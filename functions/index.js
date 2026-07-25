@@ -861,6 +861,663 @@ exports.onCoachBroadcastCreated = functions.firestore
     }
   });
 
+/**
+ * ====================================================
+ * 3. התראה על ביטול אימון או שינוי שעת אימון
+ *
+ * מאזין ל:
+ * trainingOverrides/{overrideId}
+ *
+ * מאתר מתאמנים לפי סניף וקבוצה ושולח Push.
+ * ====================================================
+ */
+
+function normalizeTrainingTargetText(value) {
+  return String(value || "")
+    .trim()
+    .replace(/[־–—]/g, "-")
+    .replace(/\s+/g, " ")
+    .toLowerCase();
+}
+
+function parseUserTargetValues(user, keys) {
+  const result = [];
+
+  for (const key of keys) {
+    const value = user && user[key];
+
+    if (typeof value === "string") {
+      const clean = value.trim();
+
+      if (!clean) continue;
+
+      /*
+       * תמיכה גם במחרוזת JSON:
+       * ["סניף א", "סניף ב"]
+       */
+      if (clean.startsWith("[")) {
+        try {
+          const parsed = JSON.parse(clean);
+
+          if (Array.isArray(parsed)) {
+            parsed.forEach((entry) => {
+              const item = String(entry || "").trim();
+              if (item) result.push(item);
+            });
+
+            continue;
+          }
+        } catch (_) {
+          // אם זו אינה מחרוזת JSON תקינה, נמשיך כפיצול רגיל.
+        }
+      }
+
+      clean
+        .split(/[,;|\n]/)
+        .map((entry) => entry.trim())
+        .filter(Boolean)
+        .forEach((entry) => result.push(entry));
+    } else if (Array.isArray(value)) {
+      value
+        .map((entry) => String(entry || "").trim())
+        .filter(Boolean)
+        .forEach((entry) => result.push(entry));
+    } else if (value && typeof value === "object") {
+      /*
+       * שכבת תמיכה למבנים שבהם נשמרים ערכים כמפתחות
+       * או כאובייקטים פנימיים.
+       */
+      Object.values(value).forEach((entry) => {
+        if (typeof entry === "string") {
+          const clean = entry.trim();
+          if (clean) result.push(clean);
+        } else if (entry && typeof entry === "object") {
+          const clean = String(
+            entry.name ||
+            entry.value ||
+            entry.branch ||
+            entry.group ||
+            ""
+          ).trim();
+
+          if (clean) result.push(clean);
+        }
+      });
+    }
+  }
+
+  return [...new Set(
+    result
+      .map(normalizeTrainingTargetText)
+      .filter(Boolean)
+  )];
+}
+
+function userMatchesTrainingOverride(user, branch, group) {
+  const wantedBranch = normalizeTrainingTargetText(branch);
+  const wantedGroup = normalizeTrainingTargetText(group);
+
+  if (!wantedBranch || !wantedGroup) {
+    return false;
+  }
+
+  const userBranches = parseUserTargetValues(
+    user,
+    [
+      "branch",
+      "branches",
+      "branches_json",
+      "branchesCsv",
+      "selected_branches",
+      "selectedBranches",
+      "active_branch",
+      "activeBranch",
+      "branchName",
+      "branch2",
+      "branch3",
+    ]
+  );
+
+  const userGroups = parseUserTargetValues(
+    user,
+    [
+      "group",
+      "groups",
+      "groups_json",
+      "groupsCsv",
+      "selected_groups",
+      "selectedGroups",
+      "active_group",
+      "activeGroup",
+      "age_group",
+      "age_groups",
+      "primaryGroup",
+      "groupKey",
+    ]
+  );
+
+  const branchMatches =
+    userBranches.some((value) => value === wantedBranch);
+
+  const groupMatches =
+    userGroups.some((value) => {
+      if (value === wantedGroup) {
+        return true;
+      }
+
+      /*
+       * תמיכה בקבוצה משולבת "נוער + בוגרים".
+       */
+      const combinedYouthAdults =
+        value.includes("נוער") &&
+        value.includes("בוגרים");
+
+      if (
+        combinedYouthAdults &&
+        (
+          wantedGroup === normalizeTrainingTargetText("נוער") ||
+          wantedGroup === normalizeTrainingTargetText("בוגרים")
+        )
+      ) {
+        return true;
+      }
+
+      return false;
+    });
+
+  return branchMatches && groupMatches;
+}
+
+function formatTrainingDateTime(millis) {
+  const numericMillis = Number(millis);
+
+  if (!Number.isFinite(numericMillis) || numericMillis <= 0) {
+    return {
+      date: "",
+      time: "",
+    };
+  }
+
+  const date = new Date(numericMillis);
+
+  return {
+    date: new Intl.DateTimeFormat(
+      "he-IL",
+      {
+        timeZone: "Asia/Jerusalem",
+        weekday: "long",
+        day: "2-digit",
+        month: "2-digit",
+      }
+    ).format(date),
+
+    time: new Intl.DateTimeFormat(
+      "he-IL",
+      {
+        timeZone: "Asia/Jerusalem",
+        hour: "2-digit",
+        minute: "2-digit",
+        hour12: false,
+      }
+    ).format(date),
+  };
+}
+
+exports.onTrainingOverrideWritten = functions.firestore
+  .document("trainingOverrides/{overrideId}")
+  .onWrite(async (change, context) => {
+    /*
+     * במקרה של מחיקת מסמך אין מה לשלוח.
+     */
+    if (!change.after.exists) {
+      return null;
+    }
+
+    const overrideId =
+      String(context.params.overrideId || "").trim();
+
+    const data =
+      change.after.data() || {};
+
+    const beforeData =
+      change.before.exists
+        ? change.before.data() || {}
+        : {};
+
+    const notificationRequested =
+      data.notificationRequested === true;
+
+    const notificationStatus =
+      String(data.notificationStatus || "")
+        .trim()
+        .toLowerCase();
+
+    /*
+     * הטריגר מעדכן בעצמו את המסמך לאחר השליחה.
+     * התנאי הזה מונע לולאה חוזרת.
+     */
+    if (
+      !notificationRequested ||
+      notificationStatus !== "pending"
+    ) {
+      return null;
+    }
+
+    /*
+     * אם אותו אירוע כבר היה pending לפני הכתיבה,
+     * נבדוק האם בפועל השתנה תוכן האימון.
+     *
+     * כך לא נשלח שוב בגלל עדכון מקרי שאינו שינוי חדש.
+     */
+    const wasAlreadyPending =
+      beforeData.notificationRequested === true &&
+      String(beforeData.notificationStatus || "")
+        .trim()
+        .toLowerCase() === "pending";
+
+    const meaningfulChange =
+      beforeData.type !== data.type ||
+      beforeData.newStartMillis !== data.newStartMillis ||
+      beforeData.newEndMillis !== data.newEndMillis ||
+      beforeData.reason !== data.reason ||
+      beforeData.isActive !== data.isActive;
+
+    if (wasAlreadyPending && !meaningfulChange) {
+      return null;
+    }
+
+    const type =
+      String(data.type || "")
+        .trim()
+        .toLowerCase();
+
+    const isActive =
+      data.isActive !== false;
+
+    const branch =
+      String(data.branch || "").trim();
+
+    const group =
+      String(data.group || "").trim();
+
+    const place =
+      String(data.place || branch || "").trim();
+
+    const reason =
+      String(data.reason || "").trim();
+
+    const changedByName =
+      String(data.changedByName || "המאמן").trim();
+
+    const changedByUid =
+      String(data.changedByUid || "").trim();
+
+    console.log("Training override notification requested:", {
+      overrideId,
+      type,
+      branch,
+      group,
+      place,
+      isActive,
+      changedByUid,
+    });
+
+    if (!branch || !group) {
+      await change.after.ref.set(
+        {
+          notificationRequested: false,
+          notificationStatus: "failed",
+          notificationError:
+            "Missing branch or group",
+          notificationProcessedAt:
+            admin.firestore.FieldValue.serverTimestamp(),
+        },
+        { merge: true }
+      );
+
+      return null;
+    }
+
+    /*
+     * קוראים את המשתמשים ומסננים לפי הסניף והקבוצה.
+     *
+     * זה פתרון אמין למבנה הנוכחי, שבו אותם נתונים
+     * עשויים להישמר בכמה שמות שדות שונים.
+     */
+    const usersSnapshot =
+      await db.collection("users").get();
+
+    const targetUsers =
+      usersSnapshot.docs
+        .map((doc) => ({
+          uid: doc.id,
+          data: doc.data() || {},
+        }))
+        .filter(({ uid, data: user }) => {
+          /*
+           * לא שולחים למאמן שביצע את השינוי.
+           */
+          if (changedByUid && uid === changedByUid) {
+            return false;
+          }
+
+          const role =
+            String(
+              user.role ||
+              user.userRole ||
+              user.userType ||
+              ""
+            )
+              .trim()
+              .toLowerCase();
+
+          /*
+           * מונעים שליחה למאמנים אחרים.
+           * משתמש ללא role מפורש עדיין יכול להיות מתאמן ותיק.
+           */
+          if (
+            role === "coach" ||
+            role === "trainer" ||
+            role === "מאמן" ||
+            user.isCoach === true
+          ) {
+            return false;
+          }
+
+          return userMatchesTrainingOverride(
+            user,
+            branch,
+            group
+          );
+        });
+
+    const tokenResults =
+      await Promise.all(
+        targetUsers.map(async ({ uid, data: user }) => {
+          try {
+            return extractFcmTokensFromUser(user);
+          } catch (error) {
+            console.error(
+              "Failed extracting training target tokens:",
+              {
+                uid,
+                error: String(error),
+              }
+            );
+
+            return [];
+          }
+        })
+      );
+
+    const tokens =
+      [...new Set(tokenResults.flat())];
+
+    if (targetUsers.length === 0) {
+      await change.after.ref.set(
+        {
+          notificationRequested: false,
+          notificationStatus: "no_targets",
+          notificationTargetCount: 0,
+          notificationTokenCount: 0,
+          notificationProcessedAt:
+            admin.firestore.FieldValue.serverTimestamp(),
+        },
+        { merge: true }
+      );
+
+      console.log(
+        "No trainees matched training override:",
+        {
+          overrideId,
+          branch,
+          group,
+        }
+      );
+
+      return null;
+    }
+
+    if (tokens.length === 0) {
+      await change.after.ref.set(
+        {
+          notificationRequested: false,
+          notificationStatus: "no_tokens",
+          notificationTargetCount:
+            targetUsers.length,
+          notificationTokenCount: 0,
+          notificationProcessedAt:
+            admin.firestore.FieldValue.serverTimestamp(),
+        },
+        { merge: true }
+      );
+
+      console.log(
+        "No FCM tokens for training override targets:",
+        {
+          overrideId,
+          targetCount: targetUsers.length,
+        }
+      );
+
+      return null;
+    }
+
+    const originalStart =
+      formatTrainingDateTime(
+        data.originalStartMillis
+      );
+
+    const originalEnd =
+      formatTrainingDateTime(
+        data.originalEndMillis
+      );
+
+    const newStart =
+      formatTrainingDateTime(
+        data.newStartMillis
+      );
+
+    const newEnd =
+      formatTrainingDateTime(
+        data.newEndMillis
+      );
+
+    let title;
+    let body;
+    let notificationType;
+
+    if (
+      type === "cancelled" ||
+      type === "canceled"
+    ) {
+      title = "האימון בוטל";
+
+      body =
+        `${place} · ${originalStart.date}` +
+        ` · ${originalStart.time}` +
+        (
+          reason
+            ? `\nסיבה: ${reason}`
+            : ""
+        );
+
+      notificationType =
+        "training_cancelled";
+    } else if (
+      type === "time_changed" ||
+      type === "timechanged"
+    ) {
+      title = "שעת האימון השתנתה";
+
+      body =
+        `${place} · ${newStart.date}` +
+        `\n${originalStart.time}–${originalEnd.time}` +
+        ` ← ${newStart.time}–${newEnd.time}` +
+        (
+          reason
+            ? `\nסיבה: ${reason}`
+            : ""
+        );
+
+      notificationType =
+        "training_time_changed";
+    } else if (!isActive) {
+      title = "האימון חזר לשעה המקורית";
+
+      body =
+        `${place} · ${originalStart.date}` +
+        ` · ${originalStart.time}–${originalEnd.time}`;
+
+      notificationType =
+        "training_restored";
+    } else {
+      await change.after.ref.set(
+        {
+          notificationRequested: false,
+          notificationStatus:
+            "skipped_unknown_type",
+          notificationError:
+            `Unsupported override type: ${type}`,
+          notificationProcessedAt:
+            admin.firestore.FieldValue.serverTimestamp(),
+        },
+        { merge: true }
+      );
+
+      return null;
+    }
+
+    const message = {
+      tokens,
+
+      notification: {
+        title,
+        body,
+      },
+
+      data: {
+        type: notificationType,
+        overrideId,
+        branch,
+        group,
+        place,
+        reason,
+        originalStartMillis:
+          String(data.originalStartMillis || ""),
+        originalEndMillis:
+          String(data.originalEndMillis || ""),
+        newStartMillis:
+          String(data.newStartMillis || ""),
+        newEndMillis:
+          String(data.newEndMillis || ""),
+        changedByName,
+        click_action: "OPEN_HOME",
+      },
+
+      android: {
+        priority: "high",
+
+        /*
+         * משתמשים בערוץ שכבר קיים ועובד באפליקציה
+         * עבור הודעות מאמן.
+         */
+        notification: {
+          channelId: "coach_broadcasts",
+          sound: "default",
+          clickAction: "OPEN_HOME",
+        },
+      },
+    };
+
+    try {
+      const response =
+        await admin.messaging()
+          .sendEachForMulticast(message);
+
+      await change.after.ref.set(
+        {
+          notificationRequested: false,
+          notificationStatus: "sent",
+          notificationTargetCount:
+            targetUsers.length,
+          notificationTokenCount:
+            tokens.length,
+          notificationSuccessCount:
+            response.successCount,
+          notificationFailureCount:
+            response.failureCount,
+          notificationSentAt:
+            admin.firestore.FieldValue.serverTimestamp(),
+          notificationProcessedAt:
+            admin.firestore.FieldValue.serverTimestamp(),
+        },
+        { merge: true }
+      );
+
+      console.log(
+        "Training override push sent:",
+        {
+          overrideId,
+          type,
+          branch,
+          group,
+          targetCount: targetUsers.length,
+          tokenCount: tokens.length,
+          successCount: response.successCount,
+          failureCount: response.failureCount,
+        }
+      );
+
+      response.responses.forEach(
+        (result, index) => {
+          if (!result.success) {
+            console.error(
+              "Training override token failed:",
+              {
+                overrideId,
+                tokenIndex: index,
+                errorCode:
+                  result.error &&
+                  result.error.code,
+                errorMessage:
+                  result.error &&
+                  result.error.message,
+              }
+            );
+          }
+        }
+      );
+
+      return null;
+    } catch (error) {
+      console.error(
+        "Failed sending training override push:",
+        error
+      );
+
+      await change.after.ref.set(
+        {
+          notificationRequested: false,
+          notificationStatus: "failed",
+          notificationError:
+            String(error),
+          notificationTargetCount:
+            targetUsers.length,
+          notificationTokenCount:
+            tokens.length,
+          notificationFailedAt:
+            admin.firestore.FieldValue.serverTimestamp(),
+          notificationProcessedAt:
+            admin.firestore.FieldValue.serverTimestamp(),
+        },
+        { merge: true }
+      );
+
+      return null;
+    }
+  });
+
 function detectTtsStyle(text) {
   const t = String(text || "").trim().toLowerCase();
 

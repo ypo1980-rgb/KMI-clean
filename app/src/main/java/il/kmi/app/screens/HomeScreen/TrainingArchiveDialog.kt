@@ -8,6 +8,8 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import android.app.Activity
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.material3.Scaffold
 import androidx.compose.ui.platform.LocalContext
 import il.kmi.app.ui.KmiTopBar
@@ -22,6 +24,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -34,6 +37,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -52,6 +56,8 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import il.kmi.app.training.TrainingData
+import il.kmi.app.training.TrainingOverride
+import il.kmi.app.training.TrainingOverrideRepository
 import il.kmi.app.training.TrainingStatusEngine
 import il.kmi.app.ui.calendar.KmiCalendarMarkers
 import il.kmi.app.ui.calendar.KmiCalendarPickerDialog
@@ -72,11 +78,34 @@ import java.util.TimeZone
 private val archiveIsraelZone: ZoneId =
     ZoneId.of("Asia/Jerusalem")
 
+data class TrainingArchiveSource(
+    val training: TrainingData,
+    val branch: String,
+    val group: String
+)
+
 private data class TrainingArchiveItem(
     val training: TrainingData,
+    val branch: String,
+    val group: String,
     val status: TrainingStatusEngine.Status,
+    val activeOverride: TrainingOverride?,
     val localDate: LocalDate
-)
+) {
+    val isCancelled: Boolean
+        get() =
+            activeOverride?.isCancelled == true ||
+                    status.isCancelled
+
+    val isCompleted: Boolean
+        get() =
+            !isCancelled &&
+                    status.isCompleted
+
+    val hasChangedTime: Boolean
+        get() =
+            activeOverride?.hasChangedTime == true
+}
 
 private enum class ArchiveStatusFilter {
     ALL,
@@ -116,7 +145,7 @@ private val archiveQuickRanges =
 
 @Composable
 fun TrainingArchiveDialog(
-    baseTrainings: List<TrainingData>,
+    baseTrainings: List<TrainingArchiveSource>,
     isEnglish: Boolean,
     onDismiss: () -> Unit,
     onOpenDrawer: () -> Unit = {},
@@ -180,6 +209,55 @@ fun TrainingArchiveDialog(
         )
     }
 
+    var activeOverridesByOccurrenceKey by remember {
+        mutableStateOf<Map<String, TrainingOverride>>(
+            emptyMap()
+        )
+    }
+
+    val archiveRangeStartMillis =
+        remember(fromDate) {
+            fromDate
+                .atStartOfDay(archiveIsraelZone)
+                .toInstant()
+                .toEpochMilli()
+        }
+
+    val archiveRangeEndMillis =
+        remember(toDate) {
+            toDate
+                .plusDays(1L)
+                .atStartOfDay(archiveIsraelZone)
+                .toInstant()
+                .toEpochMilli() - 1L
+        }
+
+    DisposableEffect(
+        archiveRangeStartMillis,
+        archiveRangeEndMillis
+    ) {
+        val listenerHandle =
+            TrainingOverrideRepository
+                .listenForOverridesInRange(
+                    fromOriginalStartMillis =
+                        archiveRangeStartMillis,
+                    toOriginalStartMillis =
+                        archiveRangeEndMillis,
+                    onChanged = { overrides ->
+                        activeOverridesByOccurrenceKey =
+                            overrides
+                    },
+                    onError = {
+                        activeOverridesByOccurrenceKey =
+                            emptyMap()
+                    }
+                )
+
+        onDispose {
+            listenerHandle.remove()
+        }
+    }
+
     /*
      * מספר השבועות שנדרש ליצור נקבע לפי התאריך
      * המוקדם שבחר המשתמש. מגבילים לעשר שנים.
@@ -209,14 +287,15 @@ fun TrainingArchiveDialog(
         remember(
             baseTrainings,
             nowMillis,
-            weeksToGenerate
+            weeksToGenerate,
+            activeOverridesByOccurrenceKey
         ) {
             baseTrainings
-                .flatMap { baseTraining ->
+                .flatMap { source ->
                     (0..weeksToGenerate).map { weeksBack ->
                         val archiveCalendar =
                             (
-                                    baseTraining.cal.clone()
+                                    source.training.cal.clone()
                                             as Calendar
                                     ).apply {
                                     add(
@@ -225,24 +304,45 @@ fun TrainingArchiveDialog(
                                     )
                                 }
 
-                        baseTraining.copy(
-                            cal = archiveCalendar
+                        source.copy(
+                            training =
+                                source.training.copy(
+                                    cal = archiveCalendar
+                                )
                         )
                     }
                 }
-                .filter { training ->
-                    training.startMillis <
+                .filter { source ->
+                    source.training.startMillis <
                             nowMillis
                 }
-                .distinctBy { training ->
+                .distinctBy { source ->
                     listOf(
-                        training.startMillis,
-                        training.place,
-                        training.address,
-                        training.coach
+                        source.training.startMillis,
+                        source.branch,
+                        source.group,
+                        source.training.place,
+                        source.training.address,
+                        source.training.coach
                     ).joinToString("|")
                 }
-                .map { training ->
+                .map { source ->
+                    val training =
+                        source.training
+
+                    val occurrenceKey =
+                        TrainingOverrideRepository
+                            .buildOccurrenceKey(
+                                training = training,
+                                branch = source.branch,
+                                group = source.group
+                            )
+
+                    val activeOverride =
+                        activeOverridesByOccurrenceKey[
+                            occurrenceKey
+                        ]
+
                     val status =
                         TrainingStatusEngine.evaluate(
                             context = context,
@@ -252,7 +352,10 @@ fun TrainingArchiveDialog(
 
                     TrainingArchiveItem(
                         training = training,
+                        branch = source.branch,
+                        group = source.group,
                         status = status,
+                        activeOverride = activeOverride,
                         localDate =
                             Instant
                                 .ofEpochMilli(
@@ -265,11 +368,13 @@ fun TrainingArchiveDialog(
                     )
                 }
                 .filter { item ->
-                    item.status.isCompleted ||
-                            item.status.isCancelled
+                    item.isCompleted ||
+                            item.isCancelled
                 }
                 .sortedByDescending { item ->
-                    item.training.startMillis
+                    item.activeOverride
+                        ?.effectiveStartMillis
+                        ?: item.training.startMillis
                 }
         }
 
@@ -297,14 +402,14 @@ fun TrainingArchiveDialog(
     val completedCount =
         remember(dateFilteredItems) {
             dateFilteredItems.count { item ->
-                item.status.isCompleted
+                item.isCompleted
             }
         }
 
     val cancelledCount =
         remember(dateFilteredItems) {
             dateFilteredItems.count { item ->
-                item.status.isCancelled
+                item.isCancelled
             }
         }
 
@@ -322,12 +427,12 @@ fun TrainingArchiveDialog(
 
                 ArchiveStatusFilter.COMPLETED ->
                     dateFilteredItems.filter { item ->
-                        item.status.isCompleted
+                        item.isCompleted
                     }
 
                 ArchiveStatusFilter.CANCELLED ->
                     dateFilteredItems.filter { item ->
-                        item.status.isCancelled
+                        item.isCancelled
                     }
             }
         }
@@ -338,7 +443,7 @@ fun TrainingArchiveDialog(
                 trainingDates =
                     allArchiveItems
                         .filter { item ->
-                            item.status.isCompleted
+                            item.isCompleted
                         }
                         .map { item ->
                             item.localDate
@@ -347,7 +452,7 @@ fun TrainingArchiveDialog(
                 holidayDates =
                     allArchiveItems
                         .filter { item ->
-                            item.status.isCancelled
+                            item.isCancelled
                         }
                         .map { item ->
                             item.localDate
@@ -365,7 +470,7 @@ fun TrainingArchiveDialog(
             properties =
                 DialogProperties(
                     usePlatformDefaultWidth = false,
-                    decorFitsSystemWindows = false
+                    decorFitsSystemWindows = true
                 )
         ) {
             Box(
@@ -460,7 +565,7 @@ fun TrainingArchiveDialog(
                             .padding(
                                 top =
                                     topBarPadding
-                                        .calculateTopPadding()
+                                        .calculateTopPadding() + 30.dp
                             )
                             .navigationBarsPadding()
                     ) {
@@ -543,34 +648,34 @@ fun TrainingArchiveDialog(
                                     .fillMaxWidth(),
                                 contentPadding =
                                     PaddingValues(
-                                        start = 16.dp,
-                                        end = 16.dp,
-                                        top = 10.dp,
+                                        start = 22.dp,
+                                        end = 22.dp,
+                                        top = 12.dp,
                                         bottom = 26.dp
                                     ),
                                 verticalArrangement =
                                     Arrangement.spacedBy(
-                                        11.dp
+                                        8.dp
                                     )
                             ) {
-                                items(
-                                    items =
-                                        filteredItems,
-                                    key = { item ->
+                                itemsIndexed(
+                                    items = filteredItems,
+                                    key = { index, item ->
                                         listOf(
-                                            item.training
-                                                .startMillis,
-                                            item.training
-                                                .place,
-                                            item.training
-                                                .address
+                                            item.training.startMillis,
+                                            item.training.endMillis ?: 0L,
+                                            item.branch,
+                                            item.group,
+                                            item.training.place,
+                                            item.training.address,
+                                            item.training.coach,
+                                            index
                                         ).joinToString("|")
                                     }
-                                ) { item ->
+                                ) { _, item ->
                                     TrainingArchiveCard(
                                         item = item,
-                                        isEnglish =
-                                            isEnglish,
+                                        isEnglish = isEnglish,
                                         locale = locale
                                     )
                                 }
@@ -662,10 +767,10 @@ private fun ArchiveFilterPanel(
     Surface(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 14.dp),
-        shape = RoundedCornerShape(26.dp),
+            .padding(horizontal = 22.dp),
+        shape = RoundedCornerShape(22.dp),
         color = Color.White.copy(alpha = 0.96f),
-        shadowElevation = 10.dp,
+        shadowElevation = 7.dp,
         border =
             BorderStroke(
                 1.dp,
@@ -677,15 +782,15 @@ private fun ArchiveFilterPanel(
                 .fillMaxWidth()
                 .padding(
                     horizontal = 13.dp,
-                    vertical = 12.dp
+                    vertical = 8.dp
                 ),
             verticalArrangement =
-                Arrangement.spacedBy(10.dp)
+                Arrangement.spacedBy(6.dp)
         ) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement =
-                    Arrangement.spacedBy(9.dp)
+                    Arrangement.spacedBy(6.dp)
             ) {
                 ArchiveDateField(
                     title =
@@ -841,65 +946,70 @@ private fun ArchiveDateField(
 ) {
     Surface(
         onClick = onClick,
-        modifier = modifier.height(62.dp),
+        modifier = modifier.height(58.dp),
         shape = RoundedCornerShape(17.dp),
         color = Color(0xFFEFF8FF),
-        border =
-            BorderStroke(
-                1.dp,
+        border = BorderStroke(
+            width = 1.dp,
+            color =
                 Color(0xFF38BDF8)
                     .copy(alpha = 0.55f)
-            )
+        )
     ) {
-        Row(
+        Box(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(horizontal = 10.dp),
-            verticalAlignment =
-                Alignment.CenterVertically,
-            horizontalArrangement =
-                Arrangement.spacedBy(8.dp)
+                .padding(
+                    horizontal = 7.dp,
+                    vertical = 5.dp
+                )
         ) {
-            Surface(
-                modifier = Modifier.size(34.dp),
-                shape = CircleShape,
-                color = Color(0xFF0F5E9C)
-            ) {
-                Box(
-                    contentAlignment =
-                        Alignment.Center
-                ) {
-                    Icon(
-                        imageVector =
-                            Icons.Filled.CalendarMonth,
-                        contentDescription = null,
-                        tint = Color.White,
-                        modifier =
-                            Modifier.size(18.dp)
-                    )
-                }
-            }
+            Icon(
+                imageVector =
+                    Icons.Filled.CalendarMonth,
+                contentDescription = null,
+                tint = Color(0xFF0F5E9C),
+                modifier = Modifier
+                    .size(17.dp)
+                    .align(Alignment.CenterEnd)
+            )
 
             Column(
-                modifier = Modifier.weight(1f),
+                modifier = Modifier
+                    .fillMaxHeight()
+                    .padding(
+                        end = 21.dp
+                    ),
                 verticalArrangement =
-                    Arrangement.Center
+                    Arrangement.Center,
+                horizontalAlignment =
+                    Alignment.CenterHorizontally
             ) {
                 Text(
                     text = title,
                     color = Color(0xFF64748B),
-                    style =
-                        MaterialTheme.typography.labelSmall,
-                    fontWeight = FontWeight.Bold
+                    fontSize = 10.sp,
+                    lineHeight = 11.sp,
+                    fontWeight = FontWeight.Bold,
+                    maxLines = 1,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+                Spacer(
+                    Modifier.height(1.dp)
                 )
 
                 Text(
                     text = value,
                     color = Color(0xFF172033),
-                    style =
-                        MaterialTheme.typography.bodyMedium,
+                    fontSize = 13.sp,
+                    lineHeight = 14.sp,
                     fontWeight = FontWeight.Black,
-                    maxLines = 1
+                    maxLines = 1,
+                    softWrap = false,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.fillMaxWidth()
                 )
             }
         }
@@ -964,19 +1074,14 @@ private fun ArchiveSummaryChip(
 ) {
     Surface(
         onClick = onClick,
-        modifier = modifier,
-        shape = RoundedCornerShape(17.dp),
-
-        /*
-         * לכל המסננים רקע לבן.
-         * המסנן הפעיל מודגש באמצעות מסגרת צבעונית.
-         */
+        modifier = modifier.height(52.dp),
+        shape = RoundedCornerShape(15.dp),
         color = Color.White,
         shadowElevation = 0.dp,
         border = BorderStroke(
             width =
                 if (selected) {
-                    2.5.dp
+                    2.dp
                 } else {
                     1.dp
                 },
@@ -989,12 +1094,16 @@ private fun ArchiveSummaryChip(
         )
     ) {
         Column(
-            modifier = Modifier.padding(
-                horizontal = 5.dp,
-                vertical = 7.dp
-            ),
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(
+                    horizontal = 5.dp,
+                    vertical = 3.dp
+                ),
             horizontalAlignment =
-                Alignment.CenterHorizontally
+                Alignment.CenterHorizontally,
+            verticalArrangement =
+                Arrangement.Center
         ) {
             Text(
                 text = value.toString(),
@@ -1012,10 +1121,11 @@ private fun ArchiveSummaryChip(
                     },
                 fontSize =
                     if (selected) {
-                        18.sp
-                    } else {
                         16.sp
-                    }
+                    } else {
+                        15.sp
+                    },
+                lineHeight = 17.sp
             )
 
             Text(
@@ -1027,7 +1137,10 @@ private fun ArchiveSummaryChip(
                         Color(0xFF64748B)
                     },
                 style =
-                    MaterialTheme.typography.labelSmall,
+                    MaterialTheme.typography.labelSmall.copy(
+                        fontSize = 11.sp,
+                        lineHeight = 12.sp
+                    ),
                 fontWeight =
                     if (selected) {
                         FontWeight.Black
@@ -1128,11 +1241,8 @@ private fun TrainingArchiveCard(
     isEnglish: Boolean,
     locale: Locale
 ) {
-    val training =
-        item.training
-
-    val status =
-        item.status
+    val training = item.training
+    val status = item.status
 
     val dateFormatter =
         remember(locale) {
@@ -1182,6 +1292,7 @@ private fun TrainingArchiveCard(
                 training.startMillis
             ) {
                 append(" – ")
+
                 append(
                     timeFormatter.format(
                         Date(effectiveEndMillis)
@@ -1206,31 +1317,37 @@ private fun TrainingArchiveCard(
 
     Surface(
         modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(22.dp),
-        color = Color.White,
-        shadowElevation = 6.dp,
-        border =
-            BorderStroke(
-                1.dp,
-                statusColor.copy(alpha = 0.25f)
-            )
+        shape = RoundedCornerShape(14.dp),
+        color = Color.White.copy(alpha = 0.97f),
+        tonalElevation = 1.dp,
+        shadowElevation = 2.dp,
+        border = BorderStroke(
+            width = 1.dp,
+            color =
+                statusColor.copy(
+                    alpha = 0.24f
+                )
+        )
     ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(13.dp),
+                .padding(
+                    horizontal = 10.dp,
+                    vertical = 8.dp
+                ),
             verticalArrangement =
-                Arrangement.spacedBy(7.dp)
+                Arrangement.spacedBy(4.dp)
         ) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment =
                     Alignment.CenterVertically,
                 horizontalArrangement =
-                    Arrangement.spacedBy(10.dp)
+                    Arrangement.spacedBy(7.dp)
             ) {
                 Surface(
-                    modifier = Modifier.size(42.dp),
+                    modifier = Modifier.size(32.dp),
                     shape = CircleShape,
                     color =
                         statusColor.copy(
@@ -1251,13 +1368,15 @@ private fun TrainingArchiveCard(
                             contentDescription = null,
                             tint = statusColor,
                             modifier =
-                                Modifier.size(22.dp)
+                                Modifier.size(17.dp)
                         )
                     }
                 }
 
                 Column(
-                    modifier = Modifier.weight(1f)
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement =
+                        Arrangement.spacedBy(1.dp)
                 ) {
                     Text(
                         text =
@@ -1269,8 +1388,8 @@ private fun TrainingArchiveCard(
                                 }
                             },
                         color = Color(0xFF172033),
-                        style =
-                            MaterialTheme.typography.titleMedium,
+                        fontSize = 17.sp,
+                        lineHeight = 19.sp,
                         fontWeight = FontWeight.Black,
                         maxLines = 1,
                         overflow =
@@ -1280,10 +1399,12 @@ private fun TrainingArchiveCard(
                     Text(
                         text = "$dateText · $timeText",
                         color = Color(0xFF334155),
-                        style =
-                            MaterialTheme.typography.bodyMedium,
+                        fontSize = 14.sp,
+                        lineHeight = 16.sp,
                         fontWeight = FontWeight.Bold,
-                        maxLines = 2
+                        maxLines = 1,
+                        overflow =
+                            TextOverflow.Ellipsis
                     )
                 }
             }
@@ -1313,41 +1434,55 @@ private fun TrainingArchiveCard(
             }
 
             HorizontalDivider(
+                modifier =
+                    Modifier.padding(
+                        top = 1.dp
+                    ),
                 color =
                     statusColor.copy(
-                        alpha = 0.13f
+                        alpha = 0.12f
                     )
             )
 
-            Surface(
+            Row(
                 modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(15.dp),
-                color = statusBackground,
-                border =
-                    BorderStroke(
-                        1.dp,
-                        statusColor.copy(
-                            alpha = 0.18f
-                        )
-                    )
+                horizontalArrangement =
+                    Arrangement.Center
             ) {
-                Text(
-                    text =
-                        status.displayText(
-                            isEnglish
+                Surface(
+                    shape =
+                        RoundedCornerShape(
+                            999.dp
                         ),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(
-                            horizontal = 10.dp,
-                            vertical = 8.dp
-                        ),
-                    textAlign = TextAlign.Center,
-                    style =
-                        MaterialTheme.typography.labelMedium,
-                    fontWeight = FontWeight.Black,
-                    color = statusColor
-                )
+                    color = statusBackground,
+                    border = BorderStroke(
+                        width = 1.dp,
+                        color =
+                            statusColor.copy(
+                                alpha = 0.18f
+                            )
+                    )
+                ) {
+                    Text(
+                        text =
+                            status.displayText(
+                                isEnglish
+                            ),
+                        modifier =
+                            Modifier.padding(
+                                horizontal = 11.dp,
+                                vertical = 4.dp
+                            ),
+                        textAlign =
+                            TextAlign.Center,
+                        fontSize = 13.sp,
+                        lineHeight = 15.sp,
+                        fontWeight =
+                            FontWeight.Black,
+                        color = statusColor,
+                        maxLines = 2
+                    )
+                }
             }
         }
     }
@@ -1361,27 +1496,29 @@ private fun ArchiveDetailLine(
     Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement =
-            Arrangement.spacedBy(6.dp),
+            Arrangement.spacedBy(4.dp),
         verticalAlignment =
-            Alignment.Top
+            Alignment.CenterVertically
     ) {
         Text(
             text = "$title:",
             color = Color(0xFF64748B),
-            style =
-                MaterialTheme.typography.bodySmall,
-            fontWeight = FontWeight.Bold
+            fontSize = 12.sp,
+            lineHeight = 14.sp,
+            fontWeight = FontWeight.Bold,
+            maxLines = 1
         )
 
         Text(
             text = value,
             modifier = Modifier.weight(1f),
             color = Color(0xFF334155),
-            style =
-                MaterialTheme.typography.bodySmall,
+            fontSize = 12.sp,
+            lineHeight = 14.sp,
             fontWeight = FontWeight.SemiBold,
-            maxLines = 2,
-            overflow = TextOverflow.Ellipsis
+            maxLines = 1,
+            overflow =
+                TextOverflow.Ellipsis
         )
     }
 }

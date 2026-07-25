@@ -53,6 +53,8 @@ import androidx.compose.ui.unit.dp
 import il.kmi.app.R
 import il.kmi.app.training.TrainingData
 import il.kmi.app.training.TrainingStatusEngine
+import il.kmi.app.training.TrainingOverride
+import il.kmi.app.training.TrainingOverrideRepository
 import java.lang.reflect.AccessibleObject
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.text.style.TextOverflow
@@ -90,13 +92,16 @@ import android.app.Activity
 import android.graphics.Path
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.material3.TimePicker
+import androidx.compose.material3.rememberTimePickerState
 import androidx.compose.material.icons.filled.History
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.unit.LayoutDirection
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.ui.unit.sp
 import com.google.firebase.firestore.DocumentSnapshot
 import il.kmi.shared.localization.AppLanguage
@@ -118,6 +123,13 @@ import java.util.Calendar
 import java.util.Date
 import java.util.Locale
 import java.util.TimeZone
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material.icons.filled.Schedule
+import androidx.compose.material.icons.filled.Cancel
+import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material3.ButtonDefaults
 
 //=================================================================================
 
@@ -197,6 +209,32 @@ private fun CoachInfoCard(
         }
     }
 }
+
+private enum class HomeNoticeType {
+    COACH_MESSAGE,
+    TRAINING_TIME_CHANGED,
+    TRAINING_CANCELLED,
+    TRAINING_RESTORED
+}
+
+private data class HomeNotice(
+    val id: String,
+    val type: HomeNoticeType,
+    val title: String,
+    val text: String,
+    val coachName: String,
+    val sentAt: Date?,
+    val branch: String,
+    val group: String
+)
+
+private data class CoachHomeMessage(
+    val text: String,
+    val coachName: String,
+    val sentAt: Date?,
+    val branch: String,
+    val group: String
+)
 
 @Composable
 private fun TrainingsWeekHeader(
@@ -302,6 +340,105 @@ inline fun <T : AccessibleObject> T.makeAccessible(): T {
     return this
 }
 
+private enum class TrainingManagementMode {
+    MENU,
+    CANCEL,
+    CHANGE_TIME
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun TrainingClockPickerDialog(
+    initialTime: String,
+    title: String,
+    confirmText: String,
+    cancelText: String,
+    onDismiss: () -> Unit,
+    onTimeSelected: (String) -> Unit
+) {
+    val initialParts =
+        remember(initialTime) {
+            initialTime
+                .trim()
+                .split(":")
+        }
+
+    val initialHour =
+        initialParts
+            .getOrNull(0)
+            ?.toIntOrNull()
+            ?.coerceIn(0, 23)
+            ?: 19
+
+    val initialMinute =
+        initialParts
+            .getOrNull(1)
+            ?.toIntOrNull()
+            ?.coerceIn(0, 59)
+            ?: 0
+
+    val pickerState =
+        rememberTimePickerState(
+            initialHour = initialHour,
+            initialMinute = initialMinute,
+            is24Hour = true
+        )
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Text(
+                text = title,
+                modifier = Modifier.fillMaxWidth(),
+                textAlign = TextAlign.Center,
+                fontWeight = FontWeight.Black
+            )
+        },
+        text = {
+            Box(
+                modifier = Modifier.fillMaxWidth(),
+                contentAlignment = Alignment.Center
+            ) {
+                TimePicker(
+                    state = pickerState
+                )
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = {
+                    val selectedTime =
+                        String.format(
+                            Locale.US,
+                            "%02d:%02d",
+                            pickerState.hour,
+                            pickerState.minute
+                        )
+
+                    onTimeSelected(selectedTime)
+                }
+            ) {
+                Text(
+                    text = confirmText,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+        },
+        dismissButton = {
+            TextButton(
+                onClick = onDismiss
+            ) {
+                Text(
+                    text = cancelText,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+        },
+        shape = RoundedCornerShape(26.dp),
+        containerColor = Color.White
+    )
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun HomeScreen(
@@ -323,7 +460,7 @@ fun HomeScreen(
         mutableStateOf(false)
     }
 
-// 🗂️ מצב חלון ארכיון האימונים
+    // 🗂️ מצב חלון ארכיון האימונים
     var showTrainingArchive by rememberSaveable {
         mutableStateOf(false)
     }
@@ -554,17 +691,56 @@ fun HomeScreen(
                 FirebaseAuth.getInstance().currentUser?.uid
             }
 
-            data class CoachHomeMessage(
-                val text: String,
-                val coachName: String,
-                val sentAt: Date?,
-                val branch: String,
-                val group: String
-            )
-
             var recentCoachMessages by remember {
                 mutableStateOf<List<CoachHomeMessage>>(emptyList())
             }
+
+            var recentTrainingNotices by remember {
+                mutableStateOf<List<HomeNotice>>(emptyList())
+            }
+
+            val homeNotices =
+                remember(
+                    recentCoachMessages,
+                    recentTrainingNotices,
+                    isEnglish
+                ) {
+                    val coachNotices =
+                        recentCoachMessages.mapIndexed {
+                                index,
+                                message ->
+
+                            HomeNotice(
+                                id =
+                                    "message|${message.sentAt?.time ?: 0L}|$index",
+                                type =
+                                    HomeNoticeType.COACH_MESSAGE,
+                                title =
+                                    if (isEnglish) {
+                                        "Message from coach"
+                                    } else {
+                                        "הודעה מהמאמן"
+                                    },
+                                text = message.text,
+                                coachName = message.coachName,
+                                sentAt = message.sentAt,
+                                branch = message.branch,
+                                group = message.group
+                            )
+                        }
+
+                    (
+                            coachNotices +
+                                    recentTrainingNotices
+                            )
+                        .distinctBy { notice ->
+                            notice.id
+                        }
+                        .sortedByDescending { notice ->
+                            notice.sentAt?.time ?: 0L
+                        }
+                        .take(5)
+                }
 
             var showCoachMessagesDialog by rememberSaveable {
                 mutableStateOf(false)
@@ -1907,11 +2083,17 @@ fun HomeScreen(
                     return false
                 }
 
+                data class HomeTrainingCandidate(
+                    val training: TrainingData,
+                    val branch: String,
+                    val group: String
+                )
+
                 fun trainingsFromDatabaseForHome(
                     branchName: String,
                     groupName: String,
                     coachFallback: String
-                ): List<TrainingData> {
+                ): List<HomeTrainingCandidate> {
                     val dbBranch = KmiDatabaseProvider.branchByName(ctx, branchName)
                         ?: return emptyList()
 
@@ -1946,43 +2128,47 @@ fun HomeScreen(
                                 )
                             }
 
-                        TrainingData.nextWeekly(
-                            dayOfWeek =
-                                calendarDayFromDatabase(
-                                    day.dayOfWeek
-                                ),
-                            startHour =
-                                hourFromTimeText(
-                                    day.startTime,
-                                    19
-                                ),
-                            startMinute =
-                                minuteFromTimeText(
-                                    day.startTime,
-                                    0
-                                ),
-                            durationMinutes =
-                                durationMinutes,
-                            place =
-                                dbBranch.displayPlace(
-                                    isEnglish
-                                ),
-                            address =
-                                dbBranch.displayAddress(
-                                    isEnglish
-                                ),
-                            coach =
-                                day.displayCoachName(
-                                    isEnglish
-                                ).ifBlank {
-                                    coachFallback
-                                },
-                            now = occurrenceReference
+                        HomeTrainingCandidate(
+                            training = TrainingData.nextWeekly(
+                                dayOfWeek =
+                                    calendarDayFromDatabase(
+                                        day.dayOfWeek
+                                    ),
+                                startHour =
+                                    hourFromTimeText(
+                                        day.startTime,
+                                        19
+                                    ),
+                                startMinute =
+                                    minuteFromTimeText(
+                                        day.startTime,
+                                        0
+                                    ),
+                                durationMinutes =
+                                    durationMinutes,
+                                place =
+                                    dbBranch.displayPlace(
+                                        isEnglish
+                                    ),
+                                address =
+                                    dbBranch.displayAddress(
+                                        isEnglish
+                                    ),
+                                coach =
+                                    day.displayCoachName(
+                                        isEnglish
+                                    ).ifBlank {
+                                        coachFallback
+                                    },
+                                now = occurrenceReference
+                            ),
+                            branch = branchName.trim(),
+                            group = groupName.trim()
                         )
                     }
                 }
 
-                val currentWeekCandidates: List<TrainingData> =
+                val currentWeekCandidates: List<HomeTrainingCandidate> =
                     remember(
                         branchesEffective,
                         groupsEffective,
@@ -1990,7 +2176,8 @@ fun HomeScreen(
                         isEnglish,
                         trainingStatusNowMillis
                     ) {
-                        val all = mutableListOf<TrainingData>()
+                        val all =
+                            mutableListOf<HomeTrainingCandidate>()
 
                         branchesEffective.forEach { branchName ->
                             val parts = branchName.split('–', '-').map { it.trim() }
@@ -2008,9 +2195,9 @@ fun HomeScreen(
 
                                 if (dbItems.isNotEmpty()) {
                                     val validDbItems =
-                                        dbItems.filter { training ->
+                                        dbItems.filter { candidate ->
                                             isWithinUpcomingSevenDays(
-                                                training
+                                                candidate.training
                                             )
                                         }
 
@@ -2062,24 +2249,35 @@ fun HomeScreen(
                                         ?: coachFromPrefs.takeIf { it.isNotBlank() }
                                         ?: ""
 
-                                val fallbackItems: List<TrainingData> =
+                                val fallbackItems: List<HomeTrainingCandidate> =
                                     sched?.slots?.map { slotAny ->
                                         val s = readSlot(slotAny)
-                                        TrainingData.nextWeekly(
-                                            dayOfWeek = s.dayOfWeek,
-                                            startHour = s.startHour,
-                                            startMinute = s.startMinute,
-                                            durationMinutes = s.durationMinutes,
-                                            place = place,
-                                            address = addr,
-                                            coach = coach
+
+                                        HomeTrainingCandidate(
+                                            training = TrainingData.nextWeekly(
+                                                dayOfWeek = s.dayOfWeek,
+                                                startHour = s.startHour,
+                                                startMinute = s.startMinute,
+                                                durationMinutes = s.durationMinutes,
+                                                place = place,
+                                                address = addr,
+                                                coach = coach
+                                            ),
+                                            branch =
+                                                matchedBranch
+                                                    .ifBlank { branchName }
+                                                    .trim(),
+                                            group =
+                                                matchedGroup
+                                                    .ifBlank { grp }
+                                                    .trim()
                                         )
                                     } ?: emptyList()
 
                                 val validFallbackItems =
-                                    fallbackItems.filter { training ->
+                                    fallbackItems.filter { candidate ->
                                         isWithinUpcomingSevenDays(
-                                            training
+                                            candidate.training
                                         )
                                     }
 
@@ -2087,25 +2285,52 @@ fun HomeScreen(
                             }
                         }
 
-                        val result = all.distinctBy {
-                            buildString {
-                                append(it.cal.timeInMillis)
-                                append("|")
-                                append(it.place.orEmpty())
-                                append("|")
-                                append(it.address.orEmpty())
-                                append("|")
-                                append(it.coach.orEmpty())
+                        val result =
+                            all.distinctBy { candidate ->
+                                buildString {
+                                    append(
+                                        candidate.training
+                                            .cal
+                                            .timeInMillis
+                                    )
+                                    append("|")
+                                    append(candidate.branch)
+                                    append("|")
+                                    append(candidate.group)
+                                    append("|")
+                                    append(
+                                        candidate.training
+                                            .place
+                                            .orEmpty()
+                                    )
+                                    append("|")
+                                    append(
+                                        candidate.training
+                                            .address
+                                            .orEmpty()
+                                    )
+                                    append("|")
+                                    append(
+                                        candidate.training
+                                            .coach
+                                            .orEmpty()
+                                    )
+                                }
                             }
-                        }
-                            .sortedBy { it.cal.timeInMillis }
+                                .sortedBy { candidate ->
+                                    candidate.training.startMillis
+                                }
 
                         result
                     }
 
                 data class HomeTrainingUi(
                     val training: TrainingData,
-                    val status: TrainingStatusEngine.Status
+                    val branch: String,
+                    val group: String,
+                    val status: TrainingStatusEngine.Status,
+                    val occurrenceKey: String,
+                    val activeOverride: TrainingOverride?
                 ) {
                     val isCancelledByHoliday: Boolean
                         get() =
@@ -2119,33 +2344,332 @@ fun HomeScreen(
                     }
                 }
 
+                var selectedTrainingForManagement by remember {
+                    mutableStateOf<HomeTrainingUi?>(null)
+                }
+
+                var trainingManagementMode by remember {
+                    mutableStateOf(TrainingManagementMode.MENU)
+                }
+
+                var trainingChangeReason by rememberSaveable {
+                    mutableStateOf("")
+                }
+
+                var changedStartTime by rememberSaveable {
+                    mutableStateOf("")
+                }
+
+                var changedEndTime by rememberSaveable {
+                    mutableStateOf("")
+                }
+
+                var showStartTimePicker by rememberSaveable {
+                    mutableStateOf(false)
+                }
+
+                var showEndTimePicker by rememberSaveable {
+                    mutableStateOf(false)
+                }
+
+                var isSavingTrainingChange by remember {
+                    mutableStateOf(false)
+                }
+
+                var trainingManagementError by remember {
+                    mutableStateOf<String?>(null)
+                }
+                var activeTrainingOverrides by remember {
+                    mutableStateOf<Map<String, TrainingOverride>>(
+                        emptyMap()
+                    )
+                }
+
+                val occurrenceKeys =
+                    remember(currentWeekCandidates) {
+                        currentWeekCandidates
+                            .associate { candidate ->
+                                val occurrenceKey =
+                                    TrainingOverrideRepository
+                                        .buildOccurrenceKey(
+                                            training =
+                                                candidate.training,
+                                            branch =
+                                                candidate.branch,
+                                            group =
+                                                candidate.group
+                                        )
+
+                                occurrenceKey to candidate
+                            }
+                    }
+
+                DisposableEffect(occurrenceKeys.keys) {
+                    val listenerHandle =
+                        TrainingOverrideRepository
+                            .listenForOccurrenceKeys(
+                                occurrenceKeys =
+                                    occurrenceKeys.keys,
+                                onChanged = { overrides ->
+                                    activeTrainingOverrides =
+                                        overrides
+
+                                    val timeFormatter =
+                                        SimpleDateFormat(
+                                            "HH:mm",
+                                            Locale("he", "IL")
+                                        ).apply {
+                                            timeZone =
+                                                TimeZone.getTimeZone(
+                                                    "Asia/Jerusalem"
+                                                )
+                                        }
+
+                                    recentTrainingNotices =
+                                        overrides
+                                            .values
+                                            .filter { override ->
+                                                override.isActive
+                                            }
+                                            .mapNotNull { override ->
+                                                val eventDate =
+                                                    override.updatedAt
+                                                        ?.toDate()
+                                                        ?: override.createdAt
+                                                            ?.toDate()
+                                                        ?: Date()
+
+                                                when {
+                                                    override.isCancelled -> {
+                                                        HomeNotice(
+                                                            id =
+                                                                "cancelled|${override.occurrenceKey}",
+                                                            type =
+                                                                HomeNoticeType.TRAINING_CANCELLED,
+                                                            title =
+                                                                if (isEnglish) {
+                                                                    "Training cancelled"
+                                                                } else {
+                                                                    "האימון בוטל"
+                                                                },
+                                                            text =
+                                                                buildString {
+                                                                    append(
+                                                                        if (isEnglish) {
+                                                                            "The training at "
+                                                                        } else {
+                                                                            "האימון ב־"
+                                                                        }
+                                                                    )
+
+                                                                    append(
+                                                                        override.place
+                                                                            .ifBlank {
+                                                                                override.branch
+                                                                            }
+                                                                    )
+
+                                                                    val reason =
+                                                                        override.reason.trim()
+
+                                                                    if (reason.isNotBlank()) {
+                                                                        append("\n")
+
+                                                                        append(
+                                                                            if (isEnglish) {
+                                                                                "Reason: "
+                                                                            } else {
+                                                                                "סיבה: "
+                                                                            }
+                                                                        )
+
+                                                                        append(reason)
+                                                                    }
+                                                                },
+                                                            coachName =
+                                                                override.changedByName
+                                                                    .ifBlank {
+                                                                        if (isEnglish) {
+                                                                            "Coach"
+                                                                        } else {
+                                                                            "המאמן"
+                                                                        }
+                                                                    },
+                                                            sentAt = eventDate,
+                                                            branch = override.branch,
+                                                            group = override.group
+                                                        )
+                                                    }
+
+                                                    override.hasChangedTime -> {
+                                                        val originalStart =
+                                                            timeFormatter.format(
+                                                                Date(
+                                                                    override.originalStartMillis
+                                                                )
+                                                            )
+
+                                                        val originalEnd =
+                                                            timeFormatter.format(
+                                                                Date(
+                                                                    override.originalEndMillis
+                                                                )
+                                                            )
+
+                                                        val newStart =
+                                                            timeFormatter.format(
+                                                                Date(
+                                                                    override.effectiveStartMillis
+                                                                )
+                                                            )
+
+                                                        val newEnd =
+                                                            timeFormatter.format(
+                                                                Date(
+                                                                    override.effectiveEndMillis
+                                                                )
+                                                            )
+
+                                                        HomeNotice(
+                                                            id =
+                                                                "time_changed|${override.occurrenceKey}",
+                                                            type =
+                                                                HomeNoticeType.TRAINING_TIME_CHANGED,
+                                                            title =
+                                                                if (isEnglish) {
+                                                                    "Training time changed"
+                                                                } else {
+                                                                    "שעת האימון שונתה"
+                                                                },
+                                                            text =
+                                                                buildString {
+                                                                    append(
+                                                                        override.place
+                                                                            .ifBlank {
+                                                                                override.branch
+                                                                            }
+                                                                    )
+
+                                                                    append("\n")
+
+                                                                    append(originalStart)
+                                                                    append("–")
+                                                                    append(originalEnd)
+
+                                                                    append("  ←  ")
+
+                                                                    append(newStart)
+                                                                    append("–")
+                                                                    append(newEnd)
+
+                                                                    val reason =
+                                                                        override.reason.trim()
+
+                                                                    if (reason.isNotBlank()) {
+                                                                        append("\n")
+
+                                                                        append(
+                                                                            if (isEnglish) {
+                                                                                "Reason: "
+                                                                            } else {
+                                                                                "סיבה: "
+                                                                            }
+                                                                        )
+
+                                                                        append(reason)
+                                                                    }
+                                                                },
+                                                            coachName =
+                                                                override.changedByName
+                                                                    .ifBlank {
+                                                                        if (isEnglish) {
+                                                                            "Coach"
+                                                                        } else {
+                                                                            "המאמן"
+                                                                        }
+                                                                    },
+                                                            sentAt = eventDate,
+                                                            branch = override.branch,
+                                                            group = override.group
+                                                        )
+                                                    }
+
+                                                    else -> null
+                                                }
+                                            }
+                                            .sortedByDescending { notice ->
+                                                notice.sentAt?.time ?: 0L
+                                            }
+                                            .take(5)
+                                },
+                                onError = {
+                                    /*
+                                     * אין מפילים את מסך הבית כאשר
+                                     * Firestore אינו זמין זמנית.
+                                     */
+                                }
+                            )
+
+                    onDispose {
+                        listenerHandle.remove()
+                    }
+                }
+
                 val upcoming: List<HomeTrainingUi> =
                     remember(
                         currentWeekCandidates,
+                        activeTrainingOverrides,
                         trainingStatusNowMillis
                     ) {
                         currentWeekCandidates
-                            .sortedBy { it.startMillis }
-                            .map { training ->
+                            .map { candidate ->
+                                val occurrenceKey =
+                                    TrainingOverrideRepository
+                                        .buildOccurrenceKey(
+                                            training =
+                                                candidate.training,
+                                            branch =
+                                                candidate.branch,
+                                            group =
+                                                candidate.group
+                                        )
+
                                 HomeTrainingUi(
-                                    training = training,
+                                    training =
+                                        candidate.training,
+                                    branch =
+                                        candidate.branch,
+                                    group =
+                                        candidate.group,
                                     status =
                                         TrainingStatusEngine.evaluate(
                                             context = ctx,
-                                            training = training,
+                                            training =
+                                                candidate.training,
                                             nowMillis =
                                                 trainingStatusNowMillis
-                                        )
+                                        ),
+                                    occurrenceKey =
+                                        occurrenceKey,
+                                    activeOverride =
+                                        activeTrainingOverrides[
+                                            occurrenceKey
+                                        ]
                                 )
+                            }
+                            .sortedBy { item ->
+                                item.activeOverride
+                                    ?.effectiveStartMillis
+                                    ?: item.training.startMillis
                             }
                             .filter { item ->
                                 item.status.isScheduled ||
                                         item.status.isOngoing ||
-                                        item.status.isCancelled
+                                        item.status.isCancelled ||
+                                        item.activeOverride != null
                             }
                             .take(5)
                     }
-
 
                 LaunchedEffect(upcoming, isEnglish) {
                     val locale = if (isEnglish) {
@@ -2229,13 +2753,7 @@ fun HomeScreen(
                             items = upcoming,
                             key = { item ->
                                 buildString {
-                                    append(item.training.cal.timeInMillis)
-                                    append("|")
-                                    append(item.training.place.orEmpty())
-                                    append("|")
-                                    append(item.training.address.orEmpty())
-                                    append("|")
-                                    append(item.training.coach.orEmpty())
+                                    append(item.occurrenceKey)
                                     append("|holiday=")
                                     append(item.isCancelledByHoliday)
                                 }
@@ -2243,8 +2761,28 @@ fun HomeScreen(
                         ) { item ->
                             TrainingCardCompact(
                                 training = item.training,
+                                branch = item.branch,
+                                group = item.group,
+                                isCoach = isCoach,
                                 isEnglish = isEnglish,
-                                status = item.status
+                                status = item.status,
+                                activeOverride =
+                                    item.activeOverride,
+                                onManageTraining = {
+                                    selectedTrainingForManagement = item
+                                    trainingManagementMode =
+                                        TrainingManagementMode.MENU
+
+                                    trainingChangeReason =
+                                        item.activeOverride
+                                            ?.reason
+                                            .orEmpty()
+
+                                    changedStartTime = ""
+                                    changedEndTime = ""
+                                    trainingManagementError = null
+                                    isSavingTrainingChange = false
+                                }
                             )
                         }
                         item { Spacer(Modifier.height(6.dp)) }
@@ -2271,9 +2809,17 @@ fun HomeScreen(
 
                     // ===== כרטיס הודעות מהמאמן – הודעה אחרונה + דיאלוג הודעות אחרונות =====
                     item {
-                        val latestMessage = recentCoachMessages.firstOrNull()
-                        val msg = latestMessage?.text?.trim()
-                        val extraCount = (recentCoachMessages.size - 1).coerceAtLeast(0)
+                        val latestNotice =
+                            homeNotices.firstOrNull()
+
+                        val msg =
+                            latestNotice
+                                ?.text
+                                ?.trim()
+
+                        val extraCount =
+                            (homeNotices.size - 1)
+                                .coerceAtLeast(0)
 
                         Surface(
                             onClick = {
@@ -2307,7 +2853,7 @@ fun HomeScreen(
                                 Surface(
                                     shape = CircleShape,
                                     color = Color(0xFFE0F2FE),
-                                    modifier = Modifier.size(42.dp)
+                                    modifier = Modifier.size(38.dp)
                                 ) {
                                     Icon(
                                         imageVector = Icons.Default.Person,
@@ -2323,7 +2869,12 @@ fun HomeScreen(
                                         verticalAlignment = Alignment.CenterVertically
                                     ) {
                                         Text(
-                                            text = if (isEnglish) "Coach Messages" else "הודעות מאמן",
+                                            text =
+                                                if (isEnglish) {
+                                                    "Messages & Events"
+                                                } else {
+                                                    "הודעות ואירועים"
+                                                },
                                             fontWeight = FontWeight.Bold,
                                             color = Color(0xFF0C4A6E),
                                             style = MaterialTheme.typography.bodyMedium,
@@ -2332,48 +2883,32 @@ fun HomeScreen(
                                             modifier = Modifier.weight(1f)
                                         )
 
-                                        if (recentCoachMessages.isNotEmpty()) {
+                                        if (homeNotices.isNotEmpty()) {
                                             Surface(
                                                 onClick = {
                                                     showCoachMessagesDialog = true
                                                 },
-                                                shape = RoundedCornerShape(999.dp),
+                                                shape = CircleShape,
                                                 color = Color(0xFFE0F2FE),
                                                 border = BorderStroke(
                                                     1.dp,
                                                     Color(0xFF7DD3FC)
-                                                )
+                                                ),
+                                                modifier = Modifier.size(32.dp)
                                             ) {
-                                                Row(
-                                                    modifier = Modifier
-                                                        .padding(
-                                                            horizontal = 8.dp,
-                                                            vertical = 5.dp
-                                                        ),
-                                                    verticalAlignment = Alignment.CenterVertically,
-                                                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                                Box(
+                                                    contentAlignment = Alignment.Center
                                                 ) {
                                                     Icon(
                                                         imageVector = Icons.Filled.Email,
-                                                        contentDescription = if (isEnglish) {
-                                                            "Recent messages"
-                                                        } else {
-                                                            "הודעות אחרונות"
-                                                        },
+                                                        contentDescription =
+                                                            if (isEnglish) {
+                                                                "Messages and events"
+                                                            } else {
+                                                                "הודעות ואירועים"
+                                                            },
                                                         tint = Color(0xFF0369A1),
-                                                        modifier = Modifier.size(15.dp)
-                                                    )
-
-                                                    Text(
-                                                        text = if (isEnglish) {
-                                                            "Messages"
-                                                        } else {
-                                                            "הודעות"
-                                                        },
-                                                        color = Color(0xFF0369A1),
-                                                        fontWeight = FontWeight.Bold,
-                                                        style = MaterialTheme.typography.labelSmall,
-                                                        maxLines = 1
+                                                        modifier = Modifier.size(17.dp)
                                                     )
                                                 }
                                             }
@@ -2402,8 +2937,17 @@ fun HomeScreen(
                                         )
 
                                         val branchGroupLine = buildString {
-                                            val b = latestMessage.branch.trim()
-                                            val g = latestMessage.group.trim()
+                                            val b =
+                                                latestNotice
+                                                    ?.branch
+                                                    .orEmpty()
+                                                    .trim()
+
+                                            val g =
+                                                latestNotice
+                                                    ?.group
+                                                    .orEmpty()
+                                                    .trim()
 
                                             if (b.isNotBlank()) {
                                                 append(if (isEnglish) "Branch: " else "סניף: ")
@@ -2431,26 +2975,27 @@ fun HomeScreen(
 
                                     Spacer(Modifier.height(6.dp))
 
-                                    val timeText = latestMessage?.sentAt?.let {
+                                    val timeText = latestNotice?.sentAt?.let {
                                         SimpleDateFormat(
                                             "dd/MM/yyyy · HH:mm",
                                             Locale("he", "IL")
                                         ).format(it)
                                     }.orEmpty()
 
-                                    val openRecentText = if (extraCount > 0) {
-                                        if (isEnglish) {
-                                            "Open recent messages · +$extraCount more"
+                                    val openRecentText =
+                                        if (extraCount > 0) {
+                                            if (isEnglish) {
+                                                "Open recent updates · +$extraCount more"
+                                            } else {
+                                                "פתח הודעות ואירועים אחרונים"
+                                            }
                                         } else {
-                                            "פתח הודעות אחרונות"
+                                            if (isEnglish) {
+                                                "Open recent updates"
+                                            } else {
+                                                "פתח הודעות ואירועים אחרונים"
+                                            }
                                         }
-                                    } else {
-                                        if (isEnglish) {
-                                            "Open recent messages"
-                                        } else {
-                                            "פתח הודעות אחרונות"
-                                        }
-                                    }
 
                                     if (timeText.isNotBlank() || recentCoachMessages.isNotEmpty()) {
                                         Column(
@@ -2498,6 +3043,1186 @@ fun HomeScreen(
                             }
                         }
                     }
+                }
+
+                selectedTrainingForManagement?.let { selectedItem ->
+
+                    val dialogAccent =
+                        when (trainingManagementMode) {
+                            TrainingManagementMode.CANCEL ->
+                                Color(0xFFB91C1C)
+
+                            TrainingManagementMode.CHANGE_TIME ->
+                                Color(0xFF6D4BB6)
+
+                            TrainingManagementMode.MENU ->
+                                Color(0xFF075985)
+                        }
+
+                    val timeRegex = remember {
+                        Regex("""^(?:[01]\d|2[0-3]):[0-5]\d$""")
+                    }
+
+                    val isStartTimeValid =
+                        changedStartTime.matches(timeRegex)
+
+                    val isEndTimeValid =
+                        changedEndTime.matches(timeRegex)
+
+                    val canSubmit =
+                        when (trainingManagementMode) {
+                            TrainingManagementMode.CANCEL ->
+                                trainingChangeReason
+                                    .trim()
+                                    .length >= 3
+
+                            TrainingManagementMode.CHANGE_TIME ->
+                                isStartTimeValid &&
+                                        isEndTimeValid &&
+                                        trainingChangeReason
+                                            .trim()
+                                            .length >= 3
+
+                            TrainingManagementMode.MENU ->
+                                false
+                        }
+
+                    fun closeTrainingManagementDialog() {
+                        selectedTrainingForManagement = null
+                        trainingManagementMode =
+                            TrainingManagementMode.MENU
+                        trainingChangeReason = ""
+                        changedStartTime = ""
+                        changedEndTime = ""
+                        trainingManagementError = null
+                        isSavingTrainingChange = false
+                        showStartTimePicker = false
+                        showEndTimePicker = false
+                    }
+
+                    if (showStartTimePicker) {
+                        TrainingClockPickerDialog(
+                            initialTime =
+                                changedStartTime.ifBlank {
+                                    "19:00"
+                                },
+                            title =
+                                if (isEnglish) {
+                                    "Select start time"
+                                } else {
+                                    "בחירת שעת התחלה"
+                                },
+                            confirmText =
+                                if (isEnglish) {
+                                    "Select"
+                                } else {
+                                    "בחירה"
+                                },
+                            cancelText =
+                                if (isEnglish) {
+                                    "Cancel"
+                                } else {
+                                    "ביטול"
+                                },
+                            onDismiss = {
+                                showStartTimePicker = false
+                            },
+                            onTimeSelected = { selectedTime ->
+                                changedStartTime = selectedTime
+                                trainingManagementError = null
+                                showStartTimePicker = false
+                            }
+                        )
+                    }
+
+                    if (showEndTimePicker) {
+                        TrainingClockPickerDialog(
+                            initialTime =
+                                changedEndTime.ifBlank {
+                                    "20:30"
+                                },
+                            title =
+                                if (isEnglish) {
+                                    "Select end time"
+                                } else {
+                                    "בחירת שעת סיום"
+                                },
+                            confirmText =
+                                if (isEnglish) {
+                                    "Select"
+                                } else {
+                                    "בחירה"
+                                },
+                            cancelText =
+                                if (isEnglish) {
+                                    "Cancel"
+                                } else {
+                                    "ביטול"
+                                },
+                            onDismiss = {
+                                showEndTimePicker = false
+                            },
+                            onTimeSelected = { selectedTime ->
+                                changedEndTime = selectedTime
+                                trainingManagementError = null
+                                showEndTimePicker = false
+                            }
+                        )
+                    }
+
+                    AlertDialog(
+                        onDismissRequest = {
+                            if (!isSavingTrainingChange) {
+                                closeTrainingManagementDialog()
+                            }
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(30.dp),
+                        containerColor = Color(0xFFF8FAFC),
+                        tonalElevation = 12.dp,
+
+                        title = {
+                            Column(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalAlignment =
+                                    Alignment.CenterHorizontally
+                            ) {
+                                Surface(
+                                    modifier = Modifier.size(54.dp),
+                                    shape = CircleShape,
+                                    color =
+                                        dialogAccent.copy(alpha = 0.12f),
+                                    border = BorderStroke(
+                                        width = 1.dp,
+                                        color =
+                                            dialogAccent.copy(alpha = 0.28f)
+                                    )
+                                ) {
+                                    Box(
+                                        contentAlignment =
+                                            Alignment.Center
+                                    ) {
+                                        Icon(
+                                            imageVector =
+                                                when (
+                                                    trainingManagementMode
+                                                ) {
+                                                    TrainingManagementMode.CANCEL ->
+                                                        Icons.Filled.Cancel
+
+                                                    TrainingManagementMode.CHANGE_TIME ->
+                                                        Icons.Filled.Schedule
+
+                                                    TrainingManagementMode.MENU ->
+                                                        Icons.Filled.EditNote
+                                                },
+                                            contentDescription = null,
+                                            tint = dialogAccent,
+                                            modifier = Modifier.size(28.dp)
+                                        )
+                                    }
+                                }
+
+                                Spacer(Modifier.height(10.dp))
+
+                                Text(
+                                    text =
+                                        when (trainingManagementMode) {
+                                            TrainingManagementMode.MENU ->
+                                                if (isEnglish) {
+                                                    "Manage training"
+                                                } else {
+                                                    "ניהול אימון"
+                                                }
+
+                                            TrainingManagementMode.CANCEL ->
+                                                if (isEnglish) {
+                                                    "Cancel training"
+                                                } else {
+                                                    "ביטול אימון"
+                                                }
+
+                                            TrainingManagementMode.CHANGE_TIME ->
+                                                if (isEnglish) {
+                                                    "Change training time"
+                                                } else {
+                                                    "שינוי שעת האימון"
+                                                }
+                                        },
+                                    fontWeight = FontWeight.Black,
+                                    fontSize = 23.sp,
+                                    color = Color(0xFF172033),
+                                    textAlign = TextAlign.Center
+                                )
+                            }
+                        },
+
+                        text = {
+                            val managementScrollState =
+                                rememberScrollState()
+
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .heightIn(max = 500.dp)
+                                    .verticalScroll(
+                                        managementScrollState
+                                    )
+                                    .padding(
+                                        top = 2.dp,
+                                        bottom = 8.dp
+                                    ),
+                                verticalArrangement =
+                                    Arrangement.spacedBy(12.dp)
+                            ) {
+
+                                /*
+                                 * כרטיס פרטי האימון.
+                                 */
+                                Surface(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    shape = RoundedCornerShape(20.dp),
+                                    color = Color.White,
+                                    shadowElevation = 4.dp,
+                                    border = BorderStroke(
+                                        1.dp,
+                                        Color(0xFFDCE6F2)
+                                    )
+                                ) {
+                                    Column(
+                                        modifier = Modifier.padding(
+                                            horizontal = 13.dp,
+                                            vertical = 9.dp
+                                        ),
+                                        verticalArrangement =
+                                            Arrangement.spacedBy(3.dp)
+                                    ) {
+                                        Text(
+                                            text =
+                                                selectedItem.training
+                                                    .place
+                                                    .orEmpty()
+                                                    .ifBlank {
+                                                        selectedItem.branch
+                                                    },
+                                            fontWeight =
+                                                FontWeight.ExtraBold,
+                                            fontSize = 16.sp,
+                                            color = Color(0xFF1E293B),
+                                            textAlign =
+                                                if (isEnglish) {
+                                                    TextAlign.Left
+                                                } else {
+                                                    TextAlign.Right
+                                                },
+                                            modifier =
+                                                Modifier.fillMaxWidth()
+                                        )
+
+                                        Text(
+                                            text =
+                                                if (isEnglish) {
+                                                    "Branch: ${selectedItem.branch}"
+                                                } else {
+                                                    "סניף: ${selectedItem.branch}"
+                                                },
+                                            fontWeight =
+                                                FontWeight.SemiBold,
+                                            color = Color(0xFF475569),
+                                            modifier =
+                                                Modifier.fillMaxWidth(),
+                                            textAlign =
+                                                if (isEnglish) {
+                                                    TextAlign.Left
+                                                } else {
+                                                    TextAlign.Right
+                                                }
+                                        )
+
+                                        Text(
+                                            text =
+                                                if (isEnglish) {
+                                                    "Group: ${selectedItem.group}"
+                                                } else {
+                                                    "קבוצה: ${selectedItem.group}"
+                                                },
+                                            fontWeight =
+                                                FontWeight.SemiBold,
+                                            color = Color(0xFF475569),
+                                            modifier =
+                                                Modifier.fillMaxWidth(),
+                                            textAlign =
+                                                if (isEnglish) {
+                                                    TextAlign.Left
+                                                } else {
+                                                    TextAlign.Right
+                                                }
+                                        )
+
+                                        val currentTimeText =
+                                            buildString {
+                                                append(
+                                                    selectedItem.training
+                                                        .start
+                                                        .trim()
+                                                )
+
+                                                val end =
+                                                    selectedItem.training
+                                                        .end
+                                                        .trim()
+
+                                                if (end.isNotBlank()) {
+                                                    append(" – ")
+                                                    append(end)
+                                                }
+                                            }
+
+                                        if (currentTimeText.isNotBlank()) {
+                                            Text(
+                                                text =
+                                                    if (isEnglish) {
+                                                        "Current time: $currentTimeText"
+                                                    } else {
+                                                        "שעה נוכחית: $currentTimeText"
+                                                    },
+                                                fontWeight =
+                                                    FontWeight.Bold,
+                                                color = dialogAccent,
+                                                modifier =
+                                                    Modifier.fillMaxWidth(),
+                                                textAlign =
+                                                    if (isEnglish) {
+                                                        TextAlign.Left
+                                                    } else {
+                                                        TextAlign.Right
+                                                    }
+                                            )
+                                        }
+                                    }
+                                }
+
+                                when (trainingManagementMode) {
+
+                                    TrainingManagementMode.MENU -> {
+                                        Text(
+                                            text =
+                                                if (isEnglish) {
+                                                    "Choose the action you want to perform"
+                                                } else {
+                                                    "בחר את הפעולה שברצונך לבצע"
+                                                },
+                                            fontWeight = FontWeight.Bold,
+                                            color = Color(0xFF475569),
+                                            textAlign = TextAlign.Center,
+                                            modifier =
+                                                Modifier.fillMaxWidth()
+                                        )
+
+                                        Surface(
+                                            onClick = {
+                                                clickSound()
+                                                haptic(true)
+
+                                                trainingManagementMode =
+                                                    TrainingManagementMode.CHANGE_TIME
+
+                                                changedStartTime =
+                                                    Regex(
+                                                        """(?:[01]\d|2[0-3]):[0-5]\d"""
+                                                    )
+                                                        .find(
+                                                            selectedItem.training.start
+                                                        )
+                                                        ?.value
+                                                        .orEmpty()
+
+                                                changedEndTime =
+                                                    Regex(
+                                                        """(?:[01]\d|2[0-3]):[0-5]\d"""
+                                                    )
+                                                        .find(
+                                                            selectedItem.training.end
+                                                        )
+                                                        ?.value
+                                                        .orEmpty()
+
+                                                trainingManagementError =
+                                                    null
+                                            },
+                                            modifier = Modifier.fillMaxWidth(),
+                                            shape = RoundedCornerShape(18.dp),
+                                            color = Color(0xFFF1ECFF),
+                                            border = BorderStroke(
+                                                1.dp,
+                                                Color(0xFFB9A4E8)
+                                            ),
+                                            shadowElevation = 2.dp
+                                        ) {
+                                            Row(
+                                                modifier = Modifier.padding(
+                                                    horizontal = 14.dp,
+                                                    vertical = 11.dp
+                                                ),
+                                                verticalAlignment =
+                                                    Alignment.CenterVertically,
+                                                horizontalArrangement =
+                                                    Arrangement.spacedBy(12.dp)
+                                            ) {
+                                                Surface(
+                                                    modifier =
+                                                        Modifier.size(38.dp),
+                                                    shape = CircleShape,
+                                                    color =
+                                                        Color(0xFF6D4BB6)
+                                                ) {
+                                                    Box(
+                                                        contentAlignment =
+                                                            Alignment.Center
+                                                    ) {
+                                                        Icon(
+                                                            imageVector =
+                                                                Icons.Filled.Schedule,
+                                                            contentDescription = null,
+                                                            tint = Color.White,
+                                                            modifier =
+                                                                Modifier.size(21.dp)
+                                                        )
+                                                    }
+                                                }
+
+                                                Column(
+                                                    modifier =
+                                                        Modifier.weight(1f)
+                                                ) {
+                                                    Text(
+                                                        text =
+                                                            if (isEnglish) {
+                                                                "Change training time"
+                                                            } else {
+                                                                "שינוי שעת אימון"
+                                                            },
+                                                        fontWeight =
+                                                            FontWeight.ExtraBold,
+                                                        color =
+                                                            Color(0xFF5B3AA8),
+                                                        fontSize = 17.sp
+                                                    )
+
+                                                    Text(
+                                                        text =
+                                                            if (isEnglish) {
+                                                                "Choose a new start and end time"
+                                                            } else {
+                                                                "בחירת שעת התחלה וסיום חדשות"
+                                                            },
+                                                        color =
+                                                            Color(0xFF655A78),
+                                                        fontSize = 13.sp
+                                                    )
+                                                }
+                                            }
+                                        }
+
+                                        Surface(
+                                            onClick = {
+                                                clickSound()
+                                                haptic(true)
+                                                trainingManagementMode =
+                                                    TrainingManagementMode.CANCEL
+                                                trainingManagementError =
+                                                    null
+                                            },
+                                            modifier = Modifier.fillMaxWidth(),
+                                            shape = RoundedCornerShape(18.dp),
+                                            color = Color(0xFFFFEEEE),
+                                            border = BorderStroke(
+                                                1.dp,
+                                                Color(0xFFF2AAAA)
+                                            ),
+                                            shadowElevation = 2.dp
+                                        ) {
+                                            Row(
+                                                modifier = Modifier.padding(
+                                                    horizontal = 14.dp,
+                                                    vertical = 11.dp
+                                                ),
+                                                verticalAlignment =
+                                                    Alignment.CenterVertically,
+                                                horizontalArrangement =
+                                                    Arrangement.spacedBy(12.dp)
+                                            ) {
+                                                Surface(
+                                                    modifier =
+                                                        Modifier.size(38.dp),
+                                                    shape = CircleShape,
+                                                    color =
+                                                        Color(0xFFB91C1C)
+                                                ) {
+                                                    Box(
+                                                        contentAlignment =
+                                                            Alignment.Center
+                                                    ) {
+                                                        Icon(
+                                                            imageVector =
+                                                                Icons.Filled.Cancel,
+                                                            contentDescription = null,
+                                                            tint = Color.White,
+                                                            modifier =
+                                                                Modifier.size(21.dp)
+                                                        )
+                                                    }
+                                                }
+
+                                                Column(
+                                                    modifier =
+                                                        Modifier.weight(1f)
+                                                ) {
+                                                    Text(
+                                                        text =
+                                                            if (isEnglish) {
+                                                                "Cancel training"
+                                                            } else {
+                                                                "ביטול אימון"
+                                                            },
+                                                        fontWeight =
+                                                            FontWeight.ExtraBold,
+                                                        color =
+                                                            Color(0xFFB91C1C),
+                                                        fontSize = 17.sp
+                                                    )
+
+                                                    Text(
+                                                        text =
+                                                            if (isEnglish) {
+                                                                "Cancel this training and notify trainees"
+                                                            } else {
+                                                                "ביטול האימון ושליחת עדכון למתאמנים"
+                                                            },
+                                                        color =
+                                                            Color(0xFF7F1D1D),
+                                                        fontSize = 13.sp
+                                                    )
+                                                }
+                                            }
+                                        }
+                                    }
+
+                                    TrainingManagementMode.CANCEL -> {
+                                        Surface(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            shape = RoundedCornerShape(16.dp),
+                                            color = Color(0xFFFFF1F2),
+                                            border = BorderStroke(
+                                                1.dp,
+                                                Color(0xFFFDA4AF)
+                                            )
+                                        ) {
+                                            Text(
+                                                text =
+                                                    if (isEnglish) {
+                                                        "The training will be marked as cancelled for all trainees."
+                                                    } else {
+                                                        "האימון יסומן כמבוטל עבור כל המתאמנים."
+                                                    },
+                                                color = Color(0xFF9F1239),
+                                                fontWeight = FontWeight.Bold,
+                                                textAlign = TextAlign.Center,
+                                                modifier = Modifier.padding(
+                                                    horizontal = 12.dp,
+                                                    vertical = 10.dp
+                                                )
+                                            )
+                                        }
+
+                                        OutlinedTextField(
+                                            value = trainingChangeReason,
+                                            onValueChange = {
+                                                if (it.length <= 250) {
+                                                    trainingChangeReason = it
+                                                    trainingManagementError =
+                                                        null
+                                                }
+                                            },
+                                            modifier = Modifier.fillMaxWidth(),
+                                            label = {
+                                                Text(
+                                                    if (isEnglish) {
+                                                        "Cancellation reason"
+                                                    } else {
+                                                        "סיבת ביטול האימון"
+                                                    }
+                                                )
+                                            },
+                                            placeholder = {
+                                                Text(
+                                                    if (isEnglish) {
+                                                        "For example: the coach is unavailable"
+                                                    } else {
+                                                        "לדוגמה: המאמן אינו זמין"
+                                                    }
+                                                )
+                                            },
+                                            minLines = 3,
+                                            maxLines = 5,
+                                            supportingText = {
+                                                Text(
+                                                    "${trainingChangeReason.length}/250"
+                                                )
+                                            },
+                                            shape = RoundedCornerShape(16.dp),
+                                            colors =
+                                                OutlinedTextFieldDefaults.colors(
+                                                    focusedBorderColor =
+                                                        Color(0xFFB91C1C),
+                                                    focusedLabelColor =
+                                                        Color(0xFFB91C1C),
+                                                    cursorColor =
+                                                        Color(0xFFB91C1C),
+                                                    focusedContainerColor =
+                                                        Color.White,
+                                                    unfocusedContainerColor =
+                                                        Color.White
+                                                )
+                                        )
+                                    }
+
+                                    TrainingManagementMode.CHANGE_TIME -> {
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            horizontalArrangement =
+                                                Arrangement.spacedBy(10.dp)
+                                        ) {
+                                            Box(
+                                                modifier = Modifier.weight(1f)
+                                            ) {
+                                                OutlinedTextField(
+                                                    value = changedStartTime,
+                                                    onValueChange = {},
+                                                    modifier = Modifier.fillMaxWidth(),
+                                                    readOnly = true,
+                                                    label = {
+                                                        Text(
+                                                            if (isEnglish) {
+                                                                "Start"
+                                                            } else {
+                                                                "התחלה"
+                                                            }
+                                                        )
+                                                    },
+                                                    placeholder = {
+                                                        Text("19:00")
+                                                    },
+                                                    trailingIcon = {
+                                                        Icon(
+                                                            imageVector =
+                                                                Icons.Filled.Schedule,
+                                                            contentDescription = null,
+                                                            tint = Color(0xFF6D4BB6)
+                                                        )
+                                                    },
+                                                    singleLine = true,
+                                                    textStyle =
+                                                        MaterialTheme.typography.bodyLarge.copy(
+                                                            textAlign = TextAlign.Center,
+                                                            fontWeight = FontWeight.Bold
+                                                        ),
+                                                    shape = RoundedCornerShape(15.dp)
+                                                )
+
+                                                Box(
+                                                    modifier = Modifier
+                                                        .matchParentSize()
+                                                        .clickable {
+                                                            clickSound()
+                                                            haptic(true)
+                                                            showStartTimePicker = true
+                                                        }
+                                                )
+                                            }
+
+                                            Box(
+                                                modifier = Modifier.weight(1f)
+                                            ) {
+                                                OutlinedTextField(
+                                                    value = changedEndTime,
+                                                    onValueChange = {},
+                                                    modifier = Modifier.fillMaxWidth(),
+                                                    readOnly = true,
+                                                    label = {
+                                                        Text(
+                                                            if (isEnglish) {
+                                                                "End"
+                                                            } else {
+                                                                "סיום"
+                                                            }
+                                                        )
+                                                    },
+                                                    placeholder = {
+                                                        Text("20:30")
+                                                    },
+                                                    trailingIcon = {
+                                                        Icon(
+                                                            imageVector =
+                                                                Icons.Filled.Schedule,
+                                                            contentDescription = null,
+                                                            tint = Color(0xFF6D4BB6)
+                                                        )
+                                                    },
+                                                    singleLine = true,
+                                                    textStyle =
+                                                        MaterialTheme.typography.bodyLarge.copy(
+                                                            textAlign = TextAlign.Center,
+                                                            fontWeight = FontWeight.Bold
+                                                        ),
+                                                    shape = RoundedCornerShape(15.dp)
+                                                )
+
+                                                Box(
+                                                    modifier = Modifier
+                                                        .matchParentSize()
+                                                        .clickable {
+                                                            clickSound()
+                                                            haptic(true)
+                                                            showEndTimePicker = true
+                                                        }
+                                                )
+                                            }
+                                        }
+
+                                        Text(
+                                            text =
+                                                if (isEnglish) {
+                                                    "Tap a field to select the hour and minutes"
+                                                } else {
+                                                    "לחץ על שדה כדי לבחור שעה ודקות"
+                                                },
+                                            style =
+                                                MaterialTheme.typography.labelSmall,
+                                            color = Color(0xFF64748B),
+                                            modifier = Modifier.fillMaxWidth(),
+                                            textAlign = TextAlign.Center
+                                        )
+
+                                        OutlinedTextField(
+                                            value = trainingChangeReason,
+                                            onValueChange = {
+                                                if (it.length <= 250) {
+                                                    trainingChangeReason = it
+                                                    trainingManagementError =
+                                                        null
+                                                }
+                                            },
+                                            modifier = Modifier.fillMaxWidth(),
+                                            label = {
+                                                Text(
+                                                    if (isEnglish) {
+                                                        "Reason for the change"
+                                                    } else {
+                                                        "סיבת שינוי שעת האימון"
+                                                    }
+                                                )
+                                            },
+                                            placeholder = {
+                                                Text(
+                                                    if (isEnglish) {
+                                                        "Write a message for the trainees"
+                                                    } else {
+                                                        "כתוב הודעה שתוצג למתאמנים"
+                                                    }
+                                                )
+                                            },
+                                            minLines = 3,
+                                            maxLines = 5,
+                                            supportingText = {
+                                                Text(
+                                                    "${trainingChangeReason.length}/250"
+                                                )
+                                            },
+                                            shape = RoundedCornerShape(16.dp),
+                                            colors =
+                                                OutlinedTextFieldDefaults.colors(
+                                                    focusedBorderColor =
+                                                        Color(0xFF6D4BB6),
+                                                    focusedLabelColor =
+                                                        Color(0xFF6D4BB6),
+                                                    cursorColor =
+                                                        Color(0xFF6D4BB6),
+                                                    focusedContainerColor =
+                                                        Color.White,
+                                                    unfocusedContainerColor =
+                                                        Color.White
+                                                )
+                                        )
+                                    }
+                                }
+
+                                trainingManagementError?.let { error ->
+                                    Surface(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        shape = RoundedCornerShape(13.dp),
+                                        color = Color(0xFFFFE4E6)
+                                    ) {
+                                        Text(
+                                            text = error,
+                                            color = Color(0xFFBE123C),
+                                            fontWeight = FontWeight.Bold,
+                                            textAlign = TextAlign.Center,
+                                            modifier = Modifier.padding(10.dp)
+                                        )
+                                    }
+                                }
+                            }
+                        },
+
+                        confirmButton = {
+                            when (trainingManagementMode) {
+                                TrainingManagementMode.MENU -> {
+                                    TextButton(
+                                        onClick = {
+                                            closeTrainingManagementDialog()
+                                        }
+                                    ) {
+                                        Text(
+                                            text =
+                                                if (isEnglish) {
+                                                    "Close"
+                                                } else {
+                                                    "סגור"
+                                                },
+                                            fontWeight = FontWeight.Bold
+                                        )
+                                    }
+                                }
+
+                                TrainingManagementMode.CANCEL,
+                                TrainingManagementMode.CHANGE_TIME -> {
+                                    Button(
+                                        onClick = {
+                                            clickSound()
+                                            haptic(true)
+
+                                            if (isSavingTrainingChange) {
+                                                return@Button
+                                            }
+
+                                            val cleanReason =
+                                                trainingChangeReason.trim()
+
+                                            if (cleanReason.length < 3) {
+                                                trainingManagementError =
+                                                    if (isEnglish) {
+                                                        "Please enter a reason of at least 3 characters."
+                                                    } else {
+                                                        "יש להזין סיבה באורך של 3 תווים לפחות."
+                                                    }
+
+                                                return@Button
+                                            }
+
+                                            val changedByName =
+                                                coachFromPrefs
+                                                    .trim()
+                                                    .ifBlank {
+                                                        freeNameUi.trim()
+                                                    }
+                                                    .ifBlank {
+                                                        FirebaseAuth.getInstance()
+                                                            .currentUser
+                                                            ?.displayName
+                                                            ?.trim()
+                                                            .orEmpty()
+                                                    }
+                                                    .ifBlank {
+                                                        if (isEnglish) {
+                                                            "Coach"
+                                                        } else {
+                                                            "מאמן"
+                                                        }
+                                                    }
+
+                                            isSavingTrainingChange = true
+                                            trainingManagementError = null
+
+                                            when (trainingManagementMode) {
+
+                                                TrainingManagementMode.CANCEL -> {
+                                                    TrainingOverrideRepository.cancelTraining(
+                                                        training =
+                                                            selectedItem.training,
+                                                        branch =
+                                                            selectedItem.branch,
+                                                        group =
+                                                            selectedItem.group,
+                                                        reason =
+                                                            cleanReason,
+                                                        changedByName =
+                                                            changedByName,
+                                                        onResult = { success, error ->
+                                                            isSavingTrainingChange = false
+
+                                                            if (success) {
+                                                                closeTrainingManagementDialog()
+                                                            } else {
+                                                                trainingManagementError =
+                                                                    if (isEnglish) {
+                                                                        error?.localizedMessage
+                                                                            ?.takeIf {
+                                                                                it.isNotBlank()
+                                                                            }
+                                                                            ?: "The training could not be cancelled."
+                                                                    } else {
+                                                                        error?.localizedMessage
+                                                                            ?.takeIf {
+                                                                                it.isNotBlank()
+                                                                            }
+                                                                            ?: "לא ניתן היה לבטל את האימון."
+                                                                    }
+                                                            }
+                                                        }
+                                                    )
+                                                }
+
+                                                TrainingManagementMode.CHANGE_TIME -> {
+                                                    fun parseTime(
+                                                        rawValue: String
+                                                    ): Pair<Int, Int>? {
+                                                        val parts =
+                                                            rawValue
+                                                                .trim()
+                                                                .split(":")
+
+                                                        if (parts.size != 2) {
+                                                            return null
+                                                        }
+
+                                                        val hour =
+                                                            parts[0].toIntOrNull()
+                                                                ?: return null
+
+                                                        val minute =
+                                                            parts[1].toIntOrNull()
+                                                                ?: return null
+
+                                                        if (
+                                                            hour !in 0..23 ||
+                                                            minute !in 0..59
+                                                        ) {
+                                                            return null
+                                                        }
+
+                                                        return hour to minute
+                                                    }
+
+                                                    val parsedStart =
+                                                        parseTime(changedStartTime)
+
+                                                    val parsedEnd =
+                                                        parseTime(changedEndTime)
+
+                                                    if (
+                                                        parsedStart == null ||
+                                                        parsedEnd == null
+                                                    ) {
+                                                        isSavingTrainingChange = false
+
+                                                        trainingManagementError =
+                                                            if (isEnglish) {
+                                                                "Enter valid times in HH:mm format."
+                                                            } else {
+                                                                "יש להזין שעות תקינות בפורמט HH:mm."
+                                                            }
+
+                                                        return@Button
+                                                    }
+
+                                                    /*
+                                                     * שומרים את התאריך המקורי של האימון
+                                                     * ומשנים רק את השעה.
+                                                     */
+                                                    val newStartCalendar =
+                                                        (
+                                                                selectedItem.training.cal
+                                                                    .clone() as Calendar
+                                                                ).apply {
+                                                                set(
+                                                                    Calendar.HOUR_OF_DAY,
+                                                                    parsedStart.first
+                                                                )
+                                                                set(
+                                                                    Calendar.MINUTE,
+                                                                    parsedStart.second
+                                                                )
+                                                                set(Calendar.SECOND, 0)
+                                                                set(Calendar.MILLISECOND, 0)
+                                                            }
+
+                                                    val newEndCalendar =
+                                                        (
+                                                                selectedItem.training.cal
+                                                                    .clone() as Calendar
+                                                                ).apply {
+                                                                set(
+                                                                    Calendar.HOUR_OF_DAY,
+                                                                    parsedEnd.first
+                                                                )
+                                                                set(
+                                                                    Calendar.MINUTE,
+                                                                    parsedEnd.second
+                                                                )
+                                                                set(Calendar.SECOND, 0)
+                                                                set(Calendar.MILLISECOND, 0)
+                                                            }
+
+                                                    /*
+                                                     * אם שעת הסיום מוקדמת משעת ההתחלה,
+                                                     * האימון מסתיים ביום הבא.
+                                                     */
+                                                    if (
+                                                        newEndCalendar.timeInMillis <=
+                                                        newStartCalendar.timeInMillis
+                                                    ) {
+                                                        newEndCalendar.add(
+                                                            Calendar.DAY_OF_YEAR,
+                                                            1
+                                                        )
+                                                    }
+
+                                                    TrainingOverrideRepository.changeTrainingTime(
+                                                        training =
+                                                            selectedItem.training,
+                                                        branch =
+                                                            selectedItem.branch,
+                                                        group =
+                                                            selectedItem.group,
+                                                        newStartMillis =
+                                                            newStartCalendar.timeInMillis,
+                                                        newEndMillis =
+                                                            newEndCalendar.timeInMillis,
+                                                        reason =
+                                                            cleanReason,
+                                                        changedByName =
+                                                            changedByName,
+                                                        onResult = { success, error ->
+                                                            isSavingTrainingChange = false
+
+                                                            if (success) {
+                                                                closeTrainingManagementDialog()
+                                                            } else {
+                                                                trainingManagementError =
+                                                                    if (isEnglish) {
+                                                                        error?.localizedMessage
+                                                                            ?.takeIf {
+                                                                                it.isNotBlank()
+                                                                            }
+                                                                            ?: "The new training time could not be saved."
+                                                                    } else {
+                                                                        error?.localizedMessage
+                                                                            ?.takeIf {
+                                                                                it.isNotBlank()
+                                                                            }
+                                                                            ?: "לא ניתן היה לשמור את שעת האימון החדשה."
+                                                                    }
+                                                            }
+                                                        }
+                                                    )
+                                                }
+
+                                                TrainingManagementMode.MENU -> {
+                                                    isSavingTrainingChange = false
+                                                }
+                                            }
+                                        },
+                                        enabled =
+                                            canSubmit &&
+                                                    !isSavingTrainingChange,
+                                        shape = RoundedCornerShape(14.dp),
+                                        colors =
+                                            ButtonDefaults.buttonColors(
+                                                containerColor =
+                                                    dialogAccent,
+                                                disabledContainerColor =
+                                                    dialogAccent.copy(
+                                                        alpha = 0.35f
+                                                    )
+                                            )
+                                    ) {
+                                        if (isSavingTrainingChange) {
+                                            CircularProgressIndicator(
+                                                modifier =
+                                                    Modifier.size(18.dp),
+                                                strokeWidth = 2.dp,
+                                                color = Color.White
+                                            )
+
+                                            Spacer(Modifier.width(8.dp))
+                                        }
+
+                                        Text(
+                                            text =
+                                                when (
+                                                    trainingManagementMode
+                                                ) {
+                                                    TrainingManagementMode.CANCEL ->
+                                                        if (isEnglish) {
+                                                            "Confirm cancellation"
+                                                        } else {
+                                                            "אישור ביטול האימון"
+                                                        }
+
+                                                    TrainingManagementMode.CHANGE_TIME ->
+                                                        if (isEnglish) {
+                                                            "Save new time"
+                                                        } else {
+                                                            "שמירת השעה החדשה"
+                                                        }
+
+                                                    else -> ""
+                                                },
+                                            fontWeight = FontWeight.Bold
+                                        )
+                                    }
+                                }
+                            }
+                        },
+
+                        dismissButton = {
+                            if (
+                                trainingManagementMode !=
+                                TrainingManagementMode.MENU
+                            ) {
+                                TextButton(
+                                    enabled = !isSavingTrainingChange,
+                                    onClick = {
+                                        clickSound()
+                                        haptic(true)
+                                        trainingManagementMode =
+                                            TrainingManagementMode.MENU
+                                        trainingManagementError = null
+                                    }
+                                ) {
+                                    Icon(
+                                        imageVector =
+                                            Icons.Filled.ArrowBack,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(17.dp)
+                                    )
+
+                                    Spacer(Modifier.width(5.dp))
+
+                                    Text(
+                                        text =
+                                            if (isEnglish) {
+                                                "Back"
+                                            } else {
+                                                "חזרה"
+                                            },
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                }
+                            }
+                        }
+                    )
                 }
 
                 Spacer(Modifier.height(1.dp))
@@ -2618,7 +4343,13 @@ fun HomeScreen(
                 if (showTrainingArchive) {
                     TrainingArchiveDialog(
                         baseTrainings =
-                            currentWeekCandidates,
+                            currentWeekCandidates.map { candidate ->
+                                TrainingArchiveSource(
+                                    training = candidate.training,
+                                    branch = candidate.branch,
+                                    group = candidate.group
+                                )
+                            },
                         isEnglish = isEnglish,
                         onDismiss = {
                             showTrainingArchive = false
@@ -2688,22 +4419,25 @@ fun HomeScreen(
                     }
                 },
 
-                /*
-                 * ארכיון האימונים זמין לכל משתמש ואינו
-                 * תופס מקום קבוע במסך הבית.
-                 */
                 Triple(
-                    if (isEnglish) {
-                        "Training Archive"
-                    } else {
-                        "ארכיון אימונים"
-                    },
+                    (
+                            if (isEnglish) {
+                                "Training Archive"
+                            } else {
+                                "ארכיון אימונים"
+                            }
+                            ) + lockSuffix,
                     Icons.Filled.History
                 ) {
                     clickSound()
                     haptic(true)
                     fabExpanded = false
-                    showTrainingArchive = true
+
+                    if (hasFullAccess) {
+                        showTrainingArchive = true
+                    } else {
+                        onOpenSubscription()
+                    }
                 },
 
                 Triple(
@@ -2791,10 +4525,11 @@ fun HomeScreen(
                     tonalElevation = 10.dp,
                     title = {
                         Text(
-                            text = if (isEnglish) {
-                                "Recent coach messages"
+                            text =
+                            if (isEnglish) {
+                                "Recent messages and events"
                             } else {
-                                "הודעות אחרונות מהמאמן"
+                                "הודעות ואירועים אחרונים"
                             },
                             fontWeight = FontWeight.Black,
                             fontSize = 16.sp,
@@ -2813,7 +4548,7 @@ fun HomeScreen(
                                 .heightIn(max = 430.dp),
                             verticalArrangement = Arrangement.spacedBy(10.dp)
                         ) {
-                            if (recentCoachMessages.isEmpty()) {
+                            if (homeNotices.isEmpty()) {
                                 item {
                                     Surface(
                                         modifier = Modifier.fillMaxWidth(),
@@ -2842,15 +4577,9 @@ fun HomeScreen(
                                 }
                             } else {
                                 items(
-                                    items = recentCoachMessages,
-                                    key = { message ->
-                                        buildString {
-                                            append(message.sentAt?.time ?: 0L)
-                                            append("|")
-                                            append(message.coachName)
-                                            append("|")
-                                            append(message.text.take(40))
-                                        }
+                                    items = homeNotices,
+                                    key = { notice ->
+                                        notice.id
                                     }
                                 ) { message ->
                                     Surface(
@@ -3287,7 +5016,7 @@ private fun ModernHomeQuickFab(
                 imageVector = Icons.Filled.Menu,
                 contentDescription = if (isEnglish) "Quick menu" else "תפריט מהיר",
                 tint = Color.White,
-                modifier = Modifier.size(23.dp)
+                modifier = Modifier.size(21.dp)
             )
         }
     }
@@ -3640,8 +5369,13 @@ private fun buildExplanationWithStanceHighlight(
 @Composable
 private fun TrainingCardCompact(
     training: TrainingData,
+    branch: String,
+    group: String,
+    isCoach: Boolean,
     isEnglish: Boolean,
-    status: TrainingStatusEngine.Status
+    status: TrainingStatusEngine.Status,
+    activeOverride: TrainingOverride?,
+    onManageTraining: () -> Unit
 ) {
     val ctx = LocalContext.current
     val haptic = rememberHapticsGlobal()
@@ -3764,48 +5498,89 @@ private fun TrainingCardCompact(
         Locale("he", "IL")
     }
 
-    val dayText = remember(training.cal.timeInMillis, isEnglish) {
-        SimpleDateFormat("EEEE", locale).format(training.cal.time)
-    }
-    val dateText = remember(training.cal.timeInMillis, isEnglish) {
-        SimpleDateFormat("dd/MM", locale).format(training.cal.time)
-    }
-    val timeText = remember(
-        training.startMillis,
-        training.endMillis,
-        isEnglish
-    ) {
-        val formatter =
+    val effectiveStartMillis =
+        activeOverride
+            ?.takeIf {
+                it.hasChangedTime
+            }
+            ?.effectiveStartMillis
+            ?: training.startMillis
+
+    val effectiveEndMillis =
+        activeOverride
+            ?.takeIf {
+                it.hasChangedTime
+            }
+            ?.effectiveEndMillis
+            ?: training.endMillis
+            ?: training.startMillis
+
+    val effectiveStartDate =
+        remember(effectiveStartMillis) {
+            Date(effectiveStartMillis)
+        }
+
+    val dayText =
+        remember(
+            effectiveStartMillis,
+            isEnglish
+        ) {
             SimpleDateFormat(
-                "HH:mm",
+                "EEEE",
                 locale
             ).apply {
                 timeZone =
                     TimeZone.getTimeZone(
                         "Asia/Jerusalem"
                     )
-            }
+            }.format(effectiveStartDate)
+        }
 
-        val effectiveEndMillis =
-            training.endMillis
-                ?: training.startMillis
+    val dateText =
+        remember(
+            effectiveStartMillis,
+            isEnglish
+        ) {
+            SimpleDateFormat(
+                "dd/MM",
+                locale
+            ).apply {
+                timeZone =
+                    TimeZone.getTimeZone(
+                        "Asia/Jerusalem"
+                    )
+            }.format(effectiveStartDate)
+        }
 
-        val start =
-            formatter.format(
-                Date(
-                    training.startMillis
+    val timeText =
+        remember(
+            effectiveStartMillis,
+            effectiveEndMillis,
+            isEnglish
+        ) {
+            val formatter =
+                SimpleDateFormat(
+                    "HH:mm",
+                    locale
+                ).apply {
+                    timeZone =
+                        TimeZone.getTimeZone(
+                            "Asia/Jerusalem"
+                        )
+                }
+
+            val start =
+                formatter.format(
+                    Date(effectiveStartMillis)
                 )
-            )
 
-        val end =
-            formatter.format(
-                Date(
-                    effectiveEndMillis
+            val end =
+                formatter.format(
+                    Date(effectiveEndMillis)
                 )
-            )
 
-        "$start – $end"
-    }
+            "$start – $end"
+        }
     val dateTimeText = remember(dayText, dateText, timeText, isEnglish) {
         if (isEnglish) {
             "$dayText $dateText · $timeText"
@@ -3847,14 +5622,47 @@ private fun TrainingCardCompact(
         }
     }
 
+    val trainingCardBorderColor =
+        when (status.state) {
+            TrainingStatusEngine.State.ONGOING ->
+                Color(0xFF047857)
+
+            TrainingStatusEngine.State.COMPLETED ->
+                Color(0xFF475569)
+
+            TrainingStatusEngine.State.CANCELLED_BY_HOLIDAY ->
+                Color(0xFF9A3412)
+
+            TrainingStatusEngine.State.INVALID ->
+                Color(0xFFB91C1C)
+
+            TrainingStatusEngine.State.SCHEDULED ->
+                Color(0xFF1D4ED8)
+        }
+
     Surface(
+        onClick = {
+            if (isCoach) {
+                clickSound()
+                haptic(true)
+                onManageTraining()
+            }
+        },
+        enabled = isCoach,
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 16.dp)
             .heightIn(min = 78.dp),
         color = MaterialTheme.colorScheme.surface,
         tonalElevation = 1.dp,
-        shape = RoundedCornerShape(16.dp)
+        shadowElevation = 3.dp,
+        shape = RoundedCornerShape(16.dp),
+        border = BorderStroke(
+            width = 1.dp,
+            color = trainingCardBorderColor.copy(
+                alpha = 0.35f
+            )
+        )
     ) {
         Column(
             modifier = Modifier
@@ -3903,7 +5711,24 @@ private fun TrainingCardCompact(
             )
 
             val statusMessage =
-                status.displayText(isEnglish)
+                when {
+                    activeOverride?.hasChangedTime == true ->
+                        if (isEnglish) {
+                            "Training time changed"
+                        } else {
+                            "שעת האימון שונתה"
+                        }
+
+                    activeOverride?.isCancelled == true ->
+                        if (isEnglish) {
+                            "Cancelled by coach"
+                        } else {
+                            "בוטל על ידי המאמן"
+                        }
+
+                    else ->
+                        status.displayText(isEnglish)
+                }
 
             if (!statusMessage.isNullOrBlank()) {
                 val statusBackgroundColor =
@@ -3944,31 +5769,34 @@ private fun TrainingCardCompact(
 
                 Spacer(Modifier.height(4.dp))
 
-                Surface(
+                Row(
                     modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(14.dp),
-                    color = statusBackgroundColor,
-                    border = BorderStroke(
-                        width = 1.dp,
-                        color = statusContentColor.copy(
-                            alpha = 0.35f
-                        )
-                    )
+                    horizontalArrangement = Arrangement.Center
                 ) {
-                    Text(
-                        text = statusMessage,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(
-                                horizontal = 10.dp,
-                                vertical = 7.dp
+                    Surface(
+                        shape = RoundedCornerShape(999.dp),
+                        color = statusBackgroundColor,
+                        border = BorderStroke(
+                            width = 1.dp,
+                            color = statusContentColor.copy(
+                                alpha = 0.18f
+                            )
+                        )
+                    ) {
+                        Text(
+                            text = statusMessage,
+                            modifier = Modifier.padding(
+                                horizontal = 14.dp,
+                                vertical = 5.dp
                             ),
-                        textAlign = TextAlign.Center,
-                        style =
-                            MaterialTheme.typography.labelMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = statusContentColor
-                    )
+                            textAlign = TextAlign.Center,
+                            style =
+                                MaterialTheme.typography.labelMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = statusContentColor,
+                            maxLines = 1
+                        )
+                    }
                 }
             }
 
@@ -4096,13 +5924,6 @@ private fun NavigationChip(
             }
 
             Spacer(Modifier.width(8.dp))
-
-            Icon(
-                imageVector = Icons.Filled.Person, // אם אתה רוצה חץ במקום, תגיד ואחליף
-                contentDescription = null,
-                tint = Color(0xFF2563EB).copy(alpha = 0.72f),
-                modifier = Modifier.size(18.dp)
-            )
         }
     }
 
