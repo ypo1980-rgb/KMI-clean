@@ -60,7 +60,6 @@ import androidx.compose.material.icons.filled.Send
 import androidx.compose.material.icons.filled.SwapHoriz
 import androidx.compose.material.icons.filled.ThumbDown
 import androidx.compose.material.icons.filled.ThumbUp
-import androidx.compose.material.icons.filled.KeyboardArrowDown
 import il.kmi.app.ui.DrawerBridge
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -110,18 +109,15 @@ import il.kmi.app.R
 import il.kmi.app.domain.ExerciseExplanationResolver
 import il.kmi.app.ui.KmiTopBar
 import il.kmi.app.ui.KmiTtsManager
-import il.kmi.app.ui.assistant.core.AssistantBrain
 import il.kmi.app.ui.assistant.core.AssistantKnowledgeSource
 import il.kmi.app.ui.assistant.core.AssistantMatchQuality
 import il.kmi.app.ui.assistant.core.AssistantMemory
 import il.kmi.app.ui.assistant.core.AssistantOrchestrator
 import il.kmi.app.ui.assistant.core.AssistantResult
 import il.kmi.app.ui.assistant.core.AssistantResultItem
-import il.kmi.app.ui.assistant.core.contextResults
 import il.kmi.app.ui.assistant.core.matchQuality
 import il.kmi.app.ui.assistant.core.primaryText
 import il.kmi.app.ui.assistant.exercise.ExerciseAssistantEngine
-import il.kmi.app.ui.assistant.material.MaterialAssistantEngine
 import il.kmi.app.ui.assistant.trainings.TrainingsAssistantEngine
 import il.kmi.shared.localization.AppLanguageManager
 import il.kmi.shared.questions.model.util.ExerciseTitleFormatter
@@ -4985,6 +4981,31 @@ fun AiAssistantDialog(
                                     ),
                                 contentAlignment = Alignment.Center
                             ) {
+                                val micPulseTransition =
+                                    rememberInfiniteTransition(
+                                        label = "assistantMicPulse"
+                                    )
+
+                                val micScale by
+                                if (isListening) {
+                                    micPulseTransition.animateFloat(
+                                        initialValue = 1f,
+                                        targetValue = 1.18f,
+                                        animationSpec = infiniteRepeatable(
+                                            animation = tween(
+                                                durationMillis = 700,
+                                                easing = FastOutSlowInEasing
+                                            ),
+                                            repeatMode = RepeatMode.Reverse
+                                        ),
+                                        label = "assistantMicScale"
+                                    )
+                                } else {
+                                    remember {
+                                        mutableStateOf(1f)
+                                    }
+                                }
+
                                 IconButton(
                                     modifier = Modifier
                                         .size(36.dp)
@@ -5012,30 +5033,53 @@ fun AiAssistantDialog(
                                         }
                                     }
                                 ) {
-                                    Icon(
-                                        imageVector = when {
-                                            isSpeaking -> Icons.Filled.Stop
-                                            isListening -> Icons.Filled.Mic
-                                            else -> Icons.Filled.Mic
-                                        },
-                                        contentDescription = when {
-                                            isSpeaking -> tr("עצור דיבור", "Stop speaking")
-                                            isListening -> tr(
-                                                "המיקרופון מאזין",
-                                                "Microphone is listening"
-                                            )
+                                    Box(
+                                        contentAlignment = Alignment.Center
+                                    ) {
 
-                                            else -> tr("הפעל מיקרופון", "Start microphone")
-                                        },
-                                        tint = when {
-                                            isSpeaking -> Color(0xFFE53935)
-                                            isListening -> MaterialTheme.colorScheme.primary
-                                            inputEnabled -> MaterialTheme.colorScheme.primary
-                                            else -> MaterialTheme.colorScheme.onSurfaceVariant.copy(
-                                                alpha = 0.55f
+                                        if (isListening) {
+                                            Box(
+                                                modifier = Modifier
+                                                    .size(42.dp)
+                                                    .background(
+                                                        MaterialTheme.colorScheme.primary.copy(alpha = 0.15f),
+                                                        CircleShape
+                                                    )
                                             )
                                         }
-                                    )
+
+                                        Icon(
+                                            imageVector = if (isSpeaking) {
+                                                Icons.Filled.Stop
+                                            } else {
+                                                Icons.Filled.Mic
+                                            },
+                                            contentDescription = when {
+                                                isSpeaking ->
+                                                    tr("עצור דיבור", "Stop speaking")
+
+                                                isListening ->
+                                                    tr("מקשיב", "Listening")
+
+                                                else ->
+                                                    tr("הפעל מיקרופון", "Start microphone")
+                                            },
+                                            tint = when {
+                                                isSpeaking ->
+                                                    Color(0xFFE53935)
+
+                                                isListening ->
+                                                    Color(0xFF00C853)
+
+                                                inputEnabled ->
+                                                    MaterialTheme.colorScheme.primary
+
+                                                else ->
+                                                    MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.55f)
+                                            },
+                                            modifier = Modifier.scale(micScale)
+                                        )
+                                    }
                                 }
                             }
                         }

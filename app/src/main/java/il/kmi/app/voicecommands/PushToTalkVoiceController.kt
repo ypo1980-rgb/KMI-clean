@@ -3,6 +3,8 @@ package il.kmi.app.voicecommands
 import android.content.Context
 import android.content.Intent
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import android.speech.RecognitionListener
 import android.speech.RecognizerIntent
 import android.speech.SpeechRecognizer
@@ -23,6 +25,7 @@ class PushToTalkVoiceController(
         spokenText: String
     ) -> Unit,
     private val onError: (String) -> Unit,
+    private val onPartialTranscript: (String) -> Unit = {},
     private val currentScreenName: () -> String = { "unknown" }
 ) {
     private val appContext = context.applicationContext
@@ -31,6 +34,15 @@ class PushToTalkVoiceController(
     private var currentState = PushToTalkState.IDLE
     private var destroyed = false
 
+    private val silenceHandler =
+        Handler(Looper.getMainLooper())
+
+    private val silenceRunnable = Runnable {
+        if (currentState == PushToTalkState.LISTENING) {
+            stopListening()
+        }
+    }
+
     fun isRecognitionAvailable(): Boolean {
         return SpeechRecognizer.isRecognitionAvailable(appContext)
     }
@@ -38,6 +50,8 @@ class PushToTalkVoiceController(
     fun startListening() {
         if (destroyed) return
         if (currentState != PushToTalkState.IDLE) return
+
+        onPartialTranscript("")
 
         if (!isRecognitionAvailable()) {
             VoiceCommandDiagnosticsLogger.logFailure(
@@ -101,16 +115,18 @@ class PushToTalkVoiceController(
             )
             putExtra(
                 RecognizerIntent.EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS,
-                1_500L
+                700L
             )
             putExtra(
                 RecognizerIntent.EXTRA_SPEECH_INPUT_POSSIBLY_COMPLETE_SILENCE_LENGTH_MILLIS,
-                900L
+                400L
             )
-            putExtra(
-                RecognizerIntent.EXTRA_SPEECH_INPUT_MINIMUM_LENGTH_MILLIS,
-                900L
-            )
+
+            /*
+             * לא מגבילים את משך ההקלטה המינימלי.
+             * אחרת חלק מהמכשירים ממשיכים להאזין
+             * גם לאחר שהמשתמש כבר סיים לדבר.
+             */
         }
 
         runCatching {
@@ -169,8 +185,21 @@ class PushToTalkVoiceController(
             speechRecognizer?.destroy()
         }
 
+        cancelSilenceTimer()
         speechRecognizer = null
         currentState = PushToTalkState.IDLE
+    }
+
+    private fun restartSilenceTimer() {
+        silenceHandler.removeCallbacks(silenceRunnable)
+        silenceHandler.postDelayed(
+            silenceRunnable,
+            900L
+        )
+    }
+
+    private fun cancelSilenceTimer() {
+        silenceHandler.removeCallbacks(silenceRunnable)
     }
 
     private fun ensureRecognizer() {
@@ -195,6 +224,7 @@ class PushToTalkVoiceController(
 
             override fun onBeginningOfSpeech() {
                 updateState(PushToTalkState.LISTENING)
+                restartSilenceTimer()
             }
 
             override fun onEndOfSpeech() {
@@ -202,6 +232,9 @@ class PushToTalkVoiceController(
             }
 
             override fun onResults(results: Bundle?) {
+                cancelSilenceTimer()
+                onPartialTranscript("")
+
                 val alternatives = results
                     ?.getStringArrayList(
                         SpeechRecognizer.RESULTS_RECOGNITION
@@ -344,7 +377,21 @@ class PushToTalkVoiceController(
 
             override fun onPartialResults(
                 partialResults: Bundle?
-            ) = Unit
+            ) {
+
+                val partial = partialResults
+                    ?.getStringArrayList(
+                        SpeechRecognizer.RESULTS_RECOGNITION
+                    )
+                    ?.firstOrNull()
+                    ?.trim()
+                    .orEmpty()
+
+                if (partial.isNotBlank()) {
+                    restartSilenceTimer()
+                    onPartialTranscript(partial)
+                }
+            }
 
             override fun onRmsChanged(rmsdB: Float) = Unit
 

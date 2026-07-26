@@ -10,6 +10,7 @@ import java.util.Calendar
 import java.util.Date
 import java.util.Locale
 import kotlin.math.min
+import org.json.JSONArray
 
 /* ============================================================================
    ⭐ AssistantTrainingKnowledge – מנוע NLP מלא לשאלות על אימוני KAMI / ק.מ.י ⭐
@@ -22,35 +23,316 @@ import kotlin.math.min
 class AssistantMemory(private val sp: SharedPreferences) {
 
     /**
-     * פרטי הרישום האמיתיים של המשתמש.
-     * העוזר רשאי לקרוא אותם, אך לעולם אינו כותב אליהם.
+     * כל הסניפים שאליהם המשתמש רשום בפועל.
+     *
+     * הפרופיל יכול להכיל:
+     * - JSON של כמה סניפים.
+     * - מחרוזת מופרדת בפסיקים.
+     * - StringSet ישן.
+     * - סניף פעיל בודד.
+     *
+     * העוזר קורא בלבד ואינו משנה את פרופיל המשתמש.
      */
-    fun getRegisteredBranch(): String? =
-        listOf(
+    fun getRegisteredBranches(): List<String> {
+
+        fun splitBranchString(
+            rawValue: String
+        ): List<String> {
+            val raw = rawValue.trim()
+
+            if (raw.isBlank()) {
+                return emptyList()
+            }
+
+            /*
+             * תמיכה במערך JSON:
+             * ["סוקולוב", "אופק"]
+             */
+            if (
+                raw.startsWith("[") &&
+                raw.endsWith("]")
+            ) {
+                val fromJson =
+                    runCatching {
+                        val array = JSONArray(raw)
+
+                        buildList {
+                            for (
+                            index in 0 until array.length()
+                            ) {
+                                val value =
+                                    array
+                                        .optString(index)
+                                        .trim()
+
+                                if (value.isNotBlank()) {
+                                    add(value)
+                                }
+                            }
+                        }
+                    }.getOrDefault(emptyList())
+
+                if (fromJson.isNotEmpty()) {
+                    return fromJson
+                }
+            }
+
+            /*
+             * תמיכה ב־CSV ובפורמטים הישנים.
+             */
+            return raw
+                .removePrefix("[")
+                .removeSuffix("]")
+                .split(
+                    ',',
+                    ';',
+                    '|',
+                    '\n'
+                )
+                .map { value ->
+                    value
+                        .trim()
+                        .trim('"')
+                }
+                .filter { value ->
+                    value.isNotBlank()
+                }
+        }
+
+        fun valuesForKey(
+            key: String
+        ): List<String> {
+            return when (
+                val storedValue = sp.all[key]
+            ) {
+                is String ->
+                    splitBranchString(
+                        storedValue
+                    )
+
+                is Set<*> ->
+                    storedValue
+                        .mapNotNull { value ->
+                            value
+                                ?.toString()
+                                ?.trim()
+                        }
+                        .filter { value ->
+                            value.isNotBlank()
+                        }
+
+                is List<*> ->
+                    storedValue
+                        .mapNotNull { value ->
+                            value
+                                ?.toString()
+                                ?.trim()
+                        }
+                        .filter { value ->
+                            value.isNotBlank()
+                        }
+
+                else ->
+                    emptyList()
+            }
+        }
+
+        /*
+         * תחילה קוראים את שדות ריבוי הסניפים,
+         * ולאחר מכן את שדות הסניף הבודד לצורכי תאימות.
+         */
+        return listOf(
+            "branches_json",
+            "selected_branches",
+            "branches",
             "branch",
+            "active_branch",
+            "activeBranch",
             "branch_name",
             "selected_branch",
             "user_branch",
-            "training_branch"
+            "training_branch",
+            "branch2",
+            "branch3"
         )
-            .firstNotNullOfOrNull { key ->
-                sp.getString(key, null)
-                    ?.trim()
-                    ?.takeIf { it.isNotBlank() }
+            .flatMap { key ->
+                valuesForKey(key)
+            }
+            .map { branch ->
+                branch
+                    .replace('־', '-')
+                    .replace('–', '-')
+                    .replace('—', '-')
+                    .replace(
+                        Regex("\\s+"),
+                        " "
+                    )
+                    .trim()
+            }
+            .filter { branch ->
+                branch.isNotBlank()
+            }
+            .distinctBy { branch ->
+                branch.lowercase(
+                    Locale("he", "IL")
+                )
+            }
+    }
+
+    /**
+     * תאימות לקוד הקיים:
+     * מחזירים את כל הסניפים כמחרוזת אחת.
+     *
+     * מנגנון הסינון בהמשך הקובץ כבר מפצל
+     * את המחרוזת ומשווה כל סניף בנפרד.
+     */
+    fun getRegisteredBranch(): String? =
+        getRegisteredBranches()
+            .joinToString(", ")
+            .takeIf { value ->
+                value.isNotBlank()
             }
 
-    fun getRegisteredGroup(): String? =
-        listOf(
+    /**
+     * כל הקבוצות שאליהן המשתמש רשום בפועל.
+     */
+    fun getRegisteredGroups(): List<String> {
+
+        fun splitGroupString(
+            rawValue: String
+        ): List<String> {
+            val raw = rawValue.trim()
+
+            if (raw.isBlank()) {
+                return emptyList()
+            }
+
+            if (
+                raw.startsWith("[") &&
+                raw.endsWith("]")
+            ) {
+                val fromJson =
+                    runCatching {
+                        val array = JSONArray(raw)
+
+                        buildList {
+                            for (
+                            index in 0 until array.length()
+                            ) {
+                                val value =
+                                    array
+                                        .optString(index)
+                                        .trim()
+
+                                if (value.isNotBlank()) {
+                                    add(value)
+                                }
+                            }
+                        }
+                    }.getOrDefault(emptyList())
+
+                if (fromJson.isNotEmpty()) {
+                    return fromJson
+                }
+            }
+
+            return raw
+                .removePrefix("[")
+                .removeSuffix("]")
+                .split(
+                    ',',
+                    ';',
+                    '|',
+                    '\n'
+                )
+                .map { value ->
+                    value
+                        .trim()
+                        .trim('"')
+                }
+                .filter { value ->
+                    value.isNotBlank()
+                }
+        }
+
+        fun valuesForKey(
+            key: String
+        ): List<String> {
+            return when (
+                val storedValue = sp.all[key]
+            ) {
+                is String ->
+                    splitGroupString(
+                        storedValue
+                    )
+
+                is Set<*> ->
+                    storedValue
+                        .mapNotNull { value ->
+                            value
+                                ?.toString()
+                                ?.trim()
+                        }
+                        .filter { value ->
+                            value.isNotBlank()
+                        }
+
+                is List<*> ->
+                    storedValue
+                        .mapNotNull { value ->
+                            value
+                                ?.toString()
+                                ?.trim()
+                        }
+                        .filter { value ->
+                            value.isNotBlank()
+                        }
+
+                else ->
+                    emptyList()
+            }
+        }
+
+        return listOf(
+            "groups_json",
+            "selected_groups",
+            "groups",
+            "age_groups",
+            "age_group",
             "group",
+            "active_group",
+            "activeGroup",
             "group_name",
             "selected_group",
             "user_group",
             "training_group"
         )
-            .firstNotNullOfOrNull { key ->
-                sp.getString(key, null)
-                    ?.trim()
-                    ?.takeIf { it.isNotBlank() }
+            .flatMap { key ->
+                valuesForKey(key)
+            }
+            .map { group ->
+                TrainingCatalog
+                    .normalizeGroupName(group)
+                    .ifBlank { group.trim() }
+            }
+            .filter { group ->
+                group.isNotBlank()
+            }
+            .distinctBy { group ->
+                group.lowercase(
+                    Locale("he", "IL")
+                )
+            }
+    }
+
+    /**
+     * תאימות לפונקציות הישנות בקובץ.
+     */
+    fun getRegisteredGroup(): String? =
+        getRegisteredGroups()
+            .joinToString(", ")
+            .takeIf { value ->
+                value.isNotBlank()
             }
 
     /**
@@ -833,6 +1115,26 @@ object EntityExtractor {
             Regex(
                 """(?<!\d)(20|1[0-9]|[2-9])(?!\d)"""
             ).containsMatchIn(norm)
+                    ||
+                    listOf(
+                        "שניים",
+                        "שתיים",
+                        "שלושה",
+                        "שלוש",
+                        "ארבעה",
+                        "ארבע",
+                        "חמישה",
+                        "חמש",
+                        "שישה",
+                        "שש",
+                        "שבעה",
+                        "שבע",
+                        "שמונה",
+                        "תשעה",
+                        "תשע",
+                        "עשרה",
+                        "עשר"
+                    ).any { it in norm }
 
         return hasListMeaning ||
                 hasRequestedNumber
@@ -856,6 +1158,36 @@ object EntityExtractor {
 
         if (numericCount != null) {
             return numericCount.coerceIn(1, 20)
+        }
+
+        val numberWords = linkedMapOf(
+            "אחד" to 1,
+            "אחת" to 1,
+            "שניים" to 2,
+            "שתיים" to 2,
+            "שני" to 2,
+            "שתי" to 2,
+            "שלושה" to 3,
+            "שלוש" to 3,
+            "ארבעה" to 4,
+            "ארבע" to 4,
+            "חמישה" to 5,
+            "חמש" to 5,
+            "שישה" to 6,
+            "שש" to 6,
+            "שבעה" to 7,
+            "שבע" to 7,
+            "שמונה" to 8,
+            "תשעה" to 9,
+            "תשע" to 9,
+            "עשרה" to 10,
+            "עשר" to 10
+        )
+
+        numberWords.forEach { (word, value) ->
+            if (word in norm) {
+                return value
+            }
         }
 
         val countWords = linkedMapOf(
@@ -1953,25 +2285,51 @@ object AssistantTrainingKnowledge {
         val explicitDay = EntityExtractor.detectDay(norm)
         val timeRange = EntityExtractor.detectTimeRange(norm)
 
-        val isPersonalQuestion =
-            isMyTrainingQuestion(norm) ||
-                    intent == AssistantIntent.ASK_NEXT_TRAINING ||
-                    intent == AssistantIntent.ASK_WHAT_TODAY ||
+        /*
+      * בקשת רשימת אימונים ללא סניף מפורש נחשבת לבקשה
+      * על האימונים של המשתמש בכל הסניפים הרשומים שלו.
+      *
+      * כך לא משתמשים בטעות בסניף האחרון שנשמר בזיכרון השיחה.
+      */
+        val isRegisteredTrainingsQuestion =
+            explicitBranch == null &&
                     (
-                            wantsNextWeek &&
-                                    (
-                                            "שלי" in norm ||
-                                                    "my " in norm
-                                            )
+                            isMyTrainingQuestion(norm) ||
+                                    intent == AssistantIntent.ASK_NEXT_TRAINING ||
+                                    intent == AssistantIntent.ASK_WHAT_TODAY ||
+                                    wantsTrainingList ||
+                                    wantsUpcoming ||
+                                    wantsThisWeek ||
+                                    wantsNextWeek
                             )
 
-        val registeredBranch = memory.getRegisteredBranch()
-        val registeredGroup = memory.getRegisteredGroup()
+        val isPersonalQuestion =
+            isRegisteredTrainingsQuestion
+
+        val registeredBranches =
+            memory.getRegisteredBranches()
+
+        val registeredBranch =
+            registeredBranches
+                .joinToString(", ")
+                .takeIf { value ->
+                    value.isNotBlank()
+                }
+
+        val registeredGroups =
+            memory.getRegisteredGroups()
+
+        val registeredGroup =
+            registeredGroups
+                .joinToString(", ")
+                .takeIf { value ->
+                    value.isNotBlank()
+                }
 
         if (
             isPersonalQuestion &&
             explicitBranch == null &&
-            registeredBranch.isNullOrBlank()
+            registeredBranches.isEmpty()
         ) {
             return if (isEnglish) {
                 "Your branch is missing from your profile. Update your branch before asking about your personal trainings."
@@ -1983,7 +2341,7 @@ object AssistantTrainingKnowledge {
         if (
             isPersonalQuestion &&
             explicitGroup == null &&
-            registeredGroup.isNullOrBlank()
+            registeredGroups.isEmpty()
         ) {
             return if (isEnglish) {
                 "Your group is missing from your profile. Update your group before asking about your personal trainings."
@@ -1992,18 +2350,26 @@ object AssistantTrainingKnowledge {
             }
         }
 
-        // בשאלה אישית משתמשים בפרופיל האמיתי ולא בזיכרון מתשובה קודמת.
-        var branch = explicitBranch ?: if (isPersonalQuestion) {
-            registeredBranch
-        } else {
-            memory.getLastBranch()
-        }
+        /*
+    * ברשימת האימונים האישית משתמשים בכל הסניפים הרשומים.
+    * רק שאלה כללית שאינה אישית רשאית להשתמש בהקשר
+    * מהשאלה הקודמת.
+    */
+        var branch =
+            explicitBranch
+                ?: if (isRegisteredTrainingsQuestion) {
+                    registeredBranch
+                } else {
+                    memory.getLastBranch()
+                }
 
-        var group = explicitGroup ?: if (isPersonalQuestion) {
-            registeredGroup
-        } else {
-            memory.getLastGroup()
-        }
+        var group =
+            explicitGroup
+                ?: if (isRegisteredTrainingsQuestion) {
+                    registeredGroup
+                } else {
+                    memory.getLastGroup()
+                }
 
         var day = explicitDay ?: memory.getLastDay()
 
@@ -2152,13 +2518,40 @@ object AssistantTrainingKnowledge {
             }
         }
 
+        /*
+   * סינון לפי כל הקבוצות הרשומות ולא לפי קבוצה אחת בלבד.
+   */
         group?.let { expectedGroup ->
-            seq = seq.filter { training ->
-                TrainingCatalog.normalizeGroupName(
-                    training.groupName
-                ) == TrainingCatalog.normalizeGroupName(
-                    expectedGroup
-                )
+
+            val expectedGroups =
+                expectedGroup
+                    .split(
+                        ',',
+                        ';',
+                        '|',
+                        '\n'
+                    )
+                    .map { groupName ->
+                        TrainingCatalog
+                            .normalizeGroupName(groupName)
+                            .ifBlank { groupName.trim() }
+                    }
+                    .filter { groupName ->
+                        groupName.isNotBlank()
+                    }
+                    .distinct()
+
+            if (expectedGroups.isNotEmpty()) {
+                seq = seq.filter { training ->
+                    val trainingGroup =
+                        TrainingCatalog.normalizeGroupName(
+                            training.groupName
+                        )
+
+                    expectedGroups.any { registeredGroup ->
+                        trainingGroup == registeredGroup
+                    }
+                }
             }
         }
 
@@ -2225,24 +2618,6 @@ object AssistantTrainingKnowledge {
 
         var matchedResults = seq.toList()
 
-        if (
-            isPersonalQuestion &&
-            explicitGroup == null
-        ) {
-            val personalGroup = registeredGroup
-                ?.let {
-                    TrainingCatalog.normalizeGroupName(it)
-                }
-
-            if (!personalGroup.isNullOrBlank()) {
-                matchedResults =
-                    matchedResults.filter { training ->
-                        TrainingCatalog.normalizeGroupName(
-                            training.groupName
-                        ) == personalGroup
-                    }
-            }
-        }
 
         /*
          * שומרים התאמות מבוטלות כדי להסביר למשתמש

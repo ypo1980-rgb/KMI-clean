@@ -65,7 +65,7 @@ import il.kmi.app.onboarding.onboardingNavGraph
 import il.kmi.app.onboarding.OnboardingRoute
 import il.kmi.app.ui.OnboardingBridge
 import il.kmi.app.ui.VoiceExerciseExplanationBridge
-import il.kmi.app.voicecommands.PushToTalkVoiceDialog
+import il.kmi.app.voicecommands.VoiceCommandsScreen
 import il.kmi.app.voicecommands.VoiceAppCommand
 import il.kmi.app.voicecommands.VoiceCommandDiagnosticsLogger
 import il.kmi.app.voicecommands.VoiceCommandsBridge
@@ -1413,7 +1413,8 @@ fun MainNavHost(
         }   // <-- NavHost
 
         if (showVoiceCommands) {
-            PushToTalkVoiceDialog(
+            VoiceCommandsScreen(
+                modifier = Modifier.fillMaxSize(),
                 onDismiss = {
                     showVoiceCommands = false
                 },
