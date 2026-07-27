@@ -67,7 +67,28 @@ import kotlinx.coroutines.tasks.await
 
 /* ------------------------------ MarkState (3 states) ------------------------------ */
 
-private enum class MarkState { YES, NO, NONE }
+private enum class MarkState {
+    YES,
+    NO,
+    NONE
+}
+
+private enum class CoachSummaryStatus(
+    val storageValue: String
+) {
+    NOT_TAUGHT("not_taught"),
+    TAUGHT("taught"),
+    PRACTICED("practiced"),
+    NEEDS_REINFORCEMENT("needs_reinforcement");
+
+    companion object {
+        fun fromStorage(value: String?): CoachSummaryStatus {
+            return entries.firstOrNull { status ->
+                status.storageValue == value
+            } ?: NOT_TAUGHT
+        }
+    }
+}
 
 private data class SummaryExerciseRow(
     val displayTopicTitle: String,
@@ -1160,7 +1181,24 @@ fun SummaryScreen(
 
     val scroll = rememberScrollState()
     val focusManager = LocalFocusManager.current
-    val notesSp = remember { ctx.getSharedPreferences("kmi_settings", android.content.Context.MODE_PRIVATE) }
+
+    val notesSp = remember {
+        ctx.getSharedPreferences(
+            "kmi_settings",
+            android.content.Context.MODE_PRIVATE
+        )
+    }
+
+    val currentRole = notesSp
+        .getString("user_role", "")
+        .orEmpty()
+        .lowercase()
+
+    val isCoach =
+        currentRole == "coach" ||
+                currentRole.contains("coach") ||
+                currentRole.contains("מאמן") ||
+                currentRole.contains("מדריך")
 
     val favorites: Set<String> by FavoritesStore
         .favoritesFlow
@@ -1406,6 +1444,70 @@ fun SummaryScreen(
         mutableStateOf<Map<Pair<String, String>, MarkState>>(emptyMap())
     }
 
+    var coachStatusMap by remember(
+        belt,
+        itemsByTopic,
+        isCoach
+    ) {
+        mutableStateOf<Map<Pair<String, String>, CoachSummaryStatus>>(
+            emptyMap()
+        )
+    }
+
+    fun coachStatusPreferenceKey(
+        row: SummaryExerciseRow,
+        statusId: String
+    ): String {
+        return buildString {
+            append("coach_material_progress_")
+            append(belt.id)
+            append("_")
+            append(row.statusTopicKey)
+            append("_")
+            append(statusId)
+            append("_status")
+        }
+    }
+
+    LaunchedEffect(
+        belt,
+        itemsByTopic,
+        isCoach
+    ) {
+        if (!isCoach || itemsByTopic.isEmpty()) {
+            coachStatusMap = emptyMap()
+            return@LaunchedEffect
+        }
+
+        val loadedStatuses =
+            mutableMapOf<Pair<String, String>, CoachSummaryStatus>()
+
+        itemsByTopic.forEach { (topicTitle, rows) ->
+            rows.forEach { row ->
+                val statusId = summaryExerciseIdentityIdFor(
+                    belt = belt,
+                    topicKey = row.statusTopicKey,
+                    topicTitle = row.sourceTopicTitle,
+                    index = row.indexInStatusGroup,
+                    item = row.itemRaw
+                )
+
+                val savedValue = notesSp.getString(
+                    coachStatusPreferenceKey(
+                        row = row,
+                        statusId = statusId
+                    ),
+                    null
+                )
+
+                loadedStatuses[topicTitle to statusId] =
+                    CoachSummaryStatus.fromStorage(savedValue)
+            }
+        }
+
+        coachStatusMap = loadedStatuses
+    }
+
     LaunchedEffect(
         belt,
         itemsByTopic,
@@ -1532,9 +1634,11 @@ fun SummaryScreen(
     // ✅ סטטיסטיקות לפי נושא (מבוסס canonicalFromRepo)
     val topicStats: Map<String, Pair<Int, Int>> = remember(
         masteredMap,
+        coachStatusMap,
         itemsByTopic,
         topic,
-        subTopicFilter
+        subTopicFilter,
+        isCoach
     ) {
         itemsByTopic.mapValues { (topicTitle, rows) ->
             val total = rows.size
@@ -1548,7 +1652,19 @@ fun SummaryScreen(
                     item = row.itemRaw
                 )
 
-                masteredMap[topicTitle to statusId] == MarkState.YES
+                if (isCoach) {
+                    when (coachStatusMap[topicTitle to statusId]) {
+                        CoachSummaryStatus.TAUGHT,
+                        CoachSummaryStatus.PRACTICED,
+                        CoachSummaryStatus.NEEDS_REINFORCEMENT -> true
+
+                        CoachSummaryStatus.NOT_TAUGHT,
+                        null -> false
+                    }
+                } else {
+                    masteredMap[topicTitle to statusId] ==
+                            MarkState.YES
+                }
             }
 
             done to total
@@ -2483,7 +2599,19 @@ fun SummaryScreen(
                                                     item = row.itemRaw
                                                 )
 
-                                                masteredMap[topicTitle to statusId] == MarkState.YES
+                                                if (isCoach) {
+                                                    when (coachStatusMap[topicTitle to statusId]) {
+                                                        CoachSummaryStatus.TAUGHT,
+                                                        CoachSummaryStatus.PRACTICED,
+                                                        CoachSummaryStatus.NEEDS_REINFORCEMENT -> true
+
+                                                        CoachSummaryStatus.NOT_TAUGHT,
+                                                        null -> false
+                                                    }
+                                                } else {
+                                                    masteredMap[topicTitle to statusId] ==
+                                                            MarkState.YES
+                                                }
                                             }
 
                                             val subTotal = rowsInSubTopic.size
@@ -2529,13 +2657,95 @@ fun SummaryScreen(
                                                             item = itemRaw
                                                         )
 
-                                                        val state = masteredMap[topicTitle to statusId] ?: MarkState.NONE
+                                                        val state =
+                                                            masteredMap[topicTitle to statusId]
+                                                                ?: MarkState.NONE
 
-                                                        val (bg, fg, mark) = when (state) {
-                                                            MarkState.YES  -> Triple(Color(0xFF4CAF50), Color.White, "✓")
-                                                            MarkState.NO   -> Triple(Color(0xFFE53935), Color.White, "✗")
-                                                            MarkState.NONE -> Triple(Color(0xFFE0E0E0), Color(0xFF616161), "○")
-                                                        }
+                                                        val coachStatus =
+                                                            coachStatusMap[topicTitle to statusId]
+                                                                ?: CoachSummaryStatus.NOT_TAUGHT
+
+                                                        val statusBackgroundColor =
+                                                            if (isCoach) {
+                                                                when (coachStatus) {
+                                                                    CoachSummaryStatus.NOT_TAUGHT ->
+                                                                        Color(0xFF8A939D)
+
+                                                                    CoachSummaryStatus.TAUGHT ->
+                                                                        Color(0xFFF3A062)
+
+                                                                    CoachSummaryStatus.PRACTICED ->
+                                                                        Color(0xFF2F9B4E)
+
+                                                                    CoachSummaryStatus.NEEDS_REINFORCEMENT ->
+                                                                        Color(0xFF3478D4)
+                                                                }
+                                                            } else {
+                                                                when (state) {
+                                                                    MarkState.YES ->
+                                                                        Color(0xFF4CAF50)
+
+                                                                    MarkState.NO ->
+                                                                        Color(0xFFE53935)
+
+                                                                    MarkState.NONE ->
+                                                                        Color(0xFFE0E0E0)
+                                                                }
+                                                            }
+
+                                                        val statusForegroundColor =
+                                                            if (
+                                                                !isCoach &&
+                                                                state == MarkState.NONE
+                                                            ) {
+                                                                Color(0xFF616161)
+                                                            } else {
+                                                                Color.White
+                                                            }
+
+                                                        val statusMark =
+                                                            if (isCoach) {
+                                                                when (coachStatus) {
+                                                                    CoachSummaryStatus.NOT_TAUGHT -> "—"
+                                                                    CoachSummaryStatus.TAUGHT -> "✓"
+                                                                    CoachSummaryStatus.PRACTICED -> "↻"
+                                                                    CoachSummaryStatus.NEEDS_REINFORCEMENT -> "!"
+                                                                }
+                                                            } else {
+                                                                when (state) {
+                                                                    MarkState.YES -> "✓"
+                                                                    MarkState.NO -> "✗"
+                                                                    MarkState.NONE -> "○"
+                                                                }
+                                                            }
+
+                                                        val statusLabel =
+                                                            if (isCoach) {
+                                                                when (coachStatus) {
+                                                                    CoachSummaryStatus.NOT_TAUGHT ->
+                                                                        tr("לא נלמד", "Not taught")
+
+                                                                    CoachSummaryStatus.TAUGHT ->
+                                                                        tr("נלמד", "Taught")
+
+                                                                    CoachSummaryStatus.PRACTICED ->
+                                                                        tr("תורגל", "Practiced")
+
+                                                                    CoachSummaryStatus.NEEDS_REINFORCEMENT ->
+                                                                        tr("נדרש חיזוק", "Reinforce")
+                                                                }
+                                                            } else {
+                                                                when (state) {
+                                                                    MarkState.YES ->
+                                                                        tr("יודע", "Known")
+
+                                                                    MarkState.NO ->
+                                                                        tr("לא יודע", "Not known")
+
+                                                                    MarkState.NONE ->
+                                                                        tr("לא סומן", "Unmarked")
+                                                                }
+                                                            }
 
                                                         val cleanFavId = cleanItem(row.sourceTopicTitle, canonicalId)
                                                         val isFav = favorites.contains(cleanFavId)
@@ -2545,48 +2755,97 @@ fun SummaryScreen(
                                                             modifier = Modifier
                                                                 .fillMaxWidth()
                                                                 .background(
-                                                                    color = if (state == MarkState.YES) {
-                                                                        belt.color.copy(alpha = 0.075f)
-                                                                    } else {
-                                                                        Color.Transparent
-                                                                    },
+                                                                    color =
+                                                                        if (isCoach) {
+                                                                            when (coachStatus) {
+                                                                                CoachSummaryStatus.PRACTICED ->
+                                                                                    Color(0xFF2F9B4E).copy(alpha = 0.07f)
+
+                                                                                CoachSummaryStatus.TAUGHT ->
+                                                                                    Color(0xFFF3A062).copy(alpha = 0.07f)
+
+                                                                                CoachSummaryStatus.NEEDS_REINFORCEMENT ->
+                                                                                    Color(0xFF3478D4).copy(alpha = 0.07f)
+
+                                                                                CoachSummaryStatus.NOT_TAUGHT ->
+                                                                                    Color.Transparent
+                                                                            }
+                                                                        } else {
+                                                                            if (state == MarkState.YES) {
+                                                                                belt.color.copy(alpha = 0.075f)
+                                                                            } else {
+                                                                                Color.Transparent
+                                                                            }
+                                                                        },
                                                                     shape = RoundedCornerShape(14.dp)
                                                                 )
                                                                 .padding(vertical = 6.dp, horizontal = 8.dp),
                                                             verticalAlignment = Alignment.CenterVertically,
                                                             horizontalArrangement = Arrangement.End
                                                         ) {
-                                                            Surface(
-                                                                modifier = Modifier.size(24.dp),
-                                                                shape = CircleShape,
-                                                                color = bg,
-                                                                shadowElevation = 2.dp,
-                                                                tonalElevation = 0.dp
+                                                            Column(
+                                                                modifier = Modifier.widthIn(
+                                                                    min = if (isCoach) 62.dp else 34.dp
+                                                                ),
+                                                                horizontalAlignment = Alignment.CenterHorizontally
                                                             ) {
-                                                                Box(
-                                                                    modifier = Modifier.fillMaxSize(),
-                                                                    contentAlignment = Alignment.Center
+                                                                Surface(
+                                                                    modifier = Modifier.size(
+                                                                        if (isCoach) 36.dp else 28.dp
+                                                                    ),
+                                                                    shape = CircleShape,
+                                                                    color = statusBackgroundColor,
+                                                                    shadowElevation = 2.dp,
+                                                                    tonalElevation = 0.dp
                                                                 ) {
-                                                                    if (state == MarkState.NONE) {
-                                                                        Box(
-                                                                            modifier = Modifier
-                                                                                .size(8.dp)
-                                                                                .border(
-                                                                                    width = 1.7.dp,
-                                                                                    color = fg,
-                                                                                    shape = CircleShape
-                                                                                )
-                                                                        )
-                                                                    } else {
-                                                                        Text(
-                                                                            text = mark,
-                                                                            color = fg,
-                                                                            fontWeight = FontWeight.ExtraBold,
-                                                                            textAlign = TextAlign.Center,
-                                                                            style = MaterialTheme.typography.labelMedium
-                                                                        )
+                                                                    Box(
+                                                                        modifier = Modifier.fillMaxSize(),
+                                                                        contentAlignment = Alignment.Center
+                                                                    ) {
+                                                                        if (
+                                                                            !isCoach &&
+                                                                            state == MarkState.NONE
+                                                                        ) {
+                                                                            Box(
+                                                                                modifier = Modifier
+                                                                                    .size(9.dp)
+                                                                                    .border(
+                                                                                        width = 1.7.dp,
+                                                                                        color = statusForegroundColor,
+                                                                                        shape = CircleShape
+                                                                                    )
+                                                                            )
+                                                                        } else {
+                                                                            Text(
+                                                                                text = statusMark,
+                                                                                color = statusForegroundColor,
+                                                                                fontWeight = FontWeight.ExtraBold,
+                                                                                textAlign = TextAlign.Center,
+                                                                                fontSize = if (isCoach) {
+                                                                                    18.sp
+                                                                                } else {
+                                                                                    14.sp
+                                                                                }
+                                                                            )
+                                                                        }
                                                                     }
                                                                 }
+
+                                                                Spacer(Modifier.height(2.dp))
+
+                                                                Text(
+                                                                    text = statusLabel,
+                                                                    color = statusBackgroundColor,
+                                                                    fontSize = if (isCoach) {
+                                                                        8.5.sp
+                                                                    } else {
+                                                                        8.sp
+                                                                    },
+                                                                    lineHeight = 10.sp,
+                                                                    fontWeight = FontWeight.ExtraBold,
+                                                                    textAlign = TextAlign.Center,
+                                                                    maxLines = if (isCoach) 2 else 1
+                                                                )
                                                             }
 
                                                             Spacer(Modifier.width(8.dp))

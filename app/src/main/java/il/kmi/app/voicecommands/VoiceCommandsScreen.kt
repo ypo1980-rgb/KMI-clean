@@ -93,7 +93,8 @@ fun VoiceCommandsScreen(
         command: VoiceAppCommand,
         spokenText: String
     ) -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    compactOverlay: Boolean = false
 ) {
     val context = LocalContext.current
 

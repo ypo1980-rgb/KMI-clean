@@ -13,23 +13,17 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.Refresh
-import androidx.compose.material.icons.filled.Stop
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -50,7 +44,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.window.Dialog
 import androidx.core.content.ContextCompat
 import il.kmi.shared.localization.AppLanguage
 import il.kmi.shared.localization.AppLanguageManager
@@ -192,73 +185,75 @@ fun PushToTalkVoiceDialog(
             )
     }
 
-    Dialog(
-        onDismissRequest = {
-            controller.cancelListening()
-            onDismiss()
-        }
+    Box(
+        modifier = Modifier.fillMaxSize(),
+        contentAlignment = Alignment.Center
     ) {
-        Surface(
-            modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(30.dp),
-            color = Color.White,
-            shadowElevation = 18.dp
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center
         ) {
-            Column(
-                modifier = Modifier.padding(
-                    horizontal = 24.dp,
-                    vertical = 20.dp
-                ),
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.End
-                ) {
-                    IconButton(
-                        onClick = {
-                            controller.cancelListening()
-                            onDismiss()
+            Surface(
+                modifier = Modifier
+                    .size(126.dp)
+                    .scale(
+                        if (listening) pulseScale else 1f
+                    ),
+                shape = CircleShape,
+                color = Color.Transparent,
+                shadowElevation = 18.dp,
+                onClick = {
+                    when {
+                        listening -> {
+                            controller.stopListening()
                         }
-                    ) {
-                        Icon(
-                            imageVector = Icons.Filled.Close,
-                            contentDescription = tr("סגירה", "Close")
-                        )
+
+                        hasMicrophonePermission() -> {
+                            startListening()
+                        }
+
+                        else -> {
+                            permissionLauncher.launch(
+                                Manifest.permission.RECORD_AUDIO
+                            )
+                        }
                     }
                 }
-
-                Text(
-                    text = tr(
-                        "פקודות קוליות",
-                        "Voice commands"
-                    ),
-                    fontSize = 22.sp,
-                    fontWeight = FontWeight.ExtraBold,
-                    color = Color(0xFF172033)
-                )
-
-                Spacer(Modifier.height(22.dp))
-
+            ) {
                 Box(
                     modifier = Modifier
-                        .size(112.dp)
-                        .scale(
-                            if (listening) pulseScale else 1f
-                        )
+                        .size(126.dp)
                         .background(
                             brush = Brush.radialGradient(
-                                colors = if (listening) {
-                                    listOf(
-                                        Color(0xFF38BDF8),
-                                        Color(0xFF6366F1),
-                                        Color(0xFF7C3AED)
-                                    )
-                                } else {
-                                    listOf(
-                                        Color(0xFFE0F2FE),
-                                        Color(0xFFEDE9FE)
-                                    )
+                                colors = when {
+                                    errorMessage != null -> {
+                                        listOf(
+                                            Color(0xFFEF4444),
+                                            Color(0xFFDC2626)
+                                        )
+                                    }
+
+                                    listening -> {
+                                        listOf(
+                                            Color(0xFF38BDF8),
+                                            Color(0xFF6366F1),
+                                            Color(0xFF7C3AED)
+                                        )
+                                    }
+
+                                    state == PushToTalkState.PROCESSING -> {
+                                        listOf(
+                                            Color(0xFF8B5CF6),
+                                            Color(0xFF4F46E5)
+                                        )
+                                    }
+
+                                    else -> {
+                                        listOf(
+                                            Color(0xFF6366F1),
+                                            Color(0xFF4338CA)
+                                        )
+                                    }
                                 }
                             ),
                             shape = CircleShape
@@ -266,91 +261,50 @@ fun PushToTalkVoiceDialog(
                     contentAlignment = Alignment.Center
                 ) {
                     Icon(
-                        imageVector = if (listening) {
-                            Icons.Filled.Stop
-                        } else {
-                            Icons.Filled.Mic
+                        imageVector = when {
+                            errorMessage != null ->
+                                Icons.Filled.Refresh
+
+                            listening ->
+                                Icons.Filled.Mic
+
+                            state == PushToTalkState.PROCESSING ->
+                                Icons.Filled.Mic
+
+                            else ->
+                                Icons.Filled.Mic
                         },
                         contentDescription = null,
-                        tint = if (listening) {
-                            Color.White
-                        } else {
-                            Color(0xFF4F46E5)
-                        },
-                        modifier = Modifier.size(50.dp)
+                        tint = Color.White,
+                        modifier = Modifier.size(54.dp)
                     )
                 }
+            }
 
-                Spacer(Modifier.height(22.dp))
+            Spacer(
+                modifier = Modifier.height(18.dp)
+            )
 
+            Surface(
+                shape = RoundedCornerShape(18.dp),
+                color = Color(0xEFFFFFFF),
+                shadowElevation = 8.dp
+            ) {
                 Text(
                     text = statusText,
+                    modifier = Modifier.padding(
+                        horizontal = 18.dp,
+                        vertical = 10.dp
+                    ),
                     textAlign = TextAlign.Center,
-                    fontSize = 16.sp,
+                    fontSize = 15.sp,
                     fontWeight = FontWeight.Bold,
                     color = if (errorMessage == null) {
-                        Color(0xFF334155)
+                        Color(0xFF172033)
                     } else {
                         Color(0xFFDC2626)
                     }
                 )
-
-                Spacer(Modifier.height(10.dp))
-
-                Text(
-                    text = tr(
-                        "לדוגמה: „פתח חגורה ירוקה” או „הסבר על בעיטת צד”",
-                        "For example: “Open green belt” or “Explain side kick”"
-                    ),
-                    textAlign = TextAlign.Center,
-                    fontSize = 13.sp,
-                    color = Color(0xFF64748B)
-                )
-
-                Spacer(Modifier.height(22.dp))
-
-                Button(
-                    onClick = {
-                        if (listening) {
-                            controller.stopListening()
-                        } else if (hasMicrophonePermission()) {
-                            startListening()
-                        } else {
-                            permissionLauncher.launch(
-                                Manifest.permission.RECORD_AUDIO
-                            )
-                        }
-                    },
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = Color(0xFF4F46E5)
-                    ),
-                    shape = RoundedCornerShape(18.dp)
-                ) {
-                    Icon(
-                        imageVector = when {
-                            listening -> Icons.Filled.Stop
-                            errorMessage != null -> Icons.Filled.Refresh
-                            else -> Icons.Filled.Mic
-                        },
-                        contentDescription = null
-                    )
-
-                    Spacer(Modifier.size(8.dp))
-
-                    Text(
-                        text = when {
-                            listening ->
-                                tr("סיים פקודה", "Finish command")
-
-                            errorMessage != null ->
-                                tr("נסה שוב", "Try again")
-
-                            else ->
-                                tr("התחל להאזין", "Start listening")
-                        },
-                        fontWeight = FontWeight.Bold
-                    )
-                }
             }
         }
     }

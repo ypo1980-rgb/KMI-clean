@@ -65,7 +65,7 @@ import il.kmi.app.onboarding.onboardingNavGraph
 import il.kmi.app.onboarding.OnboardingRoute
 import il.kmi.app.ui.OnboardingBridge
 import il.kmi.app.ui.VoiceExerciseExplanationBridge
-import il.kmi.app.voicecommands.VoiceCommandsScreen
+import il.kmi.app.voicecommands.VoiceCommandListener
 import il.kmi.app.voicecommands.VoiceAppCommand
 import il.kmi.app.voicecommands.VoiceCommandDiagnosticsLogger
 import il.kmi.app.voicecommands.VoiceCommandsBridge
@@ -1160,9 +1160,10 @@ fun MainNavHost(
             // --- NEW: Materials graph ---
             materialsNavGraph(
                 nav = nav,
-                vm  = vm,
-                sp  = sp,
-                kmiPrefs = kmiPrefs
+                vm = vm,
+                sp = sp,
+                kmiPrefs = kmiPrefs,
+                isCoach = isCoach
             )
 
             // ----- לוח אימונים חודשי -----
@@ -1413,8 +1414,7 @@ fun MainNavHost(
         }   // <-- NavHost
 
         if (showVoiceCommands) {
-            VoiceCommandsScreen(
-                modifier = Modifier.fillMaxSize(),
+            VoiceCommandListener(
                 onDismiss = {
                     showVoiceCommands = false
                 },
@@ -1433,6 +1433,7 @@ fun MainNavHost(
                     )
 
                     when (command) {
+
                         VoiceAppCommand.OpenHome -> {
                             nav.navigate(Route.Home.route) {
                                 launchSingleTop = true
@@ -1525,10 +1526,6 @@ fun MainNavHost(
                             )
 
                             if (belt != null) {
-                                /*
-                                 * BeltQuestionsByBeltScreen קורא את החגורה
-                                 * הנבחרת מתוך KmiViewModel.
-                                 */
                                 vm.setSelectedBelt(belt)
 
                                 val targetRoute = Route.BeltQ.route
@@ -1546,11 +1543,6 @@ fun MainNavHost(
 
                                 nav.navigate(targetRoute) {
                                     launchSingleTop = true
-
-                                    /*
-                                     * לא משחזרים מצב ניווט ישן של מסך החגורות,
-                                     * כדי שיוצג המידע של החגורה שנבחרה כעת.
-                                     */
                                     restoreState = false
                                 }
                             } else {
@@ -1592,10 +1584,6 @@ fun MainNavHost(
                                     ?: Belt.GREEN
 
                             if (topicId != null) {
-                                /*
-                                 * משתמשים בדיוק באותו מסלול שמפעילה לחיצה רגילה
-                                 * על נושא במסך BeltQuestionsByTopicScreen.
-                                 */
                                 vm.setSelectedBelt(selectedBelt)
 
                                 val targetRoute =
@@ -1855,8 +1843,8 @@ fun MainNavHost(
                 }
             )
         }
-    }       // <-- PinLockGate
-}           // <-- MainNavHost
+    }
+}
 
 private fun isProfileCompletedLocally(
     mainSp: SharedPreferences,

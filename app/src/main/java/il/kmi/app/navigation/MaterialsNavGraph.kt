@@ -18,7 +18,8 @@ fun NavGraphBuilder.materialsNavGraph(
     nav: NavHostController,
     vm: KmiViewModel,
     sp: SharedPreferences,
-    kmiPrefs: il.kmi.shared.prefs.KmiPrefs
+    kmiPrefs: il.kmi.shared.prefs.KmiPrefs,
+    isCoach: Boolean
 ) {
     // ====== ✅ Materials (ללא subTopic) ======
     composable(
@@ -34,14 +35,28 @@ fun NavGraphBuilder.materialsNavGraph(
 
         val topicEnc = backStackEntry.arguments?.getString("topic").orEmpty()
         val topic = remember(topicEnc) {
-            runCatching { Uri.decode(topicEnc) }.getOrDefault(topicEnc).trim()
+            runCatching { Uri.decode(topicEnc) }
+                .getOrDefault(topicEnc)
+                .trim()
         }
+
+        val currentRole = sp
+            .getString("user_role", "")
+            .orEmpty()
+            .lowercase()
+
+        val currentIsCoach =
+            currentRole == "coach" ||
+                    currentRole.contains("coach") ||
+                    currentRole.contains("מאמן") ||
+                    currentRole.contains("מדריך")
 
         MaterialsScreen(
             vm = vm,
             belt = belt,
             topic = topic,
             subTopicFilter = null,
+            isCoach = currentIsCoach,
             onBack = { nav.popBackStack() },
 
             // ⚠️ כרגע אנחנו לא “מעבירים” topic/subTopic ל-Summary כי לא בטוח שה-route תומך בזה.
@@ -104,17 +119,31 @@ fun NavGraphBuilder.materialsNavGraph(
         val subEnc = backStackEntry.arguments?.getString("subTopic").orEmpty()
 
         val topic = remember(topicEnc) {
-            runCatching { Uri.decode(topicEnc) }.getOrDefault(topicEnc).trim()
+            runCatching { Uri.decode(topicEnc) }
+                .getOrDefault(topicEnc)
+                .trim()
         }
         val subTopic = remember(subEnc) {
             runCatching { Uri.decode(subEnc) }.getOrDefault(subEnc).trim()
         }
+
+        val currentRole = sp
+            .getString("user_role", "")
+            .orEmpty()
+            .lowercase()
+
+        val currentIsCoach =
+            currentRole == "coach" ||
+                    currentRole.contains("coach") ||
+                    currentRole.contains("מאמן") ||
+                    currentRole.contains("מדריך")
 
         MaterialsScreen(
             vm = vm,
             belt = belt,
             topic = topic,
             subTopicFilter = subTopic,
+            isCoach = currentIsCoach,
             onBack = { nav.popBackStack() },
 
             onSummary = { b, _topic, _sub ->

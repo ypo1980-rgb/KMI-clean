@@ -71,6 +71,30 @@ import il.kmi.app.subscription.KmiAccess
 
 //=================================================================================
 
+private enum class CoachMaterialStatus(
+    val storageValue: String
+) {
+    NOT_TAUGHT("not_taught"),
+    TAUGHT("taught"),
+    PRACTICED("practiced"),
+    NEEDS_REINFORCEMENT("needs_reinforcement");
+
+    companion object {
+        fun fromStorage(value: String?): CoachMaterialStatus {
+            return entries.firstOrNull { status ->
+                status.storageValue == value
+            } ?: NOT_TAUGHT
+        }
+    }
+}
+
+private data class CoachMaterialProgress(
+    val status: CoachMaterialStatus,
+    val updatedAt: Long
+)
+
+//=================================================================================
+
 @Composable
 private fun BeltPill(
     belt: Belt,
@@ -215,6 +239,7 @@ fun MaterialsScreen(
     onOpenSettings: () -> Unit,
     onOpenHome: () -> Unit,
     subTopicFilter: String? = null,
+    isCoach: Boolean = false,
     onOpenSubscription: () -> Unit = {}
 ) {
 
@@ -248,6 +273,15 @@ fun MaterialsScreen(
     val itemStates =
         remember(belt.id, topic, subTopicFilter) {
             mutableStateMapOf<String, Boolean?>()
+        }
+
+    /*
+     * סטטוסי המאמן נשמרים בנפרד לחלוטין מסימוני
+     * יודע / לא יודע של המתאמן.
+     */
+    val coachProgressStates =
+        remember(belt.id, topic, subTopicFilter) {
+            mutableStateMapOf<String, CoachMaterialProgress>()
         }
 
     /*
@@ -614,7 +648,95 @@ fun MaterialsScreen(
         }
     }
 
-    // הדגשת תרגיל (✅ בלי Reflection: זה top-level flow)
+    /*
+     * מפתח נפרד לסטטוס המאמן.
+     *
+     * בשלב הבא נוסיף למפתח גם groupId, לאחר שנחבר
+     * את ההתקדמות לקבוצה שנבחרה ול־Firestore.
+     */
+    fun coachProgressKey(statusId: String): String {
+        return buildString {
+            append("coach_material_progress_")
+            append(belt.id)
+            append("_")
+            append(topicKey)
+            append("_")
+            append(statusId)
+        }
+    }
+
+    fun loadCoachProgress(statusId: String): CoachMaterialProgress {
+        val key = coachProgressKey(statusId)
+
+        val status = CoachMaterialStatus.fromStorage(
+            sp.getString("${key}_status", null)
+        )
+
+        val updatedAt = sp.getLong(
+            "${key}_updated_at",
+            0L
+        )
+
+        return CoachMaterialProgress(
+            status = status,
+            updatedAt = updatedAt
+        )
+    }
+
+    fun saveCoachProgress(
+        statusId: String,
+        status: CoachMaterialStatus
+    ) {
+        val updatedAt = System.currentTimeMillis()
+        val key = coachProgressKey(statusId)
+
+        coachProgressStates[statusId] =
+            CoachMaterialProgress(
+                status = status,
+                updatedAt = updatedAt
+            )
+
+        sp.edit()
+            .putString(
+                "${key}_status",
+                status.storageValue
+            )
+            .putLong(
+                "${key}_updated_at",
+                updatedAt
+            )
+            .apply()
+    }
+
+    /*
+     * טוען את סטטוסי המאמן לאחר שרשימת התרגילים מוכנה.
+     */
+    LaunchedEffect(
+        isCoach,
+        belt.id,
+        topicKey,
+        itemList
+    ) {
+        if (!isCoach || itemList.isEmpty()) {
+            return@LaunchedEffect
+        }
+
+        val loadedProgress = buildMap {
+            itemList.forEachIndexed { index, item ->
+                val statusId = statusIdFor(index, item)
+
+                put(
+                    statusId,
+                    loadCoachProgress(statusId)
+                )
+            }
+        }
+
+        coachProgressStates.clear()
+        coachProgressStates.putAll(loadedProgress)
+    }
+
+// הדגשת תרגיל (✅ בלי Reflection: זה top-level flow)
     val highlight by highlightItem.collectAsState(initial = null)
 
     // ✅ NEW: נרמול אחיד למפתחות SP (כדי שסיכום ותוכן יקראו את אותו מפתח)
@@ -1042,6 +1164,74 @@ fun MaterialsScreen(
         }
     }
 
+    /*
+     * ספירת סטטוסי המאמן.
+     *
+     * תרגיל שעדיין לא קיבל סטטוס נחשב "לא נלמד".
+     */
+    val coachNotTaughtCount = remember(
+        itemList,
+        coachProgressStates.toMap(),
+        belt.id,
+        topicKey
+    ) {
+        itemList.count { item ->
+            val index = itemList.indexOf(item)
+            val statusId = statusIdFor(index, item)
+
+            val status =
+                coachProgressStates[statusId]?.status
+                    ?: CoachMaterialStatus.NOT_TAUGHT
+
+            status == CoachMaterialStatus.NOT_TAUGHT
+        }
+    }
+
+    val coachTaughtCount = remember(
+        itemList,
+        coachProgressStates.toMap(),
+        belt.id,
+        topicKey
+    ) {
+        itemList.count { item ->
+            val index = itemList.indexOf(item)
+            val statusId = statusIdFor(index, item)
+
+            coachProgressStates[statusId]?.status ==
+                    CoachMaterialStatus.TAUGHT
+        }
+    }
+
+    val coachPracticedCount = remember(
+        itemList,
+        coachProgressStates.toMap(),
+        belt.id,
+        topicKey
+    ) {
+        itemList.count { item ->
+            val index = itemList.indexOf(item)
+            val statusId = statusIdFor(index, item)
+
+            coachProgressStates[statusId]?.status ==
+                    CoachMaterialStatus.PRACTICED
+        }
+    }
+
+    val coachNeedsReinforcementCount = remember(
+        itemList,
+        coachProgressStates.toMap(),
+        belt.id,
+        topicKey
+    ) {
+        itemList.count { item ->
+            val index = itemList.indexOf(item)
+            val statusId = statusIdFor(index, item)
+
+            coachProgressStates[statusId]?.status ==
+                    CoachMaterialStatus.NEEDS_REINFORCEMENT
+        }
+    }
+
     Scaffold(
         topBar = {
             val headerTitle =
@@ -1409,49 +1599,91 @@ fun MaterialsScreen(
                                         .padding(horizontal = 8.dp, vertical = 6.dp),
                                     horizontalArrangement = Arrangement.spacedBy(6.dp)
                                 ) {
-                                    MaterialsTopStatChip(
-                                        value = summaryTotalCount.toString(),
-                                        label = if (isEnglish) "Exercises" else "תרגילים",
-                                        containerColor = Color(0xFF98A2B3),
-                                        contentColor = Color.White
-                                    )
+                                    if (isCoach) {
+                                        MaterialsTopStatChip(
+                                            value = coachPracticedCount.toString(),
+                                            label = if (isEnglish) "Practiced" else "תורגל",
+                                            containerColor = Color(0xFF6FC47D),
+                                            contentColor = Color.White
+                                        )
 
-                                    MaterialsTopStatChip(
-                                        value = summaryMasteredCount.toString(),
-                                        label = if (isEnglish) "Known" else "יודע",
-                                        containerColor = Color(0xFF7ACB88),
-                                        contentColor = Color.White,
-                                        minWidth = 64.dp,
-                                        horizontalPadding = 12.dp
-                                    )
+                                        MaterialsTopStatChip(
+                                            value = coachNeedsReinforcementCount.toString(),
+                                            label = if (isEnglish) {
+                                                "Reinforce"
+                                            } else {
+                                                "נדרש חיזוק"
+                                            },
+                                            containerColor = Color(0xFF3677DF),
+                                            contentColor = Color.White,
+                                            minWidth = 76.dp,
+                                            horizontalPadding = 10.dp
+                                        )
 
-                                    MaterialsTopStatChip(
-                                        value = summaryUnknownCount.toString(),
-                                        label = if (isEnglish) "Unknown" else "לא יודע",
-                                        containerColor = Color(0xFFF1A97A),
-                                        contentColor = Color.White
-                                    )
+                                        MaterialsTopStatChip(
+                                            value = coachTaughtCount.toString(),
+                                            label = if (isEnglish) "Taught" else "נלמד",
+                                            containerColor = Color(0xFFF3A062),
+                                            contentColor = Color.White
+                                        )
 
-                                    MaterialsTopStatChip(
-                                        value = summaryFavoritesCount.toString(),
-                                        label = if (isEnglish) "Favorites" else "מועדפים",
-                                        containerColor = Color(0xFFE7A3B5),
-                                        contentColor = Color.White
-                                    )
+                                        MaterialsTopStatChip(
+                                            value = coachNotTaughtCount.toString(),
+                                            label = if (isEnglish) {
+                                                "Not taught"
+                                            } else {
+                                                "לא נלמד"
+                                            },
+                                            containerColor = Color(0xFFE59AB1),
+                                            contentColor = Color.White,
+                                            minWidth = 72.dp,
+                                            horizontalPadding = 10.dp
+                                        )
+                                    } else {
+                                        MaterialsTopStatChip(
+                                            value = summaryTotalCount.toString(),
+                                            label = if (isEnglish) "Exercises" else "תרגילים",
+                                            containerColor = Color(0xFF98A2B3),
+                                            contentColor = Color.White
+                                        )
 
-                                    MaterialsTopStatChip(
-                                        value = summaryExcludedCount.toString(),
-                                        label = if (isEnglish) "Excluded" else "מוחרגים",
-                                        containerColor = Color(0xFF95D69A),
-                                        contentColor = Color.White
-                                    )
+                                        MaterialsTopStatChip(
+                                            value = summaryMasteredCount.toString(),
+                                            label = if (isEnglish) "Known" else "יודע",
+                                            containerColor = Color(0xFF7ACB88),
+                                            contentColor = Color.White,
+                                            minWidth = 64.dp,
+                                            horizontalPadding = 12.dp
+                                        )
 
-                                    MaterialsTopStatChip(
-                                        value = summaryNotesCount.toString(),
-                                        label = if (isEnglish) "Notes" else "הערות",
-                                        containerColor = Color(0xFF8596C9),
-                                        contentColor = Color.White
-                                    )
+                                        MaterialsTopStatChip(
+                                            value = summaryUnknownCount.toString(),
+                                            label = if (isEnglish) "Unknown" else "לא יודע",
+                                            containerColor = Color(0xFFF1A97A),
+                                            contentColor = Color.White
+                                        )
+
+                                        MaterialsTopStatChip(
+                                            value = summaryFavoritesCount.toString(),
+                                            label = if (isEnglish) "Favorites" else "מועדפים",
+                                            containerColor = Color(0xFFE7A3B5),
+                                            contentColor = Color.White
+                                        )
+
+                                        MaterialsTopStatChip(
+                                            value = summaryExcludedCount.toString(),
+                                            label = if (isEnglish) "Excluded" else "מוחרגים",
+                                            containerColor = Color(0xFF95D69A),
+                                            contentColor = Color.White
+                                        )
+
+                                        MaterialsTopStatChip(
+                                            value = summaryNotesCount.toString(),
+                                            label = if (isEnglish) "Notes" else "הערות",
+                                            containerColor = Color(0xFF8596C9),
+                                            contentColor = Color.White
+                                        )
+                                    }
                                 }
 
                                 Text(
@@ -1582,7 +1814,10 @@ fun MaterialsScreen(
                                                 shadowElevation = 0.dp
                                             ) {
                                                 Text(
-                                                    text = topicTitleForUi(currentSectionTitle, currentLang),
+                                                    text = topicTitleForUi(
+                                                        currentSectionTitle,
+                                                        currentLang
+                                                    ),
                                                     modifier = Modifier
                                                         .fillMaxWidth()
                                                         .background(belt.lightColor)
@@ -1609,45 +1844,46 @@ fun MaterialsScreen(
                                     ) {
                                         var showNoteDialog by remember { mutableStateOf(false) }
 
-                                // ✅ מזהה אחיד להסבר / הערות / החרגות
-                                val canonicalId = remember(item, belt.id, topicUi) {
-                                    canonicalFor(item)
-                                }
+                                        // ✅ מזהה אחיד להסבר / הערות / החרגות
+                                        val canonicalId = remember(item, belt.id, topicUi) {
+                                            canonicalFor(item)
+                                        }
 
-                                // ✅ מועדפים לפי כל המזהים האפשריים של אותו תרגיל,
-                                // כדי שכוכבית בכרטיס הגלובאלי ותפריט ה-i יהיו מסונכרנים.
-                                val isFavorite = remember(
-                                    favorites,
-                                    item,
-                                    belt.id,
-                                    materialRootTopic,
-                                    topicKey
-                                ) {
-                                    isFavoriteByAliases(
-                                        topicTitle = materialRootTopic,
-                                        rawItem = item
-                                    )
-                                }
+                                        // ✅ מועדפים לפי כל המזהים האפשריים של אותו תרגיל,
+                                        // כדי שכוכבית בכרטיס הגלובאלי ותפריט ה-i יהיו מסונכרנים.
+                                        val isFavorite = remember(
+                                            favorites,
+                                            item,
+                                            belt.id,
+                                            materialRootTopic,
+                                            topicKey
+                                        ) {
+                                            isFavoriteByAliases(
+                                                topicTitle = materialRootTopic,
+                                                rawItem = item
+                                            )
+                                        }
 
-                                // ✅ מזהה לסימון יודע/לא יודע בלבד.
-                                // אם canonicalId כפול בין כמה שורות, statusId מפריד ביניהן לפי מיקום השורה.
-                                val statusId = remember(index, item, belt.id, topicKey, topicUi) {
-                                    statusIdFor(index, item)
-                                }
+                                        // ✅ מזהה לסימון יודע/לא יודע בלבד.
+                                        // אם canonicalId כפול בין כמה שורות, statusId מפריד ביניהן לפי מיקום השורה.
+                                        val statusId =
+                                            remember(index, item, belt.id, topicKey, topicUi) {
+                                                statusIdFor(index, item)
+                                            }
 
-                                // ✅ טקסט לתצוגה בלבד
-                                val displayName = remember(item, topicUi, currentLang) {
-                                    itemTitleForUi(topicUi, item, currentLang)
-                                }
+                                        // ✅ טקסט לתצוגה בלבד
+                                        val displayName = remember(item, topicUi, currentLang) {
+                                            itemTitleForUi(topicUi, item, currentLang)
+                                        }
 
-                                var noteText by remember(
-                                    item,
-                                    belt.id,
-                                    excludedKeySuffix,
-                                    notesRefreshKey
-                                ) {
-                                    mutableStateOf(loadNote(canonicalId))
-                                }
+                                        var noteText by remember(
+                                            item,
+                                            belt.id,
+                                            excludedKeySuffix,
+                                            notesRefreshKey
+                                        ) {
+                                            mutableStateOf(loadNote(canonicalId))
+                                        }
 
                                         val mastered: Boolean? =
                                             if (itemStates.containsKey(statusId)) {
@@ -1660,152 +1896,47 @@ fun MaterialsScreen(
                                                 }
                                             }
 
-                                val isExcluded = excludedItems.contains(canonicalId)
-                                val isHighlighted = highlight != null && canonicalId == highlight
+                                        val isExcluded = excludedItems.contains(canonicalId)
+                                        val isHighlighted =
+                                            highlight != null && canonicalId == highlight
 
-                                val bringer =
-                                    remember { androidx.compose.foundation.relocation.BringIntoViewRequester() }
-                                LaunchedEffect(isHighlighted) {
-                                    if (isHighlighted) {
-                                        kotlinx.coroutines.delay(120)
-                                        bringer.bringIntoView()
-                                    }
-                                }
+                                        val bringer =
+                                            remember { androidx.compose.foundation.relocation.BringIntoViewRequester() }
+                                        LaunchedEffect(isHighlighted) {
+                                            if (isHighlighted) {
+                                                kotlinx.coroutines.delay(120)
+                                                bringer.bringIntoView()
+                                            }
+                                        }
 
-                                var pressed by remember { mutableStateOf(false) }
-                                val scale by animateFloatAsState(
-                                    targetValue = if (pressed) 1.2f else 1f,
-                                    label = "scaleAnim"
-                                )
-
-                                Column(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .scale(scale)
-                                        .bringIntoViewRequester(bringer)
-                                ) {
-                                    Row(
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .heightIn(min = 48.dp)
-                                            .padding(horizontal = 8.dp, vertical = 2.dp),
-                                        verticalAlignment = Alignment.CenterVertically
-                                    ) {
-                                        ItemFloatingActions(
-                                            isEnglish = isEnglish,
-                                            excluded = isExcluded,
-                                            isFav = isFavorite,
-                                            hasNote = noteText.isNotBlank(),
-                                            onToggleExclude = { toggleExclude(canonicalId) },
-                                            onInfo = {
-                                                pressed = true
-
-                                                explainTriple = Triple(
-                                                    belt,
-                                                    materialRootTopic,
-                                                    item
-                                                )
-
-                                                scope.launch {
-                                                    kotlinx.coroutines.delay(150)
-                                                    pressed = false
-                                                }
-                                            },
-                                            onToggleFavorite = {
-                                                toggleFavoriteAliases(
-                                                    topicTitle = materialRootTopic,
-                                                    rawItem = item
-                                                )
-                                            },
-                                            onEditNote = { showNoteDialog = true }
+                                        var pressed by remember { mutableStateOf(false) }
+                                        val scale by animateFloatAsState(
+                                            targetValue = if (pressed) 1.2f else 1f,
+                                            label = "scaleAnim"
                                         )
-
-                                        Spacer(Modifier.width(8.dp))
 
                                         Column(
                                             modifier = Modifier
-                                                .weight(1f)
-                                                .padding(horizontal = 2.dp)
+                                                .fillMaxWidth()
+                                                .scale(scale)
+                                                .bringIntoViewRequester(bringer)
                                         ) {
-                                            CompositionLocalProvider(
-                                                LocalLayoutDirection provides LayoutDirection.Ltr
-                                            ) {
-                                                Row(
-                                                    modifier = Modifier.fillMaxWidth(),
-                                                    verticalAlignment = Alignment.CenterVertically
-                                                ) {
-                                                    if (isEnglish) {
-                                                        ExerciseMetaBadge(
-                                                            text = "No. ${index + 1}",
-                                                            containerColor = belt.color.copy(alpha = 0.14f),
-                                                            contentColor = Color(0xFF1F2937)
-                                                        )
-
-                                                        if (isFavorite) {
-                                                            Spacer(Modifier.width(5.dp))
-                                                            ExerciseMetaBadge(
-                                                                text = "Favorite",
-                                                                containerColor = Color(0xFFF9D9B8),
-                                                                contentColor = Color(0xFF9A5A00)
-                                                            )
-                                                        }
-
-                                                        if (isExcluded) {
-                                                            Spacer(Modifier.width(5.dp))
-                                                            ExerciseMetaBadge(
-                                                                text = "Excluded",
-                                                                containerColor = Color(0xFFE5E7EB),
-                                                                contentColor = Color(0xFF6B7280)
-                                                            )
-                                                        }
-
-                                                        Spacer(Modifier.weight(1f))
-                                                    } else {
-                                                        Spacer(Modifier.weight(1f))
-
-                                                        if (isExcluded) {
-                                                            ExerciseMetaBadge(
-                                                                text = "מוחרג",
-                                                                containerColor = Color(0xFFE5E7EB),
-                                                                contentColor = Color(0xFF6B7280)
-                                                            )
-                                                            Spacer(Modifier.width(5.dp))
-                                                        }
-
-                                                        if (isFavorite) {
-                                                            ExerciseMetaBadge(
-                                                                text = "מועדף",
-                                                                containerColor = Color(0xFFF9D9B8),
-                                                                contentColor = Color(0xFF9A5A00)
-                                                            )
-                                                            Spacer(Modifier.width(5.dp))
-                                                        }
-
-                                                        ExerciseMetaBadge(
-                                                            text = "מס׳ ${index + 1}",
-                                                            containerColor = belt.color.copy(alpha = 0.14f),
-                                                            contentColor = Color(0xFF1F2937)
-                                                        )
-                                                    }
-                                                }
-                                            }
-
-                                            Spacer(Modifier.height(2.dp))
-
-                                            Text(
-                                                text = displayName,
-                                                textAlign = if (isEnglish) {
-                                                    TextAlign.Left
-                                                } else {
-                                                    TextAlign.Right
-                                                },
+                                            Row(
                                                 modifier = Modifier
                                                     .fillMaxWidth()
-                                                    .clickable {
-                                                        /*
-                                                         * משתמשים באותו מנגנון הסבר
-                                                         * של כפתור המידע הקיים.
-                                                         */
+                                                    .heightIn(min = 48.dp)
+                                                    .padding(horizontal = 8.dp, vertical = 2.dp),
+                                                verticalAlignment = Alignment.CenterVertically
+                                            ) {
+                                                ItemFloatingActions(
+                                                    isEnglish = isEnglish,
+                                                    excluded = isExcluded,
+                                                    isFav = isFavorite,
+                                                    hasNote = noteText.isNotBlank(),
+                                                    onToggleExclude = {
+                                                        toggleExclude(canonicalId)
+                                                    },
+                                                    onInfo = {
                                                         pressed = true
 
                                                         explainTriple = Triple(
@@ -1818,220 +1949,334 @@ fun MaterialsScreen(
                                                             kotlinx.coroutines.delay(150)
                                                             pressed = false
                                                         }
-                                                    }
-                                                    .padding(
-                                                        vertical = 4.dp
-                                                    ),
-                                                color = when {
-                                                    isExcluded ->
-                                                        Color.Gray
-
-                                                    isHighlighted ->
-                                                        belt.color.copy(
-                                                            alpha = 0.95f
+                                                    },
+                                                    onToggleFavorite = {
+                                                        toggleFavoriteAliases(
+                                                            topicTitle = materialRootTopic,
+                                                            rawItem = item
                                                         )
+                                                    },
+                                                    onEditNote = {
+                                                        showNoteDialog = true
+                                                    }
+                                                )
 
-                                                    else ->
-                                                        Color(0xFF111827)
-                                                },
-                                                style = MaterialTheme.typography.bodySmall.copy(
-                                                    fontSize = 11.sp,
-                                                    lineHeight = 13.sp
-                                                ),
-                                                fontWeight = if (isHighlighted) {
-                                                    FontWeight.Bold
-                                                } else {
-                                                    FontWeight.SemiBold
-                                                },
-                                                maxLines = 3,
-                                                overflow = TextOverflow.Ellipsis
-                                            )
-                                        }
+                                                Spacer(Modifier.width(8.dp))
 
-                                        Spacer(Modifier.width(8.dp))
-
-                                        Box(
-                                            modifier = Modifier.scale(0.82f),
-                                            contentAlignment = Alignment.Center
-                                        ) {
-                                            MasterToggle(
-                                                mastered = mastered,
-                                                onSelect = { newVal ->
-
-                                                    /*
-                                                     * עדכון מיידי של השורה בלבד.
-                                                     * הסטטוס נשמר לפי statusId החד־ערכי בלבד.
-                                                     */
-                                                    /*
-       * עדכון מיידי של השורה.
-       */
-                                                    pendingItemStates[statusId] = newVal
-                                                    itemStates[statusId] = newVal
-
-                                                    /*
-                                                     * חשוב לעדכן גם את ה־fallback המקומי.
-                                                     *
-                                                     * בלי העדכון הזה, בלחיצה השלישית ה־ViewModel מחזיר null,
-                                                     * אבל unknowns עדיין מכיל את התרגיל ולכן האיקס האדום חוזר.
-                                                     */
-                                                    val nextMasteredSet = masteredSet.toMutableSet()
-                                                    val nextUnknownSet = unknowns.toMutableSet()
-
-                                                    when (newVal) {
-                                                        true -> {
-                                                            nextMasteredSet.add(statusId)
-                                                            nextUnknownSet.remove(statusId)
+                                                Column(
+                                                    modifier = Modifier
+                                                        .weight(
+                                                            weight = 1f,
+                                                            fill = true
+                                                        )
+                                                        .padding(horizontal = 4.dp),
+                                                    horizontalAlignment =
+                                                        if (isEnglish) {
+                                                            Alignment.Start
+                                                        } else {
+                                                            Alignment.End
                                                         }
+                                                ) {
+                                                    CompositionLocalProvider(
+                                                        LocalLayoutDirection provides LayoutDirection.Ltr
+                                                    ) {
+                                                        Row(
+                                                            modifier = Modifier.fillMaxWidth(),
+                                                            verticalAlignment = Alignment.CenterVertically
+                                                        ) {
+                                                            if (isEnglish) {
+                                                                ExerciseMetaBadge(
+                                                                    text = "No. ${index + 1}",
+                                                                    containerColor = belt.color.copy(
+                                                                        alpha = 0.14f
+                                                                    ),
+                                                                    contentColor = Color(0xFF1F2937)
+                                                                )
 
-                                                        false -> {
-                                                            nextUnknownSet.add(statusId)
-                                                            nextMasteredSet.remove(statusId)
-                                                        }
+                                                                if (isFavorite) {
+                                                                    Spacer(Modifier.width(5.dp))
 
-                                                        null -> {
-                                                            nextMasteredSet.remove(statusId)
-                                                            nextUnknownSet.remove(statusId)
+                                                                    ExerciseMetaBadge(
+                                                                        text = "Favorite",
+                                                                        containerColor = Color(0xFFF9D9B8),
+                                                                        contentColor = Color(0xFF9A5A00)
+                                                                    )
+                                                                }
+
+                                                                if (isExcluded) {
+                                                                    Spacer(Modifier.width(5.dp))
+
+                                                                    ExerciseMetaBadge(
+                                                                        text = "Excluded",
+                                                                        containerColor = Color(0xFFE5E7EB),
+                                                                        contentColor = Color(0xFF6B7280)
+                                                                    )
+                                                                }
+
+                                                                Spacer(Modifier.weight(1f))
+                                                            } else {
+                                                                Spacer(Modifier.weight(1f))
+
+                                                                if (isExcluded) {
+                                                                    ExerciseMetaBadge(
+                                                                        text = "מוחרג",
+                                                                        containerColor = Color(0xFFE5E7EB),
+                                                                        contentColor = Color(0xFF6B7280)
+                                                                    )
+
+                                                                    Spacer(Modifier.width(5.dp))
+                                                                }
+
+                                                                if (isFavorite) {
+                                                                    ExerciseMetaBadge(
+                                                                        text = "מועדף",
+                                                                        containerColor = Color(0xFFF9D9B8),
+                                                                        contentColor = Color(0xFF9A5A00)
+                                                                    )
+
+                                                                    Spacer(Modifier.width(5.dp))
+                                                                }
+
+                                                                ExerciseMetaBadge(
+                                                                    text = "מס׳ ${index + 1}",
+                                                                    containerColor = belt.color.copy(
+                                                                        alpha = 0.14f
+                                                                    ),
+                                                                    contentColor = Color(0xFF1F2937)
+                                                                )
+                                                            }
                                                         }
                                                     }
 
-                                                    masteredSet = nextMasteredSet
-                                                    unknowns = nextUnknownSet
+                                                    Spacer(Modifier.height(2.dp))
 
-                                                    val statusTopicKeys =
-                                                        if (subTopicFilter.isNullOrBlank()) {
-                                                            listOf(
-                                                                topicKey,
-                                                                topicUi,
-                                                                "כללי"
-                                                            )
-                                                        } else {
-                                                            listOf(topicKey)
-                                                        }
-                                                            .map { key -> key.trim() }
-                                                            .filter { key -> key.isNotBlank() }
-                                                            .distinct()
+                                                    Text(
+                                                        text = displayName,
+                                                        textAlign =
+                                                            if (isEnglish) {
+                                                                TextAlign.Left
+                                                            } else {
+                                                                TextAlign.Right
+                                                            },
+                                                        modifier = Modifier
+                                                            .fillMaxWidth()
+                                                            .clickable {
+                                                                pressed = true
 
-                                                    scope.launch(Dispatchers.IO) {
+                                                                explainTriple = Triple(
+                                                                    belt,
+                                                                    materialRootTopic,
+                                                                    item
+                                                                )
 
-                                                        /*
-                                                         * סטטוס יודע / לא יודע / לא סומן
-                                                         * נשמר רק לפי statusId.
-                                                         *
-                                                         * canonicalId נשאר עבור הערות, מועדפים,
-                                                         * החרגות והסברים בלבד.
-                                                         */
-                                                        statusTopicKeys.forEach { topicKeyToSave ->
-                                                            vm.setItemStatusNullable(
-                                                                belt = belt,
-                                                                topic = topicKeyToSave,
-                                                                item = statusId,
-                                                                value = newVal
-                                                            )
-                                                        }
-
-                                                        val editor = sp.edit()
-
-                                                        statusTopicKeys.forEach { topicKeyToSave ->
-                                                            val masteredPreferenceKey =
-                                                                "mastered_${belt.id}_${topicKeyToSave}"
-
-                                                            val unknownPreferenceKey =
-                                                                "unknown_${belt.id}_${topicKeyToSave}"
-
-                                                            val savedMastered =
-                                                                (
-                                                                        sp.getStringSet(
-                                                                            masteredPreferenceKey,
-                                                                            emptySet()
-                                                                        ) ?: emptySet()
-                                                                        ).toMutableSet()
-
-                                                            val savedUnknown =
-                                                                (
-                                                                        sp.getStringSet(
-                                                                            unknownPreferenceKey,
-                                                                            emptySet()
-                                                                        ) ?: emptySet()
-                                                                        ).toMutableSet()
-
-                                                            when (newVal) {
-                                                                true -> {
-                                                                    savedMastered.add(statusId)
-                                                                    savedUnknown.remove(statusId)
-                                                                }
-
-                                                                false -> {
-                                                                    savedUnknown.add(statusId)
-                                                                    savedMastered.remove(statusId)
-                                                                }
-
-                                                                null -> {
-                                                                    savedMastered.remove(statusId)
-                                                                    savedUnknown.remove(statusId)
+                                                                scope.launch {
+                                                                    kotlinx.coroutines.delay(150)
+                                                                    pressed = false
                                                                 }
                                                             }
+                                                            .padding(vertical = 4.dp),
+                                                        color = when {
+                                                            isExcluded ->
+                                                                Color.Gray
 
-                                                            editor.putStringSet(
-                                                                masteredPreferenceKey,
-                                                                savedMastered
+                                                            isHighlighted ->
+                                                                belt.color.copy(alpha = 0.95f)
+
+                                                            else ->
+                                                                Color(0xFF111827)
+                                                        },
+                                                        style = MaterialTheme.typography.bodySmall.copy(
+                                                            fontSize = 11.sp,
+                                                            lineHeight = 13.sp
+                                                        ),
+                                                        fontWeight =
+                                                            if (isHighlighted) {
+                                                                FontWeight.Bold
+                                                            } else {
+                                                                FontWeight.SemiBold
+                                                            },
+                                                        maxLines = 3,
+                                                        overflow = TextOverflow.Ellipsis
+                                                    )
+                                                }
+
+                                                Spacer(Modifier.width(6.dp))
+
+                                                if (isCoach) {
+                                                    val coachProgress =
+                                                        coachProgressStates[statusId]
+                                                            ?: CoachMaterialProgress(
+                                                                status = CoachMaterialStatus.NOT_TAUGHT,
+                                                                updatedAt = 0L
                                                             )
 
-                                                            editor.putStringSet(
-                                                                unknownPreferenceKey,
-                                                                savedUnknown
+                                                    CoachMaterialStatusSelector(
+                                                        progress = coachProgress,
+                                                        isEnglish = isEnglish,
+                                                        onSelect = { selectedStatus ->
+                                                            saveCoachProgress(
+                                                                statusId = statusId,
+                                                                status = selectedStatus
                                                             )
                                                         }
-
-                                                        editor.apply()
-
-                                                        withContext(Dispatchers.Main.immediate) {
-                                                            /*
-                                                             * containsKey חשוב במיוחד עבור null:
-                                                             * גם "לא קיים מפתח" וגם "ערך null" מחזירים null בקריאה רגילה.
-                                                             */
-                                                            if (
-                                                                pendingItemStates.containsKey(statusId) &&
-                                                                pendingItemStates[statusId] == newVal
-                                                            ) {
-                                                                pendingItemStates.remove(statusId)
+                                                    )
+                                                } else {
+                                                    Box(
+                                                        modifier = Modifier.scale(0.82f),
+                                                        contentAlignment = Alignment.Center
+                                                    ) {
+                                                        MasterToggle(
+                                                            mastered = mastered,
+                                                            onSelect = { newVal ->
+                                                                pendingItemStates[statusId] = newVal
                                                                 itemStates[statusId] = newVal
+
+                                                                val nextMasteredSet =
+                                                                    masteredSet.toMutableSet()
+
+                                                                val nextUnknownSet =
+                                                                    unknowns.toMutableSet()
+
+                                                                when (newVal) {
+                                                                    true -> {
+                                                                        nextMasteredSet.add(statusId)
+                                                                        nextUnknownSet.remove(statusId)
+                                                                    }
+
+                                                                    false -> {
+                                                                        nextUnknownSet.add(statusId)
+                                                                        nextMasteredSet.remove(statusId)
+                                                                    }
+
+                                                                    null -> {
+                                                                        nextMasteredSet.remove(statusId)
+                                                                        nextUnknownSet.remove(statusId)
+                                                                    }
+                                                                }
+
+                                                                masteredSet = nextMasteredSet
+                                                                unknowns = nextUnknownSet
+
+                                                                val statusTopicKeys =
+                                                                    if (subTopicFilter.isNullOrBlank()) {
+                                                                        listOf(
+                                                                            topicKey,
+                                                                            topicUi,
+                                                                            "כללי"
+                                                                        )
+                                                                    } else {
+                                                                        listOf(topicKey)
+                                                                    }
+                                                                        .map { key ->
+                                                                            key.trim()
+                                                                        }
+                                                                        .filter { key ->
+                                                                            key.isNotBlank()
+                                                                        }
+                                                                        .distinct()
+
+                                                                scope.launch(Dispatchers.IO) {
+                                                                    statusTopicKeys.forEach { topicKeyToSave ->
+                                                                        vm.setItemStatusNullable(
+                                                                            belt = belt,
+                                                                            topic = topicKeyToSave,
+                                                                            item = statusId,
+                                                                            value = newVal
+                                                                        )
+                                                                    }
+
+                                                                    val editor = sp.edit()
+
+                                                                    statusTopicKeys.forEach { topicKeyToSave ->
+                                                                        val masteredPreferenceKey =
+                                                                            "mastered_${belt.id}_${topicKeyToSave}"
+
+                                                                        val unknownPreferenceKey =
+                                                                            "unknown_${belt.id}_${topicKeyToSave}"
+
+                                                                        val savedMastered =
+                                                                            (
+                                                                                    sp.getStringSet(
+                                                                                        masteredPreferenceKey,
+                                                                                        emptySet()
+                                                                                    ) ?: emptySet()
+                                                                                    ).toMutableSet()
+
+                                                                        val savedUnknown =
+                                                                            (
+                                                                                    sp.getStringSet(
+                                                                                        unknownPreferenceKey,
+                                                                                        emptySet()
+                                                                                    ) ?: emptySet()
+                                                                                    ).toMutableSet()
+
+                                                                        when (newVal) {
+                                                                            true -> {
+                                                                                savedMastered.add(statusId)
+                                                                                savedUnknown.remove(statusId)
+                                                                            }
+
+                                                                            false -> {
+                                                                                savedUnknown.add(statusId)
+                                                                                savedMastered.remove(statusId)
+                                                                            }
+
+                                                                            null -> {
+                                                                                savedMastered.remove(statusId)
+                                                                                savedUnknown.remove(statusId)
+                                                                            }
+                                                                        }
+
+                                                                        editor.putStringSet(
+                                                                            masteredPreferenceKey,
+                                                                            savedMastered
+                                                                        )
+
+                                                                        editor.putStringSet(
+                                                                            unknownPreferenceKey,
+                                                                            savedUnknown
+                                                                        )
+                                                                    }
+
+                                                                    editor.apply()
+
+                                                                    withContext(Dispatchers.Main.immediate) {
+                                                                        if (
+                                                                            pendingItemStates.containsKey(statusId) &&
+                                                                            pendingItemStates[statusId] == newVal
+                                                                        ) {
+                                                                            pendingItemStates.remove(statusId)
+                                                                            itemStates[statusId] = newVal
+                                                                        }
+                                                                    }
+                                                                }
                                                             }
-                                                        }
+                                                        )
                                                     }
                                                 }
-                                            )
+                                            }
+
+                                            // דיאלוג הערה
+                                            if (showNoteDialog) {
+                                                ExerciseNoteEditorDialog(
+                                                    noteText = noteText,
+                                                    isEnglish = isEnglish,
+                                                    accentColor = belt.color,
+                                                    onNoteChange = { noteText = it },
+                                                    onDismiss = {
+                                                        showNoteDialog = false
+                                                    },
+                                                    onSave = {
+                                                        val cleanNote = noteText.trim()
+                                                        noteText = cleanNote
+                                                        saveNote(canonicalId, cleanNote)
+                                                        showNoteDialog = false
+                                                    }
+                                                )
+                                            }
+
+                                            Spacer(Modifier.height(0.dp))
                                         }
-                                    }
-
-                                    Divider(
-                                        color = belt.color.copy(alpha = 0.30f),
-                                        thickness = 1.dp,
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .padding(start = 8.dp, end = 8.dp)
-                                    )
-                                }
-
-                                        // דיאלוג הערה
-                                        if (showNoteDialog) {
-                                    ExerciseNoteEditorDialog(
-                                        noteText = noteText,
-                                        isEnglish = isEnglish,
-                                        accentColor = belt.color,
-                                        onNoteChange = { noteText = it },
-                                        onDismiss = {
-                                            showNoteDialog = false
-                                        },
-                                        onSave = {
-                                            val cleanNote = noteText.trim()
-                                            noteText = cleanNote
-                                            saveNote(canonicalId, cleanNote)
-                                            showNoteDialog = false
-                                        }
-                                    )
-                                }
-
-                                        Spacer(Modifier.height(0.dp))
                                     }
                                 }
                             }
@@ -2260,10 +2505,15 @@ private fun createMaterialsPdf(
     fun drawFooter(canvas: android.graphics.Canvas, pageNumber: Int, totalPages: Int) {
         val footerY = 804f
 
-        canvas.drawLine(0f, footerY, pageWidth.toFloat(), footerY, Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = navy
-            strokeWidth = 2f
-        })
+        canvas.drawLine(
+            0f,
+            footerY,
+            pageWidth.toFloat(),
+            footerY,
+            Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                color = navy
+                strokeWidth = 2f
+            })
 
         drawKmiLogo(canvas, 38f, footerY + 22f, 13f)
 
@@ -2292,7 +2542,16 @@ private fun createMaterialsPdf(
         val notes = items.count { it.hasNote }
 
         drawRoundRect(canvas, margin, top, pageWidth - margin, top + 120f, lightBlue, 12f)
-        drawRoundRect(canvas, margin, top, pageWidth - margin, top + 120f, borderBlue, 12f, stroke = true)
+        drawRoundRect(
+            canvas,
+            margin,
+            top,
+            pageWidth - margin,
+            top + 120f,
+            borderBlue,
+            12f,
+            stroke = true
+        )
 
         sectionPaint.textAlign =
             if (isEnglish) Paint.Align.LEFT else Paint.Align.RIGHT
@@ -2324,7 +2583,16 @@ private fun createMaterialsPdf(
             val right = left + boxW - 8f
 
             drawRoundRect(canvas, left, cardTop, right, cardTop + 28f, softBlue, 10f)
-            drawRoundRect(canvas, left, cardTop, right, cardTop + 28f, borderBlue, 10f, stroke = true)
+            drawRoundRect(
+                canvas,
+                left,
+                cardTop,
+                right,
+                cardTop + 28f,
+                borderBlue,
+                10f,
+                stroke = true
+            )
 
             boldValuePaint.textAlign = Paint.Align.CENTER
             boldValuePaint.color = navy
@@ -2451,10 +2719,24 @@ private fun createMaterialsPdf(
 
         if (items.isEmpty()) {
             drawRoundRect(canvas, margin, y, pageWidth - margin, y + 92f, softBlue, 12f)
-            drawRoundRect(canvas, margin, y, pageWidth - margin, y + 92f, borderBlue, 12f, stroke = true)
+            drawRoundRect(
+                canvas,
+                margin,
+                y,
+                pageWidth - margin,
+                y + 92f,
+                borderBlue,
+                12f,
+                stroke = true
+            )
 
             sectionPaint.textAlign = Paint.Align.CENTER
-            canvas.drawText(tr("אין תרגילים להצגה", "No exercises to display"), pageWidth / 2f, y + 42f, sectionPaint)
+            canvas.drawText(
+                tr("אין תרגילים להצגה", "No exercises to display"),
+                pageWidth / 2f,
+                y + 42f,
+                sectionPaint
+            )
         } else {
             repeat(capacity) {
                 if (itemIndex >= items.size) return@repeat
@@ -2592,6 +2874,200 @@ private fun MaterialsTopStatChip(
         }
     }
 }
+
+@Composable
+private fun CoachMaterialStatusSelector(
+    progress: CoachMaterialProgress,
+    isEnglish: Boolean,
+    onSelect: (CoachMaterialStatus) -> Unit
+) {
+    var expanded by remember {
+        mutableStateOf(false)
+    }
+
+    val statusColor = when (progress.status) {
+        CoachMaterialStatus.NOT_TAUGHT ->
+            Color(0xFF8A939D)
+
+        CoachMaterialStatus.TAUGHT ->
+            Color(0xFF2F9B4E)
+
+        CoachMaterialStatus.PRACTICED ->
+            Color(0xFF3478D4)
+
+        CoachMaterialStatus.NEEDS_REINFORCEMENT ->
+            Color(0xFFF28C28)
+    }
+
+    val statusSymbol = when (progress.status) {
+        CoachMaterialStatus.NOT_TAUGHT -> "—"
+        CoachMaterialStatus.TAUGHT -> "✓"
+        CoachMaterialStatus.PRACTICED -> "↻"
+        CoachMaterialStatus.NEEDS_REINFORCEMENT -> "!"
+    }
+
+    val statusLabel = when (progress.status) {
+        CoachMaterialStatus.NOT_TAUGHT ->
+            if (isEnglish) "Not taught" else "לא נלמד"
+
+        CoachMaterialStatus.TAUGHT ->
+            if (isEnglish) "Taught" else "נלמד"
+
+        CoachMaterialStatus.PRACTICED ->
+            if (isEnglish) "Practiced" else "תורגל"
+
+        CoachMaterialStatus.NEEDS_REINFORCEMENT ->
+            if (isEnglish) "Reinforce" else "נדרש חיזוק"
+    }
+
+    val dateText = remember(progress.updatedAt, isEnglish) {
+        if (progress.updatedAt <= 0L) {
+            if (isEnglish) {
+                "Not updated"
+            } else {
+                "טרם עודכן"
+            }
+        } else {
+            java.text.SimpleDateFormat(
+                "dd/MM/yyyy",
+                java.util.Locale.getDefault()
+            ).format(
+                java.util.Date(progress.updatedAt)
+            )
+        }
+    }
+
+    Box(
+        contentAlignment = Alignment.Center
+    ) {
+        Column(
+            modifier = Modifier
+                .widthIn(min = 68.dp, max = 82.dp)
+                .clickable {
+                    expanded = true
+                }
+                .padding(vertical = 2.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Surface(
+                shape = CircleShape,
+                color = statusColor,
+                shadowElevation = 3.dp,
+                border = BorderStroke(
+                    width = 1.dp,
+                    color = Color.White.copy(alpha = 0.35f)
+                ),
+                modifier = Modifier.size(38.dp)
+            ) {
+                Box(
+                    modifier = Modifier.fillMaxSize(),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = statusSymbol,
+                        color = Color.White,
+                        fontWeight = FontWeight.ExtraBold,
+                        fontSize = 22.sp,
+                        lineHeight = 24.sp,
+                        textAlign = TextAlign.Center
+                    )
+                }
+            }
+
+            Spacer(Modifier.height(2.dp))
+
+            Text(
+                text = statusLabel,
+                color = statusColor,
+                fontSize = 9.sp,
+                lineHeight = 10.sp,
+                fontWeight = FontWeight.ExtraBold,
+                textAlign = TextAlign.Center,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+
+            Text(
+                text = dateText,
+                color = Color(0xFF6B7280),
+                fontSize = 7.5.sp,
+                lineHeight = 9.sp,
+                fontWeight = FontWeight.Medium,
+                textAlign = TextAlign.Center,
+                maxLines = 1
+            )
+        }
+
+        DropdownMenu(
+            expanded = expanded,
+            onDismissRequest = {
+                expanded = false
+            },
+            shape = RoundedCornerShape(18.dp),
+            containerColor = Color(0xFFF9FAFB),
+            shadowElevation = 8.dp
+        ) {
+            CoachMaterialStatus.entries.forEach { status ->
+                val optionColor = when (status) {
+                    CoachMaterialStatus.NOT_TAUGHT ->
+                        Color(0xFF8A939D)
+
+                    CoachMaterialStatus.TAUGHT ->
+                        Color(0xFF2F9B4E)
+
+                    CoachMaterialStatus.PRACTICED ->
+                        Color(0xFF3478D4)
+
+                    CoachMaterialStatus.NEEDS_REINFORCEMENT ->
+                        Color(0xFFF28C28)
+                }
+
+                val optionLabel = when (status) {
+                    CoachMaterialStatus.NOT_TAUGHT ->
+                        if (isEnglish) "Not taught" else "לא נלמד"
+
+                    CoachMaterialStatus.TAUGHT ->
+                        if (isEnglish) "Taught" else "נלמד"
+
+                    CoachMaterialStatus.PRACTICED ->
+                        if (isEnglish) "Practiced" else "תורגל"
+
+                    CoachMaterialStatus.NEEDS_REINFORCEMENT ->
+                        if (isEnglish) {
+                            "Needs reinforcement"
+                        } else {
+                            "נדרש חיזוק"
+                        }
+                }
+
+                DropdownMenuItem(
+                    text = {
+                        Text(
+                            text = optionLabel,
+                            color = optionColor,
+                            fontWeight = if (progress.status == status) {
+                                FontWeight.ExtraBold
+                            } else {
+                                FontWeight.SemiBold
+                            },
+                            textAlign = if (isEnglish) {
+                                TextAlign.Left
+                            } else {
+                                TextAlign.Right
+                            },
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    },
+                    onClick = {
+                        expanded = false
+                        onSelect(status)
+                    }
+                )
+            }
+        }
+    }
+}
+
 
 @Composable
 private fun ExerciseMetaBadge(

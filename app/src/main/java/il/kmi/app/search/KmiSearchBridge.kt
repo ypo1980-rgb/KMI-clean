@@ -16,6 +16,127 @@ private fun String.normHeb(): String = this
     .replace(Regex("\\s+"), " ")
     .lowercase()
 
+/**
+ * יוצר וריאציות חיפוש מתוך טקסט שהוקלד או נאמר בקול.
+ *
+ * לדוגמה:
+ * "הסבר לי איך עושים בעיטת מגל"
+ *
+ * יהפוך בין היתר ל:
+ * "בעיטת מגל"
+ */
+private fun voiceExerciseSearchVariants(
+    rawQuery: String
+): List<String> {
+    val normalized = rawQuery.normHeb()
+
+    if (normalized.isBlank()) {
+        return emptyList()
+    }
+
+    val variants = linkedSetOf<String>()
+
+    fun addVariant(value: String) {
+        val clean = value
+            .normHeb()
+            .trim(' ', '.', ',', '?', '!', ':', ';', '"', '\'')
+
+        if (clean.length >= 2) {
+            variants += clean
+        }
+    }
+
+    addVariant(normalized)
+
+    val prefixes = listOf(
+        "הסבר לי על",
+        "הסבר לי את",
+        "הסבר לי",
+        "תסביר לי על",
+        "תסביר לי את",
+        "תסביר לי",
+        "תסביר על",
+        "תסביר את",
+        "תסביר",
+        "הסבר על",
+        "הסבר את",
+        "הסבר",
+        "איך מבצעים את",
+        "איך מבצעים",
+        "איך עושים את",
+        "איך עושים",
+        "איך לבצע את",
+        "איך לבצע",
+        "איך לעשות את",
+        "איך לעשות",
+        "תראה לי איך עושים את",
+        "תראה לי איך עושים",
+        "תראה לי את",
+        "תראה לי",
+        "פתח לי את",
+        "פתח לי",
+        "פתח את",
+        "פתח",
+        "מידע על התרגיל",
+        "מידע על",
+        "תרגיל בשם",
+        "תרגיל",
+        "explain to me",
+        "explain",
+        "show me how to do",
+        "show me",
+        "how do i perform",
+        "how do i do",
+        "how to perform",
+        "how to do",
+        "open exercise",
+        "open",
+        "information about"
+    )
+
+    prefixes
+        .sortedByDescending { it.length }
+        .forEach { prefix ->
+            val normalizedPrefix = prefix.normHeb()
+
+            if (normalized.startsWith("$normalizedPrefix ")) {
+                addVariant(
+                    normalized.removePrefix(normalizedPrefix)
+                )
+            }
+        }
+
+    /*
+     * ניקוי ביטויים שעלולים להישאר לאחר הסרת הפתיח הראשי.
+     */
+    variants
+        .toList()
+        .forEach { variant ->
+            addVariant(
+                variant
+                    .removePrefix("על התרגיל ")
+                    .removePrefix("את התרגיל ")
+                    .removePrefix("התרגיל ")
+                    .removePrefix("על ")
+                    .removePrefix("את ")
+            )
+        }
+
+    /*
+     * התוצאה הקצרה והנקייה ביותר נבדקת ראשונה.
+     */
+    return variants
+        .sortedWith(
+            compareBy<String> { value ->
+                val containsVoicePrefix = prefixes.any { prefix ->
+                    value.startsWith(prefix.normHeb())
+                }
+
+                if (containsVoicePrefix) 1 else 0
+            }.thenBy { it.length }
+        )
+}
+
 // המרת KmiBelt -> Belt (מוגדרת כרמה-עליונה, לא בתוך פונקציה)
 private fun KmiBelt.toAppBelt(): Belt = when (this) {
     KmiBelt.WHITE  -> Belt.WHITE
@@ -199,18 +320,66 @@ object KmiSearchBridge {
     /* ====================== end SHARED ====================== */
 
     /** חיפוש: (אם אתה משתמש בזה עדיין) */
-    fun search(query: String, beltFilter: Belt? = null): List<AppSearchHit> {
-        val qn = query.normHeb()
-        if (qn.isBlank()) return emptyList()
+    fun search(
+        query: String,
+        beltFilter: Belt? = null
+    ): List<AppSearchHit> {
+        val variants = voiceExerciseSearchVariants(query)
 
-        // 👇 כרגע אנחנו לא תלויים ב-KmiSearch בכלל כדי לא להיתקע על API/גרסאות.
-        // אפשר להחזיר רק localSearch לפי Shared repo (source of truth).
-        val local: List<AppSearchHit> = localSearchContentRepo(query = qn, beltFilter = beltFilter)
+        if (variants.isEmpty()) {
+            return emptyList()
+        }
 
-        return local
-            .distinctBy { "${it.belt.name}|${it.topic}|${it.item}" }
-            .sortedWith(compareBy<AppSearchHit> { it.topic }.thenBy { it.item })
-            .let { list -> if (beltFilter != null) list.filter { it.belt == beltFilter } else list }
+        val results = variants.flatMap { variant ->
+            localSearchContentRepo(
+                query = variant,
+                beltFilter = beltFilter
+            )
+        }
+
+        return results
+            .distinctBy { hit ->
+                "${hit.belt.name}|${hit.topic}|${hit.item}"
+            }
+            .sortedWith(
+                compareBy<AppSearchHit> { hit ->
+                    val normalizedItem =
+                        hit.item
+                            ?.normHeb()
+                            .orEmpty()
+
+                    when {
+                        variants.any { variant ->
+                            normalizedItem == variant
+                        } -> 0
+
+                        variants.any { variant ->
+                            normalizedItem.startsWith(variant)
+                        } -> 1
+
+                        variants.any { variant ->
+                            normalizedItem.contains(variant)
+                        } -> 2
+
+                        else -> 3
+                    }
+                }
+                    .thenBy { hit ->
+                        hit.item?.length ?: Int.MAX_VALUE
+                    }
+                    .thenBy { hit ->
+                        hit.topic
+                    }
+            )
+            .let { list ->
+                if (beltFilter != null) {
+                    list.filter { hit ->
+                        hit.belt == beltFilter
+                    }
+                } else {
+                    list
+                }
+            }
     }
 
     /* ---------- חיפוש מקומי ישיר על ה־ContentRepo ---------- */
@@ -225,12 +394,36 @@ object KmiSearchBridge {
                 val items: List<String> = itemsFor(belt, topicTitle)
 
                 items.forEach { item ->
-                    if (item.normHeb().contains(query)) {
-                        val fixedBelt = resolveBeltByContent(topicTitle, item, belt)
+                    val normalizedItem = item.normHeb()
+                    val normalizedQuery = query.normHeb()
+
+                    val queryWords = normalizedQuery
+                        .split(" ")
+                        .filter { word ->
+                            word.length >= 2
+                        }
+
+                    val matches =
+                        normalizedItem == normalizedQuery ||
+                                normalizedItem.contains(normalizedQuery) ||
+                                (
+                                        queryWords.isNotEmpty() &&
+                                                queryWords.all { word ->
+                                                    normalizedItem.contains(word)
+                                                }
+                                        )
+
+                    if (matches) {
+                        val fixedBelt = resolveBeltByContent(
+                            topicTitle = topicTitle,
+                            itemTitle = item,
+                            hint = belt
+                        )
+
                         results += AppSearchHit(
-                            belt  = fixedBelt,
+                            belt = fixedBelt,
                             topic = topicTitle,
-                            item  = item
+                            item = item
                         )
                     }
                 }

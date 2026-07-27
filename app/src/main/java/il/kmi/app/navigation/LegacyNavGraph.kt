@@ -51,6 +51,17 @@ fun NavGraphBuilder.legacyNavGraph(
     sp: SharedPreferences,
     kmiPrefs: KmiPrefs,
 ) {
+    val role = sp
+        .getString("user_role", "")
+        .orEmpty()
+        .lowercase()
+
+    val isCoach =
+        role == "coach" ||
+                role.contains("coach") ||
+                role.contains("מאמן") ||
+                role.contains("מדריך")
+
     // ---- Intro → RegistrationLanding ----
     composable(Route.Intro.route) {
         IntroScreen(
@@ -103,7 +114,13 @@ fun NavGraphBuilder.legacyNavGraph(
         nav = nav,
         vm = vm
     )
-    materialsNavGraph(nav = nav, vm = vm, sp = sp, kmiPrefs = kmiPrefs)
+    materialsNavGraph(
+        nav = nav,
+        vm = vm,
+        sp = sp,
+        kmiPrefs = kmiPrefs,
+        isCoach = isCoach
+    )
     summaryNavGraph(nav = nav, vm = vm, sp = sp, kmiPrefs = kmiPrefs)
     practiceNavGraph(nav = nav, vm = vm, sp = sp, kmiPrefs = kmiPrefs)
     examNavGraph(nav = nav, vm = vm, sp = sp, kmiPrefs = kmiPrefs)

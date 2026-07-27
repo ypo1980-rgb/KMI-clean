@@ -516,129 +516,14 @@ fun KmiTopBar(
         query: String
     ): Boolean {
         val cleanQuery = query.trim()
-        if (cleanQuery.isBlank()) return false
 
-        val hit = KmiSearchBridge
-            .search(cleanQuery)
-            .firstOrNull()
-            ?: return false
-
-        val hitTopic = hit.topic
-            .orEmpty()
-            .trim()
-
-        val hitItem = hit.item
-            .orEmpty()
-            .trim()
-
-        if (hitItem.isBlank()) {
+        if (cleanQuery.isBlank()) {
             return false
         }
 
-        val stableKey = listOf(
-            hit.belt.id,
-            hitTopic,
-            hitItem
-        ).joinToString("::")
-
-        val defaultExplanation = Explanations.get(
-            belt = hit.belt,
-            item = hitItem,
-            exerciseId = stableKey
-        ).trim()
-
-        if (defaultExplanation.isBlank()) {
-            return false
-        }
-
-        val editedExplanation = ctx
-            .getSharedPreferences(
-                "kmi_explanation_overrides",
-                Context.MODE_PRIVATE
-            )
-            .getString(stableKey, null)
-            ?.trim()
-            .orEmpty()
-
-        val favoritesSet = ctx
-            .getSharedPreferences(
-                "kmi_global_favorites",
-                Context.MODE_PRIVATE
-            )
-            .getStringSet(
-                "favorite_exercises",
-                emptySet()
-            )
-            ?: emptySet()
-
-        val noteRoleKey =
-            if (userIsCoach) "coach" else "trainee"
-
-        val notePrefsKey =
-            "$stableKey::$noteRoleKey"
-
-        val savedUserNote = ctx
-            .getSharedPreferences(
-                "kmi_exercise_user_notes",
-                Context.MODE_PRIVATE
-            )
-            .getString(notePrefsKey, "")
-            ?.trim()
-            .orEmpty()
-
-        premiumExerciseTitle = hitItem
-
-        premiumExerciseBeltName = when (hit.belt) {
-            il.kmi.shared.domain.Belt.WHITE ->
-                if (isEnglish) "White belt" else "חגורה לבנה"
-
-            il.kmi.shared.domain.Belt.YELLOW ->
-                if (isEnglish) "Yellow belt" else "חגורה צהובה"
-
-            il.kmi.shared.domain.Belt.ORANGE ->
-                if (isEnglish) "Orange belt" else "חגורה כתומה"
-
-            il.kmi.shared.domain.Belt.GREEN ->
-                if (isEnglish) "Green belt" else "חגורה ירוקה"
-
-            il.kmi.shared.domain.Belt.BLUE ->
-                if (isEnglish) "Blue belt" else "חגורה כחולה"
-
-            il.kmi.shared.domain.Belt.BROWN ->
-                if (isEnglish) "Brown belt" else "חגורה חומה"
-
-            il.kmi.shared.domain.Belt.BLACK ->
-                if (isEnglish) "Black belt" else "חגורה שחורה"
-        }
-
-        premiumExerciseExplanation =
-            editedExplanation.ifBlank {
-                defaultExplanation
-            }
-
-        premiumExerciseStableKey = stableKey
-        premiumExerciseIsFavorite =
-            stableKey in favoritesSet
-
-        premiumExerciseUserNote = savedUserNote
-        premiumExerciseUserNoteTitle =
-            if (userIsCoach) {
-                if (isEnglish) {
-                    "Coach notes"
-                } else {
-                    "הערות המאמן"
-                }
-            } else {
-                if (isEnglish) {
-                    "Trainee notes"
-                } else {
-                    "הערות המתאמן"
-                }
-            }
-
-        showGlobalSearch = false
-        globalSearchQuery = ""
-        showPremiumExerciseDialog = true
+        quickActionsExpanded = false
+        globalSearchQuery = cleanQuery
+        showGlobalSearch = true
 
         return true
     }

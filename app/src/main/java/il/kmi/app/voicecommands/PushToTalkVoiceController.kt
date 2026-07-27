@@ -192,9 +192,10 @@ class PushToTalkVoiceController(
 
     private fun restartSilenceTimer() {
         silenceHandler.removeCallbacks(silenceRunnable)
+
         silenceHandler.postDelayed(
             silenceRunnable,
-            900L
+            1_500L
         )
     }
 
@@ -224,7 +225,7 @@ class PushToTalkVoiceController(
 
             override fun onBeginningOfSpeech() {
                 updateState(PushToTalkState.LISTENING)
-                restartSilenceTimer()
+                cancelSilenceTimer()
             }
 
             override fun onEndOfSpeech() {
@@ -393,7 +394,14 @@ class PushToTalkVoiceController(
                 }
             }
 
-            override fun onRmsChanged(rmsdB: Float) = Unit
+            override fun onRmsChanged(rmsdB: Float) {
+                if (
+                    currentState == PushToTalkState.LISTENING &&
+                    rmsdB > 1.5f
+                ) {
+                    restartSilenceTimer()
+                }
+            }
 
             override fun onBufferReceived(buffer: ByteArray?) = Unit
 
