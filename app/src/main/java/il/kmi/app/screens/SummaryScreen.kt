@@ -1901,17 +1901,18 @@ fun SummaryScreen(
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 20.dp, vertical = 10.dp)
+                    .padding(vertical = 8.1.dp)
                     .navigationBarsPadding()
-                    .imePadding()
+                    .imePadding(),
+                contentAlignment = Alignment.Center
             ) {
                 Surface(
                     onClick = onBack,
-                    shape = RoundedCornerShape(18.dp),
-                    shadowElevation = 5.dp,
+                    shape = RoundedCornerShape(14.4.dp),
+                    shadowElevation = 4.5.dp,
                     modifier = Modifier
-                        .fillMaxWidth()
-                        .height(58.dp)
+                        .fillMaxWidth(0.90f)
+                        .height(46.8.dp)
                         .border(
                             width = 1.dp,
                             brush = Brush.linearGradient(
@@ -1921,7 +1922,7 @@ fun SummaryScreen(
                                     Color.White.copy(alpha = 0.85f)
                                 )
                             ),
-                            shape = RoundedCornerShape(18.dp)
+                            shape = RoundedCornerShape(14.4.dp)
                         )
                 ) {
                     Box(
@@ -1947,7 +1948,7 @@ fun SummaryScreen(
                             Box(
                                 modifier = Modifier
                                     .align(Alignment.CenterStart)
-                                    .width(72.dp)
+                                    .width(58.5.dp)
                                     .fillMaxHeight(0.70f)
                                     .background(
                                         brush = Brush.linearGradient(
@@ -1971,14 +1972,19 @@ fun SummaryScreen(
                                 imageVector = Icons.Filled.Star,
                                 contentDescription = null,
                                 tint = Color.White,
-                                modifier = Modifier.size(18.dp)
+                                modifier = Modifier.size(14.4.dp)
                             )
 
-                            Spacer(Modifier.width(8.dp))
+                            Spacer(Modifier.width(6.3.dp))
 
                             Text(
-                                text = tr("חזרה למסך הנושאים", "Back to topics screen"),
-                                style = MaterialTheme.typography.titleMedium,
+                                text = tr(
+                                    "חזרה למסך הנושאים",
+                                    "Back to topics screen"
+                                ),
+                                style = MaterialTheme.typography.titleMedium.copy(
+                                    fontSize = 14.4.sp
+                                ),
                                 fontWeight = FontWeight.ExtraBold,
                                 color = Color.White
                             )
@@ -2856,7 +2862,10 @@ fun SummaryScreen(
                                                             ) {
                                                                 Text(
                                                                     text = exerciseDisplayNameForUi(row.sourceTopicTitle, itemRaw, isEnglish),
-                                                                    style = MaterialTheme.typography.bodyMedium,
+                                                                    style = MaterialTheme.typography.bodyMedium.copy(
+                                                                        fontSize = 9.75375.sp,
+                                                                        lineHeight = 12.24.sp
+                                                                    ),
                                                                     textAlign = if (isEnglish) TextAlign.Left else TextAlign.Right,
                                                                     modifier = Modifier.fillMaxWidth(),
                                                                     color = Color(0xFF1B1B1B)
@@ -2898,7 +2907,7 @@ fun SummaryScreen(
                                                                         belt.color.copy(alpha = 0.14f)
                                                                     ),
                                                                     modifier = Modifier
-                                                                        .size(38.dp)
+                                                                        .size(34.dp)      // ↓ כ-10% קטן יותר
                                                                         .graphicsLayer {
                                                                             scaleX = infoScale
                                                                             scaleY = infoScale

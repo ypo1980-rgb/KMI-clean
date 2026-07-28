@@ -3,14 +3,10 @@
 package il.kmi.app.screens
 
 import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.relocation.BringIntoViewRequester
-import androidx.compose.foundation.relocation.bringIntoViewRequester
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Info
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -33,7 +29,6 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.animation.core.tween
 import androidx.compose.ui.text.AnnotatedString
@@ -49,6 +44,7 @@ import androidx.compose.runtime.collectAsState
 import il.kmi.app.domain.CanonicalIds
 import il.kmi.app.favorites.FavoritesStore
 import il.kmi.app.domain.ContentRepo
+import il.kmi.shared.domain.content.ExerciseIdentityRegistry
 import android.app.Activity
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.ui.unit.sp
@@ -63,6 +59,23 @@ private data class ExerciseCardsPdfItem(
     val status: Boolean?,
     val isFavorite: Boolean
 )
+
+private enum class ExerciseCoachStatus(
+    val storageValue: String
+) {
+    NOT_TAUGHT("not_taught"),
+    TAUGHT("taught"),
+    PRACTICE("practice"),
+    NEEDS_IMPROVEMENT("needs_improvement");
+
+    companion object {
+        fun fromStorage(value: String?): ExerciseCoachStatus {
+            return entries.firstOrNull { status ->
+                status.storageValue == value
+            } ?: NOT_TAUGHT
+        }
+    }
+}
 
 private fun createExerciseCardsPdf(
     context: android.content.Context,
@@ -695,19 +708,46 @@ fun ExercisesTabsScreen(
     val langManager = remember { AppLanguageManager(ctx) }
     val isEnglish = langManager.getCurrentLanguage() == AppLanguage.ENGLISH
     fun tr(he: String, en: String): String = if (isEnglish) en else he
-    val scroll = rememberScrollState()
-    val sp = remember { ctx.getSharedPreferences("kmi_settings", android.content.Context.MODE_PRIVATE) }
-    val notesSp = remember { ctx.getSharedPreferences("kmi_notes", android.content.Context.MODE_PRIVATE) }
+
+    val sp = remember {
+        ctx.getSharedPreferences(
+            "kmi_settings",
+            android.content.Context.MODE_PRIVATE
+        )
+    }
+
+    val notesSp = remember {
+        ctx.getSharedPreferences(
+            "kmi_notes",
+            android.content.Context.MODE_PRIVATE
+        )
+    }
+
+    val currentRole = sp
+        .getString("user_role", "")
+        .orEmpty()
+        .trim()
+        .lowercase()
+
+    val isCoach =
+        currentRole == "coach" ||
+                currentRole.contains("coach") ||
+                currentRole.contains("מאמן") ||
+                currentRole.contains("מדריך")
+
 // ⭐ Favorites גלובלי – source of truth אחד לכל האפליקציה
     val favorites: Set<String> by FavoritesStore
         .favoritesFlow
         .collectAsState(initial = emptySet())
 
-    // ✅ רענון סימוני יודע/לא יודע שהגיעו ממסכים אחרים, כולל MaterialsScreen
+// ✅ רענון סימוני יודע/לא יודע שהגיעו ממסכים אחרים, כולל MaterialsScreen
     val marksVersion by vm.marksVersion.collectAsState()
 
     fun readSet(key: String): MutableSet<String> =
-        sp.getStringSet(key, emptySet())?.toMutableSet() ?: mutableSetOf()
+        sp.getStringSet(
+            key,
+            emptySet()
+        )?.toMutableSet() ?: mutableSetOf()
 
     val allUnknownKeys = remember(belt.id, marksVersion) {
         sp.all.keys.filter { it.startsWith("unknown_${belt.id}_") }
@@ -836,8 +876,25 @@ fun ExercisesTabsScreen(
     var noteEditorFor by rememberSaveable { mutableStateOf<String?>(null) }
     var noteDraft by rememberSaveable { mutableStateOf("") }
     var notesRefreshKey by rememberSaveable { mutableIntStateOf(0) }
-    // --- מצב טאבים (0=הכל, 1=לא יודע, 2=מועדפים) — חייב להיות לפני ה-Scaffold ---
-    var selectedTab by rememberSaveable { mutableStateOf(0) }
+    /*
+   * צד מתאמן:
+   * 0 = הכול
+   * 1 = לא יודע
+   * 2 = מועדפים
+   *
+   * צד מאמן:
+   * 0 = הכול
+   * 1 = נלמד
+   * 2 = לתרגול
+   * 3 = לשיפור
+   */
+    var selectedTab by rememberSaveable(isCoach) {
+        mutableStateOf(0)
+    }
+
+    LaunchedEffect(isCoach) {
+        selectedTab = 0
+    }
 
     fun String.norm() = this
         .replace("\u200F","").replace("\u200E","").replace("\u00A0"," ")
@@ -866,23 +923,91 @@ fun ExercisesTabsScreen(
             .trim()
 
         return formatted
-            .takeIf { value: String -> value.isNotBlank() && value != "null" }
+            .takeIf { value: String ->
+                value.isNotBlank() && value != "null"
+            }
             ?: raw.trim()
     }
 
-    fun noteKeyFor(raw: String): String = "note_${belt.id}_${normalizeItemId(raw)}"
+    // ✅ אם זה __ALL__ צריך לדעת לאיזה נושא שייך כל item
+    fun topicForRawItem(raw: String): String {
+        if (topic != "__ALL__") {
+            return topic
+        }
+
+        return allTopicItems
+            .firstOrNull { topicItems ->
+                raw in topicItems.items
+            }
+            ?.topic
+            ?: topic
+    }
+
+    /*
+     * מקור האמת היחיד לזהות התרגיל.
+     *
+     * כל תרגיל במסך מומר ל־ex_XXX מתוך ExerciseIdentityRegistry.
+     */
+    fun exerciseIdentityIdFor(raw: String): String {
+        val itemTopic = topicForRawItem(raw)
+
+        return ExerciseIdentityRegistry.idFor(
+            belt = belt,
+            hebrewTitle = formattedExerciseTitle(raw),
+            topicKey = itemTopic
+        )
+    }
+
+    /*
+     * תמיכה גם במועדפים החדשים שנשמרים כ־ex_XXX
+     * וגם במועדפים ישנים שנשמרו לפי שם התרגיל.
+     */
+    val favoriteExerciseIds: Set<String> = remember(
+        favorites,
+        belt
+    ) {
+        favorites.mapTo(linkedSetOf()) { storedValue ->
+            val cleanValue = storedValue.trim()
+
+            if (cleanValue.matches(Regex("ex_\\d+"))) {
+                cleanValue
+            } else {
+                ExerciseIdentityRegistry.idFor(
+                    belt = belt,
+                    hebrewTitle = cleanValue,
+                    topicKey = null
+                )
+            }
+        }
+    }
+
+    fun isFavoriteRawItem(raw: String): Boolean {
+        return exerciseIdentityIdFor(raw) in favoriteExerciseIds
+    }
+
+    fun noteKeyFor(raw: String): String =
+        "note_${belt.id}_${exerciseIdentityIdFor(raw)}"
 
     fun loadNote(raw: String): String =
-        notesSp.getString(noteKeyFor(raw), "")?.trim().orEmpty()
+        notesSp.getString(
+            noteKeyFor(raw),
+            ""
+        )?.trim().orEmpty()
 
-    fun saveNote(raw: String, value: String) {
+    fun saveNote(
+        raw: String,
+        value: String
+    ) {
         val clean = value.trim()
 
         notesSp.edit().apply {
             if (clean.isBlank()) {
                 remove(noteKeyFor(raw))
             } else {
-                putString(noteKeyFor(raw), clean)
+                putString(
+                    noteKeyFor(raw),
+                    clean
+                )
             }
         }.apply()
 
@@ -902,12 +1027,13 @@ fun ExercisesTabsScreen(
         return loadNote(raw).isNotBlank()
     }
 
-    // סטטוסים מה-VM
-    val itemStates = remember(belt.id, topic, subTopicFilter) { mutableStateMapOf<String, Boolean?>() }
-    // ✅ אם זה __ALL__ צריך לדעת לאיזה נושא שייך כל item כדי לקרוא סטטוס נכון מה-VM
-    fun topicForRawItem(raw: String): String {
-        if (topic != "__ALL__") return topic
-        return allTopicItems.firstOrNull { it.items.contains(raw) }?.topic ?: topic
+// סטטוסים מה-VM
+    val itemStates = remember(
+        belt.id,
+        topic,
+        subTopicFilter
+    ) {
+        mutableStateMapOf<String, Boolean?>()
     }
 
     LaunchedEffect(
@@ -972,57 +1098,119 @@ fun ExercisesTabsScreen(
         )
     }
 
-    fun unknownCandidateIdsFor(raw: String): Set<String> {
-        val tp = topicForRawItem(raw)
-        val cleanId = normalizeItemId(raw)
-        val displayName = formattedExerciseTitle(raw)
-
-        val canonicalFromRaw = CanonicalIds.canonicalFor(belt, tp, raw)
-        val canonicalFromClean = CanonicalIds.canonicalFor(belt, tp, cleanId)
-        val canonicalFromDisplay = CanonicalIds.canonicalFor(belt, tp, displayName)
-
-        return buildSet {
-            add(raw.trim())
-            add(cleanId)
-            add(displayName)
-            add(canonicalFromRaw)
-            add(canonicalFromClean)
-            add(canonicalFromDisplay)
-        }.filter { it.isNotBlank() }.toSet()
-    }
-
     fun isUnknownRawItem(raw: String): Boolean {
-        val candidates = unknownCandidateIdsFor(raw)
-        val cleanRaw = normalizeStatusPart(raw)
-        val cleanDisplay = normalizeStatusPart(
-            formattedExerciseTitle(raw)
-        )
+        val exerciseId = exerciseIdentityIdFor(raw)
 
-        return unknowns.any { storedRaw ->
-            val stored = storedRaw.trim()
-            val storedNormalized = normalizeItemId(stored)
-
-            stored in candidates ||
-                    storedNormalized in candidates ||
-                    candidates.contains(storedNormalized) ||
-                    (
-                            stored.startsWith("status_${belt.id}_") &&
-                                    (
-                                            stored.endsWith("_$cleanRaw") ||
-                                                    stored.endsWith("_$cleanDisplay") ||
-                                                    stored.contains(cleanRaw) ||
-                                                    stored.contains(cleanDisplay)
-                                            )
-                            )
-        }
+        return exerciseId in unknowns
     }
 
     fun isUnknownForCards(raw: String): Boolean {
-        return itemStates[raw] == false || isUnknownRawItem(raw)
+        return itemStates[raw] == false ||
+                isUnknownRawItem(raw)
     }
 
-    fun toggleFavorite(rawId: String) {
-        FavoritesStore.toggle(normalizeItemId(rawId))
+    /*
+     * מקור אמת יחיד לכל שימושי "לא יודע":
+     * המונה, הטאב, הרשימה וקובץ ה־PDF.
+     */
+    val unknownItems: Set<String> by remember(
+        itemList,
+        unknowns,
+        itemStates.toMap(),
+        belt,
+        topic,
+        subTopicFilter,
+        marksVersion
+    ) {
+        derivedStateOf {
+            itemList.filterTo(linkedSetOf()) { rawItem ->
+                isUnknownForCards(rawItem)
+            }
+        }
+    }
+
+    fun coachStatusKey(raw: String): String {
+        val itemTopic = topicForRawItem(raw)
+
+        val canonicalId = CanonicalIds.canonicalFor(
+            belt,
+            itemTopic,
+            raw
+        )
+
+        val statusTopicKey =
+            if (!subTopicFilter.isNullOrBlank() && topic != "__ALL__") {
+                "${itemTopic.trim()}__${dec(subTopicFilter).trim()}"
+            } else {
+                itemTopic.trim()
+            }
+
+        return buildString {
+            append("coach_material_progress_")
+            append(belt.id)
+            append("_")
+            append(statusTopicKey)
+            append("_")
+            append(canonicalId)
+            append("_status")
+        }
+    }
+
+    fun loadCoachStatus(raw: String): ExerciseCoachStatus {
+        return ExerciseCoachStatus.fromStorage(
+            sp.getString(
+                coachStatusKey(raw),
+                null
+            )
+        )
+    }
+
+    fun saveCoachStatus(
+        raw: String,
+        status: ExerciseCoachStatus
+    ) {
+        sp.edit()
+            .putString(
+                coachStatusKey(raw),
+                status.storageValue
+            )
+            .apply()
+    }
+
+    var coachStatusesVersion by rememberSaveable {
+        mutableIntStateOf(0)
+    }
+
+    val coachStatuses: Map<String, ExerciseCoachStatus> = remember(
+        itemList,
+        isCoach,
+        coachStatusesVersion
+    ) {
+        if (!isCoach) {
+            emptyMap()
+        } else {
+            itemList.associateWith { raw ->
+                loadCoachStatus(raw)
+            }
+        }
+    }
+
+    fun updateCoachStatus(
+        raw: String,
+        status: ExerciseCoachStatus
+    ) {
+        saveCoachStatus(
+            raw = raw,
+            status = status
+        )
+
+        coachStatusesVersion++
+    }
+
+    fun toggleFavorite(rawItem: String) {
+        FavoritesStore.toggle(
+            exerciseIdentityIdFor(rawItem)
+        )
     }
 
     /**
@@ -1031,139 +1219,108 @@ fun ExercisesTabsScreen(
       /**
      * סימון/הסרה "לא יודע"
      */
-      fun setUnknown(id: String, set: Boolean) {
-          val cleanId = normalizeItemId(id)
+      fun setUnknown(
+          rawItem: String,
+          set: Boolean
+      ) {
+          val itemTopic = topicForRawItem(rawItem)
+          val exerciseId = exerciseIdentityIdFor(rawItem)
+          val canonicalId = CanonicalIds.canonicalFor(
+              belt,
+              itemTopic,
+              rawItem
+          )
 
-          fun removeMatchingUnknowns(
-              setToClean: MutableSet<String>,
-              raw: String,
-              canonicalId: String
-          ) {
-              val cleanRaw = normalizeStatusPart(raw)
-              val cleanDisplay = normalizeStatusPart(
-                  formattedExerciseTitle(raw)
-              )
-
-              setToClean.remove(cleanId)
-              setToClean.remove(raw)
-              setToClean.remove(canonicalId)
-
-              setToClean.removeAll { stored ->
-                  stored.trim() == cleanId ||
-                          stored.trim() == raw.trim() ||
-                          stored.trim() == canonicalId ||
-                          (
-                                  stored.startsWith("status_${belt.id}_") &&
-                                          (
-                                                  stored.endsWith("_$cleanRaw") ||
-                                                          stored.endsWith("_$cleanDisplay") ||
-                                                          stored.contains(cleanRaw) ||
-                                                          stored.contains(cleanDisplay)
-                                                  )
-                                  )
-              }
-          }
-
-          if (topic == "__ALL__") {
-              val nextUnknowns = unknowns.toMutableSet()
-
-              allTopicItems.forEach { ti ->
-                  val matchedItems = ti.items.filter { raw ->
-                      normalizeItemId(raw) == cleanId ||
-                              raw.trim() == id.trim() ||
-                              CanonicalIds.canonicalFor(belt, ti.topic, raw) == id.trim()
-                  }
-
-                  matchedItems.forEach { raw ->
-                      val canonicalId = CanonicalIds.canonicalFor(belt, ti.topic, raw)
-                      val key = "unknown_${belt.id}_${ti.topic}"
-
-                      val s = readSet(key)
-
-                      if (set) {
-                          s.add(cleanId)
-                          s.add(canonicalId)
-
-                          nextUnknowns.add(cleanId)
-                          nextUnknowns.add(canonicalId)
-
-                          vm.setItemStatusNullable(
-                              belt = belt,
-                              topic = ti.topic,
-                              item = canonicalId,
-                              value = false
-                          )
-                      } else {
-                          removeMatchingUnknowns(s, raw, canonicalId)
-                          removeMatchingUnknowns(nextUnknowns, raw, canonicalId)
-
-                          vm.setItemStatusNullable(
-                              belt = belt,
-                              topic = ti.topic,
-                              item = canonicalId,
-                              value = null
-                          )
-                      }
-
-                      sp.edit()
-                          .putStringSet(key, s)
-                          .apply()
-                  }
-              }
-
-              unknowns = nextUnknowns
-          } else {
-              val tp = topicForRawItem(id)
-              val canonicalId = CanonicalIds.canonicalFor(belt, tp, id)
-              val key = "unknown_${belt.id}_$suffix"
-
-              val s = readSet(key)
-
-              if (set) {
-                  s.add(cleanId)
-                  s.add(canonicalId)
-
-                  vm.setItemStatusNullable(
-                      belt = belt,
-                      topic = tp,
-                      item = canonicalId,
-                      value = false
-                  )
+          val storageKey =
+              if (topic == "__ALL__") {
+                  "unknown_${belt.id}_$itemTopic"
               } else {
-                  removeMatchingUnknowns(s, id, canonicalId)
-
-                  vm.setItemStatusNullable(
-                      belt = belt,
-                      topic = tp,
-                      item = canonicalId,
-                      value = null
-                  )
+                  "unknown_${belt.id}_$suffix"
               }
 
-              unknowns = s.toMutableSet()
+          val storedUnknowns = readSet(storageKey)
 
-              sp.edit()
-                  .putStringSet(key, s)
-                  .apply()
+          if (set) {
+              storedUnknowns.add(exerciseId)
+
+              vm.setItemStatusNullable(
+                  belt = belt,
+                  topic = itemTopic,
+                  item = canonicalId,
+                  value = false
+              )
+          } else {
+              storedUnknowns.remove(exerciseId)
+              storedUnknowns.remove(rawItem.trim())
+              storedUnknowns.remove(canonicalId)
+
+              vm.setItemStatusNullable(
+                  belt = belt,
+                  topic = itemTopic,
+                  item = canonicalId,
+                  value = null
+              )
           }
+
+          sp.edit()
+              .putStringSet(
+                  storageKey,
+                  storedUnknowns
+              )
+              .apply()
+
+          unknowns =
+              if (topic == "__ALL__") {
+                  allUnknownKeys
+                      .plus(storageKey)
+                      .distinct()
+                      .flatMap { key ->
+                          readSet(key)
+                      }
+                      .toMutableSet()
+              } else {
+                  storedUnknowns.toMutableSet()
+              }
       }
 
-    val pdfFilteredItems: List<String> = when (selectedTab) {
-        1 -> itemList.filter { rawItem ->
-            isUnknownForCards(rawItem)
-        }
+    val pdfFilteredItems: List<String> =
+        if (isCoach) {
+            when (selectedTab) {
+                1 -> itemList.filter { rawItem ->
+                    coachStatuses[rawItem] ==
+                            ExerciseCoachStatus.TAUGHT
+                }
 
-        2 -> itemList.filter { rawItem ->
-            normalizeItemId(rawItem) in favorites
-        }
+                2 -> itemList.filter { rawItem ->
+                    coachStatuses[rawItem] ==
+                            ExerciseCoachStatus.PRACTICE
+                }
 
-        else -> itemList
-    }
+                3 -> itemList.filter { rawItem ->
+                    coachStatuses[rawItem] ==
+                            ExerciseCoachStatus.NEEDS_IMPROVEMENT
+                }
+
+                else -> itemList
+            }
+        } else {
+            when (selectedTab) {
+                1 -> itemList.filter { rawItem ->
+                    rawItem in unknownItems
+                }
+
+                2 -> itemList.filter { rawItem ->
+                    isFavoriteRawItem(rawItem)
+                }
+
+                else -> itemList
+            }
+        }
 
     val pdfItems: List<ExerciseCardsPdfItem> = pdfFilteredItems
         .map { rawItem ->
             val status: Boolean? = when {
-                isUnknownForCards(rawItem) -> false
+                rawItem in unknownItems -> false
                 itemStates[rawItem] == true -> true
                 else -> null
             }
@@ -1171,7 +1328,7 @@ fun ExercisesTabsScreen(
             ExerciseCardsPdfItem(
                 title = formattedExerciseTitle(rawItem),
                 status = status,
-                isFavorite = normalizeItemId(rawItem) in favorites
+                isFavorite = isFavoriteRawItem(rawItem)
             )
         }
         .filter { pdfItem ->
@@ -1204,11 +1361,21 @@ fun ExercisesTabsScreen(
             dec(rawSubTopic)
         }
 
-    val pdfTabTitle = when (selectedTab) {
-        1 -> tr("לא יודע", "Unknown")
-        2 -> tr("מועדפים", "Favorites")
-        else -> tr("הכל", "All")
-    }
+    val pdfTabTitle =
+        if (isCoach) {
+            when (selectedTab) {
+                1 -> tr("נלמד", "Taught")
+                2 -> tr("לתרגול", "Practice")
+                3 -> tr("לשיפור", "Needs improvement")
+                else -> tr("הכול", "All")
+            }
+        } else {
+            when (selectedTab) {
+                1 -> tr("לא יודע", "Unknown")
+                2 -> tr("מועדפים", "Favorites")
+                else -> tr("הכול", "All")
+            }
+        }
 
     val onExportPdf: () -> Unit = {
         if (pdfItems.isEmpty()) {
@@ -1338,14 +1505,35 @@ fun ExercisesTabsScreen(
                     horizontalArrangement = Arrangement.spacedBy(12.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {                    // ← קובע את מקור התרגול לפי הטאב: הכל/לא-יודע/מועדפים
-                    val practiceToken = when (selectedTab) {
-                        1 -> "__UNKNOWN__"
-                        2 -> "__FAVS_ALL__"
-                        else -> {
-                            // ✅ אם נכנסנו דרך נושא מסוים — מתרגלים את הנושא הזה
-                            if (topic != "__ALL__") topic else "__ALL__"
+                    val practiceToken =
+                        if (isCoach) {
+                            when (selectedTab) {
+                                1 -> "__COACH_TAUGHT__"
+                                2 -> "__COACH_PRACTICE__"
+                                3 -> "__COACH_IMPROVEMENT__"
+
+                                else -> {
+                                    if (topic != "__ALL__") {
+                                        topic
+                                    } else {
+                                        "__ALL__"
+                                    }
+                                }
+                            }
+                        } else {
+                            when (selectedTab) {
+                                1 -> "__UNKNOWN__"
+                                2 -> "__FAVS_ALL__"
+
+                                else -> {
+                                    if (topic != "__ALL__") {
+                                        topic
+                                    } else {
+                                        "__ALL__"
+                                    }
+                                }
+                            }
                         }
-                    }
 
                     ActionButton(
                         text = tr("תרגול", "Practice"),
@@ -1413,59 +1601,186 @@ fun ExercisesTabsScreen(
             onClick: () -> Unit,
             modifier: Modifier = Modifier
         ) {
-            val baseBg    = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f)
-            val selBg     = MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)
-            val borderCol = if (selected) MaterialTheme.colorScheme.primary.copy(alpha = 0.40f)
-            else MaterialTheme.colorScheme.outlineVariant
+            val shape = RoundedCornerShape(18.dp)
 
-            Box(
+            val selectedGradient = Brush.verticalGradient(
+                colors = listOf(
+                    Color(0xFF7C3AED),
+                    Color(0xFF5B4BDB),
+                    Color(0xFF2563EB)
+                )
+            )
+
+            val idleGradient = Brush.verticalGradient(
+                colors = listOf(
+                    Color.White.copy(alpha = 0.98f),
+                    Color(0xFFF5F3FF),
+                    Color(0xFFEDE9FE)
+                )
+            )
+
+            Surface(
+                onClick = onClick,
                 modifier = modifier
-                    .height(64.dp)
-                    .background(if (selected) selBg else baseBg, shape = RectangleShape)
-                    .border(1.dp, borderCol, RectangleShape)
-                    .clickable(onClick = onClick)
+                    .padding(horizontal = 3.dp, vertical = 6.dp)
+                    .height(70.dp),
+                shape = shape,
+                color = Color.Transparent,
+                tonalElevation = 0.dp,
+                shadowElevation = if (selected) 10.dp else 3.dp,
+                border = BorderStroke(
+                    width = if (selected) 2.dp else 1.dp,
+                    color = if (selected) {
+                        Color.White.copy(alpha = 0.90f)
+                    } else {
+                        Color(0xFF8B5CF6).copy(alpha = 0.22f)
+                    }
+                )
             ) {
-                Column(
+                Box(
                     modifier = Modifier
                         .fillMaxSize()
-                        .padding(horizontal = 10.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.Center
+                        .background(
+                            brush = if (selected) {
+                                selectedGradient
+                            } else {
+                                idleGradient
+                            },
+                            shape = shape
+                        )
+                        .border(
+                            width = 1.dp,
+                            brush = Brush.linearGradient(
+                                colors = if (selected) {
+                                    listOf(
+                                        Color.White.copy(alpha = 0.92f),
+                                        Color(0xFFA78BFA),
+                                        Color.White.copy(alpha = 0.70f)
+                                    )
+                                } else {
+                                    listOf(
+                                        Color.White,
+                                        Color(0xFFC4B5FD).copy(alpha = 0.46f),
+                                        Color.White
+                                    )
+                                }
+                            ),
+                            shape = shape
+                        ),
+                    contentAlignment = Alignment.Center
                 ) {
-                    Text(
-                        text = title,
-                        style = MaterialTheme.typography.titleSmall,
-                        fontWeight = if (selected) FontWeight.Bold else FontWeight.SemiBold,
-                        maxLines = 1,
-                        softWrap = false,
-                        textAlign = TextAlign.Center
-                    )
-                    Spacer(Modifier.height(2.dp))
-                    Surface(
-                        shape = RoundedCornerShape(10.dp),
-                        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.90f),
-                        tonalElevation = 0.dp,
-                        shadowElevation = 0.dp
+                    Column(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(horizontal = 4.dp, vertical = 7.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.Center
                     ) {
                         Text(
-                            text = number.toString(),
-                            style = MaterialTheme.typography.labelLarge,
-                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 2.dp),
+                            text = title,
+                            color = if (selected) {
+                                Color.White
+                            } else {
+                                Color(0xFF312E81)
+                            },
+                            fontSize = if (selected) 14.sp else 13.sp,
+                            lineHeight = 16.sp,
+                            fontWeight = FontWeight.ExtraBold,
+                            maxLines = 1,
+                            softWrap = false,
+                            overflow = TextOverflow.Ellipsis,
                             textAlign = TextAlign.Center
+                        )
+
+                        Spacer(Modifier.height(4.dp))
+
+                        Surface(
+                            shape = RoundedCornerShape(999.dp),
+                            color = if (selected) {
+                                Color.White.copy(alpha = 0.95f)
+                            } else {
+                                Color.White.copy(alpha = 0.90f)
+                            },
+                            tonalElevation = 0.dp,
+                            shadowElevation = if (selected) 3.dp else 0.dp,
+                            border = BorderStroke(
+                                width = 1.dp,
+                                color = if (selected) {
+                                    Color.White.copy(alpha = 0.94f)
+                                } else {
+                                    Color(0xFF8B5CF6).copy(alpha = 0.18f)
+                                }
+                            )
+                        ) {
+                            Text(
+                                text = number.toString(),
+                                color = if (selected) {
+                                    Color(0xFF4338CA)
+                                } else {
+                                    Color(0xFF1F2937)
+                                },
+                                fontSize = 14.sp,
+                                lineHeight = 16.sp,
+                                fontWeight = FontWeight.Black,
+                                modifier = Modifier.padding(
+                                    horizontal = 13.dp,
+                                    vertical = 2.dp
+                                ),
+                                textAlign = TextAlign.Center
+                            )
+                        }
+                    }
+
+                    if (selected) {
+                        Box(
+                            modifier = Modifier
+                                .align(Alignment.BottomCenter)
+                                .padding(bottom = 3.dp)
+                                .width(28.dp)
+                                .height(3.dp)
+                                .background(
+                                    color = Color.White,
+                                    shape = RoundedCornerShape(999.dp)
+                                )
                         )
                     }
                 }
             }
         }
 
-        val allCount     = itemList.size
-        // ✅ תומך גם ב-cleanId, גם ב-canonicalId וגם ב-statusId שמגיע מ-MaterialsScreen
-        val unknownCount = itemList.count { item ->
-            isUnknownForCards(item)
+        val allCount = itemList.size
+
+        val unknownCount by remember {
+            derivedStateOf {
+                unknownItems.count()
+            }
         }
 
-        val favCount = itemList.count { item ->
-            normalizeItemId(item) in favorites
+        val favCount = remember(
+            itemList,
+            favoriteExerciseIds,
+            belt,
+            topic,
+            allTopicItems
+        ) {
+            itemList.count { item ->
+                isFavoriteRawItem(item)
+            }
+        }
+
+        val taughtCount = itemList.count { item ->
+            coachStatuses[item] ==
+                    ExerciseCoachStatus.TAUGHT
+        }
+
+        val practiceCount = itemList.count { item ->
+            coachStatuses[item] ==
+                    ExerciseCoachStatus.PRACTICE
+        }
+
+        val improvementCount = itemList.count { item ->
+            coachStatuses[item] ==
+                    ExerciseCoachStatus.NEEDS_IMPROVEMENT
         }
 
         Column(
@@ -1473,45 +1788,107 @@ fun ExercisesTabsScreen(
                 .fillMaxSize()
                 .padding(padding)
         ) {
+            if (isCoach) {
+                Row(
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    MetricFieldEdgeToEdge(
+                        title = tr("הכול", "All"),
+                        number = allCount,
+                        selected = selectedTab == 0,
+                        onClick = { selectedTab = 0 },
+                        modifier = Modifier.weight(1f)
+                    )
 
-            Row(modifier = Modifier.fillMaxWidth()) {
-                MetricFieldEdgeToEdge(
-                    title    = tr("הכל", "All"),
-                    number   = allCount,
-                    selected = selectedTab == 0,
-                    onClick  = { selectedTab = 0 },
-                    modifier = Modifier.weight(1f)
-                )
-                MetricFieldEdgeToEdge(
-                    title    = tr("לא יודע", "Unknown"),
-                    number   = unknownCount,
-                    selected = selectedTab == 1,
-                    onClick  = { selectedTab = 1 },
-                    modifier = Modifier.weight(1f)
-                )
-                MetricFieldEdgeToEdge(
-                    title    = tr("מועדפים", "Favorites"),
-                    number   = favCount,
-                    selected = selectedTab == 2,
-                    onClick  = { selectedTab = 2 },
-                    modifier = Modifier.weight(1f)
-                )
+                    MetricFieldEdgeToEdge(
+                        title = tr("נלמד", "Taught"),
+                        number = taughtCount,
+                        selected = selectedTab == 1,
+                        onClick = { selectedTab = 1 },
+                        modifier = Modifier.weight(1f)
+                    )
+
+                    MetricFieldEdgeToEdge(
+                        title = tr("לתרגול", "Practice"),
+                        number = practiceCount,
+                        selected = selectedTab == 2,
+                        onClick = { selectedTab = 2 },
+                        modifier = Modifier.weight(1f)
+                    )
+
+                    MetricFieldEdgeToEdge(
+                        title = tr("לשיפור", "Improve"),
+                        number = improvementCount,
+                        selected = selectedTab == 3,
+                        onClick = { selectedTab = 3 },
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+            } else {
+                Row(
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    MetricFieldEdgeToEdge(
+                        title = tr("הכול", "All"),
+                        number = allCount,
+                        selected = selectedTab == 0,
+                        onClick = { selectedTab = 0 },
+                        modifier = Modifier.weight(1f)
+                    )
+
+                    MetricFieldEdgeToEdge(
+                        title = tr("לא יודע", "Unknown"),
+                        number = unknownCount,
+                        selected = selectedTab == 1,
+                        onClick = { selectedTab = 1 },
+                        modifier = Modifier.weight(1f)
+                    )
+
+                    MetricFieldEdgeToEdge(
+                        title = tr("מועדפים", "Favorites"),
+                        number = favCount,
+                        selected = selectedTab == 2,
+                        onClick = { selectedTab = 2 },
+                        modifier = Modifier.weight(1f)
+                    )
+                }
             }
 
             Spacer(Modifier.height(8.dp))
 
-            val filtered = when (selectedTab) {
-                1 -> itemList.filter { item ->
-                    isUnknownForCards(item)
+            val filtered: List<String> =
+                if (isCoach) {
+                    when (selectedTab) {
+                        1 -> itemList.filter { item ->
+                            coachStatuses[item] ==
+                                    ExerciseCoachStatus.TAUGHT
+                        }
+
+                        2 -> itemList.filter { item ->
+                            coachStatuses[item] ==
+                                    ExerciseCoachStatus.PRACTICE
+                        }
+
+                        3 -> itemList.filter { item ->
+                            coachStatuses[item] ==
+                                    ExerciseCoachStatus.NEEDS_IMPROVEMENT
+                        }
+
+                        else -> itemList
+                    }
+                } else {
+                    when (selectedTab) {
+                        1 -> itemList.filter { item ->
+                            item in unknownItems
+                        }
+
+                        2 -> itemList.filter { item ->
+                            isFavoriteRawItem(item)
+                        }
+
+                        else -> itemList
+                    }
                 }
-
-                2 -> itemList.filter { item ->
-                    normalizeItemId(item) in favorites
-                }
-
-                else -> itemList
-            }
-
 // ✅ מפת “raw -> display” אחת, שמשמשת לכל ה-UI
             val displayByRaw: Map<String, String> = remember(filtered) {
                 filtered.associateWith { raw: String ->
@@ -1519,17 +1896,26 @@ fun ExercisesTabsScreen(
                 }
             }
 
-            Column(
+            LazyColumn(
                 modifier = Modifier
                     .weight(1f)
                     .fillMaxWidth()
-                    .padding(horizontal = 16.dp)
-                    .verticalScroll(scroll),
+                    .padding(horizontal = 16.dp),
                 verticalArrangement = Arrangement.spacedBy(0.dp)
             ) {
-                filtered.forEachIndexed { index, item ->
-                    val bringer = remember { BringIntoViewRequester() }
-                    var pressed by remember { mutableStateOf(false) }
+                itemsIndexed(
+                    items = filtered,
+                    key = { _, item ->
+                        buildString {
+                            append(topicForRawItem(item))
+                            append("::")
+                            append(normalizeItemId(item))
+                        }
+                    }
+                ) { index, item ->
+                    var pressed by remember(item) {
+                        mutableStateOf(false)
+                    }
 
                     val scale by animateFloatAsState(
                         targetValue = if (pressed) 0.985f else 1f,
@@ -1540,13 +1926,17 @@ fun ExercisesTabsScreen(
                     val displayName = displayByRaw[item]
                         ?: formattedExerciseTitle(item)
 
-                    val isFav = normalizeItemId(item) in favorites
+                    val isFav = isFavoriteRawItem(item)
 
                     val itemHasNote = remember(item, notesRefreshKey) {
                         hasNote(item)
                     }
 
-                    val itemIsUnknown = isUnknownForCards(item)
+                    val itemIsUnknown = item in unknownItems
+
+                    val itemCoachStatus =
+                        coachStatuses[item]
+                            ?: ExerciseCoachStatus.NOT_TAUGHT
 
                     CompositionLocalProvider(
                         LocalLayoutDirection provides LayoutDirection.Ltr
@@ -1554,7 +1944,6 @@ fun ExercisesTabsScreen(
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .bringIntoViewRequester(bringer)
                                 .graphicsLayer {
                                     scaleX = scale
                                     scaleY = scale
@@ -1578,9 +1967,11 @@ fun ExercisesTabsScreen(
                         ) {
                             ExerciseRowActionsMenu(
                                 isEnglish = isEnglish,
+                                isCoach = isCoach,
                                 isFav = isFav,
                                 hasNote = itemHasNote,
                                 isUnknown = itemIsUnknown,
+                                coachStatus = itemCoachStatus,
                                 onInfo = {
                                     pressed = true
                                     explainFromSearch = item
@@ -1600,7 +1991,13 @@ fun ExercisesTabsScreen(
                                 onToggleUnknown = {
                                     setUnknown(
                                         item,
-                                        !isUnknownForCards(item)
+                                        item !in unknownItems
+                                    )
+                                },
+                                onCoachStatusChange = { newStatus ->
+                                    updateCoachStatus(
+                                        raw = item,
+                                        status = newStatus
                                     )
                                 }
                             )
@@ -1791,7 +2188,7 @@ fun ExercisesTabsScreen(
                 }
             }
 
-            val isFav = favorites.contains(normalizeItemId(item))
+            val isFav = isFavoriteRawItem(item)
             val noteText = remember(item, notesRefreshKey) {
                 loadNote(item)
             }
@@ -1836,26 +2233,28 @@ fun ExercisesTabsScreen(
                 }
             )
         }
-
     } // ✅ סוגר את Scaffold { padding -> ... }
-
 } // ✅ סוגר את ExercisesTabsScreen(...)
 
 
 @Composable
 private fun ExerciseRowActionsMenu(
     isEnglish: Boolean,
+    isCoach: Boolean,
     isFav: Boolean,
     hasNote: Boolean,
     isUnknown: Boolean,
+    coachStatus: ExerciseCoachStatus,
     onInfo: () -> Unit,
     onToggleFavorite: () -> Unit,
     onEditNote: () -> Unit,
     onToggleUnknown: () -> Unit,
+    onCoachStatusChange: (ExerciseCoachStatus) -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val context = LocalContext.current
-    var expanded by remember { mutableStateOf(false) }
+    var expanded by remember {
+        mutableStateOf(false)
+    }
 
     val infoScale by animateFloatAsState(
         targetValue = if (expanded) 1.08f else 1f,
@@ -1869,11 +2268,20 @@ private fun ExerciseRowActionsMenu(
         label = "exerciseInfoRotation"
     )
 
-    fun tr(he: String, en: String): String = if (isEnglish) en else he
+    fun tr(
+        he: String,
+        en: String
+    ): String {
+        return if (isEnglish) en else he
+    }
 
-    Box(modifier = modifier) {
+    Box(
+        modifier = modifier
+    ) {
         Surface(
-            onClick = { expanded = true },
+            onClick = {
+                expanded = true
+            },
             shape = CircleShape,
             color = Color(0xFF60717A),
             shadowElevation = 4.dp,
@@ -1907,79 +2315,254 @@ private fun ExerciseRowActionsMenu(
 
         DropdownMenu(
             expanded = expanded,
-            onDismissRequest = { expanded = false },
+            onDismissRequest = {
+                expanded = false
+            },
             modifier = Modifier
                 .background(
                     brush = Brush.verticalGradient(
                         colors = listOf(
                             Color.White.copy(alpha = 0.99f),
-                            MaterialTheme.colorScheme.primary.copy(alpha = 0.05f),
+                            MaterialTheme.colorScheme.primary.copy(
+                                alpha = 0.05f
+                            ),
                             Color.White.copy(alpha = 0.97f)
                         )
                     ),
                     shape = RoundedCornerShape(18.dp)
                 )
                 .border(
-                    1.dp,
-                    MaterialTheme.colorScheme.primary.copy(alpha = 0.12f),
-                    RoundedCornerShape(18.dp)
+                    width = 1.dp,
+                    color = MaterialTheme.colorScheme.primary.copy(
+                        alpha = 0.12f
+                    ),
+                    shape = RoundedCornerShape(18.dp)
                 )
         ) {
             DropdownMenuItem(
-                text = { Text(tr("מידע", "Info"), style = MaterialTheme.typography.labelLarge) },
+                text = {
+                    Text(
+                        text = tr("מידע", "Info"),
+                        style = MaterialTheme.typography.labelLarge
+                    )
+                },
                 onClick = {
                     expanded = false
                     onInfo()
                 }
             )
 
-            DropdownMenuItem(
-                text = {
-                    Text(
-                        tr(
-                            if (isFav) "הסר ממועדפים" else "הוסף למועדפים",
-                            if (isFav) "Remove from favorites" else "Add to favorites"
-                        ),
-                        style = MaterialTheme.typography.labelLarge
-                    )
-                },
-                onClick = {
-                    expanded = false
-                    onToggleFavorite()
-                }
-            )
+            if (isCoach) {
+                HorizontalDivider()
 
-            DropdownMenuItem(
-                text = {
-                    Text(
-                        tr(
-                            if (hasNote) "ערוך / מחק הערה" else "הוסף הערה לתרגיל",
-                            if (hasNote) "Edit / delete note" else "Add note"
-                        ),
-                        style = MaterialTheme.typography.labelLarge
-                    )
-                },
-                onClick = {
-                    expanded = false
-                    onEditNote()
-                }
-            )
+                DropdownMenuItem(
+                    text = {
+                        Text(
+                            text = tr(
+                                if (
+                                    coachStatus ==
+                                    ExerciseCoachStatus.NOT_TAUGHT
+                                ) {
+                                    "✓ לא נלמד"
+                                } else {
+                                    "לא נלמד"
+                                },
+                                if (
+                                    coachStatus ==
+                                    ExerciseCoachStatus.NOT_TAUGHT
+                                ) {
+                                    "✓ Not taught"
+                                } else {
+                                    "Not taught"
+                                }
+                            ),
+                            style = MaterialTheme.typography.labelLarge,
+                            color = Color(0xFF667085)
+                        )
+                    },
+                    onClick = {
+                        expanded = false
 
-            DropdownMenuItem(
-                text = {
-                    Text(
-                        tr(
-                            if (isUnknown) "בטל לא יודע" else "סמן כלא יודע",
-                            if (isUnknown) "Remove unknown mark" else "Mark as unknown"
-                        ),
-                        style = MaterialTheme.typography.labelLarge
-                    )
-                },
-                onClick = {
-                    expanded = false
-                    onToggleUnknown()
-                }
-            )
+                        onCoachStatusChange(
+                            ExerciseCoachStatus.NOT_TAUGHT
+                        )
+                    }
+                )
+
+                DropdownMenuItem(
+                    text = {
+                        Text(
+                            text = tr(
+                                if (
+                                    coachStatus ==
+                                    ExerciseCoachStatus.TAUGHT
+                                ) {
+                                    "✓ נלמד"
+                                } else {
+                                    "נלמד"
+                                },
+                                if (
+                                    coachStatus ==
+                                    ExerciseCoachStatus.TAUGHT
+                                ) {
+                                    "✓ Taught"
+                                } else {
+                                    "Taught"
+                                }
+                            ),
+                            style = MaterialTheme.typography.labelLarge,
+                            color = Color(0xFF2E7D32)
+                        )
+                    },
+                    onClick = {
+                        expanded = false
+
+                        onCoachStatusChange(
+                            ExerciseCoachStatus.TAUGHT
+                        )
+                    }
+                )
+
+                DropdownMenuItem(
+                    text = {
+                        Text(
+                            text = tr(
+                                if (
+                                    coachStatus ==
+                                    ExerciseCoachStatus.PRACTICE
+                                ) {
+                                    "✓ לתרגול"
+                                } else {
+                                    "לתרגול"
+                                },
+                                if (
+                                    coachStatus ==
+                                    ExerciseCoachStatus.PRACTICE
+                                ) {
+                                    "✓ Practice"
+                                } else {
+                                    "Practice"
+                                }
+                            ),
+                            style = MaterialTheme.typography.labelLarge,
+                            color = Color(0xFFF57C00)
+                        )
+                    },
+                    onClick = {
+                        expanded = false
+
+                        onCoachStatusChange(
+                            ExerciseCoachStatus.PRACTICE
+                        )
+                    }
+                )
+
+                DropdownMenuItem(
+                    text = {
+                        Text(
+                            text = tr(
+                                if (
+                                    coachStatus ==
+                                    ExerciseCoachStatus.NEEDS_IMPROVEMENT
+                                ) {
+                                    "✓ לשיפור"
+                                } else {
+                                    "לשיפור"
+                                },
+                                if (
+                                    coachStatus ==
+                                    ExerciseCoachStatus.NEEDS_IMPROVEMENT
+                                ) {
+                                    "✓ Needs improvement"
+                                } else {
+                                    "Needs improvement"
+                                }
+                            ),
+                            style = MaterialTheme.typography.labelLarge,
+                            color = Color(0xFFC62828)
+                        )
+                    },
+                    onClick = {
+                        expanded = false
+
+                        onCoachStatusChange(
+                            ExerciseCoachStatus.NEEDS_IMPROVEMENT
+                        )
+                    }
+                )
+            } else {
+                DropdownMenuItem(
+                    text = {
+                        Text(
+                            text = tr(
+                                if (isFav) {
+                                    "הסר ממועדפים"
+                                } else {
+                                    "הוסף למועדפים"
+                                },
+                                if (isFav) {
+                                    "Remove from favorites"
+                                } else {
+                                    "Add to favorites"
+                                }
+                            ),
+                            style = MaterialTheme.typography.labelLarge
+                        )
+                    },
+                    onClick = {
+                        expanded = false
+                        onToggleFavorite()
+                    }
+                )
+
+                DropdownMenuItem(
+                    text = {
+                        Text(
+                            text = tr(
+                                if (hasNote) {
+                                    "ערוך / מחק הערה"
+                                } else {
+                                    "הוסף הערה לתרגיל"
+                                },
+                                if (hasNote) {
+                                    "Edit / delete note"
+                                } else {
+                                    "Add note"
+                                }
+                            ),
+                            style = MaterialTheme.typography.labelLarge
+                        )
+                    },
+                    onClick = {
+                        expanded = false
+                        onEditNote()
+                    }
+                )
+
+                DropdownMenuItem(
+                    text = {
+                        Text(
+                            text = tr(
+                                if (isUnknown) {
+                                    "בטל לא יודע"
+                                } else {
+                                    "סמן כלא יודע"
+                                },
+                                if (isUnknown) {
+                                    "Remove unknown mark"
+                                } else {
+                                    "Mark as unknown"
+                                }
+                            ),
+                            style = MaterialTheme.typography.labelLarge
+                        )
+                    },
+                    onClick = {
+                        expanded = false
+                        onToggleUnknown()
+                    }
+                )
+            }
         }
     }
 }
