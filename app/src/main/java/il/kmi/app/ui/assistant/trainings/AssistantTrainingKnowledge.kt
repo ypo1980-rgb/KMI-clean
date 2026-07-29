@@ -932,6 +932,56 @@ object EntityExtractor {
         return keys.any { it in norm }
     }
 
+    fun wantsPast(norm: String): Boolean {
+        val keys = listOf(
+            "האימון האחרון",
+            "אימון אחרון",
+            "האימונים האחרונים",
+            "אימונים אחרונים",
+            "אימונים קודמים",
+            "האימונים הקודמים",
+            "אימונים שהיו",
+            "האימונים שהיו",
+            "אימונים שעברו",
+            "אימונים מהעבר",
+            "באילו אימונים הייתי",
+            "last training",
+            "last trainings",
+            "my last training",
+            "my last trainings",
+            "recent training",
+            "recent trainings",
+            "past training",
+            "past trainings",
+            "previous training",
+            "previous trainings",
+            "trainings i attended",
+            "trainings i had",
+            "workouts i attended"
+        )
+
+        val containsKnownPhrase =
+            keys.any { key ->
+                key in norm
+            }
+
+        /*
+         * תמיכה במספר שמופיע בין מילת הזמן לבין סוג האימון:
+         * last 3 trainings
+         * last four workouts
+         * previous 5 classes
+         */
+        val containsNumberedEnglishPastRequest =
+            Regex(
+                pattern =
+                    """\b(last|recent|past|previous)\s+(?:\d+|one|two|three|four|five|six|seven|eight|nine|ten)\s+(training|trainings|workout|workouts|class|classes)\b""",
+                option = RegexOption.IGNORE_CASE
+            ).containsMatchIn(norm)
+
+        return containsKnownPhrase ||
+                containsNumberedEnglishPastRequest
+    }
+
     // ✅ יום בשבוע → Calendar.*
     fun getDayIndex(hebrewDay: String): Int? {
         return when (hebrewDay.trim()) {
@@ -1385,7 +1435,14 @@ object TrainingTableBuilder {
                                     }
                                 }
 
-                            repeat(5) { weekOffset ->
+                            /*
+                             * יוצרים חמישה מופעים קודמים ואת חמשת
+                             * המופעים הנוכחיים/הבאים של כל אימון.
+                             */
+                            repeat(10) { occurrenceIndex ->
+                                val weekOffset =
+                                    occurrenceIndex - 5
+
                                 val occurrence =
                                     (firstOccurrence.clone() as Calendar).apply {
                                         add(
@@ -1540,6 +1597,7 @@ In addition, a groin guard is strongly recommended for maximum safety during tra
         group: String?,
         limit: Int = 8,
         isEnglish: Boolean = false,
+        past: Boolean = false,
         statusProvider:
         ((TrainingRow) ->
         TrainingStatusEngine.Status)? = null
@@ -1551,20 +1609,16 @@ In addition, a groin guard is strongly recommended for maximum safety during tra
         val nowMillis =
             System.currentTimeMillis()
 
-        /*
-         * הרשימה כוללת אימון עתידי וגם אימון
-         * שמתקיים כעת ועדיין לא הסתיים.
-         */
-        val sorted = list
+        val filtered = list
             .filter { training ->
-                val endMillis =
+                val effectiveEndMillis =
                     training.endAtMillis
+                        ?: training.startAtMillis
 
-                if (endMillis != null) {
-                    endMillis > nowMillis
+                if (past) {
+                    effectiveEndMillis <= nowMillis
                 } else {
-                    training.startAtMillis >=
-                            nowMillis
+                    effectiveEndMillis > nowMillis
                 }
             }
             .distinctBy { training ->
@@ -1574,28 +1628,94 @@ In addition, a groin guard is strongly recommended for maximum safety during tra
                     training.startAtMillis
                 ).joinToString("|")
             }
-            .sortedBy { it.startAtMillis }
-            .take(safeLimit)
+
+        val sorted =
+            if (past) {
+                filtered.sortedByDescending { training ->
+                    training.startAtMillis
+                }
+            } else {
+                filtered.sortedBy { training ->
+                    training.startAtMillis
+                }
+            }.take(safeLimit)
 
         if (sorted.isEmpty()) {
-            return tr(isEnglish, "לא מצאתי אימונים קרובים.", "I could not find upcoming trainings.")
+            return if (past) {
+                tr(
+                    isEnglish,
+                    "לא מצאתי אימונים קודמים.",
+                    "I could not find previous trainings."
+                )
+            } else {
+                tr(
+                    isEnglish,
+                    "לא מצאתי אימונים קרובים.",
+                    "I could not find upcoming trainings."
+                )
+            }
         }
 
-        val title = if (isEnglish) {
-            when {
-                branch != null && group != null -> "Upcoming trainings at $branch for $group:"
-                branch != null -> "Upcoming trainings at $branch:"
-                group != null -> "Upcoming trainings for $group:"
-                else -> "Upcoming trainings I found:"
+        val title =
+            if (past) {
+                if (isEnglish) {
+                    when {
+                        branch != null && group != null ->
+                            "Recent trainings at $branch for $group:"
+
+                        branch != null ->
+                            "Recent trainings at $branch:"
+
+                        group != null ->
+                            "Recent trainings for $group:"
+
+                        else ->
+                            "Recent trainings I found:"
+                    }
+                } else {
+                    when {
+                        branch != null && group != null ->
+                            "האימונים האחרונים בסניף $branch לקבוצה $group:"
+
+                        branch != null ->
+                            "האימונים האחרונים בסניף $branch:"
+
+                        group != null ->
+                            "האימונים האחרונים לקבוצה $group:"
+
+                        else ->
+                            "האימונים האחרונים שמצאתי:"
+                    }
+                }
+            } else if (isEnglish) {
+                when {
+                    branch != null && group != null ->
+                        "Upcoming trainings at $branch for $group:"
+
+                    branch != null ->
+                        "Upcoming trainings at $branch:"
+
+                    group != null ->
+                        "Upcoming trainings for $group:"
+
+                    else ->
+                        "Upcoming trainings I found:"
+                }
+            } else {
+                when {
+                    branch != null && group != null ->
+                        "האימונים הבאים בסניף $branch לקבוצה $group:"
+
+                    branch != null ->
+                        "האימונים הבאים בסניף $branch:"
+
+                    group != null ->
+                        "האימונים הבאים לקבוצה $group:"
+
+                    else ->
+                        "האימונים הבאים שמצאתי:"
+                }
             }
-        } else {
-            when {
-                branch != null && group != null -> "האימונים הבאים בסניף $branch לקבוצה $group:"
-                branch != null -> "האימונים הבאים בסניף $branch:"
-                group != null -> "האימונים הבאים לקבוצה $group:"
-                else -> "האימונים הבאים שמצאתי:"
-            }
-        }
 
         return buildString {
             append(title).append('\n')
@@ -2244,6 +2364,9 @@ object AssistantTrainingKnowledge {
         val wantsUpcoming =
             EntityExtractor.wantsUpcoming(norm)
 
+        val wantsPast =
+            EntityExtractor.wantsPast(norm)
+
         val wantsThisWeek =
             EntityExtractor.wantsThisWeek(norm)
 
@@ -2299,6 +2422,7 @@ object AssistantTrainingKnowledge {
                                     intent == AssistantIntent.ASK_WHAT_TODAY ||
                                     wantsTrainingList ||
                                     wantsUpcoming ||
+                                    wantsPast ||
                                     wantsThisWeek ||
                                     wantsNextWeek
                             )
@@ -2461,7 +2585,19 @@ object AssistantTrainingKnowledge {
                     wantsThisWeek ||
                     wantsNextWeek
 
-        if (
+        if (wantsPast) {
+            /*
+             * אימון נחשב לאימון עבר רק לאחר שהסתיים.
+             * אם אין שעת סיום, משתמשים בשעת ההתחלה.
+             */
+            seq = seq.filter { training ->
+                val effectiveEndMillis =
+                    training.endAtMillis
+                        ?: training.startAtMillis
+
+                effectiveEndMillis <= nowMillis
+            }
+        } else if (
             isNextOrUpcoming ||
             isPersonalQuestion ||
             wantsThisWeek ||
@@ -2634,7 +2770,7 @@ object AssistantTrainingKnowledge {
          * בבקשה לאימון יחיד מדלגים עליהם.
          */
         var results =
-            if (shouldIncludeCancelledInList) {
+            if (shouldIncludeCancelledInList || wantsPast) {
                 matchedResults
             } else {
                 matchedResults.filter { training ->
@@ -2642,14 +2778,21 @@ object AssistantTrainingKnowledge {
                 }
             }
 
-        if (
-            (intent == AssistantIntent.ASK_NEXT_TRAINING || wantsUpcoming) &&
-            isPersonalQuestion
-        ) {
-            results = results.sortedBy {
-                it.startAtMillis
+        results =
+            if (wantsPast) {
+                results.sortedByDescending { training ->
+                    training.startAtMillis
+                }
+            } else if (
+                (intent == AssistantIntent.ASK_NEXT_TRAINING || wantsUpcoming) &&
+                isPersonalQuestion
+            ) {
+                results.sortedBy { training ->
+                    training.startAtMillis
+                }
+            } else {
+                results
             }
-        }
 
         // עדכון זיכרון רק לפי מה שנשאל מפורשות (כדי לא “לנעול” בטעות)
         explicitBranch?.let { memory.setLastBranch(it) }
@@ -2934,6 +3077,7 @@ object AssistantTrainingKnowledge {
         val shouldCreateTrainingCards =
             wantsTrainingList ||
                     wantsUpcoming ||
+                    wantsPast ||
                     wantsThisWeek ||
                     wantsNextWeek
 
@@ -2953,8 +3097,16 @@ object AssistantTrainingKnowledge {
                             training.startAtMillis
                         ).joinToString("|")
                     }
-                    .sortedBy { training ->
-                        training.startAtMillis
+                    .let { trainings ->
+                        if (wantsPast) {
+                            trainings.sortedByDescending { training ->
+                                training.startAtMillis
+                            }
+                        } else {
+                            trainings.sortedBy { training ->
+                                training.startAtMillis
+                            }
+                        }
                     }
                     .take(requestedTrainingCount)
                     .map { training ->
@@ -3037,6 +3189,7 @@ object AssistantTrainingKnowledge {
 
             wantsTrainingList ||
                     wantsUpcoming ||
+                    wantsPast ||
                     wantsThisWeek ||
                     wantsNextWeek ->
                 AnswerBuilder.buildUpcomingTrainings(
@@ -3045,6 +3198,7 @@ object AssistantTrainingKnowledge {
                     group = group,
                     limit = requestedTrainingCount,
                     isEnglish = isEnglish,
+                    past = wantsPast,
                     statusProvider = { training ->
                         statusFor(training)
                     }

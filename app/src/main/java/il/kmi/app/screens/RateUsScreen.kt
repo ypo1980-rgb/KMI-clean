@@ -30,7 +30,10 @@ import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.luminance
 import il.kmi.app.ui.KmiTopBar
+import il.kmi.app.ui.KmiTypography
+import il.kmi.app.ui.scaledIconSize
 import il.kmi.shared.localization.AppLanguage
 import il.kmi.shared.localization.AppLanguageManager
 
@@ -60,6 +63,31 @@ fun RateUsScreen(
     } else {
         "הדירוג שלכם עוזר לנו להשתפר ולגדול."
     }
+
+    val isDarkMode =
+        MaterialTheme.colorScheme.background.luminance() < 0.5f
+
+    val screenGradientColors =
+        if (isDarkMode) {
+            listOf(
+                Color(0xFF090D18),
+                Color(0xFF101827),
+                Color(0xFF13263A)
+            )
+        } else {
+            listOf(
+                Color(0xFFF8F5FF),
+                Color(0xFFF1F5FF),
+                Color(0xFFEAF6FF)
+            )
+        }
+
+    val cardColor =
+        if (isDarkMode) {
+            MaterialTheme.colorScheme.surface
+        } else {
+            Color(0xFFEAF2FF)
+        }
 
     // ✅ מתחילים בלי סימון כדי שהמשתמש יבחר דירוג בעצמו
     var stars by remember { mutableStateOf(0) }
@@ -113,11 +141,7 @@ fun RateUsScreen(
                     .fillMaxSize()
                     .background(
                         Brush.verticalGradient(
-                            colors = listOf(
-                                Color(0xFFF8F5FF),
-                                Color(0xFFF1F5FF),
-                                Color(0xFFEAF6FF)
-                            )
+                            colors = screenGradientColors
                         )
                     )
                     .padding(padding)
@@ -133,13 +157,21 @@ fun RateUsScreen(
                             .fillMaxWidth()
                             // ✅ מורידים את הכרטיס למטה כמו במסך פורום הסניף
                             .padding(top = 24.dp),
-                        color = Color(0xFFEAF2FF),
+                        color = cardColor,
+                        contentColor = MaterialTheme.colorScheme.onSurface,
                         shape = RoundedCornerShape(20.dp),
                         tonalElevation = 2.dp,
                         shadowElevation = 4.dp,
                         border = BorderStroke(
-                            1.dp,
-                            Color(0xFFD8E3F5)
+                            width = 1.dp,
+                            color =
+                                if (isDarkMode) {
+                                    MaterialTheme.colorScheme.outline.copy(
+                                        alpha = 0.42f
+                                    )
+                                } else {
+                                    Color(0xFFD8E3F5)
+                                }
                         )
                     ) {
                         Column(
@@ -151,16 +183,28 @@ fun RateUsScreen(
                         ) {
                             Text(
                                 text = heroTitle,
-                                style = MaterialTheme.typography.headlineSmall,
-                                fontWeight = FontWeight.Bold,
-                                textAlign = if (isEnglish) TextAlign.Start else TextAlign.Right,
+                                style = KmiTypography.screenTitle,
+                                color = MaterialTheme.colorScheme.onSurface,
+                                textAlign =
+                                    if (isEnglish) {
+                                        TextAlign.Start
+                                    } else {
+                                        TextAlign.Right
+                                    },
                                 modifier = Modifier.fillMaxWidth()
                             )
 
                             Text(
                                 text = heroSubtitle,
-                                style = MaterialTheme.typography.bodyLarge,
-                                textAlign = if (isEnglish) TextAlign.Start else TextAlign.Right,
+                                style = KmiTypography.body,
+                                color =
+                                    MaterialTheme.colorScheme.onSurfaceVariant,
+                                textAlign =
+                                    if (isEnglish) {
+                                        TextAlign.Start
+                                    } else {
+                                        TextAlign.Right
+                                    },
                                 modifier = Modifier.fillMaxWidth()
                             )
 
@@ -177,9 +221,10 @@ fun RateUsScreen(
                                     } else {
                                         "לחצו על כוכב כדי לבחור דירוג"
                                     },
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    color = Color(0xFF6B5CA5),
-                                    fontWeight = FontWeight.Bold,
+                                    style = KmiTypography.body.copy(
+                                        fontWeight = FontWeight.Bold
+                                    ),
+                                    color = MaterialTheme.colorScheme.primary,
                                     textAlign = TextAlign.Center,
                                     modifier = Modifier.fillMaxWidth()
                                 )
@@ -192,8 +237,13 @@ fun RateUsScreen(
                                     },
                                     modifier = Modifier.fillMaxWidth(),
                                     minLines = 3,
-                                    textStyle = LocalTextStyle.current.copy(
-                                        textAlign = if (isEnglish) TextAlign.Start else TextAlign.Right
+                                    textStyle = KmiTypography.body.copy(
+                                        textAlign =
+                                            if (isEnglish) {
+                                                TextAlign.Start
+                                            } else {
+                                                TextAlign.Right
+                                            }
                                     )
                                 )
 
@@ -211,12 +261,20 @@ fun RateUsScreen(
                                     modifier = Modifier.fillMaxWidth(),
                                     shape = RoundedCornerShape(14.dp)
                                 ) {
-                                    Text(if (isEnglish) "Send Feedback" else "שליחת משוב")
+                                    Text(
+                                        text =
+                                            if (isEnglish) {
+                                                "Send Feedback"
+                                            } else {
+                                                "שליחת משוב"
+                                            },
+                                        style = KmiTypography.action
+                                    )
                                 }
 
                                 Text(
                                     text = if (isEnglish) "We read every message 🙏" else "אנחנו קוראים כל משוב 🙏",
-                                    style = MaterialTheme.typography.bodySmall,
+                                    style = KmiTypography.caption,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                                     textAlign = if (isEnglish) TextAlign.Start else TextAlign.Right,
                                     modifier = Modifier.fillMaxWidth()
@@ -236,11 +294,13 @@ fun RateUsScreen(
                                     )
                                 ) {
                                     Text(
-                                        if (isEnglish) {
-                                            "Rate Us on Google Play"
-                                        } else {
-                                            "דרגו אותנו בחנות Google Play"
-                                        }
+                                        text =
+                                            if (isEnglish) {
+                                                "Rate Us on Google Play"
+                                            } else {
+                                                "דרגו אותנו בחנות Google Play"
+                                            },
+                                        style = KmiTypography.action
                                     )
                                 }
 
@@ -254,7 +314,15 @@ fun RateUsScreen(
                                         )
                                     }
                                 ) {
-                                    Text(if (isEnglish) "Or send feedback instead" else "או שלחו לנו משוב במקום")
+                                    Text(
+                                        text =
+                                            if (isEnglish) {
+                                                "Or send feedback instead"
+                                            } else {
+                                                "או שלחו לנו משוב במקום"
+                                            },
+                                        style = KmiTypography.action
+                                    )
                                 }
                             }
                         }
@@ -284,21 +352,23 @@ private fun StarsRow(
         for (i in 1..5) {
             val filled = value > 0 && i <= value
 
-            val circleColor = if (filled) {
-                ratingColorForStep(i)
-            } else {
-                Color(0xFFE1E7F2)
-            }
+            val circleColor =
+                if (filled) {
+                    ratingColorForStep(i)
+                } else {
+                    MaterialTheme.colorScheme.surfaceVariant
+                }
 
-            val starTint = if (filled) {
-                Color.White
-            } else {
-                Color(0xFF7A6AAE)
-            }
+            val starTint =
+                if (filled) {
+                    Color.White
+                } else {
+                    MaterialTheme.colorScheme.primary
+                }
 
             Box(
                 modifier = Modifier
-                    .size(40.dp)
+                    .size(scaledIconSize(40.dp))
                     .clip(CircleShape)
                     .background(circleColor)
                     .clickable {
@@ -314,7 +384,9 @@ private fun StarsRow(
                     },
                     contentDescription = if (isEnglish) "$i stars" else "$i כוכבים",
                     tint = starTint,
-                    modifier = Modifier.size(25.dp)
+                    modifier = Modifier.size(
+                        scaledIconSize(25.dp)
+                    )
                 )
             }
         }

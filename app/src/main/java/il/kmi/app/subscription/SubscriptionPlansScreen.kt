@@ -62,10 +62,14 @@ import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.graphics.graphicsLayer
 import android.media.AudioManager
 import android.media.ToneGenerator
+import il.kmi.app.ui.KmiIconSize
+import il.kmi.app.ui.KmiTypography
+import il.kmi.app.ui.scaledIconSize
+
+//==================================================================
 
 private fun formatStorePriceNoTrailingZeros(raw: String): String {
     return raw
@@ -301,13 +305,24 @@ fun SubscriptionPlansScreen(
                 Spacer(Modifier.height(16.dp))
 
                 Text(
-                    text = if (isAssociationMember) {
-                        if (isEnglish) "Association member pricing detected" else "זוהתה זכאות למחיר חבר עמותה"
-                    } else {
-                        if (isEnglish) "Choose the plan that fits you:" else "בחר/י במסלול המתאים לך:"
-                    },
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.SemiBold,
+                    text =
+                        if (isAssociationMember) {
+                            if (isEnglish) {
+                                "Association member pricing detected"
+                            } else {
+                                "זוהתה זכאות למחיר חבר עמותה"
+                            }
+                        } else {
+                            if (isEnglish) {
+                                "Choose the plan that fits you:"
+                            } else {
+                                "בחר/י במסלול המתאים לך:"
+                            }
+                        },
+                    style = KmiTypography.sectionTitle.copy(
+                        fontWeight = FontWeight.SemiBold
+                    ),
+                    color = MaterialTheme.colorScheme.onSurface,
                     textAlign = TextAlign.Center,
                     modifier = Modifier.fillMaxWidth()
                 )
@@ -337,8 +352,9 @@ fun SubscriptionPlansScreen(
                                 }
                             },
                             color = Color(0xFF9A3412),
-                            style = MaterialTheme.typography.bodySmall,
-                            fontWeight = FontWeight.SemiBold,
+                            style = KmiTypography.caption.copy(
+                                fontWeight = FontWeight.SemiBold
+                            ),
                             textAlign = TextAlign.Center,
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -526,7 +542,15 @@ fun SubscriptionPlansScreen(
                         .height(48.dp),
                     shape = RoundedCornerShape(24.dp)
                 ) {
-                    Text(if (isEnglish) "Back to subscription screen" else "חזרה למסך ניהול המנוי")
+                    Text(
+                        text =
+                            if (isEnglish) {
+                                "Back to subscription screen"
+                            } else {
+                                "חזרה למסך ניהול המנוי"
+                            },
+                        style = KmiTypography.action
+                    )
                 }
 
                 Spacer(modifier = Modifier.height(8.dp))
@@ -665,7 +689,7 @@ private fun PremiumPurchaseSuccessDialog(
                 ) {
                     Box(
                         modifier = Modifier
-                            .size(78.dp)
+                            .size(scaledIconSize(78.dp))
                             .graphicsLayer {
                                 scaleX = pulse
                                 scaleY = pulse
@@ -683,7 +707,13 @@ private fun PremiumPurchaseSuccessDialog(
                             ),
                         contentAlignment = Alignment.Center
                     ) {
-                        Text(text = "👑", fontSize = 36.sp)
+                        Text(
+                            text = "👑",
+                            style = KmiTypography.metric.copy(
+                                fontSize = 36.sp,
+                                lineHeight = 40.sp
+                            )
+                        )
                     }
 
                     Box(
@@ -714,7 +744,10 @@ private fun PremiumPurchaseSuccessDialog(
                             Icon(
                                 imageVector = Icons.Filled.CheckCircle,
                                 contentDescription = null,
-                                tint = Color.White
+                                tint = Color.White,
+                                modifier = Modifier.size(
+                                    KmiIconSize.medium
+                                )
                             )
                         }
                     }
@@ -794,7 +827,13 @@ private fun PremiumPurchaseSuccessDialog(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.Center
                     ) {
-                        Text(text = "🛡️", fontSize = 26.sp)
+                        Text(
+                            text = "🛡️",
+                            style = KmiTypography.metric.copy(
+                                fontSize = 26.sp,
+                                lineHeight = 30.sp
+                            )
+                        )
                         Spacer(Modifier.width(10.dp))
                         Text(
                             text = if (isEnglish) {
@@ -851,9 +890,13 @@ private fun PremiumPurchaseSuccessDialog(
                 horizontalAlignment = horizontalAlign
             ) {
                 Text(
-                    text = if (isEnglish) "App pricing" else "תעריפון האפליקציה",
-                    style = MaterialTheme.typography.titleLarge,
-                    fontWeight = FontWeight.ExtraBold,
+                    text =
+                        if (isEnglish) {
+                            "App pricing"
+                        } else {
+                            "תעריפון האפליקציה"
+                        },
+                    style = KmiTypography.screenTitle,
                     color = Color.White,
                     modifier = Modifier.fillMaxWidth(),
                     textAlign = TextAlign.Center
@@ -865,7 +908,7 @@ private fun PremiumPurchaseSuccessDialog(
                     } else {
                         "המחירים נטענים ישירות מ־Google Play בהתאם לזכאות המנוי שלך."
                     },
-                    style = MaterialTheme.typography.bodyMedium,
+                    style = KmiTypography.body,
                     color = Color.White.copy(alpha = 0.78f),
                     modifier = Modifier.fillMaxWidth(),
                     textAlign = TextAlign.Center
@@ -926,7 +969,7 @@ private fun PremiumPurchaseSuccessDialog(
                         } else {
                             "חברי עמותה יכולים לקבל מחיר מוזל לאחר אימות סטטוס החברות."
                         },
-                        style = MaterialTheme.typography.bodySmall,
+                        style = KmiTypography.caption,
                         fontWeight = FontWeight.SemiBold,
                         color = Color.White,
                         textAlign = TextAlign.Center,
@@ -962,9 +1005,15 @@ private fun PremiumTariffRow(
         else -> Color.White.copy(alpha = 0.96f)
     }
 
-    val fontWeight = if (isHeader) FontWeight.ExtraBold else FontWeight.SemiBold
-    val headerStyle = MaterialTheme.typography.bodyMedium
-    val regularStyle = MaterialTheme.typography.bodyLarge
+    val fontWeight =
+        if (isHeader) {
+            FontWeight.ExtraBold
+        } else {
+            FontWeight.SemiBold
+        }
+
+    val headerStyle = KmiTypography.secondary
+    val regularStyle = KmiTypography.body
 
     CompositionLocalProvider(LocalLayoutDirection provides layoutDirection) {
         Row(
@@ -1025,23 +1074,40 @@ private fun JoinAssociationCard(
     onClick: () -> Unit
 ) {
     val ctx = LocalContext.current
-    val langManager = remember { il.kmi.shared.localization.AppLanguageManager(ctx) }
-    val isEnglish = langManager.getCurrentLanguage() ==
-            il.kmi.shared.localization.AppLanguage.ENGLISH
-    val layoutDirection = if (isEnglish) androidx.compose.ui.unit.LayoutDirection.Ltr
-    else androidx.compose.ui.unit.LayoutDirection.Rtl
-    val horizontalAlign = if (isEnglish) Alignment.Start else Alignment.End
-    val textAlign = if (isEnglish) TextAlign.Left else TextAlign.Right
+    val langManager = remember {
+        il.kmi.shared.localization.AppLanguageManager(ctx)
+    }
+    val isEnglish =
+        langManager.getCurrentLanguage() ==
+                il.kmi.shared.localization.AppLanguage.ENGLISH
+
+    val layoutDirection =
+        if (isEnglish) {
+            androidx.compose.ui.unit.LayoutDirection.Ltr
+        } else {
+            androidx.compose.ui.unit.LayoutDirection.Rtl
+        }
+
+    val horizontalAlign =
+        if (isEnglish) Alignment.Start else Alignment.End
+
+    val textAlign =
+        if (isEnglish) TextAlign.Left else TextAlign.Right
 
     ElevatedCard(
         shape = RoundedCornerShape(22.dp),
         colors = CardDefaults.elevatedCardColors(
-            containerColor = Color(0xFFF8FAFC)
+            containerColor = MaterialTheme.colorScheme.surface,
+            contentColor = MaterialTheme.colorScheme.onSurface
         ),
-        elevation = CardDefaults.elevatedCardElevation(defaultElevation = 4.dp),
+        elevation = CardDefaults.elevatedCardElevation(
+            defaultElevation = 4.dp
+        ),
         modifier = Modifier.fillMaxWidth()
     ) {
-        CompositionLocalProvider(LocalLayoutDirection provides layoutDirection) {
+        CompositionLocalProvider(
+            LocalLayoutDirection provides layoutDirection
+        ) {
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -1050,26 +1116,27 @@ private fun JoinAssociationCard(
                 horizontalAlignment = horizontalAlign
             ) {
                 Text(
-                    text = if (isEnglish) {
-                        "Join the KAMI association"
-                    } else {
-                        "הצטרפות לעמותת ק.מ.י"
-                    },
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.ExtraBold,
-                    color = Color(0xFF111827),
+                    text =
+                        if (isEnglish) {
+                            "Join the KAMI association"
+                        } else {
+                            "הצטרפות לעמותת ק.מ.י"
+                        },
+                    style = KmiTypography.sectionTitle,
+                    color = MaterialTheme.colorScheme.onSurface,
                     modifier = Modifier.fillMaxWidth(),
                     textAlign = textAlign
                 )
 
                 Text(
-                    text = if (isEnglish) {
-                        "Join now and enjoy discounted pricing in the app."
-                    } else {
-                        "הצטרף עכשיו לעמותה ותוכל ליהנות ממחיר מוזל באפליקציה."
-                    },
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = Color(0xFF475569),
+                    text =
+                        if (isEnglish) {
+                            "Join now and enjoy discounted pricing in the app."
+                        } else {
+                            "הצטרף עכשיו לעמותה ותוכל ליהנות ממחיר מוזל באפליקציה."
+                        },
+                    style = KmiTypography.body,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.fillMaxWidth(),
                     textAlign = textAlign
                 )
@@ -1077,22 +1144,31 @@ private fun JoinAssociationCard(
                 Card(
                     shape = RoundedCornerShape(16.dp),
                     colors = CardDefaults.cardColors(
-                        containerColor = Color(0xFFECFDF5)
+                        containerColor =
+                            MaterialTheme.colorScheme.primaryContainer,
+                        contentColor =
+                            MaterialTheme.colorScheme.onPrimaryContainer
                     ),
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Text(
-                        text = if (isEnglish) {
-                            "Association members may receive discounted pricing after membership verification."
-                        } else {
-                            "חברי עמותה יכולים לקבל מחיר מוזל לאחר אימות סטטוס החברות."
-                        },
-                        style = MaterialTheme.typography.bodyMedium,
-                        fontWeight = FontWeight.SemiBold,
-                        color = Color(0xFF065F46),
+                        text =
+                            if (isEnglish) {
+                                "Association members may receive discounted pricing after membership verification."
+                            } else {
+                                "חברי עמותה יכולים לקבל מחיר מוזל לאחר אימות סטטוס החברות."
+                            },
+                        style = KmiTypography.body.copy(
+                            fontWeight = FontWeight.SemiBold
+                        ),
+                        color =
+                            MaterialTheme.colorScheme.onPrimaryContainer,
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(horizontal = 12.dp, vertical = 10.dp),
+                            .padding(
+                                horizontal = 12.dp,
+                                vertical = 10.dp
+                            ),
                         textAlign = TextAlign.Center
                     )
                 }
@@ -1105,9 +1181,13 @@ private fun JoinAssociationCard(
                         .height(48.dp)
                 ) {
                     Text(
-                        text = if (isEnglish) "Join the association" else "להצטרפות לעמותה",
-                        style = MaterialTheme.typography.titleSmall,
-                        fontWeight = FontWeight.Bold
+                        text =
+                            if (isEnglish) {
+                                "Join the association"
+                            } else {
+                                "להצטרפות לעמותה"
+                            },
+                        style = KmiTypography.action
                     )
                 }
             }
@@ -1171,15 +1251,16 @@ private fun PlanCard(
                                 "⭐ 3-DAY FREE TRIAL"
                             else
                                 "⭐ ניסיון חינם ל-3 ימים",
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.Bold,
+                            style = KmiTypography.caption.copy(
+                                fontWeight = FontWeight.Bold
+                            ),
                             color = Color.Black
                         )
                     }
                 }
                 Text(
                     text = title,
-                    style = MaterialTheme.typography.titleLarge,
+                    style = KmiTypography.screenTitle,
                     fontWeight = FontWeight.ExtraBold,
                     color = Color.White,
                     textAlign = TextAlign.Center,
@@ -1188,7 +1269,7 @@ private fun PlanCard(
 
                 Text(
                     text = priceLine,
-                    style = MaterialTheme.typography.titleMedium,
+                    style = KmiTypography.sectionTitle,
                     fontWeight = FontWeight.ExtraBold,
                     color = Color.White,
                     textAlign = TextAlign.Center,
@@ -1209,12 +1290,16 @@ private fun PlanCard(
                                 Icon(
                                     imageVector = Icons.Filled.CheckCircle,
                                     contentDescription = null,
-                                    tint = Color.White.copy(alpha = 0.95f)
+                                    tint = Color.White.copy(alpha = 0.95f),
+                                    modifier = Modifier.size(
+                                        KmiIconSize.medium
+                                    )
                                 )
+
                                 Spacer(Modifier.width(8.dp))
                                 Text(
                                     text = line,
-                                    style = MaterialTheme.typography.bodyMedium,
+                                    style = KmiTypography.body,
                                     color = Color.White,
                                     textAlign = pointTextAlign,
                                     modifier = Modifier.weight(1f)
@@ -1222,16 +1307,20 @@ private fun PlanCard(
                             } else {
                                 Text(
                                     text = line,
-                                    style = MaterialTheme.typography.bodyMedium,
+                                    style = KmiTypography.body,
                                     color = Color.White,
                                     textAlign = pointTextAlign,
                                     modifier = Modifier.weight(1f)
                                 )
                                 Spacer(Modifier.width(8.dp))
+
                                 Icon(
                                     imageVector = Icons.Filled.CheckCircle,
                                     contentDescription = null,
-                                    tint = Color.White.copy(alpha = 0.95f)
+                                    tint = Color.White.copy(alpha = 0.95f),
+                                    modifier = Modifier.size(
+                                        KmiIconSize.medium
+                                    )
                                 )
                             }
                         }
@@ -1259,12 +1348,19 @@ private fun PlanCard(
                         horizontalArrangement = Arrangement.Center,
                         modifier = Modifier.fillMaxWidth()
                     ) {
-                        Icon(Icons.Filled.Lock, contentDescription = null)
+                        Icon(
+                            imageVector = Icons.Filled.Lock,
+                            contentDescription = null,
+                            modifier = Modifier.size(
+                                KmiIconSize.medium
+                            )
+                        )
+
                         Spacer(Modifier.width(8.dp))
+
                         Text(
                             text = buyText,
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold
+                            style = KmiTypography.action
                         )
                     }
                 }

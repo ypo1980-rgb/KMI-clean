@@ -107,8 +107,11 @@ import com.google.firebase.ktx.Firebase
 import il.kmi.shared.domain.Belt
 import il.kmi.app.R
 import il.kmi.app.domain.ExerciseExplanationResolver
+import il.kmi.app.ui.KmiIconSize
 import il.kmi.app.ui.KmiTopBar
 import il.kmi.app.ui.KmiTtsManager
+import il.kmi.app.ui.KmiTypography
+import il.kmi.app.ui.scaledIconSize
 import il.kmi.app.ui.assistant.core.AssistantKnowledgeSource
 import il.kmi.app.ui.assistant.core.AssistantMatchQuality
 import il.kmi.app.ui.assistant.core.AssistantMemory
@@ -183,22 +186,7 @@ private fun AssistantTrainingCard(
         }
 
     val statusBackground =
-        when (statusCode) {
-            "ONGOING" ->
-                Color(0xFFECFDF5)
-
-            "CANCELLED_BY_HOLIDAY" ->
-                Color(0xFFFFF7ED)
-
-            "COMPLETED" ->
-                Color(0xFFF1F5F9)
-
-            "INVALID" ->
-                Color(0xFFFEF2F2)
-
-            else ->
-                Color(0xFFEFF6FF)
-        }
+        statusColor.copy(alpha = 0.14f)
 
     val statusText =
         item.trainingStatusText(
@@ -235,7 +223,7 @@ private fun AssistantTrainingCard(
                 shape = RoundedCornerShape(18.dp)
             ),
         shape = RoundedCornerShape(18.dp),
-        color = Color.White,
+        color = MaterialTheme.colorScheme.surface,
         tonalElevation = 0.dp,
         shadowElevation = 3.dp
     ) {
@@ -251,10 +239,8 @@ private fun AssistantTrainingCard(
         ) {
             Text(
                 text = item.title,
-                color = Color(0xFF172033),
-                fontWeight = FontWeight.Black,
-                fontSize = 15.sp,
-                lineHeight = 19.sp,
+                color = MaterialTheme.colorScheme.onSurface,
+                style = KmiTypography.cardTitle,
                 textAlign = if (isEnglish) {
                     TextAlign.Left
                 } else {
@@ -270,9 +256,10 @@ private fun AssistantTrainingCard(
                     } else {
                         "שעה: $timeText"
                     },
-                    color = Color(0xFF334155),
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 13.sp,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    style = KmiTypography.secondary.copy(
+                        fontWeight = FontWeight.Bold
+                    ),
                     textAlign = if (isEnglish) {
                         TextAlign.Left
                     } else {
@@ -291,8 +278,8 @@ private fun AssistantTrainingCard(
                         } else {
                             "סניף: $branch"
                         },
-                        color = Color(0xFF475569),
-                        fontSize = 12.5.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        style = KmiTypography.secondary,
                         textAlign = if (isEnglish) {
                             TextAlign.Left
                         } else {
@@ -312,8 +299,8 @@ private fun AssistantTrainingCard(
                         } else {
                             "קבוצה: $group"
                         },
-                        color = Color(0xFF475569),
-                        fontSize = 12.5.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        style = KmiTypography.secondary,
                         textAlign = if (isEnglish) {
                             TextAlign.Left
                         } else {
@@ -333,8 +320,8 @@ private fun AssistantTrainingCard(
                         } else {
                             "מיקום: $location"
                         },
-                        color = Color(0xFF475569),
-                        fontSize = 12.5.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        style = KmiTypography.secondary,
                         textAlign = if (isEnglish) {
                             TextAlign.Left
                         } else {
@@ -354,8 +341,8 @@ private fun AssistantTrainingCard(
                         } else {
                             "מאמן: $coach"
                         },
-                        color = Color(0xFF475569),
-                        fontSize = 12.5.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        style = KmiTypography.secondary,
                         textAlign = if (isEnglish) {
                             TextAlign.Left
                         } else {
@@ -377,8 +364,9 @@ private fun AssistantTrainingCard(
                     Text(
                         text = statusText,
                         color = statusColor,
-                        fontSize = 12.5.sp,
-                        fontWeight = FontWeight.Black,
+                        style = KmiTypography.secondary.copy(
+                            fontWeight = FontWeight.Black
+                        ),
                         textAlign = TextAlign.Center,
                         modifier = Modifier.padding(
                             horizontal = 10.dp,
@@ -1476,13 +1464,14 @@ fun AiAssistantDialog(
     val textAlignPrimary = if (isEnglish) TextAlign.Left else TextAlign.Right
 
     fun tr(he: String, en: String): String = if (isEnglish) en else he
+
     val graniteBrush = Brush.verticalGradient(
         colors = listOf(
-            Color(0xFFF8FAFF),
-            Color(0xFFF1EDFF),
-            Color(0xFFE8E2F7),
-            Color(0xFFE3ECFA),
-            Color(0xFFF7F9FF)
+            MaterialTheme.colorScheme.background,
+            MaterialTheme.colorScheme.surface,
+            MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.68f),
+            MaterialTheme.colorScheme.surfaceVariant,
+            MaterialTheme.colorScheme.background
         )
     )
 
@@ -1493,7 +1482,9 @@ fun AiAssistantDialog(
             Color(0xFF8B5CF6),
             Color(0xFF2563EB)
         )
-    )   // ✅ Focus Sink: גורם ל-TextField לאבד פוקוס באמת בתוך AlertDialog
+    )
+
+    // ✅ Focus Sink: גורם ל-TextField לאבד פוקוס באמת בתוך AlertDialog
     val focusSinkRequester = remember { FocusRequester() }
     var focusSinkTick by remember { mutableStateOf(0) }
 
@@ -2574,11 +2565,27 @@ fun AiAssistantDialog(
          */
         val routedQuestion = when (assistantMode) {
             /*
-             * שאלת אימונים נשלחת כפי שנאמרה.
-             * הוספת משפט כללי כאן עלולה להפוך בקשה על
-             * אימון יחיד לבקשה על מספר אימונים.
+             * מוסיפים סימון ניתוב בלבד, בלי לשנות את
+             * הכמות או את טווח הזמן שביקש המשתמש.
+             *
+             * לדוגמה:
+             * "מהם 3 האימונים האחרונים"
+             * הופך ל:
+             * "מידע על אימונים. מהם 3 האימונים האחרונים"
              */
-            AssistantMode.TRAININGS -> question
+            AssistantMode.TRAININGS -> {
+                /*
+                 * הביטוי "רשימת אימונים" מזוהה במפורש
+                 * על ידי ה־Orchestrator כמקור TRAININGS.
+                 * השאלה המקורית נשמרת במלואה אחריו,
+                 * כולל כמות וטווח הזמן שביקש המשתמש.
+                 */
+                if (isEnglish) {
+                    "Training list. $question"
+                } else {
+                    "רשימת אימונים. $question"
+                }
+            }
 
             AssistantMode.KMI_MATERIAL -> {
                 val normalizedQuestion = question
@@ -2976,9 +2983,8 @@ fun AiAssistantDialog(
         Surface(
             modifier = Modifier
                 .fillMaxSize()
-                .navigationBarsPadding()
-                .imePadding(),
-            color = Color.Transparent
+                .navigationBarsPadding(),
+            color = MaterialTheme.colorScheme.background
         ) {
             Box(
                 modifier = Modifier
@@ -2986,7 +2992,9 @@ fun AiAssistantDialog(
                     .background(graniteBrush)
             ) {
                 Column(
-                    modifier = Modifier.fillMaxSize(),
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .imePadding(),
                     verticalArrangement = Arrangement.spacedBy(4.dp)
                 ) {
 
@@ -3143,7 +3151,9 @@ fun AiAssistantDialog(
                                         )
                                     },
                                     tint = Color.White,
-                                    modifier = Modifier.size(25.dp)
+                                    modifier = Modifier.size(
+                                        scaledIconSize(25.dp)
+                                    )
                                 )
 
                                 Spacer(Modifier.width(10.dp))
@@ -3179,9 +3189,7 @@ fun AiAssistantDialog(
                                         .padding(
                                             horizontal = 6.dp
                                         ),
-                                    style =
-                                        MaterialTheme.typography.titleSmall,
-                                    fontWeight = FontWeight.Bold,
+                                    style = KmiTypography.cardTitle,
                                     textAlign = textAlignPrimary,
                                     color = Color.White
                                 )
@@ -3194,7 +3202,9 @@ fun AiAssistantDialog(
                                     onClick = {
                                         backToModePicker()
                                     },
-                                    modifier = Modifier.size(48.dp),
+                                    modifier = Modifier.size(
+                                        scaledIconSize(48.dp)
+                                    ),
                                     shape = RoundedCornerShape(16.dp),
                                     color =
                                         Color.White.copy(
@@ -3225,8 +3235,9 @@ fun AiAssistantDialog(
                                                     "Back to mode selection"
                                                 ),
                                             tint = Color.White,
-                                            modifier =
-                                                Modifier.size(25.dp)
+                                            modifier = Modifier.size(
+                                                scaledIconSize(25.dp)
+                                            )
                                         )
                                     }
                                 }
@@ -3252,16 +3263,18 @@ fun AiAssistantDialog(
                                     .background(
                                         brush = Brush.verticalGradient(
                                             colors = listOf(
-                                                Color.White.copy(alpha = 0.94f),
-                                                Color(0xFFF7F3FF).copy(alpha = 0.96f),
-                                                Color(0xFFEEF4FF).copy(alpha = 0.94f)
+                                                MaterialTheme.colorScheme.surface,
+                                                MaterialTheme.colorScheme.surfaceVariant,
+                                                MaterialTheme.colorScheme.primaryContainer.copy(
+                                                    alpha = 0.52f
+                                                )
                                             )
                                         ),
                                         shape = modePickerShape
                                     )
                                     .border(
                                         width = 1.dp,
-                                        color = Color.White.copy(alpha = 0.92f),
+                                        color = MaterialTheme.colorScheme.outlineVariant,
                                         shape = modePickerShape
                                     )
                                     .padding(12.dp),
@@ -3282,7 +3295,7 @@ fun AiAssistantDialog(
                                         if (selected) {
                                             Color(0xFF7C3AED)
                                         } else {
-                                            Color(0xFFB8A9E8).copy(alpha = 0.55f)
+                                            MaterialTheme.colorScheme.outlineVariant
                                         }
 
                                     Surface(
@@ -3309,9 +3322,11 @@ fun AiAssistantDialog(
                                                     } else {
                                                         Brush.horizontalGradient(
                                                             colors = listOf(
-                                                                Color.White,
-                                                                Color(0xFFF7F3FF),
-                                                                Color(0xFFEEF5FF)
+                                                                MaterialTheme.colorScheme.surface,
+                                                                MaterialTheme.colorScheme.surfaceVariant,
+                                                                MaterialTheme.colorScheme.primaryContainer.copy(
+                                                                    alpha = 0.42f
+                                                                )
                                                             )
                                                         )
                                                     },
@@ -3329,12 +3344,14 @@ fun AiAssistantDialog(
                                             ) {
                                                 if (isEnglish) {
                                                     Surface(
-                                                        modifier = Modifier.size(46.dp),
+                                                        modifier = Modifier.size(
+                                                            scaledIconSize(46.dp)
+                                                        ),
                                                         shape = RoundedCornerShape(16.dp),
                                                         color = if (selected) {
                                                             Color.White.copy(alpha = 0.20f)
                                                         } else {
-                                                            Color(0xFFECE5FF)
+                                                            MaterialTheme.colorScheme.primaryContainer
                                                         },
                                                         tonalElevation = 0.dp,
                                                         shadowElevation = 5.dp
@@ -3349,9 +3366,11 @@ fun AiAssistantDialog(
                                                                 tint = if (selected) {
                                                                     Color.White
                                                                 } else {
-                                                                    Color(0xFF6D4DE8)
+                                                                    MaterialTheme.colorScheme.primary
                                                                 },
-                                                                modifier = Modifier.size(24.dp)
+                                                                modifier = Modifier.size(
+                                                                    KmiIconSize.medium
+                                                                )
                                                             )
                                                         }
                                                     }
@@ -3363,13 +3382,11 @@ fun AiAssistantDialog(
                                                     text = title,
                                                     modifier = Modifier.weight(1f),
                                                     textAlign = textAlignPrimary,
-                                                    fontSize = 16.sp,
-                                                    lineHeight = 21.sp,
-                                                    fontWeight = FontWeight.ExtraBold,
+                                                    style = KmiTypography.sectionTitle,
                                                     color = if (selected) {
                                                         Color.White
                                                     } else {
-                                                        Color(0xFF172033)
+                                                        MaterialTheme.colorScheme.onSurface
                                                     }
                                                 )
 
@@ -3377,12 +3394,14 @@ fun AiAssistantDialog(
                                                     Spacer(Modifier.width(10.dp))
 
                                                     Surface(
-                                                        modifier = Modifier.size(46.dp),
+                                                        modifier = Modifier.size(
+                                                            scaledIconSize(46.dp)
+                                                        ),
                                                         shape = RoundedCornerShape(16.dp),
                                                         color = if (selected) {
                                                             Color.White.copy(alpha = 0.20f)
                                                         } else {
-                                                            Color(0xFFECE5FF)
+                                                            MaterialTheme.colorScheme.primaryContainer
                                                         },
                                                         tonalElevation = 0.dp,
                                                         shadowElevation = 5.dp
@@ -3397,9 +3416,11 @@ fun AiAssistantDialog(
                                                                 tint = if (selected) {
                                                                     Color.White
                                                                 } else {
-                                                                    Color(0xFF6D4DE8)
+                                                                    MaterialTheme.colorScheme.primary
                                                                 },
-                                                                modifier = Modifier.size(24.dp)
+                                                                modifier = Modifier.size(
+                                                                    KmiIconSize.medium
+                                                                )
                                                             )
                                                         }
                                                     }
@@ -3487,18 +3508,26 @@ fun AiAssistantDialog(
                             verticalArrangement = Arrangement.Center
                         ) {
                             Box(
-                                modifier = Modifier.requiredSize(102.dp),
+                                modifier = Modifier.requiredSize(
+                                    scaledIconSize(102.dp)
+                                ),
                                 contentAlignment = Alignment.Center
                             ) {
                                 Box(
                                     modifier = Modifier
-                                        .requiredSize(100.dp)
+                                        .requiredSize(
+                                            scaledIconSize(100.dp)
+                                        )
                                         .scale(logoScale)
                                         .background(
                                             brush = Brush.radialGradient(
                                                 colors = listOf(
-                                                    Color(0x558B5CF6),
-                                                    Color(0x225B7CFA),
+                                                    MaterialTheme.colorScheme.primary.copy(
+                                                        alpha = 0.34f
+                                                    ),
+                                                    MaterialTheme.colorScheme.secondary.copy(
+                                                        alpha = 0.14f
+                                                    ),
                                                     Color.Transparent
                                                 )
                                             ),
@@ -3508,11 +3537,13 @@ fun AiAssistantDialog(
 
                                 Surface(
                                     modifier = Modifier
-                                        .requiredSize(84.dp)
+                                        .requiredSize(
+                                            scaledIconSize(84.dp)
+                                        )
                                         .scale(logoScale)
                                         .border(
                                             width = 2.dp,
-                                            color = Color(0xFF7C3AED),
+                                            color = MaterialTheme.colorScheme.primary,
                                             shape = CircleShape
                                         ),
                                     shape = CircleShape,
@@ -3524,8 +3555,10 @@ fun AiAssistantDialog(
                                         painter = painterResource(
                                             R.drawable.kami_logo
                                         ),
-                                        contentDescription =
-                                            tr("לוגו ק.מ.י", "K.A.M.I logo"),
+                                        contentDescription = tr(
+                                            "לוגו ק.מ.י",
+                                            "K.A.M.I logo"
+                                        ),
                                         modifier = Modifier
                                             .fillMaxSize()
                                             .padding(5.dp)
@@ -3540,9 +3573,8 @@ fun AiAssistantDialog(
                                     "העוזר האישי של ק.מ.י",
                                     "K.A.M.I Personal Assistant"
                                 ),
-                                color = Color(0xFF172033),
-                                fontSize = 15.sp,
-                                fontWeight = FontWeight.ExtraBold
+                                color = MaterialTheme.colorScheme.onBackground,
+                                style = KmiTypography.cardTitle
                             )
 
                             Spacer(Modifier.height(3.dp))
@@ -3552,9 +3584,10 @@ fun AiAssistantDialog(
                                     "המיקרופון פועל רק לאחר לחיצה",
                                     "Microphone activates only when tapped"
                                 ),
-                                color = Color(0xFF667085),
-                                fontSize = 11.sp,
-                                fontWeight = FontWeight.Medium
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                style = KmiTypography.caption.copy(
+                                    fontWeight = FontWeight.Medium
+                                )
                             )
                         }
                     } else {
@@ -3573,7 +3606,7 @@ fun AiAssistantDialog(
                             shape = RoundedCornerShape(28.dp),
                             tonalElevation = 0.dp,
                             shadowElevation = 10.dp,
-                            color = Color(0xFFF6F3FA)
+                            color = MaterialTheme.colorScheme.surface
                         ) {
                             if (messages.isEmpty() && !isThinking) {
                                 Column(
@@ -3584,12 +3617,16 @@ fun AiAssistantDialog(
                                     verticalArrangement = Arrangement.spacedBy(14.dp)
                                 ) {
                                     Surface(
-                                        modifier = Modifier.size(64.dp),
+                                        modifier = Modifier.size(
+                                            scaledIconSize(64.dp)
+                                        ),
                                         shape = CircleShape,
-                                        color = Color(0xFFEDE9FE),
+                                        color = MaterialTheme.colorScheme.primaryContainer,
                                         shadowElevation = 8.dp
                                     ) {
-                                        Box(contentAlignment = Alignment.Center) {
+                                        Box(
+                                            contentAlignment = Alignment.Center
+                                        ) {
                                             Icon(
                                                 imageVector = when (assistantMode) {
                                                     AssistantMode.EXERCISE ->
@@ -3605,8 +3642,10 @@ fun AiAssistantDialog(
                                                         Icons.Filled.AutoAwesome
                                                 },
                                                 contentDescription = null,
-                                                tint = Color(0xFF6D4AFF),
-                                                modifier = Modifier.size(30.dp)
+                                                tint = MaterialTheme.colorScheme.primary,
+                                                modifier = Modifier.size(
+                                                    scaledIconSize(30.dp)
+                                                )
                                             )
                                         }
                                     }
@@ -3637,28 +3676,26 @@ fun AiAssistantDialog(
                                                     "How can I help?"
                                                 )
                                         },
-                                        color = Color(0xFF172033),
-                                        fontSize = 19.sp,
-                                        lineHeight = 24.sp,
-                                        fontWeight = FontWeight.ExtraBold,
+                                        color = MaterialTheme.colorScheme.onSurface,
+                                        style = KmiTypography.sectionTitle,
                                         textAlign = TextAlign.Center
                                     )
 
                                     Text(
                                         text = emptyStateText,
-                                        color = Color(0xFF667085),
-                                        fontSize = 14.sp,
-                                        lineHeight = 21.sp,
-                                        fontWeight = FontWeight.Medium,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        style = KmiTypography.body.copy(
+                                            fontWeight = FontWeight.Medium
+                                        ),
                                         textAlign = TextAlign.Center
                                     )
 
                                     Surface(
                                         shape = RoundedCornerShape(20.dp),
-                                        color = Color(0xFFF0EDFF),
+                                        color = MaterialTheme.colorScheme.primaryContainer,
                                         border = androidx.compose.foundation.BorderStroke(
                                             width = 1.dp,
-                                            color = Color(0xFFDDD6FE)
+                                            color = MaterialTheme.colorScheme.outlineVariant
                                         )
                                     ) {
                                         Row(
@@ -3672,8 +3709,10 @@ fun AiAssistantDialog(
                                             Icon(
                                                 imageVector = Icons.Filled.AutoAwesome,
                                                 contentDescription = null,
-                                                tint = Color(0xFF6D4AFF),
-                                                modifier = Modifier.size(17.dp)
+                                                tint = MaterialTheme.colorScheme.primary,
+                                                modifier = Modifier.size(
+                                                    KmiIconSize.small
+                                                )
                                             )
 
                                             Spacer(Modifier.width(7.dp))
@@ -3683,10 +3722,10 @@ fun AiAssistantDialog(
                                                     "אפשר לדבר באופן טבעי — יובל יבין את ההקשר",
                                                     "Speak naturally — Yuval will understand the context"
                                                 ),
-                                                color = Color(0xFF6246B5),
-                                                fontSize = 12.sp,
-                                                lineHeight = 17.sp,
-                                                fontWeight = FontWeight.Bold,
+                                                color = MaterialTheme.colorScheme.onPrimaryContainer,
+                                                style = KmiTypography.secondary.copy(
+                                                    fontWeight = FontWeight.Bold
+                                                ),
                                                 textAlign = TextAlign.Center
                                             )
                                         }
@@ -3728,7 +3767,7 @@ fun AiAssistantDialog(
                                         Surface(
                                             modifier = Modifier.fillMaxWidth(),
                                             shape = RoundedCornerShape(22.dp),
-                                            color = Color(0xFF6C55B8),
+                                            color = MaterialTheme.colorScheme.primary,
                                             tonalElevation = 0.dp,
                                             shadowElevation = 5.dp
                                         ) {
@@ -3736,12 +3775,15 @@ fun AiAssistantDialog(
                                                 text = displayTopRequestText,
                                                 modifier = Modifier
                                                     .fillMaxWidth()
-                                                    .padding(horizontal = 14.dp, vertical = 7.dp),
-                                                color = Color.White,
+                                                    .padding(
+                                                        horizontal = 14.dp,
+                                                        vertical = 7.dp
+                                                    ),
+                                                color = MaterialTheme.colorScheme.onPrimary,
                                                 textAlign = textAlignPrimary,
-                                                fontWeight = FontWeight.Bold,
-                                                fontSize = 13.sp,
-                                                lineHeight = 17.sp
+                                                style = KmiTypography.secondary.copy(
+                                                    fontWeight = FontWeight.Bold
+                                                )
                                             )
                                         }
                                     }
@@ -4927,16 +4969,23 @@ fun AiAssistantDialog(
                     shape = inputShape,
                     tonalElevation = 0.dp,
                     shadowElevation = 12.dp,
-                    color = Color.White.copy(alpha = 0.97f),
+                    color = MaterialTheme.colorScheme.surface,
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(horizontal = 12.dp)
                         .border(
                             width = 1.dp,
                             color = when {
-                                isListening -> Color(0xFF8B5CF6)
-                                isThinking -> Color(0xFFC4B5FD)
-                                else -> Color(0xFFDDD6FE)
+                                isListening ->
+                                    MaterialTheme.colorScheme.primary
+
+                                isThinking ->
+                                    MaterialTheme.colorScheme.primary.copy(
+                                        alpha = 0.55f
+                                    )
+
+                                else ->
+                                    MaterialTheme.colorScheme.outlineVariant
                             },
                             shape = inputShape
                         )
@@ -4950,13 +4999,17 @@ fun AiAssistantDialog(
                     ) {
 
                         Box(
-                            modifier = Modifier.size(44.dp),
+                            modifier = Modifier.size(
+                                scaledIconSize(44.dp)
+                            ),
                             contentAlignment = Alignment.Center
                         ) {
                             if (isListening) {
                                 Box(
                                     modifier = Modifier
-                                        .size(40.dp)
+                                        .size(
+                                            scaledIconSize(40.dp)
+                                        )
                                         .scale(waveScale)
                                         .background(
                                             MaterialTheme.colorScheme.primary.copy(alpha = waveAlpha),
@@ -4967,7 +5020,9 @@ fun AiAssistantDialog(
 
                             Box(
                                 modifier = Modifier
-                                    .size(38.dp)
+                                    .size(
+                                        scaledIconSize(38.dp)
+                                    )
                                     .background(
                                         when {
                                             isSpeaking -> Color(0x22E53935)
@@ -5008,7 +5063,9 @@ fun AiAssistantDialog(
 
                                 IconButton(
                                     modifier = Modifier
-                                        .size(36.dp)
+                                        .size(
+                                            scaledIconSize(36.dp)
+                                        )
                                         .scale(micScale),
                                     enabled = inputEnabled || isSpeaking || isListening,
                                     onClick = {
@@ -5040,7 +5097,9 @@ fun AiAssistantDialog(
                                         if (isListening) {
                                             Box(
                                                 modifier = Modifier
-                                                    .size(42.dp)
+                                                    .size(
+                                                        scaledIconSize(42.dp)
+                                                    )
                                                     .background(
                                                         MaterialTheme.colorScheme.primary.copy(alpha = 0.15f),
                                                         CircleShape
@@ -5066,7 +5125,7 @@ fun AiAssistantDialog(
                                             },
                                             tint = when {
                                                 isSpeaking ->
-                                                    Color(0xFFE53935)
+                                                    MaterialTheme.colorScheme.error
 
                                                 isListening ->
                                                     Color(0xFF00C853)
@@ -5075,9 +5134,13 @@ fun AiAssistantDialog(
                                                     MaterialTheme.colorScheme.primary
 
                                                 else ->
-                                                    MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.55f)
+                                                    MaterialTheme.colorScheme.onSurfaceVariant.copy(
+                                                        alpha = 0.55f
+                                                    )
                                             },
-                                            modifier = Modifier.scale(micScale)
+                                            modifier = Modifier
+                                                .size(KmiIconSize.medium)
+                                                .scale(micScale)
                                         )
                                     }
                                 }
@@ -5121,8 +5184,7 @@ fun AiAssistantDialog(
                                         alpha = 0.82f
                                     ),
                                     textAlign = textAlignPrimary,
-                                    fontSize = 11.sp,
-                                    lineHeight = 13.sp,
+                                    style = KmiTypography.caption,
                                     maxLines = 1,
                                     softWrap = false,
                                     overflow = TextOverflow.Ellipsis,
@@ -5130,7 +5192,7 @@ fun AiAssistantDialog(
                                 )
                             },
 
-                            textStyle = MaterialTheme.typography.bodySmall.copy(
+                            textStyle = KmiTypography.body.copy(
                                 color = MaterialTheme.colorScheme.onSurface,
                                 textAlign = textAlignPrimary
                             ),
@@ -5148,9 +5210,16 @@ fun AiAssistantDialog(
                             ),
                             shape = RoundedCornerShape(24.dp),
                             colors = TextFieldDefaults.colors(
-                                focusedContainerColor = Color.White.copy(alpha = 0.98f),
-                                unfocusedContainerColor = Color.White.copy(alpha = 0.94f),
-                                disabledContainerColor = Color.White.copy(alpha = 0.90f),
+                                focusedContainerColor =
+                                    MaterialTheme.colorScheme.surfaceVariant,
+
+                                unfocusedContainerColor =
+                                    MaterialTheme.colorScheme.surfaceVariant,
+
+                                disabledContainerColor =
+                                    MaterialTheme.colorScheme.surfaceVariant.copy(
+                                        alpha = 0.72f
+                                    ),
                                 focusedIndicatorColor = Color.Transparent,
                                 unfocusedIndicatorColor = Color.Transparent,
                                 disabledIndicatorColor = Color.Transparent,
@@ -5174,21 +5243,44 @@ fun AiAssistantDialog(
                         IconButton(
                             onClick = {
                                 val cleanInput = input.trim()
-                                if (!inputEnabled || cleanInput.isBlank()) return@IconButton
+                                if (
+                                    !inputEnabled ||
+                                    cleanInput.isBlank()
+                                ) {
+                                    return@IconButton
+                                }
 
                                 stopListeningHard()
                                 requestHideKeyboard = true
                                 sendQuestion(cleanInput)
                             },
-                            enabled = inputEnabled && input.trim().isNotBlank()
+                            enabled =
+                                inputEnabled &&
+                                        input.trim().isNotBlank(),
+                            modifier = Modifier.size(
+                                scaledIconSize(44.dp)
+                            )
                         ) {
                             Icon(
                                 imageVector = Icons.Filled.Send,
-                                contentDescription = tr("שלח שאלה", "Send question"),
-                                tint = if (inputEnabled && input.isNotBlank())
-                                    MaterialTheme.colorScheme.primary
-                                else
-                                    MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.55f)
+                                contentDescription = tr(
+                                    "שלח שאלה",
+                                    "Send question"
+                                ),
+                                tint =
+                                    if (
+                                        inputEnabled &&
+                                        input.isNotBlank()
+                                    ) {
+                                        MaterialTheme.colorScheme.primary
+                                    } else {
+                                        MaterialTheme.colorScheme.onSurfaceVariant.copy(
+                                            alpha = 0.55f
+                                        )
+                                    },
+                                modifier = Modifier.size(
+                                    KmiIconSize.medium
+                                )
                             )
                         }
                     }

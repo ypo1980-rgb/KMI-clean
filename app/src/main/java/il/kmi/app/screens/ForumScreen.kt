@@ -91,6 +91,9 @@ import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.unit.sp
+import il.kmi.app.ui.KmiIconSize
+import il.kmi.app.ui.KmiTypography
+import il.kmi.app.ui.scaledIconSize
 
 //==================================================================
 
@@ -1627,14 +1630,25 @@ fun ForumScreen(
                                         Color(0xFFD4E1F7)
                                     }
                                 ),
-                                modifier = Modifier.size(64.dp)
+                                modifier = Modifier.size(
+                                    scaledIconSize(64.dp)
+                                )
                             ) {
-                                Box(contentAlignment = Alignment.Center) {
+                                Box(
+                                    contentAlignment = Alignment.Center
+                                ) {
                                     Icon(
                                         imageVector = Icons.Filled.Lock,
                                         contentDescription = null,
-                                        tint = if (isDarkMode) Color(0xFFBFDBFE) else Color(0xFF2563EB),
-                                        modifier = Modifier.size(30.dp)
+                                        tint =
+                                            if (isDarkMode) {
+                                                Color(0xFFBFDBFE)
+                                            } else {
+                                                Color(0xFF2563EB)
+                                            },
+                                        modifier = Modifier.size(
+                                            scaledIconSize(30.dp)
+                                        )
                                     )
                                 }
                             }
@@ -1642,10 +1656,18 @@ fun ForumScreen(
                             Spacer(Modifier.height(14.dp))
 
                             Text(
-                                text = forumTr(isEnglish, "גישה לפורום", "Forum Access"),
-                                color = if (isDarkMode) Color(0xFFBFDBFE) else Color(0xFF1E3A8A),
-                                style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.Bold,
+                                text = forumTr(
+                                    isEnglish,
+                                    "גישה לפורום",
+                                    "Forum Access"
+                                ),
+                                color =
+                                    if (isDarkMode) {
+                                        Color(0xFFBFDBFE)
+                                    } else {
+                                        Color(0xFF1E3A8A)
+                                    },
+                                style = KmiTypography.sectionTitle,
                                 textAlign = TextAlign.Center,
                                 modifier = Modifier.fillMaxWidth()
                             )
@@ -1654,8 +1676,13 @@ fun ForumScreen(
 
                             Text(
                                 text = lockText,
-                                color = if (isDarkMode) Color(0xFFE5E7EB) else Color(0xFF334155),
-                                style = MaterialTheme.typography.bodyMedium,
+                                color =
+                                    if (isDarkMode) {
+                                        Color(0xFFE5E7EB)
+                                    } else {
+                                        Color(0xFF334155)
+                                    },
+                                style = KmiTypography.body,
                                 textAlign = TextAlign.Center,
                                 modifier = Modifier.fillMaxWidth()
                             )
@@ -1670,8 +1697,12 @@ fun ForumScreen(
                                 shape = RoundedCornerShape(999.dp)
                             ) {
                                 Text(
-                                    text = forumTr(isEnglish, "עבור למסך המנוי", "Go to Subscription"),
-                                    fontWeight = FontWeight.Bold
+                                    text = forumTr(
+                                        isEnglish,
+                                        "עבור למסך המנוי",
+                                        "Go to Subscription"
+                                    ),
+                                    style = KmiTypography.action
                                 )
                             }
 
@@ -1683,8 +1714,13 @@ fun ForumScreen(
                                     "ניתן לחזור תמיד למסך זה לאחר רכישת מנוי.",
                                     "You can always return to this screen after purchasing a subscription."
                                 ),
-                                color = if (isDarkMode) Color(0xFF9CA3AF) else Color(0xFF64748B),
-                                style = MaterialTheme.typography.bodySmall,
+                                color =
+                                    if (isDarkMode) {
+                                        Color(0xFF9CA3AF)
+                                    } else {
+                                        Color(0xFF64748B)
+                                    },
+                                style = KmiTypography.caption,
                                 textAlign = TextAlign.Center,
                                 modifier = Modifier.fillMaxWidth()
                             )
@@ -1704,7 +1740,7 @@ fun ForumScreen(
                             "No branch/group was found for this user.\nPlease make sure \"branch\" and \"groupKey\" are set in the profile."
                         ),
                         color = Color(0xFFFF6B6B),
-                        style = MaterialTheme.typography.bodyMedium,
+                        style = KmiTypography.body,
                         textAlign = screenTextAlign,
                         modifier = Modifier.fillMaxWidth()
                     )
@@ -1888,9 +1924,9 @@ fun ForumScreen(
                                         Text(
                                             text = messageAuthorName,
                                             color = textColor.copy(alpha = 0.78f),
-                                            fontSize = 12.sp,
-                                            lineHeight = 14.sp,
-                                            fontWeight = FontWeight.Black,
+                                            style = KmiTypography.caption.copy(
+                                                fontWeight = FontWeight.Black
+                                            ),
                                             textAlign = screenTextAlign,
                                             maxLines = 1,
                                             modifier = Modifier.fillMaxWidth()
@@ -1900,9 +1936,9 @@ fun ForumScreen(
                                             Text(
                                                 text = msg.text,
                                                 color = textColor,
-                                                fontSize = 10.sp,
-                                                lineHeight = 14.sp,
-                                                fontWeight = FontWeight.SemiBold,
+                                                style = KmiTypography.body.copy(
+                                                    fontWeight = FontWeight.SemiBold
+                                                ),
                                                 textAlign = screenTextAlign,
                                                 modifier = Modifier.fillMaxWidth()
                                             )
@@ -1947,16 +1983,29 @@ fun ForumScreen(
                                                                 horizontalAlignment = if (isEnglish) Alignment.Start else Alignment.End
                                                             ) {
                                                                 Text(
-                                                                    text = forumTr(isEnglish, "סרטון מצורף", "Attached video"),
+                                                                    text = forumTr(
+                                                                        isEnglish,
+                                                                        "סרטון מצורף",
+                                                                        "Attached video"
+                                                                    ),
                                                                     color = Color.White,
-                                                                    fontWeight = FontWeight.SemiBold,
+                                                                    style = KmiTypography.body.copy(
+                                                                        fontWeight = FontWeight.SemiBold
+                                                                    ),
                                                                     textAlign = screenTextAlign,
                                                                     modifier = Modifier.fillMaxWidth()
                                                                 )
+
                                                                 Text(
-                                                                    text = forumTr(isEnglish, "לחיצה לפתיחה בנגן", "Tap to open in player"),
-                                                                    color = Color.White.copy(alpha = 0.78f),
-                                                                    style = MaterialTheme.typography.labelSmall,
+                                                                    text = forumTr(
+                                                                        isEnglish,
+                                                                        "לחיצה לפתיחה בנגן",
+                                                                        "Tap to open in player"
+                                                                    ),
+                                                                    color = Color.White.copy(
+                                                                        alpha = 0.78f
+                                                                    ),
+                                                                    style = KmiTypography.caption,
                                                                     textAlign = screenTextAlign,
                                                                     modifier = Modifier.fillMaxWidth()
                                                                 )
@@ -1977,11 +2026,24 @@ fun ForumScreen(
                                                                 }
                                                             ) {
                                                                 Icon(
-                                                                    Icons.Filled.VideoLibrary,
-                                                                    contentDescription = null
+                                                                    imageVector =
+                                                                        Icons.Filled.VideoLibrary,
+                                                                    contentDescription = null,
+                                                                    modifier = Modifier.size(
+                                                                        KmiIconSize.medium
+                                                                    )
                                                                 )
+
                                                                 Spacer(Modifier.width(6.dp))
-                                                                Text(forumTr(isEnglish, "פתח", "Open"))
+
+                                                                Text(
+                                                                    text = forumTr(
+                                                                        isEnglish,
+                                                                        "פתח",
+                                                                        "Open"
+                                                                    ),
+                                                                    style = KmiTypography.action
+                                                                )
                                                             }
                                                         }
                                                     }
@@ -2011,7 +2073,7 @@ fun ForumScreen(
                                                         attachedUri = null
                                                         attachedMediaType = null
                                                     },
-                                                    modifier = Modifier.size(18.dp)
+                                                    modifier = Modifier.size(scaledIconSize(18.dp))
                                                 ) {
                                                     Icon(
                                                         Icons.Filled.Edit,
@@ -2060,7 +2122,7 @@ fun ForumScreen(
                                                                 .await()
                                                         }
                                                     },
-                                                    modifier = Modifier.size(18.dp)
+                                                    modifier = Modifier.size(scaledIconSize(18.dp))
                                                 ) {
                                                     Icon(
                                                         Icons.Filled.Delete,
@@ -2072,9 +2134,13 @@ fun ForumScreen(
                                             }
 
                                             Text(
-                                                text = formatInstant(msg.createdAt),
-                                                style = MaterialTheme.typography.labelSmall,
-                                                color = textColor.copy(alpha = 0.62f),
+                                                text = formatInstant(
+                                                    msg.createdAt
+                                                ),
+                                                style = KmiTypography.caption,
+                                                color = textColor.copy(
+                                                    alpha = 0.62f
+                                                ),
                                                 textAlign = screenTextAlign
                                             )
                                         }
@@ -2136,13 +2202,22 @@ fun ForumScreen(
                                     else -> forumTr(isEnglish, "קובץ מצורף", "Attachment")
                                 },
                                 color = attachmentChipText,
-                                style = MaterialTheme.typography.labelMedium
+                                style = KmiTypography.secondary
                             )
-                            TextButton(onClick = {
-                                attachedUri = null
-                                attachedMediaType = null
-                            }) {
-                                Text(forumTr(isEnglish, "הסר", "Remove"))
+                            TextButton(
+                                onClick = {
+                                    attachedUri = null
+                                    attachedMediaType = null
+                                }
+                            ) {
+                                Text(
+                                    text = forumTr(
+                                        isEnglish,
+                                        "הסר",
+                                        "Remove"
+                                    ),
+                                    style = KmiTypography.action
+                                )
                             }
                         }
                     }
@@ -2181,12 +2256,21 @@ fun ForumScreen(
                         ) {
                             IconButton(
                                 onClick = { imagePicker.launch("image/*") },
-                                modifier = Modifier.size(36.dp)
+                                modifier = Modifier.size(
+                                    scaledIconSize(36.dp)
+                                )
                             ) {
                                 Icon(
-                                    Icons.Outlined.Add,
-                                    contentDescription = forumTr(isEnglish, "צרף תמונה", "Attach image"),
-                                    tint = inputIconTint
+                                    imageVector = Icons.Outlined.Add,
+                                    contentDescription = forumTr(
+                                        isEnglish,
+                                        "צרף תמונה",
+                                        "Attach image"
+                                    ),
+                                    tint = inputIconTint,
+                                    modifier = Modifier.size(
+                                        KmiIconSize.medium
+                                    )
                                 )
                             }
 
@@ -2202,11 +2286,10 @@ fun ForumScreen(
                                 modifier = Modifier
                                     .weight(1f)
                                     .fillMaxHeight(),
-                                textStyle = MaterialTheme.typography.bodyMedium.copy(
+                                textStyle = KmiTypography.body.copy(
                                     color = inputTextColor,
                                     textAlign = screenTextAlign,
-                                    fontWeight = FontWeight.SemiBold,
-                                    lineHeight = 22.sp
+                                    fontWeight = FontWeight.SemiBold
                                 ),
                                 cursorBrush = SolidColor(Color(0xFF25D366)),
                                 singleLine = true,
@@ -2235,9 +2318,7 @@ fun ForumScreen(
                                                 },
                                                 color = inputPlaceholderColor,
                                                 textAlign = screenTextAlign,
-                                                style = MaterialTheme.typography.bodyMedium.copy(
-                                                    lineHeight = 22.sp
-                                                ),
+                                                style = KmiTypography.body,
                                                 modifier = Modifier.fillMaxWidth()
                                             )
                                         }
@@ -2254,12 +2335,21 @@ fun ForumScreen(
 
                             IconButton(
                                 onClick = { videoPicker.launch("video/*") },
-                                modifier = Modifier.size(36.dp)
+                                modifier = Modifier.size(
+                                    scaledIconSize(36.dp)
+                                )
                             ) {
                                 Icon(
-                                    Icons.Filled.VideoLibrary,
-                                    contentDescription = forumTr(isEnglish, "צרף וידאו", "Attach video"),
-                                    tint = inputIconTint
+                                    imageVector = Icons.Filled.VideoLibrary,
+                                    contentDescription = forumTr(
+                                        isEnglish,
+                                        "צרף וידאו",
+                                        "Attach video"
+                                    ),
+                                    tint = inputIconTint,
+                                    modifier = Modifier.size(
+                                        KmiIconSize.medium
+                                    )
                                 )
                             }
                         }
@@ -2278,7 +2368,9 @@ fun ForumScreen(
                         },
                         shape = RoundedCornerShape(999.dp),
                         color = if (canSend) Color(0xFF25D366) else Color(0xFF1F3C33),
-                        modifier = Modifier.size(48.dp),
+                        modifier = Modifier.size(
+                            scaledIconSize(48.dp)
+                        ),
                         tonalElevation = 0.dp,
                         shadowElevation = 2.dp
                     ) {
@@ -2297,7 +2389,10 @@ fun ForumScreen(
                                 } else {
                                     forumTr(isEnglish, "הקלטה", "Voice recording")
                                 },
-                                tint = Color.White
+                                tint = Color.White,
+                                modifier = Modifier.size(
+                                    KmiIconSize.medium
+                                )
                             )
                         }
                     }
@@ -2338,14 +2433,23 @@ fun ForumScreen(
                             ) {
                                 Text(
                                     text = displayName,
-                                    style = MaterialTheme.typography.titleMedium,
-                                    fontWeight = FontWeight.Bold,
+                                    style = KmiTypography.sectionTitle,
+                                    color =
+                                        MaterialTheme.colorScheme.onSurface,
                                     textAlign = screenTextAlign,
                                     modifier = Modifier.fillMaxWidth()
                                 )
+
                                 Text(
-                                    text = if (isEnglish) "(${belt.en})" else "(${belt.heb})",
-                                    style = MaterialTheme.typography.labelMedium,
+                                    text =
+                                        if (isEnglish) {
+                                            "(${belt.en})"
+                                        } else {
+                                            "(${belt.heb})"
+                                        },
+                                    style = KmiTypography.secondary,
+                                    color =
+                                        MaterialTheme.colorScheme.onSurfaceVariant,
                                     textAlign = screenTextAlign,
                                     modifier = Modifier.fillMaxWidth()
                                 )
@@ -2353,18 +2457,30 @@ fun ForumScreen(
 
                             IconButton(
                                 onClick = { isFav = !isFav },
-                                modifier = Modifier.padding(start = 6.dp)
+                                modifier = Modifier
+                                    .padding(start = 6.dp)
+                                    .size(scaledIconSize(36.dp))
                             ) {
                                 if (isFav) {
                                     Icon(
                                         imageVector = Icons.Filled.Star,
-                                        contentDescription = forumTr(isEnglish, "מועדף", "Favorite"),
-                                        tint = Color(0xFFFFC107)
+                                        contentDescription = forumTr(
+                                            isEnglish,
+                                            "מועדף",
+                                            "Favorite"
+                                        ),
+                                        tint = Color(0xFFFFC107),
+                                        modifier = Modifier.size(KmiIconSize.medium)
                                     )
                                 } else {
                                     Icon(
                                         imageVector = Icons.Outlined.StarBorder,
-                                        contentDescription = forumTr(isEnglish, "הוסף למועדפים", "Add to favorites"),
+                                        contentDescription = forumTr(
+                                            isEnglish,
+                                            "הוסף למועדפים",
+                                            "Add to favorites"
+                                        ),
+                                        modifier = Modifier.size(KmiIconSize.medium)
                                     )
                                 }
                             }
@@ -2373,14 +2489,22 @@ fun ForumScreen(
                     text = {
                         Text(
                             text = explanation,
-                            style = MaterialTheme.typography.bodyMedium,
+                            style = KmiTypography.body,
+                            color = MaterialTheme.colorScheme.onSurface,
                             textAlign = screenTextAlign,
                             modifier = Modifier.fillMaxWidth()
                         )
                     },
                     confirmButton = {
                         TextButton(onClick = { pickedKey = null }) {
-                            Text(forumTr(isEnglish, "סגור", "Close"))
+                            Text(
+                                text = forumTr(
+                                    isEnglish,
+                                    "סגור",
+                                    "Close"
+                                ),
+                                style = KmiTypography.action
+                            )
                         }
                     }
                 )
@@ -2466,9 +2590,9 @@ private fun ForumTopCollapseHeader(
                     Text(
                         text = title,
                         color = titleColor,
-                        fontWeight = FontWeight.ExtraBold,
-                        fontSize = 14.sp,
-                        lineHeight = 16.sp,
+                        style = KmiTypography.cardTitle.copy(
+                            fontWeight = FontWeight.ExtraBold
+                        ),
                         textAlign = forumTextAlign(isEnglish),
                         modifier = Modifier.fillMaxWidth(),
                         maxLines = 1
@@ -2495,11 +2619,14 @@ private fun ForumTopCollapseHeader(
                         Text(
                             text = subtitle,
                             color = subtitleColor,
-                            fontSize = 10.sp,
-                            lineHeight = 12.sp,
-                            fontWeight = FontWeight.Bold,
+                            style = KmiTypography.caption.copy(
+                                fontWeight = FontWeight.Bold
+                            ),
                             textAlign = forumTextAlign(isEnglish),
-                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
+                            modifier = Modifier.padding(
+                                horizontal = 10.dp,
+                                vertical = 4.dp
+                            ),
                             maxLines = 1
                         )
                     }
@@ -2522,7 +2649,7 @@ private fun ForumTopCollapseHeader(
                     )
                 ) {
                     Box(
-                        modifier = Modifier.size(30.dp),
+                        modifier = Modifier.size(scaledIconSize(30.dp)),
                         contentAlignment = Alignment.Center
                     ) {
                         Text(
@@ -2597,9 +2724,9 @@ private fun ForumControlsMiniHandle(
                 Text(
                     text = text,
                     color = textColor,
-                    fontSize = 11.sp,
-                    lineHeight = 13.sp,
-                    fontWeight = FontWeight.Bold,
+                    style = KmiTypography.caption.copy(
+                        fontWeight = FontWeight.Bold
+                    ),
                     textAlign = forumTextAlign(isEnglish),
                     maxLines = 1
                 )
@@ -2856,15 +2983,20 @@ private fun ForumPremiumControlCard(
                     ) {
                         participants.forEach { p ->
                             Text(
-                                text = if (p.isMe) {
-                                    if (isEnglish) "${p.name} (me)" else "${p.name} (אני)"
-                                } else {
-                                    p.name
-                                },
+                                text =
+                                    if (p.isMe) {
+                                        if (isEnglish) {
+                                            "${p.name} (me)"
+                                        } else {
+                                            "${p.name} (אני)"
+                                        }
+                                    } else {
+                                        p.name
+                                    },
                                 color = participantsText,
-                                fontSize = 12.sp,
-                                lineHeight = 14.sp,
-                                fontWeight = FontWeight.Medium,
+                                style = KmiTypography.secondary.copy(
+                                    fontWeight = FontWeight.Medium
+                                ),
                                 textAlign = forumTextAlign(isEnglish),
                                 modifier = Modifier.fillMaxWidth()
                             )
@@ -2949,7 +3081,7 @@ private fun ForumPremiumControlRow(
         horizontalArrangement = Arrangement.spacedBy(9.dp)
     ) {
         Surface(
-            modifier = Modifier.size(34.dp),
+            modifier = Modifier.size(scaledIconSize(34.dp)),
             shape = RoundedCornerShape(14.dp),
             color = accentColor.copy(alpha = if (isDarkMode) 0.18f else 0.11f),
             border = BorderStroke(
@@ -3021,7 +3153,7 @@ private fun ForumPremiumControlRow(
         }
 
         Surface(
-            modifier = Modifier.size(30.dp),
+            modifier = Modifier.size(scaledIconSize(30.dp)),
             shape = RoundedCornerShape(13.dp),
             color = if (enabled) {
                 accentColor.copy(alpha = if (isDarkMode) 0.18f else 0.10f)
@@ -3098,7 +3230,7 @@ private fun ForumPremiumInlineDropdown(
                     imageVector = Icons.Filled.KeyboardArrowDown,
                     contentDescription = null,
                     tint = accentColor,
-                    modifier = Modifier.size(18.dp)
+                    modifier = Modifier.size(scaledIconSize(18.dp))
                 )
 
                 Text(
@@ -3216,7 +3348,7 @@ private fun ForumRoomPickerCard(
                                 imageVector = Icons.Filled.KeyboardArrowDown,
                                 contentDescription = null,
                                 tint = textColor.copy(alpha = 0.72f),
-                                modifier = Modifier.size(18.dp)
+                                modifier = Modifier.size(scaledIconSize(18.dp))
                             )
 
                             Text(
@@ -3286,7 +3418,7 @@ private fun ForumRoomPickerCard(
                                 imageVector = Icons.Filled.KeyboardArrowDown,
                                 contentDescription = null,
                                 tint = textColor.copy(alpha = 0.72f),
-                                modifier = Modifier.size(18.dp)
+                                modifier = Modifier.size(scaledIconSize(18.dp))
                             )
 
                             Text(
@@ -3382,14 +3514,14 @@ private fun EmptyForumRoomCard(
                 )
             ) {
                 Box(
-                    modifier = Modifier.size(50.dp),
+                    modifier = Modifier.size(scaledIconSize(50.dp)),
                     contentAlignment = Alignment.Center
                 ) {
                     Icon(
                         imageVector = Icons.Filled.Info,
                         contentDescription = null,
                         tint = if (isDarkMode) Color(0xFFBFDBFE) else Color(0xFF0284C7),
-                        modifier = Modifier.size(26.dp)
+                        modifier = Modifier.size(scaledIconSize(26.dp))
                     )
                 }
             }
@@ -3400,9 +3532,13 @@ private fun EmptyForumRoomCard(
                     "אין עדיין הודעות בחדר הזה",
                     "No messages in this room yet"
                 ),
-                color = if (isDarkMode) Color(0xFFE9EDEF) else Color(0xFF0F172A),
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold,
+                color =
+                    if (isDarkMode) {
+                        Color(0xFFE9EDEF)
+                    } else {
+                        Color(0xFF0F172A)
+                    },
+                style = KmiTypography.sectionTitle,
                 textAlign = TextAlign.Center,
                 modifier = Modifier.fillMaxWidth()
             )
@@ -3413,8 +3549,13 @@ private fun EmptyForumRoomCard(
                     "הפורום מחובר לשרת. הודעות שתשלחו כאן יישמרו בחדר הקבוצה ויופיעו לכל המשתתפים המורשים.",
                     "This forum is connected to the server. Messages sent here will be saved in the group room and shown to authorized participants."
                 ),
-                color = if (isDarkMode) Color(0xFFBFC8CD) else Color(0xFF475569),
-                style = MaterialTheme.typography.bodySmall,
+                color =
+                    if (isDarkMode) {
+                        Color(0xFFBFC8CD)
+                    } else {
+                        Color(0xFF475569)
+                    },
+                style = KmiTypography.caption,
                 textAlign = align,
                 modifier = Modifier.fillMaxWidth()
             )
@@ -3425,9 +3566,15 @@ private fun EmptyForumRoomCard(
                     "סניף: ${branch.ifBlank { "—" }}  •  קבוצה: ${groupKey.ifBlank { "—" }}",
                     "Branch: ${branch.ifBlank { "—" }}  •  Group: ${groupKey.ifBlank { "—" }}"
                 ),
-                color = if (isDarkMode) Color(0xFF93C5FD) else Color(0xFF2563EB),
-                style = MaterialTheme.typography.labelMedium,
-                fontWeight = FontWeight.SemiBold,
+                color =
+                    if (isDarkMode) {
+                        Color(0xFF93C5FD)
+                    } else {
+                        Color(0xFF2563EB)
+                    },
+                style = KmiTypography.secondary.copy(
+                    fontWeight = FontWeight.SemiBold
+                ),
                 textAlign = align,
                 modifier = Modifier.fillMaxWidth()
             )

@@ -34,7 +34,10 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import il.kmi.app.ui.KmiIconSize
 import il.kmi.app.ui.KmiTopBar
+import il.kmi.app.ui.KmiTypography
+import il.kmi.app.ui.scaledIconSize
 
 //==============================================================
 
@@ -162,9 +165,8 @@ private fun PaymentHeaderCard(
                 } else {
                     "דשבורד תשלומים פרימיום למתאמנים ולמנהלים"
                 },
-                style = MaterialTheme.typography.titleMedium,
+                style = KmiTypography.sectionTitle,
                 color = MaterialTheme.colorScheme.onSurface,
-                fontWeight = FontWeight.Bold,
                 textAlign = textAlign,
                 modifier = Modifier.fillMaxWidth()
             )
@@ -175,11 +177,10 @@ private fun PaymentHeaderCard(
                 } else {
                     "מעקב אחר סטטוס תשלום, אחוז גבייה, מתאמנים ששילמו ומתאמנים שטרם שילמו."
                 },
-                style = MaterialTheme.typography.bodySmall,
+                style = KmiTypography.secondary,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 textAlign = textAlign,
-                modifier = Modifier.fillMaxWidth(),
-                lineHeight = MaterialTheme.typography.bodySmall.lineHeight
+                modifier = Modifier.fillMaxWidth()
             )
         }
     }
@@ -208,7 +209,7 @@ private fun MembershipStatusCard(
         ) {
             Box(
                 modifier = Modifier
-                    .size(44.dp)
+                    .size(scaledIconSize(44.dp))
                     .background(
                         color = MaterialTheme.colorScheme.primary.copy(alpha = 0.12f),
                         shape = RoundedCornerShape(14.dp)
@@ -218,21 +219,21 @@ private fun MembershipStatusCard(
                 Icon(
                     imageVector = Icons.Default.VerifiedUser,
                     contentDescription = null,
-                    tint = MaterialTheme.colorScheme.primary
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(KmiIconSize.medium)
                 )
             }
 
             Text(
                 text = title,
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold,
+                style = KmiTypography.sectionTitle,
                 textAlign = if (isEnglish) TextAlign.Left else TextAlign.Right,
                 modifier = Modifier.fillMaxWidth()
             )
 
             Text(
                 text = status,
-                style = MaterialTheme.typography.bodyMedium,
+                style = KmiTypography.body,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 textAlign = if (isEnglish) TextAlign.Left else TextAlign.Right,
                 modifier = Modifier.fillMaxWidth()
@@ -244,7 +245,7 @@ private fun MembershipStatusCard(
                 } else {
                     "לאחר אישור תשלום, הסטטוס יתעדכן אוטומטית."
                 },
-                style = MaterialTheme.typography.bodySmall,
+                style = KmiTypography.secondary,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 textAlign = if (isEnglish) TextAlign.Left else TextAlign.Right,
                 modifier = Modifier.fillMaxWidth()
@@ -278,7 +279,7 @@ private fun PaymentRow(
         ) {
             Box(
                 modifier = Modifier
-                    .size(40.dp)
+                    .size(scaledIconSize(40.dp))
                     .background(
                         color = MaterialTheme.colorScheme.primary.copy(alpha = 0.10f),
                         shape = RoundedCornerShape(12.dp)
@@ -288,7 +289,8 @@ private fun PaymentRow(
                 Icon(
                     imageVector = Icons.Default.CreditCard,
                     contentDescription = null,
-                    tint = MaterialTheme.colorScheme.primary
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(KmiIconSize.medium)
                 )
             }
 
@@ -300,19 +302,25 @@ private fun PaymentRow(
             ) {
                 Text(
                     text = title,
-                    style = MaterialTheme.typography.titleMedium
+                    style = KmiTypography.cardTitle
                 )
+
                 Text(
                     text = subtitle,
-                    style = MaterialTheme.typography.bodySmall,
+                    style = KmiTypography.secondary,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
 
             Icon(
-                imageVector = if (isEnglish) Icons.Default.ChevronRight else Icons.Default.ChevronLeft,
+                imageVector = if (isEnglish) {
+                    Icons.Default.ChevronRight
+                } else {
+                    Icons.Default.ChevronLeft
+                },
                 contentDescription = null,
-                tint = MaterialTheme.colorScheme.onSurfaceVariant
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.size(KmiIconSize.medium)
             )
         }
     }
