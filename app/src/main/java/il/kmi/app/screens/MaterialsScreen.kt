@@ -61,7 +61,9 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.border
 import androidx.compose.ui.unit.Dp
 import il.kmi.app.ui.color
+import il.kmi.app.ui.KmiIconSize
 import il.kmi.app.ui.KmiTypography
+import il.kmi.app.ui.scaledIconSize
 import il.kmi.app.ui.dialogs.ExerciseExplanationDialog
 import il.kmi.app.ui.dialogs.ExerciseNoteEditorDialog
 import il.kmi.shared.localization.AppLanguage
@@ -129,7 +131,7 @@ private fun BeltPill(
             Image(
                 painter = painterResource(id = beltDrawableRes(belt)),
                 contentDescription = null,
-                modifier = Modifier.size(22.dp),
+                modifier = Modifier.size(KmiIconSize.medium),
                 contentScale = ContentScale.Fit
             )
         }
@@ -137,14 +139,32 @@ private fun BeltPill(
 }
 
 @Composable
-private fun premiumSurfaceGradientForBelt(belt: Belt): Brush {
-    return Brush.verticalGradient(
-        colors = listOf(
-            Color.White.copy(alpha = 0.98f),
-            belt.color.copy(alpha = 0.10f),
-            Color.White.copy(alpha = 0.94f)
-        )
-    )
+private fun premiumSurfaceGradientForBelt(
+    belt: Belt
+): Brush {
+    val isDarkMode =
+        MaterialTheme.colorScheme.surface.luminance() < 0.5f
+
+    val colors =
+        if (isDarkMode) {
+            listOf(
+                MaterialTheme.colorScheme.surface.copy(
+                    alpha = 0.98f
+                ),
+                belt.color.copy(alpha = 0.18f),
+                MaterialTheme.colorScheme.surfaceVariant.copy(
+                    alpha = 0.96f
+                )
+            )
+        } else {
+            listOf(
+                Color.White.copy(alpha = 0.98f),
+                belt.color.copy(alpha = 0.10f),
+                Color.White.copy(alpha = 0.94f)
+            )
+        }
+
+    return Brush.verticalGradient(colors = colors)
 }
 
 @Composable
@@ -1324,17 +1344,19 @@ fun MaterialsScreen(
                     modifier = Modifier
                         .fillMaxWidth()
                         .background(
-                            brush = Brush.verticalGradient(
-                                colors = listOf(
-                                    Color.White.copy(alpha = 0.96f),
-                                    belt.color.copy(alpha = 0.10f),
-                                    Color.White.copy(alpha = 0.94f)
-                                )
+                            brush = premiumSurfaceGradientForBelt(
+                                belt = belt
                             )
                         )
                         .border(
                             width = 1.dp,
-                            color = belt.color.copy(alpha = 0.14f)
+                            color = belt.color.copy(
+                                alpha = if (isDarkSurface) {
+                                    0.30f
+                                } else {
+                                    0.14f
+                                }
+                            )
                         )
                 ) {
                     Column(
@@ -1563,8 +1585,18 @@ fun MaterialsScreen(
                     modifier = Modifier
                         .weight(1f)
                         .fillMaxWidth()
-                        .background(belt.lightColor)
-                        .padding(top = 4.dp, start = 12.dp, end = 12.dp)
+                        .background(
+                            if (isDarkSurface) {
+                                MaterialTheme.colorScheme.background
+                            } else {
+                                belt.lightColor
+                            }
+                        )
+                        .padding(
+                            top = 4.dp,
+                            start = 12.dp,
+                            end = 12.dp
+                        )
                 ) {
                     Column(
                         modifier = Modifier
@@ -1587,7 +1619,12 @@ fun MaterialsScreen(
                                     style = KmiTypography.caption.copy(
                                         fontWeight = FontWeight.SemiBold
                                     ),
-                                    color = Color(0xFF5B6472),
+                                    color =
+                                        if (isDarkSurface) {
+                                            MaterialTheme.colorScheme.onSurfaceVariant
+                                        } else {
+                                            Color(0xFF5B6472)
+                                        },
                                     textAlign = TextAlign.Center,
                                     modifier = Modifier
                                         .fillMaxWidth()
@@ -1734,18 +1771,34 @@ fun MaterialsScreen(
                                 Surface(
                                     modifier = Modifier
                                         .fillMaxWidth()
-                                        .height(90.dp)
-                                        .padding(horizontal = 8.dp, vertical = 6.dp)
+                                        .heightIn(min = 90.dp)
+                                        .padding(
+                                            horizontal = 8.dp,
+                                            vertical = 6.dp
+                                        )
                                         .clickable {
                                             openedNestedSubTopic = nestedTitle
                                         },
                                     shape = RoundedCornerShape(20.dp),
-                                    color = Color.White.copy(alpha = 0.92f),
+                                    color =
+                                        if (isDarkSurface) {
+                                            MaterialTheme.colorScheme.surfaceVariant
+                                                .copy(alpha = 0.96f)
+                                        } else {
+                                            Color.White.copy(alpha = 0.92f)
+                                        },
                                     tonalElevation = 2.dp,
                                     shadowElevation = 3.dp,
                                     border = BorderStroke(
                                         width = 1.dp,
-                                        color = belt.color.copy(alpha = 0.35f)
+                                        color = belt.color.copy(
+                                            alpha =
+                                                if (isDarkSurface) {
+                                                    0.55f
+                                                } else {
+                                                    0.35f
+                                                }
+                                        )
                                     )
                                 ) {
                                     CompositionLocalProvider(
@@ -1774,7 +1827,12 @@ fun MaterialsScreen(
                                                     } else {
                                                         TextAlign.Right
                                                     },
-                                                color = Color(0xFF1F2937),
+                                                color =
+                                                    if (isDarkSurface) {
+                                                        MaterialTheme.colorScheme.onSurface
+                                                    } else {
+                                                        Color(0xFF1F2937)
+                                                    },
                                                 maxLines = 2,
                                                 overflow = TextOverflow.Ellipsis,
                                                 modifier = Modifier.weight(1f)
@@ -1842,7 +1900,12 @@ fun MaterialsScreen(
                                         ) {
                                             Surface(
                                                 modifier = Modifier.fillMaxWidth(),
-                                                color = belt.lightColor,
+                                                color =
+                                                    if (isDarkSurface) {
+                                                        MaterialTheme.colorScheme.surface
+                                                    } else {
+                                                        belt.lightColor
+                                                    },
                                                 tonalElevation = 0.dp,
                                                 shadowElevation = 0.dp
                                             ) {
@@ -1855,7 +1918,11 @@ fun MaterialsScreen(
                                                     modifier = Modifier
                                                         .fillMaxWidth()
                                                         .background(
-                                                            belt.lightColor
+                                                            if (isDarkSurface) {
+                                                                MaterialTheme.colorScheme.surface
+                                                            } else {
+                                                                belt.lightColor
+                                                            }
                                                         )
                                                         .padding(
                                                             start = 8.dp,
@@ -1871,7 +1938,12 @@ fun MaterialsScreen(
                                                         },
                                                     style =
                                                         KmiTypography.cardTitle,
-                                                    color = belt.color
+                                                    color =
+                                                        if (isDarkSurface) {
+                                                            MaterialTheme.colorScheme.primary
+                                                        } else {
+                                                            belt.color
+                                                        }
                                                 )
                                             }
                                         }
@@ -2002,9 +2074,20 @@ fun MaterialsScreen(
                                                                     "מס׳ ${index + 1}"
                                                                 },
                                                                 containerColor = belt.color.copy(
-                                                                    alpha = 0.14f
+                                                                    alpha =
+                                                                        if (isDarkSurface) {
+                                                                            0.28f
+                                                                        } else {
+                                                                            0.14f
+                                                                        }
                                                                 ),
-                                                                contentColor = Color(0xFF1F2937)
+                                                                contentColor =
+                                                                    if (isDarkSurface) {
+                                                                        MaterialTheme.colorScheme
+                                                                            .onSurface
+                                                                    } else {
+                                                                        Color(0xFF1F2937)
+                                                                    }
                                                             )
 
                                                             Spacer(Modifier.width(6.dp))
@@ -2065,8 +2148,20 @@ fun MaterialsScreen(
                                                                     } else {
                                                                         "מוחרג"
                                                                     },
-                                                                    containerColor = Color(0xFFE5E7EB),
-                                                                    contentColor = Color(0xFF6B7280)
+                                                                    containerColor =
+                                                                        if (isDarkSurface) {
+                                                                            MaterialTheme.colorScheme
+                                                                                .surfaceVariant
+                                                                        } else {
+                                                                            Color(0xFFE5E7EB)
+                                                                        },
+                                                                    contentColor =
+                                                                        if (isDarkSurface) {
+                                                                            MaterialTheme.colorScheme
+                                                                                .onSurfaceVariant
+                                                                        } else {
+                                                                            Color(0xFF6B7280)
+                                                                        }
                                                                 )
                                                             }
 
@@ -2114,17 +2209,26 @@ fun MaterialsScreen(
                                                             color =
                                                                 when {
                                                                     isExcluded ->
-                                                                        Color.Gray
+                                                                        MaterialTheme.colorScheme
+                                                                            .onSurfaceVariant
+                                                                            .copy(alpha = 0.55f)
 
                                                                     isHighlighted ->
-                                                                        belt.color.copy(
-                                                                            alpha = 0.95f
-                                                                        )
+                                                                        if (isDarkSurface) {
+                                                                            MaterialTheme.colorScheme
+                                                                                .primary
+                                                                        } else {
+                                                                            belt.color.copy(
+                                                                                alpha = 0.95f
+                                                                            )
+                                                                        }
+
+                                                                    isDarkSurface ->
+                                                                        MaterialTheme.colorScheme
+                                                                            .onSurface
 
                                                                     else ->
-                                                                        Color(
-                                                                            0xFF111827
-                                                                        )
+                                                                        Color(0xFF111827)
                                                                 },
                                                             style =
                                                                 KmiTypography.body.copy(
@@ -3001,7 +3105,9 @@ private fun CoachMaterialStatusSelector(
                     width = 1.dp,
                     color = Color.White.copy(alpha = 0.35f)
                 ),
-                modifier = Modifier.size(38.dp)
+                modifier = Modifier.size(
+                    scaledIconSize(38.dp)
+                )
             ) {
                 Box(
                     modifier = Modifier.fillMaxSize(),
@@ -3009,10 +3115,10 @@ private fun CoachMaterialStatusSelector(
                 ) {
                     Text(
                         text = statusSymbol,
+                        style = KmiTypography.metric.copy(
+                            fontWeight = FontWeight.ExtraBold
+                        ),
                         color = Color.White,
-                        fontWeight = FontWeight.ExtraBold,
-                        fontSize = 22.sp,
-                        lineHeight = 24.sp,
                         textAlign = TextAlign.Center
                     )
                 }
@@ -3036,7 +3142,7 @@ private fun CoachMaterialStatusSelector(
                 style = KmiTypography.caption.copy(
                     fontWeight = FontWeight.Medium
                 ),
-                color = Color(0xFF6B7280),
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
                 textAlign = TextAlign.Center,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
@@ -3154,10 +3260,13 @@ private fun CompactDropdownAction(
     text: String,
     isEnglish: Boolean,
     enabled: Boolean = true,
-    textColor: Color = Color(0xFF1F2937),
+    textColor: Color? = null,
     fontWeight: FontWeight = FontWeight.SemiBold,
     onClick: () -> Unit
 ) {
+    val resolvedTextColor =
+        textColor ?: MaterialTheme.colorScheme.onSurface
+
     CompositionLocalProvider(
         LocalLayoutDirection provides if (isEnglish) LayoutDirection.Ltr else LayoutDirection.Rtl
     ) {
@@ -3181,9 +3290,10 @@ private fun CompactDropdownAction(
                 ),
                 color =
                     if (enabled) {
-                        textColor
+                        resolvedTextColor
                     } else {
-                        Color(0xFF6B7280)
+                        MaterialTheme.colorScheme.onSurfaceVariant
+                            .copy(alpha = 0.65f)
                     },
                 textAlign =
                     if (isEnglish) {
@@ -3210,6 +3320,17 @@ private fun ItemFloatingActions(
     onEditNote: () -> Unit
 ) {
     val context = LocalContext.current
+
+    val isDarkMode =
+        MaterialTheme.colorScheme.surface.luminance() < 0.5f
+
+    val dropdownContainerColor =
+        if (isDarkMode) {
+            MaterialTheme.colorScheme.surfaceVariant
+        } else {
+            Color(0xFFF7F5FB)
+        }
+
     val sp = remember {
         context.getSharedPreferences(
             "kmi_settings",
@@ -3249,7 +3370,9 @@ private fun ItemFloatingActions(
                 Color.White.copy(alpha = 0.22f)
             ),
             modifier = Modifier
-                .size(27.dp)
+                .size(
+                    scaledIconSize(27.dp)
+                )
                 .graphicsLayer {
                     scaleX = infoScale
                     scaleY = infoScale
@@ -3261,9 +3384,10 @@ private fun ItemFloatingActions(
             ) {
                 Text(
                     text = "i",
+                    style = KmiTypography.body.copy(
+                        fontWeight = FontWeight.ExtraBold
+                    ),
                     color = Color.White,
-                    style = MaterialTheme.typography.bodyMedium,
-                    fontWeight = FontWeight.ExtraBold,
                     modifier = Modifier.graphicsLayer {
                         rotationZ = infoRotation
                     }
@@ -3275,21 +3399,32 @@ private fun ItemFloatingActions(
             expanded = expanded,
             onDismissRequest = { expanded = false },
             shape = RoundedCornerShape(22.dp),
-            containerColor = Color(0xFFF7F5FB),
+            containerColor = dropdownContainerColor,
             tonalElevation = 0.dp,
             shadowElevation = 8.dp,
             border = BorderStroke(
                 1.dp,
-                MaterialTheme.colorScheme.primary.copy(alpha = 0.14f)
+                MaterialTheme.colorScheme.primary.copy(
+                    alpha = if (isDarkMode) 0.32f else 0.14f
+                )
             ),
             modifier = Modifier
                 .background(
                     brush = Brush.verticalGradient(
-                        colors = listOf(
-                            Color(0xFFF9F8FC),
-                            Color(0xFFF3F0FA),
-                            Color(0xFFF7F5FB)
-                        )
+                        colors =
+                            if (isDarkMode) {
+                                listOf(
+                                    MaterialTheme.colorScheme.surfaceVariant,
+                                    MaterialTheme.colorScheme.surface,
+                                    MaterialTheme.colorScheme.surfaceVariant
+                                )
+                            } else {
+                                listOf(
+                                    Color(0xFFF9F8FC),
+                                    Color(0xFFF3F0FA),
+                                    Color(0xFFF7F5FB)
+                                )
+                            }
                     ),
                     shape = RoundedCornerShape(22.dp)
                 )

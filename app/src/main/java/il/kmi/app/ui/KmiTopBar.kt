@@ -577,6 +577,19 @@ fun KmiTopBar(
     // לכן לא צריך לתת לו גובה מרכזי גדול בכותרת.
     val topBarHeight = if (shouldShowRolePillBelowTitle) 68.dp else 64.dp
 
+    /*
+     * צבעי הכותרת מגיעים מערכת הנושא הפעילה,
+     * כדי שכל המסכים יתאימו אוטומטית למצב בהיר וכהה.
+     */
+    val topBarContainerColor =
+        MaterialTheme.colorScheme.surface
+
+    val topBarTitleColor =
+        MaterialTheme.colorScheme.onSurface
+
+    val topBarDividerColor =
+        MaterialTheme.colorScheme.outline.copy(alpha = 0.45f)
+
     // ✅ טור האייקונים נפתח כ-overlay מעל המסך,
     // לכן ה-TopBar עצמו נשאר בגובה הכותרת בלבד.
     val quickActionsWidth = 68.dp
@@ -631,7 +644,7 @@ fun KmiTopBar(
                 .height(topBarHeight),
             shadowElevation = 0.dp,
             tonalElevation = 0.dp,
-            color = Color.White
+            color = topBarContainerColor
         ) {}
 
         CenterAlignedTopAppBar(
@@ -705,11 +718,13 @@ fun KmiTopBar(
             },
 
             colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
-                containerColor = Color.White,
-                scrolledContainerColor = Color.White,
-                titleContentColor = Ink900,
-                navigationIconContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                actionIconContentColor = MaterialTheme.colorScheme.onSurfaceVariant
+                containerColor = topBarContainerColor,
+                scrolledContainerColor = topBarContainerColor,
+                titleContentColor = topBarTitleColor,
+                navigationIconContentColor =
+                    MaterialTheme.colorScheme.onSurfaceVariant,
+                actionIconContentColor =
+                    MaterialTheme.colorScheme.onSurfaceVariant
             )
         )
 
@@ -734,7 +749,7 @@ fun KmiTopBar(
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
                 textAlign = TextAlign.Center,
-                color = Color(0xFF111827),
+                color = topBarTitleColor,
                 modifier = Modifier.fillMaxWidth()
             )
         }
@@ -809,7 +824,7 @@ fun KmiTopBar(
                 .fillMaxWidth()
                 .height(1.2.dp)
                 .zIndex(91f)
-                .background(Color(0x33000000))
+                .background(topBarDividerColor)
         )
 
         val ttsHandler: () -> Unit = onTts ?: { /* no-op */ }

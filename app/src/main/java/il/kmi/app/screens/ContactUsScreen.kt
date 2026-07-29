@@ -56,7 +56,11 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.foundation.layout.size
 import il.kmi.app.ui.KmiTopBar
+import il.kmi.app.ui.KmiIconSize
+import il.kmi.app.ui.KmiTypography
 import il.kmi.shared.localization.AppLanguage
 import il.kmi.shared.localization.AppLanguageManager
 import com.google.firebase.auth.FirebaseAuth
@@ -251,7 +255,43 @@ fun ContactUsScreen(
     } else {
         "השאירו פרטים ונציג העמותה יחזור אליכם"
     }
-    val sendText = if (effectiveEnglish) "Send Request" else "שלח פנייה"
+    val sendText =
+        if (effectiveEnglish) "Send Request" else "שלח פנייה"
+
+    val isDarkMode = isSystemInDarkTheme()
+
+    val screenGradientColors =
+        if (isDarkMode) {
+            listOf(
+                Color(0xFF090D18),
+                Color(0xFF101827),
+                Color(0xFF13263A),
+                Color(0xFF123B58),
+                Color(0xFF062B4A)
+            )
+        } else {
+            listOf(
+                Color(0xFFF8FBFF),
+                Color(0xFFEAF4FF),
+                Color(0xFFB7DDF7),
+                Color(0xFF1F78B4),
+                Color(0xFF062B4A)
+            )
+        }
+
+    val cardContainerColor =
+        if (isDarkMode) {
+            MaterialTheme.colorScheme.surface
+        } else {
+            Color(0xFFEAF2FF)
+        }
+
+    val innerContainerColor =
+        if (isDarkMode) {
+            MaterialTheme.colorScheme.surfaceVariant
+        } else {
+            Color.White
+        }
 
     val isFormValid =
         fullName.isNotBlank() &&
@@ -302,13 +342,7 @@ fun ContactUsScreen(
                 .fillMaxSize()
                 .background(
                     Brush.verticalGradient(
-                        colors = listOf(
-                            Color(0xFFF8FBFF),
-                            Color(0xFFEAF4FF),
-                            Color(0xFFB7DDF7),
-                            Color(0xFF1F78B4),
-                            Color(0xFF062B4A)
-                        )
+                        colors = screenGradientColors
                     )
                 )
         ) {
@@ -336,7 +370,8 @@ fun ContactUsScreen(
                             modifier = Modifier.fillMaxWidth(),
                             shape = RoundedCornerShape(24.dp),
                             colors = CardDefaults.cardColors(
-                                containerColor = Color(0xFFEAF2FF)
+                                containerColor = cardContainerColor,
+                                contentColor = MaterialTheme.colorScheme.onSurface
                             ),
                             elevation = CardDefaults.cardElevation(
                                 defaultElevation = 8.dp,
@@ -352,20 +387,30 @@ fun ContactUsScreen(
                             ) {
                                 Text(
                                     text = subtitle,
-                                    style = MaterialTheme.typography.bodyLarge.copy(
+                                    style = KmiTypography.cardTitle.copy(
                                         fontWeight = FontWeight.ExtraBold
                                     ),
-                                    color = Color(0xFF1E2A3D),
-                                    textAlign = if (effectiveEnglish) TextAlign.Start else TextAlign.Right,
+                                    color = MaterialTheme.colorScheme.onSurface,
+                                    textAlign =
+                                        if (effectiveEnglish) {
+                                            TextAlign.Start
+                                        } else {
+                                            TextAlign.Right
+                                        },
                                     modifier = Modifier.fillMaxWidth()
                                 )
 
-                                HorizontalDivider(color = Color(0xFFBFD0E8))
+                                HorizontalDivider(
+                                    color = MaterialTheme.colorScheme.outline.copy(
+                                        alpha = 0.28f
+                                    )
+                                )
 
                                 Surface(
                                     modifier = Modifier.fillMaxWidth(),
                                     shape = RoundedCornerShape(16.dp),
-                                    color = Color.White
+                                    color = innerContainerColor,
+                                    contentColor = MaterialTheme.colorScheme.onSurface
                                 ) {
                                     Box(
                                         modifier = Modifier
@@ -376,9 +421,15 @@ fun ContactUsScreen(
                                             imageVector = Icons.Default.SupportAgent,
                                             contentDescription = null,
                                             tint = MaterialTheme.colorScheme.primary,
-                                            modifier = Modifier.align(
-                                                if (effectiveEnglish) Alignment.CenterStart else Alignment.CenterEnd
-                                            )
+                                            modifier = Modifier
+                                                .align(
+                                                    if (effectiveEnglish) {
+                                                        Alignment.CenterStart
+                                                    } else {
+                                                        Alignment.CenterEnd
+                                                    }
+                                                )
+                                                .size(KmiIconSize.medium)
                                         )
 
                                         Text(
@@ -387,10 +438,10 @@ fun ContactUsScreen(
                                             } else {
                                                 "נציג מטעם ק.מ.י יחזור אליכם בהקדם."
                                             },
-                                            style = MaterialTheme.typography.bodyMedium.copy(
+                                            style = KmiTypography.body.copy(
                                                 fontWeight = FontWeight.Bold
                                             ),
-                                            color = Color(0xFF1E2A3D),
+                                            color = MaterialTheme.colorScheme.onSurface,
                                             textAlign = if (effectiveEnglish) TextAlign.Start else TextAlign.Right,
                                             modifier = Modifier
                                                 .fillMaxWidth()
@@ -409,13 +460,14 @@ fun ContactUsScreen(
                     visible = true,
                     enter = fadeIn() + slideInVertically { it / 4 }
                 ) {
-                    Card(
-                        modifier = Modifier.fillMaxWidth(),
-                        shape = MaterialTheme.shapes.extraLarge,
-                        colors = CardDefaults.cardColors(
-                            containerColor = Color(0xFFEAF2FF)
-                        ),
-                        elevation = CardDefaults.cardElevation(
+                        Card(
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = MaterialTheme.shapes.extraLarge,
+                            colors = CardDefaults.cardColors(
+                                containerColor = cardContainerColor,
+                                contentColor = MaterialTheme.colorScheme.onSurface
+                            ),
+                            elevation = CardDefaults.cardElevation(
                             defaultElevation = 10.dp,
                             pressedElevation = 4.dp
                         )
@@ -433,9 +485,13 @@ fun ContactUsScreen(
                                 singleLine = true,
                                 label = { contactFieldLabel(if (effectiveEnglish) "Full Name" else "שם מלא") },
                                 leadingIcon = {
-                                    Icon(Icons.Default.Person, contentDescription = null)
+                                    Icon(
+                                        imageVector = Icons.Default.Person,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(KmiIconSize.medium)
+                                    )
                                 },
-                                textStyle = MaterialTheme.typography.bodyLarge.copy(
+                                textStyle = KmiTypography.body.copy(
                                     textAlign = if (effectiveEnglish) TextAlign.Start else TextAlign.End
                                 ),
                                 colors = contactFieldColors()
@@ -448,10 +504,18 @@ fun ContactUsScreen(
                                 singleLine = true,
                                 label = { contactFieldLabel(if (effectiveEnglish) "Phone Number" else "טלפון") },
                                 leadingIcon = {
-                                    Icon(Icons.Default.Phone, contentDescription = null)
+                                    Icon(
+                                        imageVector = Icons.Default.Phone,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(
+                                            KmiIconSize.medium
+                                        )
+                                    )
                                 },
-                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
-                                textStyle = MaterialTheme.typography.bodyLarge.copy(
+                                keyboardOptions = KeyboardOptions(
+                                    keyboardType = KeyboardType.Phone
+                                ),
+                                textStyle = KmiTypography.body.copy(
                                     textAlign = if (effectiveEnglish) TextAlign.Start else TextAlign.End
                                 ),
                                 colors = contactFieldColors()
@@ -464,10 +528,18 @@ fun ContactUsScreen(
                                 singleLine = true,
                                 label = { contactFieldLabel(if (effectiveEnglish) "Email" else "אימייל") },
                                 leadingIcon = {
-                                    Icon(Icons.Default.Email, contentDescription = null)
+                                    Icon(
+                                        imageVector = Icons.Default.Email,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(
+                                            KmiIconSize.medium
+                                        )
+                                    )
                                 },
-                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
-                                textStyle = MaterialTheme.typography.bodyLarge.copy(
+                                keyboardOptions = KeyboardOptions(
+                                    keyboardType = KeyboardType.Email
+                                ),
+                                textStyle = KmiTypography.body.copy(
                                     textAlign = if (effectiveEnglish) TextAlign.Start else TextAlign.End
                                 ),
                                 colors = contactFieldColors()
@@ -480,14 +552,25 @@ fun ContactUsScreen(
                                 singleLine = true,
                                 label = {
                                     contactFieldLabel(
-                                        text = if (effectiveEnglish) "Subject" else "נושא הפנייה",
-                                        color = Color(0xFF5E6C80)
+                                        text =
+                                            if (effectiveEnglish) {
+                                                "Subject"
+                                            } else {
+                                                "נושא הפנייה"
+                                            }
                                     )
                                 },
                                 leadingIcon = {
-                                    Icon(Icons.AutoMirrored.Filled.Message, contentDescription = null)
+                                    Icon(
+                                        imageVector =
+                                            Icons.AutoMirrored.Filled.Message,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(
+                                            KmiIconSize.medium
+                                        )
+                                    )
                                 },
-                                textStyle = MaterialTheme.typography.bodyLarge.copy(
+                                textStyle = KmiTypography.body.copy(
                                     textAlign = if (effectiveEnglish) TextAlign.Start else TextAlign.End
                                 ),
                                 colors = contactFieldColors()
@@ -500,11 +583,15 @@ fun ContactUsScreen(
                                 minLines = 4,
                                 label = {
                                     contactFieldLabel(
-                                        text = if (effectiveEnglish) "Message" else "הודעה",
-                                        color = Color(0xFF5E6C80)
+                                        text =
+                                            if (effectiveEnglish) {
+                                                "Message"
+                                            } else {
+                                                "הודעה"
+                                            }
                                     )
                                 },
-                                textStyle = MaterialTheme.typography.bodyLarge.copy(
+                                textStyle = KmiTypography.body.copy(
                                     textAlign = if (effectiveEnglish) TextAlign.Start else TextAlign.End
                                 ),
                                 colors = contactFieldColors()
@@ -575,8 +662,12 @@ fun ContactUsScreen(
                                 colors = ButtonDefaults.buttonColors(
                                     containerColor = Color(0xFF7C5CE6),
                                     contentColor = Color.White,
-                                    disabledContainerColor = Color(0xFFD8E3F5),
-                                    disabledContentColor = Color(0xFF6B778B)
+                                    disabledContainerColor =
+                                        MaterialTheme.colorScheme.surfaceVariant,
+                                    disabledContentColor =
+                                        MaterialTheme.colorScheme.onSurfaceVariant.copy(
+                                            alpha = 0.62f
+                                        )
                                 ),
                                 shape = MaterialTheme.shapes.extraLarge
                             ) {
@@ -586,7 +677,8 @@ fun ContactUsScreen(
                                 ) {
                                     Icon(
                                         imageVector = Icons.AutoMirrored.Filled.Send,
-                                        contentDescription = null
+                                        contentDescription = null,
+                                        modifier = Modifier.size(KmiIconSize.medium)
                                     )
                                     Text(
                                         text = if (isSubmitting) {
@@ -594,7 +686,7 @@ fun ContactUsScreen(
                                         } else {
                                             sendText
                                         },
-                                        style = MaterialTheme.typography.titleMedium,
+                                        style = KmiTypography.action,
                                         modifier = Modifier.padding(vertical = 4.dp)
                                     )
                                 }
@@ -611,12 +703,12 @@ fun ContactUsScreen(
 @Composable
 private fun contactFieldLabel(
     text: String,
-    color: Color = Color(0xFF5E6C80)
+    color: Color = MaterialTheme.colorScheme.onSurfaceVariant
 ) {
     Text(
         text = text,
         color = color,
-        style = MaterialTheme.typography.labelSmall.copy(
+        style = KmiTypography.caption.copy(
             fontWeight = FontWeight.ExtraBold
         )
     )
@@ -624,25 +716,40 @@ private fun contactFieldLabel(
 
 @Composable
 private fun contactFieldColors() = OutlinedTextFieldDefaults.colors(
-    focusedContainerColor = Color.White,
-    unfocusedContainerColor = Color.White,
-    disabledContainerColor = Color.White,
+    focusedContainerColor =
+        MaterialTheme.colorScheme.surfaceVariant,
+    unfocusedContainerColor =
+        MaterialTheme.colorScheme.surfaceVariant,
+    disabledContainerColor =
+        MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.72f),
 
-    focusedBorderColor = Color(0xFFBFD0E8),
-    unfocusedBorderColor = Color(0xFFD8E3F5),
-    disabledBorderColor = Color(0xFFD8E3F5),
+    focusedBorderColor =
+        MaterialTheme.colorScheme.primary,
+    unfocusedBorderColor =
+        MaterialTheme.colorScheme.outline.copy(alpha = 0.60f),
+    disabledBorderColor =
+        MaterialTheme.colorScheme.outline.copy(alpha = 0.36f),
 
-    focusedTextColor = Color(0xFF1E2A3D),
-    unfocusedTextColor = Color(0xFF1E2A3D),
-    disabledTextColor = Color(0xFF1E2A3D),
+    focusedTextColor =
+        MaterialTheme.colorScheme.onSurface,
+    unfocusedTextColor =
+        MaterialTheme.colorScheme.onSurface,
+    disabledTextColor =
+        MaterialTheme.colorScheme.onSurface.copy(alpha = 0.62f),
 
-    focusedLabelColor = Color(0xFF5E6C80),
-    unfocusedLabelColor = Color(0xFF6B778B),
-    disabledLabelColor = Color(0xFF6B778B),
+    focusedLabelColor =
+        MaterialTheme.colorScheme.primary,
+    unfocusedLabelColor =
+        MaterialTheme.colorScheme.onSurfaceVariant,
+    disabledLabelColor =
+        MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.62f),
 
-    focusedLeadingIconColor = Color(0xFF5E6C80),
-    unfocusedLeadingIconColor = Color(0xFF6B778B),
-    disabledLeadingIconColor = Color(0xFF6B778B),
+    focusedLeadingIconColor =
+        MaterialTheme.colorScheme.primary,
+    unfocusedLeadingIconColor =
+        MaterialTheme.colorScheme.onSurfaceVariant,
+    disabledLeadingIconColor =
+        MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.62f),
 
-    cursorColor = Color(0xFF1E2A3D)
+    cursorColor = MaterialTheme.colorScheme.primary
 )

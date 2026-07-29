@@ -13,6 +13,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -23,6 +24,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.height
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import il.kmi.shared.domain.Belt
 import android.content.Context
 import android.app.TimePickerDialog
@@ -47,6 +49,7 @@ import android.os.Build
 import android.view.HapticFeedbackConstants
 import android.view.SoundEffectConstants
 import android.widget.TextView
+import android.util.TypedValue
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.material.icons.filled.AccessibilityNew
@@ -71,6 +74,7 @@ import androidx.compose.material.icons.filled.Language
 import il.kmi.shared.localization.AppLanguage
 import il.kmi.shared.localization.AppLanguageManager
 import il.kmi.app.ui.AppFontSize
+import il.kmi.app.ui.KmiIconSize
 import il.kmi.app.ui.KmiTypography
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.ui.graphics.toArgb
@@ -165,10 +169,15 @@ private fun clearAppCache(ctx: android.content.Context): Boolean {
 
 private fun styleKmiNumberPicker(
     picker: NumberPicker,
-    textColor: Int
+    textColor: Int,
+    textSizePx: Float
 ) {
-    picker.descendantFocusability = NumberPicker.FOCUS_BLOCK_DESCENDANTS
-    picker.setFormatter { value -> value.toString() }
+    picker.descendantFocusability =
+        NumberPicker.FOCUS_BLOCK_DESCENDANTS
+
+    picker.setFormatter { value ->
+        value.toString()
+    }
 
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
         picker.textColor = textColor
@@ -177,7 +186,10 @@ private fun styleKmiNumberPicker(
     for (i in 0 until picker.childCount) {
         (picker.getChildAt(i) as? TextView)?.apply {
             setTextColor(textColor)
-            textSize = 24f
+            setTextSize(
+                TypedValue.COMPLEX_UNIT_PX,
+                textSizePx
+            )
         }
     }
 
@@ -207,11 +219,20 @@ fun SettingsScreenModern(
     val appCtxLang = LocalContext.current
     val languageManager = remember { AppLanguageManager(appCtxLang) }
     var currentLanguage by remember { mutableStateOf(languageManager.getCurrentLanguage()) }
-    val isEnglish = currentLanguage == AppLanguage.ENGLISH
-    val textAlignPrimary = if (isEnglish) TextAlign.Left else TextAlign.Right
-    val horizontalEnd = if (isEnglish) Alignment.Start else Alignment.End
+    val isEnglish =
+        currentLanguage == AppLanguage.ENGLISH
 
-    fun tr(he: String, en: String): String = if (isEnglish) en else he
+    val textAlignPrimary =
+        if (isEnglish) TextAlign.Left else TextAlign.Right
+
+    val horizontalEnd =
+        if (isEnglish) Alignment.Start else Alignment.End
+
+    val isDarkMode =
+        MaterialTheme.colorScheme.background.luminance() < 0.5f
+
+    fun tr(he: String, en: String): String =
+        if (isEnglish) en else he
 
     fun formatLeadTime(totalMinutes: Int): String {
         val safeMinutes = totalMinutes.takeIf { it > 0 } ?: 60
@@ -436,13 +457,24 @@ fun SettingsScreenModern(
                 .fillMaxSize()
                 .background(
                     Brush.verticalGradient(
-                        colors = listOf(
-                            Color(0xFFF8FBFF),
-                            Color(0xFFEAF4FF),
-                            Color(0xFFB7DDF7),
-                            Color(0xFF1F78B4),
-                            Color(0xFF062B4A)
-                        )
+                        colors =
+                            if (isDarkMode) {
+                                listOf(
+                                    MaterialTheme.colorScheme.background,
+                                    MaterialTheme.colorScheme.surface,
+                                    Color(0xFF10243A),
+                                    Color(0xFF0A3657),
+                                    Color(0xFF041E33)
+                                )
+                            } else {
+                                listOf(
+                                    Color(0xFFF8FBFF),
+                                    Color(0xFFEAF4FF),
+                                    Color(0xFFB7DDF7),
+                                    Color(0xFF1F78B4),
+                                    Color(0xFF062B4A)
+                                )
+                            }
                     )
                 )
                 .padding(padding)
@@ -497,11 +529,11 @@ fun SettingsScreenModern(
                             verticalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
                             Text(
-                                text = tr("בחר שפת ממשק", "Choose interface language"),
-                                style = MaterialTheme.typography.bodySmall.copy(
-                                    fontSize = 10.8.sp,
-                                    lineHeight = 13.5.sp
+                                text = tr(
+                                    "בחר שפת ממשק",
+                                    "Choose interface language"
                                 ),
+                                style = KmiTypography.secondary,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 textAlign = textAlignPrimary,
                                 modifier = Modifier.fillMaxWidth()
@@ -516,10 +548,7 @@ fun SettingsScreenModern(
                                     text = {
                                         Text(
                                             text = "עברית",
-                                            style = MaterialTheme.typography.labelMedium.copy(
-                                                fontSize = 11.5.sp,
-                                                fontWeight = FontWeight.Bold
-                                            )
+                                            style = KmiTypography.action
                                         )
                                     }
                                 )
@@ -532,10 +561,7 @@ fun SettingsScreenModern(
                                     text = {
                                         Text(
                                             text = "English",
-                                            style = MaterialTheme.typography.labelMedium.copy(
-                                                fontSize = 11.5.sp,
-                                                fontWeight = FontWeight.Bold
-                                            )
+                                            style = KmiTypography.action
                                         )
                                     }
                                 )
@@ -641,10 +667,7 @@ fun SettingsScreenModern(
                                             "Enable reminders before training sessions"
                                         )
                                     },
-                                    style = MaterialTheme.typography.bodySmall.copy(
-                                        fontSize = 10.8.sp,
-                                        lineHeight = 13.5.sp
-                                    ),
+                                    style = KmiTypography.secondary,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                                     modifier = Modifier.weight(1f),
                                     textAlign = textAlignPrimary
@@ -713,9 +736,7 @@ fun SettingsScreenModern(
                                     ) {
                                         Text(
                                             text = formatLeadTime(reminderMinutes),
-                                            style = MaterialTheme.typography.titleMedium.copy(
-                                                fontSize = 14.sp,
-                                                lineHeight = 17.sp,
+                                            style = KmiTypography.cardTitle.copy(
                                                 fontWeight = FontWeight.ExtraBold
                                             ),
                                             color = MaterialTheme.colorScheme.primary,
@@ -728,10 +749,7 @@ fun SettingsScreenModern(
                                                 "ברירת המחדל היא 60 דקות אם לא נבחר זמן אחר.",
                                                 "Default is 60 minutes if no other time is selected."
                                             ),
-                                            style = MaterialTheme.typography.bodySmall.copy(
-                                                fontSize = 10.5.sp,
-                                                lineHeight = 13.sp
-                                            ),
+                                            style = KmiTypography.caption,
                                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                                             textAlign = textAlignPrimary,
                                             modifier = Modifier.fillMaxWidth()
@@ -760,7 +778,13 @@ fun SettingsScreenModern(
                             var selectedMinutes by rememberSaveable {
                                 mutableIntStateOf(initialLead % 60)
                             }
-                            val pickerTextColor = MaterialTheme.colorScheme.onSurface.toArgb()
+                            val pickerTextColor =
+                                MaterialTheme.colorScheme.onSurface.toArgb()
+
+                            val pickerTextSizePx =
+                                with(LocalDensity.current) {
+                                    KmiTypography.metric.fontSize.toPx()
+                                }
 
                             Dialog(
                                 onDismissRequest = {
@@ -772,7 +796,11 @@ fun SettingsScreenModern(
                                         .fillMaxWidth()
                                         .padding(horizontal = 12.dp),
                                     shape = RoundedCornerShape(30.dp),
-                                    color = Color(0xFFF6F1FB),
+                                    color = if (isDarkMode) {
+                                        MaterialTheme.colorScheme.surface
+                                    } else {
+                                        Color(0xFFF6F1FB)
+                                    },
                                     tonalElevation = 0.dp,
                                     shadowElevation = 16.dp
                                 ) {
@@ -806,7 +834,7 @@ fun SettingsScreenModern(
                                                         "בחירת זמן לפני האימון",
                                                         "Choose reminder time before training"
                                                     ),
-                                                    style = MaterialTheme.typography.headlineSmall.copy(
+                                                    style = KmiTypography.screenTitle.copy(
                                                         fontWeight = FontWeight.ExtraBold
                                                     ),
                                                     color = Color.White,
@@ -821,7 +849,7 @@ fun SettingsScreenModern(
                                                         "בחר שעות ודקות. לדוגמה: שעה ו־18 דקות.",
                                                         "Choose hours and minutes. For example: 1 hour and 18 minutes."
                                                     ),
-                                                    style = MaterialTheme.typography.bodyMedium,
+                                                    style = KmiTypography.body,
                                                     color = Color.White.copy(alpha = 0.92f),
                                                     textAlign = textAlignPrimary,
                                                     modifier = Modifier.fillMaxWidth()
@@ -843,7 +871,7 @@ fun SettingsScreenModern(
                                                             horizontal = 14.dp,
                                                             vertical = 10.dp
                                                         ),
-                                                        style = MaterialTheme.typography.titleMedium.copy(
+                                                        style = KmiTypography.cardTitle.copy(
                                                             fontWeight = FontWeight.ExtraBold
                                                         ),
                                                         color = Color.White,
@@ -861,20 +889,22 @@ fun SettingsScreenModern(
                                                 Surface(
                                                     modifier = Modifier.weight(1f),
                                                     shape = RoundedCornerShape(22.dp),
-                                                    color = Color.White,
+                                                    color = MaterialTheme.colorScheme.surfaceVariant,
                                                     tonalElevation = 0.dp,
                                                     shadowElevation = 4.dp
                                                 ) {
                                                     Column(
                                                         modifier = Modifier
                                                             .fillMaxWidth()
-                                                            .padding(horizontal = 12.dp, vertical = 12.dp),
+                                                            .padding(
+                                                                horizontal = 12.dp,
+                                                                vertical = 12.dp
+                                                            ),
                                                         horizontalAlignment = Alignment.CenterHorizontally
                                                     ) {
                                                         Text(
                                                             text = tr("Hours", "Hours"),
-                                                            style = MaterialTheme.typography.titleSmall,
-                                                            fontWeight = FontWeight.Bold,
+                                                            style = KmiTypography.action,
                                                             color = MaterialTheme.colorScheme.onSurface
                                                         )
 
@@ -885,22 +915,26 @@ fun SettingsScreenModern(
                                                                 NumberPicker(viewContext).apply {
                                                                     minValue = 0
                                                                     maxValue = 6
-                                                                    value = selectedHours.coerceIn(0, 6)
+                                                                    value =
+                                                                        selectedHours.coerceIn(0, 6)
                                                                     wrapSelectorWheel = false
                                                                     setOnValueChangedListener { _, _, newValue ->
                                                                         selectedHours = newValue
                                                                     }
                                                                     styleKmiNumberPicker(
-                                                                        this,
-                                                                        pickerTextColor
+                                                                        picker = this,
+                                                                        textColor = pickerTextColor,
+                                                                        textSizePx = pickerTextSizePx
                                                                     )
                                                                 }
                                                             },
                                                             update = { picker ->
-                                                                picker.value = selectedHours.coerceIn(0, 6)
+                                                                picker.value =
+                                                                    selectedHours.coerceIn(0, 6)
                                                                 styleKmiNumberPicker(
-                                                                    picker,
-                                                                    pickerTextColor
+                                                                    picker = picker,
+                                                                    textColor = pickerTextColor,
+                                                                    textSizePx = pickerTextSizePx
                                                                 )
                                                             },
                                                             modifier = Modifier
@@ -913,20 +947,22 @@ fun SettingsScreenModern(
                                                 Surface(
                                                     modifier = Modifier.weight(1f),
                                                     shape = RoundedCornerShape(22.dp),
-                                                    color = Color.White,
+                                                    color = MaterialTheme.colorScheme.surfaceVariant,
                                                     tonalElevation = 0.dp,
                                                     shadowElevation = 4.dp
                                                 ) {
                                                     Column(
                                                         modifier = Modifier
                                                             .fillMaxWidth()
-                                                            .padding(horizontal = 12.dp, vertical = 12.dp),
+                                                            .padding(
+                                                                horizontal = 12.dp,
+                                                                vertical = 12.dp
+                                                            ),
                                                         horizontalAlignment = Alignment.CenterHorizontally
                                                     ) {
                                                         Text(
                                                             text = tr("Minutes", "Minutes"),
-                                                            style = MaterialTheme.typography.titleSmall,
-                                                            fontWeight = FontWeight.Bold,
+                                                            style = KmiTypography.action,
                                                             color = MaterialTheme.colorScheme.onSurface
                                                         )
 
@@ -937,14 +973,19 @@ fun SettingsScreenModern(
                                                                 NumberPicker(viewContext).apply {
                                                                     minValue = 0
                                                                     maxValue = 59
-                                                                    value = selectedMinutes.coerceIn(0, 59)
+                                                                    value =
+                                                                        selectedMinutes.coerceIn(
+                                                                            0,
+                                                                            59
+                                                                        )
                                                                     wrapSelectorWheel = true
                                                                     setOnValueChangedListener { _, _, newValue ->
                                                                         selectedMinutes = newValue
                                                                     }
                                                                     styleKmiNumberPicker(
-                                                                        this,
-                                                                        pickerTextColor
+                                                                        picker = this,
+                                                                        textColor = pickerTextColor,
+                                                                        textSizePx = pickerTextSizePx
                                                                     )
                                                                 }
                                                             },
@@ -952,8 +993,9 @@ fun SettingsScreenModern(
                                                                 picker.value =
                                                                     selectedMinutes.coerceIn(0, 59)
                                                                 styleKmiNumberPicker(
-                                                                    picker,
-                                                                    pickerTextColor
+                                                                    picker = picker,
+                                                                    textColor = pickerTextColor,
+                                                                    textSizePx = pickerTextSizePx
                                                                 )
                                                             },
                                                             modifier = Modifier
@@ -966,20 +1008,22 @@ fun SettingsScreenModern(
                                                 Surface(
                                                     modifier = Modifier.weight(1f),
                                                     shape = RoundedCornerShape(22.dp),
-                                                    color = Color.White,
+                                                    color = MaterialTheme.colorScheme.surfaceVariant,
                                                     tonalElevation = 0.dp,
                                                     shadowElevation = 4.dp
                                                 ) {
                                                     Column(
                                                         modifier = Modifier
                                                             .fillMaxWidth()
-                                                            .padding(horizontal = 12.dp, vertical = 12.dp),
+                                                            .padding(
+                                                                horizontal = 12.dp,
+                                                                vertical = 12.dp
+                                                            ),
                                                         horizontalAlignment = Alignment.CenterHorizontally
                                                     ) {
                                                         Text(
                                                             text = tr("דקות", "Minutes"),
-                                                            style = MaterialTheme.typography.titleSmall,
-                                                            fontWeight = FontWeight.Bold,
+                                                            style = KmiTypography.action,
                                                             color = MaterialTheme.colorScheme.onSurface
                                                         )
 
@@ -990,14 +1034,19 @@ fun SettingsScreenModern(
                                                                 NumberPicker(viewContext).apply {
                                                                     minValue = 0
                                                                     maxValue = 59
-                                                                    value = selectedMinutes.coerceIn(0, 59)
+                                                                    value =
+                                                                        selectedMinutes.coerceIn(
+                                                                            0,
+                                                                            59
+                                                                        )
                                                                     wrapSelectorWheel = true
                                                                     setOnValueChangedListener { _, _, newValue ->
                                                                         selectedMinutes = newValue
                                                                     }
                                                                     styleKmiNumberPicker(
-                                                                        this,
-                                                                        pickerTextColor
+                                                                        picker = this,
+                                                                        textColor = pickerTextColor,
+                                                                        textSizePx = pickerTextSizePx
                                                                     )
                                                                 }
                                                             },
@@ -1005,8 +1054,9 @@ fun SettingsScreenModern(
                                                                 picker.value =
                                                                     selectedMinutes.coerceIn(0, 59)
                                                                 styleKmiNumberPicker(
-                                                                    picker,
-                                                                    pickerTextColor
+                                                                    picker = picker,
+                                                                    textColor = pickerTextColor,
+                                                                    textSizePx = pickerTextSizePx
                                                                 )
                                                             },
                                                             modifier = Modifier
@@ -1019,20 +1069,22 @@ fun SettingsScreenModern(
                                                 Surface(
                                                     modifier = Modifier.weight(1f),
                                                     shape = RoundedCornerShape(22.dp),
-                                                    color = Color.White,
+                                                    color = MaterialTheme.colorScheme.surfaceVariant,
                                                     tonalElevation = 0.dp,
                                                     shadowElevation = 4.dp
                                                 ) {
                                                     Column(
                                                         modifier = Modifier
                                                             .fillMaxWidth()
-                                                            .padding(horizontal = 12.dp, vertical = 12.dp),
+                                                            .padding(
+                                                                horizontal = 12.dp,
+                                                                vertical = 12.dp
+                                                            ),
                                                         horizontalAlignment = Alignment.CenterHorizontally
                                                     ) {
                                                         Text(
                                                             text = tr("שעות", "Hours"),
-                                                            style = MaterialTheme.typography.titleSmall,
-                                                            fontWeight = FontWeight.Bold,
+                                                            style = KmiTypography.action,
                                                             color = MaterialTheme.colorScheme.onSurface
                                                         )
 
@@ -1043,22 +1095,26 @@ fun SettingsScreenModern(
                                                                 NumberPicker(viewContext).apply {
                                                                     minValue = 0
                                                                     maxValue = 6
-                                                                    value = selectedHours.coerceIn(0, 6)
+                                                                    value =
+                                                                        selectedHours.coerceIn(0, 6)
                                                                     wrapSelectorWheel = false
                                                                     setOnValueChangedListener { _, _, newValue ->
                                                                         selectedHours = newValue
                                                                     }
                                                                     styleKmiNumberPicker(
-                                                                        this,
-                                                                        pickerTextColor
+                                                                        picker = this,
+                                                                        textColor = pickerTextColor,
+                                                                        textSizePx = pickerTextSizePx
                                                                     )
                                                                 }
                                                             },
                                                             update = { picker ->
-                                                                picker.value = selectedHours.coerceIn(0, 6)
+                                                                picker.value =
+                                                                    selectedHours.coerceIn(0, 6)
                                                                 styleKmiNumberPicker(
-                                                                    picker,
-                                                                    pickerTextColor
+                                                                    picker = picker,
+                                                                    textColor = pickerTextColor,
+                                                                    textSizePx = pickerTextSizePx
                                                                 )
                                                             },
                                                             modifier = Modifier
@@ -1187,10 +1243,7 @@ fun SettingsScreenModern(
                                             "Send me a daily exercise from the next belt"
                                         )
                                     },
-                                    style = MaterialTheme.typography.bodySmall.copy(
-                                        fontSize = 10.8.sp,
-                                        lineHeight = 13.5.sp
-                                    ),
+                                    style = KmiTypography.secondary,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                                     modifier = Modifier.weight(1f),
                                     textAlign = textAlignPrimary
@@ -1262,10 +1315,12 @@ fun SettingsScreenModern(
                                     modifier = Modifier.fillMaxWidth()
                                 ) {
                                     Text(
-                                        tr(
+                                        text = tr(
                                             "שעת התזכורת: $formattedDailyTime",
                                             "Reminder time: $formattedDailyTime"
-                                        )
+                                        ),
+                                        style = KmiTypography.action,
+                                        textAlign = TextAlign.Center
                                     )
                                 }
 
@@ -1274,10 +1329,7 @@ fun SettingsScreenModern(
                                         "תקבל התראה יומית עם אפשרות לפתוח כרטיס תרגיל, לשמור למועדפים ולקבל תרגיל נוסף.",
                                         "You will receive a daily reminder with options to open the exercise card, save it to favorites, and get another exercise."
                                     ),
-                                    style = MaterialTheme.typography.bodySmall.copy(
-                                        fontSize = 10.5.sp,
-                                        lineHeight = 13.sp
-                                    ),
+                                    style = KmiTypography.caption,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                                     textAlign = textAlignPrimary,
                                     modifier = Modifier.fillMaxWidth()
@@ -1311,7 +1363,8 @@ fun SettingsScreenModern(
                             rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
                                 if (!granted) {
                                     freeRemindersEnabled = false
-                                    sp.edit().putBoolean("free_sessions_reminders_enabled", false).apply()
+                                    sp.edit().putBoolean("free_sessions_reminders_enabled", false)
+                                        .apply()
                                 }
                             }
 
@@ -1325,10 +1378,7 @@ fun SettingsScreenModern(
                                     "התראות 30 ו-10 דקות לפני אימון חופשי שסימנת \"אני מגיע\"",
                                     "Notifications 30 and 10 minutes before a free training session marked as \"I'm coming\""
                                 ),
-                                style = MaterialTheme.typography.bodySmall.copy(
-                                    fontSize = 10.8.sp,
-                                    lineHeight = 13.5.sp
-                                ),
+                                style = KmiTypography.secondary,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 modifier = Modifier.weight(1f),
                                 textAlign = textAlignPrimary
@@ -1359,7 +1409,8 @@ fun SettingsScreenModern(
                         title = tr("סנכרון ליומן במכשיר", "Device calendar sync"),
                         value = if (sp.getBoolean("calendar_sync_selected_enabled", false)) {
                             val selectedCalendarDisplayCollapsed =
-                                sp.getString("calendar_sync_selected_calendar_display", "").orEmpty()
+                                sp.getString("calendar_sync_selected_calendar_display", "")
+                                    .orEmpty()
 
                             if (selectedCalendarDisplayCollapsed.isNotBlank()) {
                                 tr(
@@ -1381,7 +1432,12 @@ fun SettingsScreenModern(
                             mutableStateOf(sp.getBoolean("calendar_sync_selected_enabled", false))
                         }
                         var selectedCalendarId by rememberSaveable {
-                            mutableLongStateOf(sp.getLong("calendar_sync_selected_calendar_id", -1L))
+                            mutableLongStateOf(
+                                sp.getLong(
+                                    "calendar_sync_selected_calendar_id",
+                                    -1L
+                                )
+                            )
                         }
                         var selectedCalendarDisplay by rememberSaveable {
                             mutableStateOf(
@@ -1404,7 +1460,8 @@ fun SettingsScreenModern(
 
                             if (!granted) {
                                 selectedSyncEnabled = false
-                                sp.edit().putBoolean("calendar_sync_selected_enabled", false).apply()
+                                sp.edit().putBoolean("calendar_sync_selected_enabled", false)
+                                    .apply()
                                 pendingEnableAfterPermission = false
                                 haptic(true)
                                 toast(
@@ -1569,11 +1626,14 @@ fun SettingsScreenModern(
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Text(
-                                tr("סנכרן ליומן חיצוני", "Sync to external calendar"),
-                                style = MaterialTheme.typography.titleMedium.copy(
-                                    fontSize = 12.6.sp,
-                                    lineHeight = 16.sp
+                                text = tr(
+                                    "סנכרן ליומן חיצוני",
+                                    "Sync to external calendar"
                                 ),
+                                style = KmiTypography.body.copy(
+                                    fontWeight = FontWeight.SemiBold
+                                ),
+                                color = MaterialTheme.colorScheme.onSurface,
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis,
                                 textAlign = textAlignPrimary,
@@ -1627,10 +1687,7 @@ fun SettingsScreenModern(
                             } else {
                                 tr("עדיין לא נבחר יומן יעד", "No target calendar selected yet")
                             },
-                            style = MaterialTheme.typography.bodySmall.copy(
-                                fontSize = 10.5.sp,
-                                lineHeight = 13.sp
-                            ),
+                            style = KmiTypography.caption,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             textAlign = textAlignPrimary,
                             modifier = Modifier.fillMaxWidth()
@@ -1687,7 +1744,7 @@ fun SettingsScreenModern(
                                                     "לא נמצאו יומנים זמינים לכתיבה במכשיר.",
                                                     "No writable calendars were found on this device."
                                                 ),
-                                                style = MaterialTheme.typography.bodyMedium,
+                                                style = KmiTypography.body,
                                                 textAlign = textAlignPrimary,
                                                 modifier = Modifier.fillMaxWidth()
                                             )
@@ -1698,7 +1755,10 @@ fun SettingsScreenModern(
                                                         .fillMaxWidth()
                                                         .clip(RoundedCornerShape(12.dp))
                                                         .clickable { tempSelectedId = cal.id }
-                                                        .padding(horizontal = 8.dp, vertical = 6.dp),
+                                                        .padding(
+                                                            horizontal = 8.dp,
+                                                            vertical = 6.dp
+                                                        ),
                                                     verticalAlignment = Alignment.CenterVertically
                                                 ) {
                                                     RadioButton(
@@ -1721,7 +1781,7 @@ fun SettingsScreenModern(
                                                         )
                                                         Text(
                                                             cal.accountName.ifBlank { cal.accountType.ifBlank { "-" } },
-                                                            style = MaterialTheme.typography.bodySmall,
+                                                            style = KmiTypography.secondary,
                                                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                                                             textAlign = textAlignPrimary
                                                         )
@@ -1831,7 +1891,12 @@ fun SettingsScreenModern(
                             horizontalArrangement = Arrangement.SpaceBetween
                         ) {
                             Text(
-                                tr("צליל הקשה בכפתורים", "Button tap sound"),
+                                text = tr(
+                                    "צליל הקשה בכפתורים",
+                                    "Button tap sound"
+                                ),
+                                style = KmiTypography.body,
+                                color = MaterialTheme.colorScheme.onSurface,
                                 textAlign = textAlignPrimary,
                                 modifier = Modifier.weight(1f)
                             )
@@ -1858,7 +1923,12 @@ fun SettingsScreenModern(
                             horizontalArrangement = Arrangement.SpaceBetween
                         ) {
                             Text(
-                                tr("רטט קצר בעת סימון ✓/✗", "Short haptic on ✓/✗ marking"),
+                                text = tr(
+                                    "רטט קצר בעת סימון ✓/✗",
+                                    "Short haptic on ✓/✗ marking"
+                                ),
+                                style = KmiTypography.body,
+                                color = MaterialTheme.colorScheme.onSurface,
                                 textAlign = textAlignPrimary,
                                 modifier = Modifier.weight(1f)
                             )
@@ -1924,10 +1994,7 @@ fun SettingsScreenModern(
                         ) {
                             Text(
                                 text = tr("בחר קול להשמעה:", "Choose voice playback:"),
-                                style = MaterialTheme.typography.bodySmall.copy(
-                                    fontSize = 10.8.sp,
-                                    lineHeight = 13.5.sp
-                                ),
+                                style = KmiTypography.secondary,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 textAlign = textAlignPrimary,
                                 modifier = Modifier.fillMaxWidth()
@@ -1938,15 +2005,46 @@ fun SettingsScreenModern(
                             ) {
                                 SegmentedButton(
                                     selected = selectedIndex == 0,
-                                    onClick = { setCloudVoice("male") },
-                                    shape = SegmentedButtonDefaults.itemShape(index = 0, count = 2),
-                                    label = { Text(tr("קול גבר", "Male voice"), maxLines = 1) }
+                                    onClick = {
+                                        setCloudVoice("male")
+                                    },
+                                    shape = SegmentedButtonDefaults.itemShape(
+                                        index = 0,
+                                        count = 2
+                                    ),
+                                    label = {
+                                        Text(
+                                            text = tr(
+                                                "קול גבר",
+                                                "Male voice"
+                                            ),
+                                            style = KmiTypography.action,
+                                            maxLines = 2,
+                                            textAlign = TextAlign.Center
+                                        )
+                                    }
                                 )
+
                                 SegmentedButton(
                                     selected = selectedIndex == 1,
-                                    onClick = { setCloudVoice("female") },
-                                    shape = SegmentedButtonDefaults.itemShape(index = 1, count = 2),
-                                    label = { Text(tr("קול אישה", "Female voice"), maxLines = 1) }
+                                    onClick = {
+                                        setCloudVoice("female")
+                                    },
+                                    shape = SegmentedButtonDefaults.itemShape(
+                                        index = 1,
+                                        count = 2
+                                    ),
+                                    label = {
+                                        Text(
+                                            text = tr(
+                                                "קול אישה",
+                                                "Female voice"
+                                            ),
+                                            style = KmiTypography.action,
+                                            maxLines = 2,
+                                            textAlign = TextAlign.Center
+                                        )
+                                    }
                                 )
                             }
 
@@ -1955,10 +2053,7 @@ fun SettingsScreenModern(
                                     "הבחירה נשמרת למכשיר ותשפיע על הדיבור בעוזר הקולי.",
                                     "The selection is saved on the device and affects speech in the voice assistant."
                                 ),
-                                style = MaterialTheme.typography.bodySmall.copy(
-                                    fontSize = 10.5.sp,
-                                    lineHeight = 13.sp
-                                ),
+                                style = KmiTypography.caption,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 textAlign = textAlignPrimary,
                                 modifier = Modifier.fillMaxWidth()
@@ -1967,674 +2062,696 @@ fun SettingsScreenModern(
                     }
 
                     HorizontalDivider(
-                        color = MaterialTheme.colorScheme.outline.copy(alpha = 0.16f),
-                        modifier = Modifier.padding(horizontal = 12.dp)
-                    )
-
-                    SettingsListItem(
-                        title = tr("נראות אפליקציה", "App appearance"),
-                        value = when (themeModeLocal) {
-                            "dark" -> tr("מצב כהה", "Dark mode")
-                            "system" -> tr("לפי המכשיר", "Device default")
-                            else -> tr("מצב בהיר", "Light mode")
-                        },
-                        icon = Icons.Filled.Palette,
-                        iconTint = Color(0xFFD97706)
-                    ) {
-                        val systemIsDark = isSystemInDarkTheme()
-
-                        fun effectiveModeLabel(): String {
-                            return when (themeModeLocal) {
-                                "light" -> tr("מצב פעיל: בהיר", "Active mode: Light")
-                                "dark" -> tr("מצב פעיל: כהה", "Active mode: Dark")
-                                else -> {
-                                    if (systemIsDark) {
-                                        tr(
-                                            "מצב פעיל: לפי המכשיר — כהה",
-                                            "Active mode: Device default — Dark"
-                                        )
-                                    } else {
-                                        tr(
-                                            "מצב פעיל: לפי המכשיר — בהיר",
-                                            "Active mode: Device default — Light"
-                                        )
-                                    }
-                                }
-                            }
-                        }
-
-                        fun applyAppearanceMode(mode: String) {
-                            themeModeLocal = mode
-                            onThemeChange(mode)
-                            kmiPrefs.themeMode = mode
-                            sp.edit().putString("theme_mode", mode).apply()
-                        }
-
-                        val themeIndex = when (themeModeLocal) {
-                            "system" -> 0
-                            "light" -> 1
-                            "dark" -> 2
-                            else -> 1
-                        }
-
-                        TabRow(selectedTabIndex = themeIndex) {
-                            Tab(
-                                selected = themeModeLocal == "system",
-                                onClick = { applyAppearanceMode("system") },
-                                text = {
-                                    Text(
-                                        text = tr("לפי\nהמכשיר", "Device\ndefault"),
-                                        minLines = 2,
-                                        maxLines = 2,
-                                        softWrap = true,
-                                        textAlign = TextAlign.Center,
-                                        style = MaterialTheme.typography.labelMedium
-                                    )
-                                }
-                            )
-
-                            Tab(
-                                selected = themeModeLocal == "light",
-                                onClick = { applyAppearanceMode("light") },
-                                text = {
-                                    Text(
-                                        text = tr("מצב\nבהיר", "Light\nmode"),
-                                        minLines = 2,
-                                        maxLines = 2,
-                                        softWrap = true,
-                                        textAlign = TextAlign.Center,
-                                        style = MaterialTheme.typography.labelMedium
-                                    )
-                                }
-                            )
-
-                            Tab(
-                                selected = themeModeLocal == "dark",
-                                onClick = { applyAppearanceMode("dark") },
-                                text = {
-                                    Text(
-                                        text = tr("מצב\nכהה", "Dark\nmode"),
-                                        minLines = 2,
-                                        maxLines = 2,
-                                        softWrap = true,
-                                        textAlign = TextAlign.Center,
-                                        style = MaterialTheme.typography.labelMedium
-                                    )
-                                }
-                            )
-                        }
-
-                        Text(
-                            text = effectiveModeLabel(),
-                            style = MaterialTheme.typography.bodySmall.copy(
-                                fontSize = 10.8.sp,
-                                lineHeight = 13.5.sp,
-                                fontWeight = FontWeight.SemiBold
-                            ),
-                            color = MaterialTheme.colorScheme.primary,
-                            textAlign = textAlignPrimary,
-                            modifier = Modifier.fillMaxWidth()
+                            color = MaterialTheme.colorScheme.outline.copy(alpha = 0.16f),
+                            modifier = Modifier.padding(horizontal = 12.dp)
                         )
-                    }
 
-                    HorizontalDivider(
-                        color = MaterialTheme.colorScheme.outline.copy(alpha = 0.16f),
-                        modifier = Modifier.padding(horizontal = 12.dp)
-                    )
-
-                    SettingsListItem(
-                        title = tr("גודל כתב", "Font size"),
-                        value = when (
-                            AppFontSize.fromStorageValue(fontSizeModeLocal)
+                        SettingsListItem(
+                            title = tr("נראות אפליקציה", "App appearance"),
+                            value = when (themeModeLocal) {
+                                "dark" -> tr("מצב כהה", "Dark mode")
+                                "system" -> tr("לפי המכשיר", "Device default")
+                                else -> tr("מצב בהיר", "Light mode")
+                            },
+                            icon = Icons.Filled.Palette,
+                            iconTint = Color(0xFFD97706)
                         ) {
-                            AppFontSize.SMALL ->
-                                tr("קטן", "Small")
+                            val systemIsDark = isSystemInDarkTheme()
 
-                            AppFontSize.MEDIUM ->
-                                tr("בינוני", "Medium")
-
-                            AppFontSize.LARGE ->
-                                tr("גדול", "Large")
-                        },
-                        icon = Icons.Filled.AccessibilityNew,
-                        iconTint = Color(0xFF0F8B8D)
-                    ) {
-                        fun applyFontSize(newSize: AppFontSize) {
-                            if (fontSizeModeLocal == newSize.storageValue) {
-                                return
+                            fun effectiveModeLabel(): String {
+                                return when (themeModeLocal) {
+                                    "light" -> tr("מצב פעיל: בהיר", "Active mode: Light")
+                                    "dark" -> tr("מצב פעיל: כהה", "Active mode: Dark")
+                                    else -> {
+                                        if (systemIsDark) {
+                                            tr(
+                                                "מצב פעיל: לפי המכשיר — כהה",
+                                                "Active mode: Device default — Dark"
+                                            )
+                                        } else {
+                                            tr(
+                                                "מצב פעיל: לפי המכשיר — בהיר",
+                                                "Active mode: Device default — Light"
+                                            )
+                                        }
+                                    }
+                                }
                             }
 
-                            fontSizeModeLocal = newSize.storageValue
-                            kmiPrefs.fontSize = newSize.storageValue
+                            fun applyAppearanceMode(mode: String) {
+                                themeModeLocal = mode
+                                onThemeChange(mode)
+                                kmiPrefs.themeMode = mode
+                                sp.edit().putString("theme_mode", mode).apply()
+                            }
 
-                            sp.edit()
-                                .putString(
-                                    AppFontSize.PREFERENCE_KEY,
-                                    newSize.storageValue
-                                )
-                                .apply()
-                        }
+                            val themeIndex = when (themeModeLocal) {
+                                "system" -> 0
+                                "light" -> 1
+                                "dark" -> 2
+                                else -> 1
+                            }
 
-                        val selectedFontSize =
-                            AppFontSize.fromStorageValue(fontSizeModeLocal)
-
-                        val selectedIndex = when (selectedFontSize) {
-                            AppFontSize.SMALL -> 0
-                            AppFontSize.MEDIUM -> 1
-                            AppFontSize.LARGE -> 2
-                        }
-
-                        Column(
-                            modifier = Modifier.fillMaxWidth(),
-                            verticalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            Text(
-                                text = tr(
-                                    "בחר גודל כתב אחיד לכל מסכי האפליקציה",
-                                    "Choose one font size for all app screens"
-                                ),
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                textAlign = textAlignPrimary,
-                                modifier = Modifier.fillMaxWidth()
-                            )
-
-                            TabRow(
-                                selectedTabIndex = selectedIndex
-                            ) {
+                            TabRow(selectedTabIndex = themeIndex) {
                                 Tab(
-                                    selected =
-                                        selectedFontSize == AppFontSize.SMALL,
-                                    onClick = {
-                                        applyFontSize(AppFontSize.SMALL)
-                                    },
+                                    selected = themeModeLocal == "system",
+                                    onClick = { applyAppearanceMode("system") },
                                     text = {
                                         Text(
-                                            text = tr("קטן", "Small"),
-                                            maxLines = 1,
-                                            style =
-                                                MaterialTheme.typography.labelMedium
+                                            text = tr("לפי\nהמכשיר", "Device\ndefault"),
+                                            minLines = 2,
+                                            maxLines = 2,
+                                            softWrap = true,
+                                            textAlign = TextAlign.Center,
+                                            style = KmiTypography.action
                                         )
                                     }
                                 )
 
                                 Tab(
-                                    selected =
-                                        selectedFontSize == AppFontSize.MEDIUM,
-                                    onClick = {
-                                        applyFontSize(AppFontSize.MEDIUM)
-                                    },
+                                    selected = themeModeLocal == "light",
+                                    onClick = { applyAppearanceMode("light") },
                                     text = {
                                         Text(
-                                            text = tr("בינוני", "Medium"),
-                                            maxLines = 1,
-                                            style =
-                                                MaterialTheme.typography.labelMedium
+                                            text = tr("מצב\nבהיר", "Light\nmode"),
+                                            minLines = 2,
+                                            maxLines = 2,
+                                            softWrap = true,
+                                            textAlign = TextAlign.Center,
+                                            style = KmiTypography.action
                                         )
                                     }
                                 )
 
                                 Tab(
-                                    selected =
-                                        selectedFontSize == AppFontSize.LARGE,
-                                    onClick = {
-                                        applyFontSize(AppFontSize.LARGE)
-                                    },
+                                    selected = themeModeLocal == "dark",
+                                    onClick = { applyAppearanceMode("dark") },
                                     text = {
                                         Text(
-                                            text = tr("גדול", "Large"),
-                                            maxLines = 1,
-                                            style =
-                                                MaterialTheme.typography.labelMedium
+                                            text = tr("מצב\nכהה", "Dark\nmode"),
+                                            minLines = 2,
+                                            maxLines = 2,
+                                            softWrap = true,
+                                            textAlign = TextAlign.Center,
+                                            style = KmiTypography.action
                                         )
                                     }
                                 )
                             }
 
                             Text(
-                                text = tr(
-                                    "השינוי חל מיד ונשמר גם לאחר סגירת האפליקציה.",
-                                    "The change applies immediately and remains after closing the app."
-                                ),
-                                style = MaterialTheme.typography.bodySmall.copy(
-                                    fontWeight = FontWeight.SemiBold
-                                ),
+                                text = effectiveModeLabel(),
+                                style = KmiTypography.caption,
                                 color = MaterialTheme.colorScheme.primary,
                                 textAlign = textAlignPrimary,
                                 modifier = Modifier.fillMaxWidth()
                             )
                         }
-                    }
 
-                    HorizontalDivider(
-                        color = MaterialTheme.colorScheme.outline.copy(alpha = 0.16f),
-                        modifier = Modifier.padding(horizontal = 12.dp)
-                    )
+                        HorizontalDivider(
+                            color = MaterialTheme.colorScheme.outline.copy(alpha = 0.16f),
+                            modifier = Modifier.padding(horizontal = 12.dp)
+                        )
 
-                    SettingsListItem(
-                        title = tr("נעילת אפליקציה", "App lock"),
-                        value = when (sp.getString("app_lock_mode", "none") ?: "none") {
-                            "biometric" -> tr("נעילה באצבע", "Biometric lock")
-                            else -> tr("ללא נעילה", "No lock")
-                        },
-                        icon = Icons.Filled.Lock,
-                        iconTint = Color(0xFFE11D48),
-                        bottomRounded = true
-                    ) {
-                        var lockMode by rememberSaveable {
-                            mutableStateOf(
-                                when (sp.getString("app_lock_mode", "none") ?: "none") {
-                                    "biometric" -> "biometric"
-                                    else -> "none"
+                        SettingsListItem(
+                            title = tr("גודל כתב", "Font size"),
+                            value = when (
+                                AppFontSize.fromStorageValue(fontSizeModeLocal)
+                            ) {
+                                AppFontSize.SMALL ->
+                                    tr("קטן", "Small")
+
+                                AppFontSize.MEDIUM ->
+                                    tr("בינוני", "Medium")
+
+                                AppFontSize.LARGE ->
+                                    tr("גדול", "Large")
+                            },
+                            icon = Icons.Filled.AccessibilityNew,
+                            iconTint = Color(0xFF0F8B8D)
+                        ) {
+                            fun applyFontSize(newSize: AppFontSize) {
+                                if (fontSizeModeLocal == newSize.storageValue) {
+                                    return
                                 }
-                            )
+
+                                fontSizeModeLocal = newSize.storageValue
+                                kmiPrefs.fontSize = newSize.storageValue
+
+                                sp.edit()
+                                    .putString(
+                                        AppFontSize.PREFERENCE_KEY,
+                                        newSize.storageValue
+                                    )
+                                    .apply()
+                            }
+
+                            val selectedFontSize =
+                                AppFontSize.fromStorageValue(fontSizeModeLocal)
+
+                            val selectedIndex = when (selectedFontSize) {
+                                AppFontSize.SMALL -> 0
+                                AppFontSize.MEDIUM -> 1
+                                AppFontSize.LARGE -> 2
+                            }
+
+                            Column(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                Text(
+                                    text = tr(
+                                        "בחר גודל כתב אחיד לכל מסכי האפליקציה",
+                                        "Choose one font size for all app screens"
+                                    ),
+                                    style = KmiTypography.secondary,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    textAlign = textAlignPrimary,
+                                    modifier = Modifier.fillMaxWidth()
+                                )
+
+                                TabRow(
+                                    selectedTabIndex = selectedIndex
+                                ) {
+                                    Tab(
+                                        selected =
+                                            selectedFontSize == AppFontSize.SMALL,
+                                        onClick = {
+                                            applyFontSize(AppFontSize.SMALL)
+                                        },
+                                        text = {
+                                            Text(
+                                                text = tr("קטן", "Small"),
+                                                maxLines = 1,
+                                                style =
+                                                    MaterialTheme.typography.labelMedium
+                                            )
+                                        }
+                                    )
+
+                                    Tab(
+                                        selected =
+                                            selectedFontSize == AppFontSize.MEDIUM,
+                                        onClick = {
+                                            applyFontSize(AppFontSize.MEDIUM)
+                                        },
+                                        text = {
+                                            Text(
+                                                text = tr("בינוני", "Medium"),
+                                                maxLines = 1,
+                                                style =
+                                                    MaterialTheme.typography.labelMedium
+                                            )
+                                        }
+                                    )
+
+                                    Tab(
+                                        selected =
+                                            selectedFontSize == AppFontSize.LARGE,
+                                        onClick = {
+                                            applyFontSize(AppFontSize.LARGE)
+                                        },
+                                        text = {
+                                            Text(
+                                                text = tr("גדול", "Large"),
+                                                maxLines = 1,
+                                                style =
+                                                    MaterialTheme.typography.labelMedium
+                                            )
+                                        }
+                                    )
+                                }
+
+                                Text(
+                                    text = tr(
+                                        "השינוי חל מיד ונשמר גם לאחר סגירת האפליקציה.",
+                                        "The change applies immediately and remains after closing the app."
+                                    ),
+                                    style = MaterialTheme.typography.bodySmall.copy(
+                                        fontWeight = FontWeight.SemiBold
+                                    ),
+                                    color = MaterialTheme.colorScheme.primary,
+                                    textAlign = textAlignPrimary,
+                                    modifier = Modifier.fillMaxWidth()
+                                )
+                            }
                         }
 
-                        val ctx = LocalContext.current
-                        val act = ctx as? androidx.fragment.app.FragmentActivity
+                        HorizontalDivider(
+                            color = MaterialTheme.colorScheme.outline.copy(alpha = 0.16f),
+                            modifier = Modifier.padding(horizontal = 12.dp)
+                        )
 
-                        fun applyLock(mode: String) {
-                            sp.edit().putString("app_lock_mode", mode).apply()
-                            when (mode) {
-                                "none" -> {
-                                    il.kmi.app.security.AppLockStore.setMethod(
-                                        ctx,
-                                        il.kmi.app.security.AppLockMethod.NONE
-                                    )
-                                    android.widget.Toast.makeText(
-                                        ctx,
-                                        tr("נעילת האפליקציה בוטלה", "App lock disabled"),
-                                        android.widget.Toast.LENGTH_SHORT
-                                    ).show()
-                                }
+                        SettingsListItem(
+                            title = tr("נעילת אפליקציה", "App lock"),
+                            value = when (sp.getString("app_lock_mode", "none") ?: "none") {
+                                "biometric" -> tr("נעילה באצבע", "Biometric lock")
+                                else -> tr("ללא נעילה", "No lock")
+                            },
+                            icon = Icons.Filled.Lock,
+                            iconTint = Color(0xFFE11D48),
+                            bottomRounded = true
+                        ) {
+                            var lockMode by rememberSaveable {
+                                mutableStateOf(
+                                    when (sp.getString("app_lock_mode", "none") ?: "none") {
+                                        "biometric" -> "biometric"
+                                        else -> "none"
+                                    }
+                                )
+                            }
 
-                                "biometric" -> {
-                                    val canBio = androidx.biometric.BiometricManager.from(ctx)
-                                        .canAuthenticate(
-                                            androidx.biometric.BiometricManager.Authenticators.BIOMETRIC_STRONG
-                                        ) == androidx.biometric.BiometricManager.BIOMETRIC_SUCCESS
+                            val ctx = LocalContext.current
+                            val act = ctx as? androidx.fragment.app.FragmentActivity
 
-                                    if (!canBio) {
+                            fun applyLock(mode: String) {
+                                sp.edit().putString("app_lock_mode", mode).apply()
+                                when (mode) {
+                                    "none" -> {
+                                        il.kmi.app.security.AppLockStore.setMethod(
+                                            ctx,
+                                            il.kmi.app.security.AppLockMethod.NONE
+                                        )
                                         android.widget.Toast.makeText(
                                             ctx,
-                                            tr(
-                                                "ביומטרי לא זמין במכשיר",
-                                                "Biometric authentication is not available on this device"
-                                            ),
-                                            android.widget.Toast.LENGTH_LONG
+                                            tr("נעילת האפליקציה בוטלה", "App lock disabled"),
+                                            android.widget.Toast.LENGTH_SHORT
                                         ).show()
-                                        lockMode = sp.getString("app_lock_mode", "none") ?: "none"
-                                        return
                                     }
 
-                                    il.kmi.app.security.AppLockStore.setMethod(
-                                        ctx,
-                                        il.kmi.app.security.AppLockMethod.BIOMETRIC
-                                    )
-                                    act?.let { il.kmi.app.security.AppLock.requireIfNeeded(it, true) }
-                                    android.widget.Toast.makeText(
-                                        ctx,
-                                        tr("זיהוי ביומטרי הופעל", "Biometric lock enabled"),
-                                        android.widget.Toast.LENGTH_SHORT
-                                    ).show()
+                                    "biometric" -> {
+                                        val canBio = androidx.biometric.BiometricManager.from(ctx)
+                                            .canAuthenticate(
+                                                androidx.biometric.BiometricManager.Authenticators.BIOMETRIC_STRONG
+                                            ) == androidx.biometric.BiometricManager.BIOMETRIC_SUCCESS
+
+                                        if (!canBio) {
+                                            android.widget.Toast.makeText(
+                                                ctx,
+                                                tr(
+                                                    "ביומטרי לא זמין במכשיר",
+                                                    "Biometric authentication is not available on this device"
+                                                ),
+                                                android.widget.Toast.LENGTH_LONG
+                                            ).show()
+                                            lockMode =
+                                                sp.getString("app_lock_mode", "none") ?: "none"
+                                            return
+                                        }
+
+                                        il.kmi.app.security.AppLockStore.setMethod(
+                                            ctx,
+                                            il.kmi.app.security.AppLockMethod.BIOMETRIC
+                                        )
+                                        act?.let {
+                                            il.kmi.app.security.AppLock.requireIfNeeded(
+                                                it,
+                                                true
+                                            )
+                                        }
+                                        android.widget.Toast.makeText(
+                                            ctx,
+                                            tr("זיהוי ביומטרי הופעל", "Biometric lock enabled"),
+                                            android.widget.Toast.LENGTH_SHORT
+                                        ).show()
+                                    }
+                                }
+                            }
+
+                            val lockIndex = when (lockMode) {
+                                "none" -> 0
+                                "biometric" -> 1
+                                else -> 0
+                            }
+
+                            TabRow(selectedTabIndex = lockIndex) {
+                                Tab(
+                                    selected = lockMode == "none",
+                                    onClick = {
+                                        lockMode = "none"
+                                        applyLock("none")
+                                    },
+                                    text = {
+                                        Text(
+                                            text = tr("ללא\nנעילה", "No\nlock"),
+                                            minLines = 2,
+                                            maxLines = 2,
+                                            softWrap = true,
+                                            textAlign = TextAlign.Center,
+                                            style = KmiTypography.action
+                                        )
+                                    }
+                                )
+
+                                Tab(
+                                    selected = lockMode == "biometric",
+                                    onClick = {
+                                        lockMode = "biometric"
+                                        applyLock("biometric")
+                                    },
+                                    text = {
+                                        Text(
+                                            text = tr("נעילה\nבאצבע", "Biometric\nlock"),
+                                            minLines = 2,
+                                            maxLines = 2,
+                                            softWrap = true,
+                                            textAlign = TextAlign.Center,
+                                            style = KmiTypography.action
+                                        )
+                                    }
+                                )
+                            }
+
+                            val ctxBio = LocalContext.current
+                            val bioAvailable = remember(ctxBio) {
+                                androidx.biometric.BiometricManager.from(ctxBio)
+                                    .canAuthenticate(androidx.biometric.BiometricManager.Authenticators.BIOMETRIC_STRONG) ==
+                                        androidx.biometric.BiometricManager.BIOMETRIC_SUCCESS
+                            }
+
+                            if (!bioAvailable) {
+                                Text(
+                                    tr(
+                                        "ביומטרי לא זמין במכשיר או לא הוגדר למשתמש.",
+                                        "Biometric authentication is not available or not configured for this user."
+                                    ),
+                                    style = KmiTypography.caption,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    textAlign = textAlignPrimary,
+                                    modifier = Modifier.fillMaxWidth()
+                                )
+                            }
+                        }
+                    }
+
+                    SettingsListSection(
+                        title = tr("מידע וניהול", "Info and management"),
+                        subtitle = tr(
+                            "נתונים, מסמכים משפטיים, גרסה ותמיכה",
+                            "Data, legal documents, version and support"
+                        ),
+                        icon = Icons.Filled.Storage,
+                        iconTint = sectionIconTint
+                    ) {
+                        SettingsListItem(
+                            title = tr("ניהול נתונים", "Data management"),
+                            value = tr("מטמון והיסטוריית שידורים", "Cache and broadcast history"),
+                            icon = Icons.Filled.Storage,
+                            iconTint = Color(0xFF0F766E),
+                            topRounded = true
+                        ) {
+                            val ctx = LocalContext.current
+                            val spUser = remember {
+                                ctx.getSharedPreferences(
+                                    "kmi_user",
+                                    Context.MODE_PRIVATE
+                                )
+                            }
+                            val PREF_RECENTS_KEY = "coach_broadcast_recents_json"
+
+                            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                Button(
+                                    onClick = {
+                                        spUser.edit().remove(PREF_RECENTS_KEY).apply()
+                                        toast(
+                                            tr(
+                                                "היסטוריית השידורים נוקתה",
+                                                "Broadcast history cleared"
+                                            )
+                                        )
+                                        haptic(true)
+                                    },
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .heightIn(min = 44.dp)
+                                ) {
+                                    Text(tr("נקה היסטוריית שידורים", "Clear broadcast history"))
+                                }
+
+                                OutlinedButton(
+                                    onClick = {
+                                        isBusy = true
+                                        val ok = clearAppCache(ctx)
+                                        isBusy = false
+                                        if (ok) {
+                                            toast(tr("נוקו קבצי המטמון", "Cache files cleared"))
+                                            haptic(true)
+                                        } else {
+                                            toast(tr("ניקוי נכשל", "Clear failed"))
+                                            haptic(false)
+                                        }
+                                    },
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .height(44.dp)
+                                ) {
+                                    Text(tr("נקה מטמון אפליקציה", "Clear app cache"))
                                 }
                             }
                         }
 
-                        val lockIndex = when (lockMode) {
-                            "none" -> 0
-                            "biometric" -> 1
-                            else -> 0
-                        }
+                        HorizontalDivider(
+                            color = MaterialTheme.colorScheme.outline.copy(alpha = 0.16f),
+                            modifier = Modifier.padding(horizontal = 12.dp)
+                        )
 
-                        TabRow(selectedTabIndex = lockIndex) {
-                            Tab(
-                                selected = lockMode == "none",
-                                onClick = {
-                                    lockMode = "none"
-                                    applyLock("none")
-                                },
-                                text = {
-                                    Text(
-                                        text = tr("ללא\nנעילה", "No\nlock"),
-                                        minLines = 2,
-                                        maxLines = 2,
-                                        softWrap = true,
-                                        textAlign = TextAlign.Center,
-                                        style = MaterialTheme.typography.labelMedium
-                                    )
+                        SettingsListItem(
+                            title = tr("מידע משפטי", "Legal information"),
+                            value = tr("פרטיות, תנאים ונגישות", "Privacy, terms and accessibility"),
+                            icon = Icons.Filled.Gavel,
+                            iconTint = Color(0xFF7C3AED)
+                        ) {
+                            Column(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                OutlinedButton(
+                                    onClick = onOpenPrivacy,
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    Text(tr("מדיניות פרטיות", "Privacy policy"))
                                 }
-                            )
 
-                            Tab(
-                                selected = lockMode == "biometric",
-                                onClick = {
-                                    lockMode = "biometric"
-                                    applyLock("biometric")
-                                },
-                                text = {
-                                    Text(
-                                        text = tr("נעילה\nבאצבע", "Biometric\nlock"),
-                                        minLines = 2,
-                                        maxLines = 2,
-                                        softWrap = true,
-                                        textAlign = TextAlign.Center,
-                                        style = MaterialTheme.typography.labelMedium
-                                    )
+                                OutlinedButton(
+                                    onClick = onOpenTerms,
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    Text(tr("תנאי שימוש", "Terms of use"))
                                 }
-                            )
+
+                                OutlinedButton(
+                                    onClick = onOpenAccessibility,
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    Text(tr("הצהרת נגישות", "Accessibility statement"))
+                                }
+                            }
                         }
 
-                        val ctxBio = LocalContext.current
-                        val bioAvailable = remember(ctxBio) {
-                            androidx.biometric.BiometricManager.from(ctxBio)
-                                .canAuthenticate(androidx.biometric.BiometricManager.Authenticators.BIOMETRIC_STRONG) ==
-                                    androidx.biometric.BiometricManager.BIOMETRIC_SUCCESS
-                        }
+                        HorizontalDivider(
+                            color = MaterialTheme.colorScheme.outline.copy(alpha = 0.16f),
+                            modifier = Modifier.padding(horizontal = 12.dp)
+                        )
 
-                        if (!bioAvailable) {
+                        SettingsListItem(
+                            title = tr("אודות ותמיכה", "About and support"),
+                            value = tr("גרסה, משוב ושיתוף", "Version, feedback and sharing"),
+                            icon = Icons.Filled.SupportAgent,
+                            iconTint = Color(0xFF0284C7),
+                            bottomRounded = true
+                        ) {
+                            val ctx = LocalContext.current
+                            val h = rememberHaptics()
+
+                            val pkgVer = remember {
+                                runCatching {
+                                    val pm = ctx.packageManager
+                                    val pInfo = if (Build.VERSION.SDK_INT >= 33) {
+                                        pm.getPackageInfo(
+                                            ctx.packageName,
+                                            PackageManager.PackageInfoFlags.of(0)
+                                        )
+                                    } else {
+                                        @Suppress("DEPRECATION")
+                                        pm.getPackageInfo(ctx.packageName, 0)
+                                    }
+                                    val longCode = PackageInfoCompat.getLongVersionCode(pInfo)
+                                    tr(
+                                        "גרסה ${pInfo.versionName} ($longCode)",
+                                        "Version ${pInfo.versionName} ($longCode)"
+                                    )
+                                }.getOrDefault(tr("גרסה לא ידועה", "Unknown version"))
+                            }
+
                             Text(
-                                tr(
-                                    "ביומטרי לא זמין במכשיר או לא הוגדר למשתמש.",
-                                    "Biometric authentication is not available or not configured for this user."
-                                ),
-                                style = MaterialTheme.typography.bodySmall.copy(
-                                    fontSize = 10.5.sp,
-                                    lineHeight = 13.sp
-                                ),
+                                text = pkgVer,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 textAlign = textAlignPrimary,
                                 modifier = Modifier.fillMaxWidth()
                             )
+
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                Button(
+                                    onClick = {
+                                        val body = buildString {
+                                            appendLine("")
+                                            appendLine("---")
+                                            appendLine(
+                                                tr(
+                                                    "פרטי מערכת (לעזרה באיתור תקלות):",
+                                                    "System details (for troubleshooting):"
+                                                )
+                                            )
+                                            appendLine(
+                                                tr(
+                                                    "חבילה: ${ctx.packageName}",
+                                                    "Package: ${ctx.packageName}"
+                                                )
+                                            )
+                                            appendLine(pkgVer)
+                                            appendLine(
+                                                tr(
+                                                    "מכשיר: ${Build.MANUFACTURER} ${Build.MODEL}",
+                                                    "Device: ${Build.MANUFACTURER} ${Build.MODEL}"
+                                                )
+                                            )
+                                            appendLine(
+                                                tr(
+                                                    "אנדרואיד: ${Build.VERSION.RELEASE} (SDK ${Build.VERSION.SDK_INT})",
+                                                    "Android: ${Build.VERSION.RELEASE} (SDK ${Build.VERSION.SDK_INT})"
+                                                )
+                                            )
+                                        }
+                                        openEmailFeedback(
+                                            ctx = ctx,
+                                            to = "ypo1980@gmail.com",
+                                            subject = tr("משוב על האפליקציה", "App feedback"),
+                                            body = body,
+                                            isEnglish = isEnglish
+                                        )
+                                        h(true)
+                                    },
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .height(44.dp)
+                                ) {
+                                    Text(tr("שלח משוב", "Send feedback"))
+                                }
+
+                                OutlinedButton(
+                                    onClick = {
+                                        openStorePage(ctx)
+                                        h(true)
+                                    },
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .height(44.dp)
+                                ) {
+                                    Text(tr("דרג בחנות", "Rate in store"))
+                                }
+                            }
+
+                            OutlinedButton(
+                                onClick = {
+                                    shareApp(ctx, isEnglish = isEnglish)
+                                    h(true)
+                                },
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(44.dp)
+                            ) {
+                                Text(tr("שתף את האפליקציה", "Share the app"))
+                            }
                         }
                     }
+
+                    Spacer(modifier = Modifier.height(8.dp))
                 }
 
-                SettingsListSection(
-                    title = tr("מידע וניהול", "Info and management"),
-                    subtitle = tr(
-                        "נתונים, מסמכים משפטיים, גרסה ותמיכה",
-                        "Data, legal documents, version and support"
+                Surface(
+                    modifier = Modifier
+                        .align(Alignment.BottomCenter)
+                        .fillMaxWidth(),
+                    shape = RoundedCornerShape(
+                        topStart = 28.dp,
+                        topEnd = 28.dp
                     ),
-                    icon = Icons.Filled.Storage,
-                    iconTint = sectionIconTint
+                    color = if (isDarkMode) {
+                        MaterialTheme.colorScheme.surface.copy(alpha = 0.98f)
+                    } else {
+                        Color(0xFFF4EFFB).copy(alpha = 0.97f)
+                    },
+                    tonalElevation = 10.dp,
+                    shadowElevation = 18.dp
                 ) {
-                    SettingsListItem(
-                        title = tr("ניהול נתונים", "Data management"),
-                        value = tr("מטמון והיסטוריית שידורים", "Cache and broadcast history"),
-                        icon = Icons.Filled.Storage,
-                        iconTint = Color(0xFF0F766E),
-                        topRounded = true
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .navigationBarsPadding()
+                            .padding(horizontal = 16.dp, vertical = 14.dp),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
-                        val ctx = LocalContext.current
-                        val spUser = remember { ctx.getSharedPreferences("kmi_user", Context.MODE_PRIVATE) }
-                        val PREF_RECENTS_KEY = "coach_broadcast_recents_json"
-
-                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                            Button(
-                                onClick = {
-                                    spUser.edit().remove(PREF_RECENTS_KEY).apply()
-                                    toast(
-                                        tr(
-                                            "היסטוריית השידורים נוקתה",
-                                            "Broadcast history cleared"
-                                        )
-                                    )
-                                    haptic(true)
-                                },
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .height(44.dp)
-                            ) {
-                                Text(tr("נקה היסטוריית שידורים", "Clear broadcast history"))
-                            }
-
-                            OutlinedButton(
-                                onClick = {
-                                    isBusy = true
-                                    val ok = clearAppCache(ctx)
-                                    isBusy = false
-                                    if (ok) {
-                                        toast(tr("נוקו קבצי המטמון", "Cache files cleared"))
-                                        haptic(true)
-                                    } else {
-                                        toast(tr("ניקוי נכשל", "Clear failed"))
-                                        haptic(false)
-                                    }
-                                },
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .height(44.dp)
-                            ) {
-                                Text(tr("נקה מטמון אפליקציה", "Clear app cache"))
-                            }
-                        }
-                    }
-
-                    HorizontalDivider(
-                        color = MaterialTheme.colorScheme.outline.copy(alpha = 0.16f),
-                        modifier = Modifier.padding(horizontal = 12.dp)
-                    )
-
-                    SettingsListItem(
-                        title = tr("מידע משפטי", "Legal information"),
-                        value = tr("פרטיות, תנאים ונגישות", "Privacy, terms and accessibility"),
-                        icon = Icons.Filled.Gavel,
-                        iconTint = Color(0xFF7C3AED)
-                    ) {
-                        Column(
-                            modifier = Modifier.fillMaxWidth(),
-                            verticalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            OutlinedButton(
-                                onClick = onOpenPrivacy,
-                                modifier = Modifier.fillMaxWidth()
-                            ) {
-                                Text(tr("מדיניות פרטיות", "Privacy policy"))
-                            }
-
-                            OutlinedButton(
-                                onClick = onOpenTerms,
-                                modifier = Modifier.fillMaxWidth()
-                            ) {
-                                Text(tr("תנאי שימוש", "Terms of use"))
-                            }
-
-                            OutlinedButton(
-                                onClick = onOpenAccessibility,
-                                modifier = Modifier.fillMaxWidth()
-                            ) {
-                                Text(tr("הצהרת נגישות", "Accessibility statement"))
-                            }
-                        }
-                    }
-
-                    HorizontalDivider(
-                        color = MaterialTheme.colorScheme.outline.copy(alpha = 0.16f),
-                        modifier = Modifier.padding(horizontal = 12.dp)
-                    )
-
-                    SettingsListItem(
-                        title = tr("אודות ותמיכה", "About and support"),
-                        value = tr("גרסה, משוב ושיתוף", "Version, feedback and sharing"),
-                        icon = Icons.Filled.SupportAgent,
-                        iconTint = Color(0xFF0284C7),
-                        bottomRounded = true
-                    ) {
-                        val ctx = LocalContext.current
-                        val h = rememberHaptics()
-
-                        val pkgVer = remember {
-                            runCatching {
-                                val pm = ctx.packageManager
-                                val pInfo = if (Build.VERSION.SDK_INT >= 33) {
-                                    pm.getPackageInfo(
-                                        ctx.packageName,
-                                        PackageManager.PackageInfoFlags.of(0)
-                                    )
-                                } else {
-                                    @Suppress("DEPRECATION")
-                                    pm.getPackageInfo(ctx.packageName, 0)
-                                }
-                                val longCode = PackageInfoCompat.getLongVersionCode(pInfo)
-                                tr(
-                                    "גרסה ${pInfo.versionName} ($longCode)",
-                                    "Version ${pInfo.versionName} ($longCode)"
-                                )
-                            }.getOrDefault(tr("גרסה לא ידועה", "Unknown version"))
-                        }
-
-                        Text(
-                            text = pkgVer,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            textAlign = textAlignPrimary,
-                            modifier = Modifier.fillMaxWidth()
-                        )
-
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            Button(
-                                onClick = {
-                                    val body = buildString {
-                                        appendLine("")
-                                        appendLine("---")
-                                        appendLine(
-                                            tr(
-                                                "פרטי מערכת (לעזרה באיתור תקלות):",
-                                                "System details (for troubleshooting):"
-                                            )
-                                        )
-                                        appendLine(
-                                            tr(
-                                                "חבילה: ${ctx.packageName}",
-                                                "Package: ${ctx.packageName}"
-                                            )
-                                        )
-                                        appendLine(pkgVer)
-                                        appendLine(
-                                            tr(
-                                                "מכשיר: ${Build.MANUFACTURER} ${Build.MODEL}",
-                                                "Device: ${Build.MANUFACTURER} ${Build.MODEL}"
-                                            )
-                                        )
-                                        appendLine(
-                                            tr(
-                                                "אנדרואיד: ${Build.VERSION.RELEASE} (SDK ${Build.VERSION.SDK_INT})",
-                                                "Android: ${Build.VERSION.RELEASE} (SDK ${Build.VERSION.SDK_INT})"
-                                            )
-                                        )
-                                    }
-                                    openEmailFeedback(
-                                        ctx = ctx,
-                                        to = "ypo1980@gmail.com",
-                                        subject = tr("משוב על האפליקציה", "App feedback"),
-                                        body = body,
-                                        isEnglish = isEnglish
-                                    )
-                                    h(true)
-                                },
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .height(44.dp)
-                            ) {
-                                Text(tr("שלח משוב", "Send feedback"))
-                            }
-
-                            OutlinedButton(
-                                onClick = {
-                                    openStorePage(ctx)
-                                    h(true)
-                                },
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .height(44.dp)
-                            ) {
-                                Text(tr("דרג בחנות", "Rate in store"))
-                            }
-                        }
-
                         OutlinedButton(
+                            onClick = { discardAndExit() },
+                            modifier = Modifier
+                                .weight(1f)
+                                .heightIn(min = 52.dp),
+                            shape = RoundedCornerShape(22.dp),
+                            colors = ButtonDefaults.outlinedButtonColors(
+                                containerColor =
+                                    if (isDarkMode) {
+                                        MaterialTheme.colorScheme.surfaceVariant
+                                    } else {
+                                        Color.White.copy(alpha = 0.80f)
+                                    },
+                                contentColor =
+                                    if (isDarkMode) {
+                                        MaterialTheme.colorScheme.onSurfaceVariant
+                                    } else {
+                                        Color(0xFF5B35D5)
+                                    }
+                            )
+                        ) {
+                            Text(
+                                text = tr("ביטול", "Cancel"),
+                                style = KmiTypography.action
+                            )
+                        }
+
+                        Button(
                             onClick = {
-                                shareApp(ctx, isEnglish = isEnglish)
-                                h(true)
+                                saveAllAndApply()
+                                onBack()
                             },
                             modifier = Modifier
-                                .fillMaxWidth()
-                                .height(44.dp)
-                        ) {
-                            Text(tr("שתף את האפליקציה", "Share the app"))
-                        }
-                    }
-                }
-
-                Spacer(modifier = Modifier.height(8.dp))
-            }
-
-            Surface(
-                modifier = Modifier
-                    .align(Alignment.BottomCenter)
-                    .fillMaxWidth(),
-                shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp),
-                color = Color(0xFFF4EFFB).copy(alpha = 0.97f),
-                tonalElevation = 10.dp,
-                shadowElevation = 18.dp
-            ) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .navigationBarsPadding()
-                        .padding(horizontal = 16.dp, vertical = 14.dp),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    OutlinedButton(
-                        onClick = { discardAndExit() },
-                        modifier = Modifier
-                            .weight(1f)
-                            .height(52.dp),
-                        shape = RoundedCornerShape(22.dp),
-                        colors = ButtonDefaults.outlinedButtonColors(
-                            containerColor = Color.White.copy(alpha = 0.80f),
-                            contentColor = Color(0xFF5B35D5)
-                        )
-                    ) {
-                        Text(
-                            text = tr("ביטול", "Cancel"),
-                            style = KmiTypography.action
-                        )
-                    }
-
-                    Button(
-                        onClick = {
-                            saveAllAndApply()
-                            onBack()
-                        },
-                        modifier = Modifier
-                            .weight(1f)
-                            .height(52.dp),
-                        shape = RoundedCornerShape(22.dp),
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = Color(0xFF7B61D9),
-                            contentColor = Color.White
-                        ),
-                        elevation = ButtonDefaults.buttonElevation(
-                            defaultElevation = 0.dp,
-                            pressedElevation = 0.dp
-                        )
-                    ) {
-                        Text(
-                            text = tr("אישור", "Confirm"),
-                            style = KmiTypography.action.copy(
-                                fontWeight = FontWeight.ExtraBold
+                                .weight(1f)
+                                .heightIn(min = 52.dp),
+                            shape = RoundedCornerShape(22.dp),
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = Color(0xFF7B61D9),
+                                contentColor = Color.White
+                            ),
+                            elevation = ButtonDefaults.buttonElevation(
+                                defaultElevation = 0.dp,
+                                pressedElevation = 0.dp
                             )
-                        )
+                        ) {
+                            Text(
+                                text = tr("אישור", "Confirm"),
+                                style = KmiTypography.action.copy(
+                                    fontWeight = FontWeight.ExtraBold
+                                )
+                            )
+                        }
                     }
                 }
             }
         }
     }
-}
+
 
 // --- עזר לכפתורי מידע משפטי: גובה אחיד, ישור למרכז, משקל שווה ---
 @Composable
@@ -2655,7 +2772,7 @@ private fun RowScope.LegalLink(
             style = KmiTypography.action,
             textAlign = TextAlign.Center,
             minLines = 2,
-            maxLines = 2,
+            maxLines = 3,
             softWrap = true,
             overflow = TextOverflow.Ellipsis,
             modifier = Modifier.fillMaxWidth()
@@ -2686,8 +2803,14 @@ fun SettingsListSection(
     val context = LocalContext.current
     val languageManager = remember { AppLanguageManager(context) }
     val isEnglish = languageManager.getCurrentLanguage() == AppLanguage.ENGLISH
-    val textAlignPrimary = if (isEnglish) TextAlign.Left else TextAlign.Right
-    val horizontalEnd = if (isEnglish) Alignment.Start else Alignment.End
+    val textAlignPrimary =
+        if (isEnglish) TextAlign.Left else TextAlign.Right
+
+    val horizontalEnd =
+        if (isEnglish) Alignment.Start else Alignment.End
+
+    val isDarkMode =
+        MaterialTheme.colorScheme.surface.luminance() < 0.5f
 
     Surface(
         color = Color.Transparent,
@@ -2695,8 +2818,15 @@ fun SettingsListSection(
         shadowElevation = 8.dp,
         shape = RoundedCornerShape(24.dp),
         border = BorderStroke(
-            1.dp,
-            Color.White.copy(alpha = 0.22f)
+            width = 1.dp,
+            color =
+                if (isDarkMode) {
+                    MaterialTheme.colorScheme.outline.copy(
+                        alpha = 0.50f
+                    )
+                } else {
+                    Color.White.copy(alpha = 0.22f)
+                }
         ),
         modifier = Modifier.fillMaxWidth()
     ) {
@@ -2706,11 +2836,26 @@ fun SettingsListSection(
                 .clip(RoundedCornerShape(24.dp))
                 .background(
                     Brush.linearGradient(
-                        colors = listOf(
-                            Color(0xFFF6F1FA).copy(alpha = 0.98f),
-                            Color(0xFFEAF5FB).copy(alpha = 0.96f),
-                            Color(0xFFF8F4EC).copy(alpha = 0.94f)
-                        )
+                        colors =
+                            if (isDarkMode) {
+                                listOf(
+                                    MaterialTheme.colorScheme.surfaceVariant,
+                                    MaterialTheme.colorScheme.surface,
+                                    MaterialTheme.colorScheme.surfaceVariant
+                                )
+                            } else {
+                                listOf(
+                                    Color(0xFFF6F1FA).copy(
+                                        alpha = 0.98f
+                                    ),
+                                    Color(0xFFEAF5FB).copy(
+                                        alpha = 0.96f
+                                    ),
+                                    Color(0xFFF8F4EC).copy(
+                                        alpha = 0.94f
+                                    )
+                                )
+                            }
                     )
                 )
                 .padding(horizontal = 14.dp, vertical = 12.dp)
@@ -2722,15 +2867,26 @@ fun SettingsListSection(
                 if (icon != null && isEnglish) {
                     Surface(
                         shape = RoundedCornerShape(13.dp),
-                        color = (iconTint ?: MaterialTheme.colorScheme.primary).copy(alpha = 0.12f),
-                        modifier = Modifier.size(34.dp)
+                        color = (
+                                iconTint
+                                    ?: MaterialTheme.colorScheme.primary
+                                ).copy(alpha = 0.12f),
+                        modifier = Modifier.size(
+                            KmiIconSize.extraLarge
+                        )
                     ) {
-                        Box(contentAlignment = Alignment.Center) {
+                        Box(
+                            contentAlignment = Alignment.Center
+                        ) {
                             Icon(
                                 imageVector = icon,
                                 contentDescription = null,
-                                tint = iconTint ?: MaterialTheme.colorScheme.primary,
-                                modifier = Modifier.size(17.dp)
+                                tint =
+                                    iconTint
+                                        ?: MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(
+                                    KmiIconSize.small
+                                )
                             )
                         }
                     }
@@ -2747,7 +2903,7 @@ fun SettingsListSection(
                         style = KmiTypography.sectionTitle,
                         textAlign = textAlignPrimary,
                         color = MaterialTheme.colorScheme.onSurface,
-                        maxLines = 1,
+                        maxLines = 2,
                         overflow = TextOverflow.Ellipsis,
                         modifier = Modifier.fillMaxWidth()
                     )
@@ -2773,14 +2929,15 @@ fun SettingsListSection(
                     Surface(
                         shape = RoundedCornerShape(13.dp),
                         color = (iconTint ?: MaterialTheme.colorScheme.primary).copy(alpha = 0.12f),
-                        modifier = Modifier.size(34.dp)
+                        modifier = Modifier.size(KmiIconSize.extraLarge)
                     ) {
                         Box(contentAlignment = Alignment.Center) {
                             Icon(
                                 imageVector = icon,
                                 contentDescription = null,
-                                tint = iconTint ?: MaterialTheme.colorScheme.primary,
-                                modifier = Modifier.size(17.dp)
+                                tint = iconTint
+                                    ?: MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(KmiIconSize.small)
                             )
                         }
                     }
@@ -2813,9 +2970,18 @@ fun SettingsListItem(
     val isEnglish = languageManager.getCurrentLanguage() == AppLanguage.ENGLISH
     val textAlignPrimary = if (isEnglish) TextAlign.Left else TextAlign.Right
     val horizontalEnd = if (isEnglish) Alignment.Start else Alignment.End
-    val accentColor = iconTint ?: MaterialTheme.colorScheme.primary
-    var expanded by rememberSaveable(title) { mutableStateOf(false) }
-    val rowInteraction = remember { MutableInteractionSource() }
+    val accentColor =
+        iconTint ?: MaterialTheme.colorScheme.primary
+
+    val isDarkMode =
+        MaterialTheme.colorScheme.surface.luminance() < 0.5f
+
+    var expanded by rememberSaveable(title) {
+        mutableStateOf(false)
+    }
+
+    val rowInteraction =
+        remember { MutableInteractionSource() }
 
     val rowShape = RoundedCornerShape(
         topStart = if (topRounded) 18.dp else 0.dp,
@@ -2841,9 +3007,27 @@ fun SettingsListItem(
                 .background(
                     Brush.horizontalGradient(
                         colors = listOf(
-                            accentColor.copy(alpha = 0.08f),
-                            Color.White.copy(alpha = 0.10f),
-                            accentColor.copy(alpha = 0.04f)
+                            accentColor.copy(
+                                alpha = if (isDarkMode) {
+                                    0.18f
+                                } else {
+                                    0.08f
+                                }
+                            ),
+                            MaterialTheme.colorScheme.surface.copy(
+                                alpha = if (isDarkMode) {
+                                    0.72f
+                                } else {
+                                    0.10f
+                                }
+                            ),
+                            accentColor.copy(
+                                alpha = if (isDarkMode) {
+                                    0.10f
+                                } else {
+                                    0.04f
+                                }
+                            )
                         )
                     )
                 )
@@ -2858,17 +3042,17 @@ fun SettingsListItem(
                 if (icon != null) {
                     Surface(
                         shape = RoundedCornerShape(12.dp),
-                        color = (iconTint ?: MaterialTheme.colorScheme.primary).copy(alpha = 0.10f),
+                        color = accentColor.copy(alpha = 0.12f),
                         shadowElevation = 0.dp,
                         tonalElevation = 0.dp,
-                        modifier = Modifier.size(34.dp)
+                        modifier = Modifier.size(KmiIconSize.extraLarge)
                     ) {
                         Box(contentAlignment = Alignment.Center) {
                             Icon(
                                 imageVector = icon,
                                 contentDescription = null,
-                                tint = iconTint ?: MaterialTheme.colorScheme.primary,
-                                modifier = Modifier.size(18.dp)
+                                tint = accentColor,
+                                modifier = Modifier.size(KmiIconSize.small)
                             )
                         }
                     }
@@ -2907,7 +3091,7 @@ fun SettingsListItem(
                     imageVector = if (expanded) Icons.Filled.KeyboardArrowUp else Icons.Filled.KeyboardArrowDown,
                     contentDescription = null,
                     tint = accentColor,
-                    modifier = Modifier.size(18.dp)
+                    modifier = Modifier.size(KmiIconSize.small)
                 )
             } else {
                 if (icon != null) {
@@ -2916,14 +3100,14 @@ fun SettingsListItem(
                         color = accentColor.copy(alpha = 0.12f),
                         shadowElevation = 0.dp,
                         tonalElevation = 0.dp,
-                        modifier = Modifier.size(29.dp)
+                        modifier = Modifier.size(KmiIconSize.large)
                     ) {
                         Box(contentAlignment = Alignment.Center) {
                             Icon(
                                 imageVector = icon,
                                 contentDescription = null,
                                 tint = accentColor,
-                                modifier = Modifier.size(14.dp)
+                                modifier = Modifier.size(KmiIconSize.tiny)
                             )
                         }
                     }
@@ -2964,10 +3148,10 @@ fun SettingsListItem(
                     imageVector = if (expanded) Icons.Filled.KeyboardArrowUp else Icons.Filled.KeyboardArrowDown,
                     contentDescription = null,
                     tint = accentColor,
-                    modifier = Modifier.size(18.dp)
+                    modifier = Modifier.size(KmiIconSize.small)
                 )
             }
-            }
+        }
 
         if (expanded) {
             HorizontalDivider(
@@ -2982,8 +3166,12 @@ fun SettingsListItem(
                     .background(
                         Brush.verticalGradient(
                             colors = listOf(
-                                Color.White.copy(alpha = 0.22f),
-                                accentColor.copy(alpha = 0.045f)
+                                MaterialTheme.colorScheme.surface.copy(
+                                    alpha = if (isDarkMode) 0.72f else 0.22f
+                                ),
+                                accentColor.copy(
+                                    alpha = if (isDarkMode) 0.12f else 0.045f
+                                )
                             )
                         )
                     )
@@ -3014,8 +3202,15 @@ fun SettingsCard(
     val isEnglish = languageManager.getCurrentLanguage() == AppLanguage.ENGLISH
     val textAlignPrimary = if (isEnglish) TextAlign.Left else TextAlign.Right
     val horizontalEnd = if (isEnglish) Alignment.Start else Alignment.End
-    val accentColor = iconTint ?: MaterialTheme.colorScheme.primary
-    var expanded by rememberSaveable(title) { mutableStateOf(false) }
+    val accentColor =
+        iconTint ?: MaterialTheme.colorScheme.primary
+
+    val isDarkMode =
+        MaterialTheme.colorScheme.surface.luminance() < 0.5f
+
+    var expanded by rememberSaveable(title) {
+        mutableStateOf(false)
+    }
 
     Column(
         modifier = Modifier.fillMaxWidth()
@@ -3030,11 +3225,20 @@ fun SettingsCard(
                 .fillMaxWidth()
                 .background(
                     Brush.linearGradient(
-                        colors = listOf(
-                            Color(0xFFF7F2FA).copy(alpha = 0.72f),
-                            Color(0xFFEAF6FB).copy(alpha = 0.64f),
-                            Color(0xFFF8F4EC).copy(alpha = 0.58f)
-                        )
+                        colors =
+                            if (isDarkMode) {
+                                listOf(
+                                    MaterialTheme.colorScheme.surfaceVariant,
+                                    MaterialTheme.colorScheme.surface,
+                                    MaterialTheme.colorScheme.surfaceVariant
+                                )
+                            } else {
+                                listOf(
+                                    Color(0xFFF7F2FA).copy(alpha = 0.72f),
+                                    Color(0xFFEAF6FB).copy(alpha = 0.64f),
+                                    Color(0xFFF8F4EC).copy(alpha = 0.58f)
+                                )
+                            }
                     )
                 )
                 .padding(horizontal = 14.dp, vertical = 10.dp),
@@ -3055,14 +3259,14 @@ fun SettingsCard(
                             color = accentColor.copy(alpha = 0.11f),
                             shadowElevation = 0.dp,
                             tonalElevation = 0.dp,
-                            modifier = Modifier.size(29.dp)
+                            modifier = Modifier.size(KmiIconSize.large)
                         ) {
                             Box(contentAlignment = Alignment.Center) {
                                 Icon(
                                     imageVector = icon,
                                     contentDescription = null,
                                     tint = accentColor,
-                                    modifier = Modifier.size(14.dp)
+                                    modifier = Modifier.size(KmiIconSize.tiny)
                                 )
                             }
                         }
@@ -3076,9 +3280,7 @@ fun SettingsCard(
                     ) {
                         Text(
                             text = title,
-                            style = MaterialTheme.typography.titleMedium.copy(
-                                fontSize = 11.6.sp,
-                                lineHeight = 14.2.sp,
+                            style = KmiTypography.cardTitle.copy(
                                 fontWeight = FontWeight.ExtraBold
                             ),
                             textAlign = TextAlign.Left,
@@ -3098,9 +3300,7 @@ fun SettingsCard(
                         if (secondaryText.isNotBlank()) {
                             Text(
                                 text = secondaryText,
-                                style = MaterialTheme.typography.bodySmall.copy(
-                                    fontSize = 9.4.sp,
-                                    lineHeight = 11.8.sp,
+                                style = KmiTypography.secondary.copy(
                                     fontWeight = FontWeight.SemiBold
                                 ),
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -3116,7 +3316,7 @@ fun SettingsCard(
                         imageVector = if (expanded) Icons.Filled.KeyboardArrowUp else Icons.Filled.KeyboardArrowDown,
                         contentDescription = null,
                         tint = accentColor,
-                        modifier = Modifier.size(18.dp)
+                        modifier = Modifier.size(KmiIconSize.small)
                     )
                 } else {
                     if (icon != null) {
@@ -3125,14 +3325,14 @@ fun SettingsCard(
                             color = accentColor.copy(alpha = 0.11f),
                             shadowElevation = 0.dp,
                             tonalElevation = 0.dp,
-                            modifier = Modifier.size(29.dp)
+                            modifier = Modifier.size(KmiIconSize.large)
                         ) {
                             Box(contentAlignment = Alignment.Center) {
                                 Icon(
                                     imageVector = icon,
                                     contentDescription = null,
                                     tint = accentColor,
-                                    modifier = Modifier.size(14.dp)
+                                    modifier = Modifier.size(KmiIconSize.tiny)
                                 )
                             }
                         }
@@ -3168,9 +3368,7 @@ fun SettingsCard(
                         if (secondaryText.isNotBlank()) {
                             Text(
                                 text = secondaryText,
-                                style = MaterialTheme.typography.bodySmall.copy(
-                                    fontSize = 9.8.sp,
-                                    lineHeight = 12.2.sp,
+                                style = KmiTypography.secondary.copy(
                                     fontWeight = FontWeight.SemiBold
                                 ),
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -3188,7 +3386,7 @@ fun SettingsCard(
                         imageVector = if (expanded) Icons.Filled.KeyboardArrowUp else Icons.Filled.KeyboardArrowDown,
                         contentDescription = null,
                         tint = accentColor,
-                        modifier = Modifier.size(18.dp)
+                        modifier = Modifier.size(KmiIconSize.small)
                     )
                 }
             }
@@ -3205,8 +3403,12 @@ fun SettingsCard(
                         .background(
                             Brush.verticalGradient(
                                 colors = listOf(
-                                    Color.White.copy(alpha = 0.10f),
-                                    accentColor.copy(alpha = 0.025f)
+                                    MaterialTheme.colorScheme.surface.copy(
+                                        alpha = if (isDarkMode) 0.72f else 0.10f
+                                    ),
+                                    accentColor.copy(
+                                        alpha = if (isDarkMode) 0.10f else 0.025f
+                                    )
                                 )
                             )
                         )
@@ -3214,10 +3416,7 @@ fun SettingsCard(
                     verticalArrangement = Arrangement.spacedBy(9.dp)
                 ) {
                     ProvideTextStyle(
-                        value = MaterialTheme.typography.bodyMedium.copy(
-                            fontSize = 12.6.sp,
-                            lineHeight = 16.sp
-                        )
+                        value = KmiTypography.body
                     ) {
                         content()
                     }
@@ -3367,14 +3566,21 @@ fun StatRow(
         ) {
             Text(
                 text = "${pct}%",
-                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.ExtraBold),
+                style = KmiTypography.cardTitle.copy(
+                    fontWeight = FontWeight.ExtraBold
+                ),
                 color = color
             )
+
             Text(
                 text = "חגורה: $title",
-                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.ExtraBold),
+                style = KmiTypography.cardTitle.copy(
+                    fontWeight = FontWeight.ExtraBold
+                ),
                 color = color,
-                textAlign = TextAlign.End
+                textAlign = TextAlign.End,
+                maxLines = 2,
+                softWrap = true
             )
         }
         Spacer(Modifier.height(6.dp))

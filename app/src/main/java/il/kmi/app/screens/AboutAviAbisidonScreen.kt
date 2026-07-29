@@ -26,7 +26,9 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.res.painterResource
+import androidx.compose.foundation.isSystemInDarkTheme
 import il.kmi.app.R
+import il.kmi.app.ui.KmiTypography
 
 //=========================================================================
 
@@ -47,7 +49,29 @@ fun AboutAviAbisidonScreen(
         "מייסד שיטת ק.מ.י - קרב מגן ישראלי"
     }
 
-    val cardTitle = if (isEnglish) "Avi Abisidon" else "אבי אביסידון"
+    val cardTitle =
+        if (isEnglish) "Avi Abisidon" else "אבי אביסידון"
+
+    val isDarkMode = isSystemInDarkTheme()
+
+    val screenGradientColors =
+        if (isDarkMode) {
+            listOf(
+                Color(0xFF090D18),
+                Color(0xFF101827),
+                Color(0xFF13263A),
+                Color(0xFF123B58),
+                Color(0xFF062B4A)
+            )
+        } else {
+            listOf(
+                Color(0xFFF8FBFF),
+                Color(0xFFEAF4FF),
+                Color(0xFFB7DDF7),
+                Color(0xFF1F78B4),
+                Color(0xFF062B4A)
+            )
+        }
 
     Scaffold(
         // ✅ TopBar גלובלי עם אייקון סרגל צד + מצב מאמן/מתאמן
@@ -104,13 +128,7 @@ fun AboutAviAbisidonScreen(
                 .padding(padding)
                 .background(
                     Brush.verticalGradient(
-                        colors = listOf(
-                            Color(0xFFF8FBFF),
-                            Color(0xFFEAF4FF),
-                            Color(0xFFB7DDF7),
-                            Color(0xFF1F78B4),
-                            Color(0xFF062B4A)
-                        )
+                        colors = screenGradientColors
                     )
                 )
                 .padding(horizontal = 16.dp, vertical = 12.dp)
@@ -118,13 +136,26 @@ fun AboutAviAbisidonScreen(
             // הכרטיס
             Surface(
                 modifier = Modifier.fillMaxSize(),
-                color = Color(0xFFEAF2FF),
+                color =
+                    if (isDarkMode) {
+                        MaterialTheme.colorScheme.surface
+                    } else {
+                        Color(0xFFEAF2FF)
+                    },
+                contentColor = MaterialTheme.colorScheme.onSurface,
                 shape = RoundedCornerShape(20.dp),
                 tonalElevation = 2.dp,
                 shadowElevation = 4.dp,
                 border = BorderStroke(
                     width = 1.dp,
-                    color = Color(0xFFD8E3F5)
+                    color =
+                        if (isDarkMode) {
+                            MaterialTheme.colorScheme.outline.copy(
+                                alpha = 0.42f
+                            )
+                        } else {
+                            Color(0xFFD8E3F5)
+                        }
                 )
             ) {
                 CompositionLocalProvider(
@@ -140,9 +171,14 @@ fun AboutAviAbisidonScreen(
                     ) {
                         Text(
                             text = cardTitle,
-                            style = MaterialTheme.typography.headlineSmall,
-                            fontWeight = FontWeight.Bold,
-                            textAlign = if (isEnglish) TextAlign.Start else TextAlign.Right,
+                            style = KmiTypography.screenTitle,
+                            color = MaterialTheme.colorScheme.onSurface,
+                            textAlign =
+                                if (isEnglish) {
+                                    TextAlign.Start
+                                } else {
+                                    TextAlign.Right
+                                },
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .padding(16.dp)
@@ -185,7 +221,7 @@ fun AboutAviAbisidonScreen(
                                     } else {
                                         "אבי אביסידון דאן 10 ראש שיטת ק.מ.י ויו\"ר עמותת ק.מ.י."
                                     },
-                                    style = MaterialTheme.typography.bodyLarge,
+                                    style = KmiTypography.body,
                                     modifier = Modifier.weight(1f),
                                     textAlign = if (isEnglish) TextAlign.Start else TextAlign.Right
                                 )
@@ -212,7 +248,7 @@ fun AboutAviAbisidonScreen(
                                 } else {
                                     "אבי אביסידון עוסק במקצועות קרב מגע וקרב מגן ישראלי, למעלה מ-40 שנה."
                                 },
-                                style = MaterialTheme.typography.bodyLarge,
+                                style = KmiTypography.body,
                                 textAlign = if (isEnglish) TextAlign.Start else TextAlign.Right,
                                 modifier = Modifier.fillMaxWidth()
                             )
@@ -223,7 +259,7 @@ fun AboutAviAbisidonScreen(
                                 } else {
                                     "בשנת 1979 הוענקה לאבי חגורה שחורה דאן 1 בקרב מגע.\nעל חגורה זו ועד דרגת דאן 4 חתום מייסד קרב המגע אימי ליכטנפלד והמדריך אלי אביקזר."
                                 },
-                                style = MaterialTheme.typography.bodyLarge,
+                                style = KmiTypography.body,
                                 textAlign = if (isEnglish) TextAlign.Start else TextAlign.Right,
                                 modifier = Modifier.fillMaxWidth()
                             )
@@ -234,7 +270,7 @@ fun AboutAviAbisidonScreen(
                                 } else {
                                     "בשלב זה, החל להרקם אצל אלי אביקזר רעיון מיסוד השינויים והשיפורים שפיתח בתרגילי קרב המגע ואיחודם למקצוע חדש בשם ק.מ.י. - קרב מגן ישראלי. אלי פנה לתלמידו הבכיר אבי, שהיה לסגנו ויד ימינו בהקמת והטמעת השיטה."
                                 },
-                                style = MaterialTheme.typography.bodyLarge,
+                                style = KmiTypography.body,
                                 textAlign = if (isEnglish) TextAlign.Start else TextAlign.Right,
                                 modifier = Modifier.fillMaxWidth()
                             )
@@ -245,7 +281,7 @@ fun AboutAviAbisidonScreen(
                                 } else {
                                     "כ-15 שנה שימש אבי אביסידון בתפקיד סגן ראש שיטת ק.מ.י. וסגן יו\"ר עמותת ק.מ.י.\nדרגות דאן 5 ועד דאן 7 הוענקו לאבי ע\"י מייסד ק.מ.י. אלי אביקזר."
                                 },
-                                style = MaterialTheme.typography.bodyLarge,
+                                style = KmiTypography.body,
                                 textAlign = if (isEnglish) TextAlign.Start else TextAlign.Right,
                                 modifier = Modifier.fillMaxWidth()
                             )
@@ -256,16 +292,20 @@ fun AboutAviAbisidonScreen(
                                 } else {
                                     "לאחר פטירת אלי אביקזר, נבחר אבי אביסידון ביוני 2004 לראש שיטת ק.מ.י. וליו\"ר עמותת ק.מ.י.\nאבי אביסידון מוסמך מטעם מכון וינגייט."
                                 },
-                                style = MaterialTheme.typography.bodyLarge,
+                                style = KmiTypography.body,
                                 textAlign = if (isEnglish) TextAlign.Start else TextAlign.Right,
                                 modifier = Modifier.fillMaxWidth()
                             )
 
-                            Divider()
+                            HorizontalDivider(
+                                color = MaterialTheme.colorScheme.outline.copy(
+                                    alpha = 0.28f
+                                )
+                            )
 
                             Text(
                                 text = if (isEnglish) "He holds the following certifications:" else "בידיו התעודות הבאות:",
-                                style = MaterialTheme.typography.titleMedium,
+                                style = KmiTypography.sectionTitle,
                                 fontWeight = FontWeight.SemiBold,
                                 textAlign = if (isEnglish) TextAlign.Start else TextAlign.Right,
                                 modifier = Modifier.fillMaxWidth()
@@ -281,16 +321,20 @@ fun AboutAviAbisidonScreen(
                                 } else {
                                     "משנת 1991 מלמד אבי קורסים לקרב מגן ישראלי במכללה האקדמית בוינגייט."
                                 },
-                                style = MaterialTheme.typography.bodyLarge,
+                                style = KmiTypography.body,
                                 textAlign = if (isEnglish) TextAlign.Start else TextAlign.Right,
                                 modifier = Modifier.fillMaxWidth()
                             )
 
-                            Divider()
+                            HorizontalDivider(
+                                color = MaterialTheme.colorScheme.outline.copy(
+                                    alpha = 0.28f
+                                )
+                            )
 
                             Text(
                                 text = if (isEnglish) "Military and security experience:" else "ניסיון צבאי וביטחוני:",
-                                style = MaterialTheme.typography.titleMedium,
+                                style = KmiTypography.sectionTitle,
                                 fontWeight = FontWeight.SemiBold,
                                 textAlign = if (isEnglish) TextAlign.Start else TextAlign.Right,
                                 modifier = Modifier.fillMaxWidth()
@@ -302,12 +346,16 @@ fun AboutAviAbisidonScreen(
                                 } else {
                                     "במשך שרותו הצבאי בשנים 1977-1979 שימש אבי כסגן ראש מדור קרב מגע בצה\"ל.\nבין השנים 1979-1991 אימן את שייטת-13 בקרב מגע ובכושר גופני.\nאבי המשיך בשרות מילואים בשייטת עד 2004 ובמקביל אימן יחידות מיוחדות."
                                 },
-                                style = MaterialTheme.typography.bodyLarge,
+                                style = KmiTypography.body,
                                 textAlign = if (isEnglish) TextAlign.Start else TextAlign.Right,
                                 modifier = Modifier.fillMaxWidth()
                             )
 
-                            Divider()
+                            HorizontalDivider(
+                                color = MaterialTheme.colorScheme.outline.copy(
+                                    alpha = 0.28f
+                                )
+                            )
 
                             Text(
                                 text = if (isEnglish) {
@@ -315,7 +363,7 @@ fun AboutAviAbisidonScreen(
                                 } else {
                                     "משנת 1992 עוסק אבי אבסידון וצוות מדריכים מטעמו בניהול אימון והכשרת מאבטחים לגופים ממשלתיים ולמגזר העסקי:"
                                 },
-                                style = MaterialTheme.typography.bodyLarge,
+                                style = KmiTypography.body,
                                 textAlign = if (isEnglish) TextAlign.Start else TextAlign.Right,
                                 modifier = Modifier.fillMaxWidth()
                             )
@@ -333,16 +381,20 @@ fun AboutAviAbisidonScreen(
                                 } else {
                                     "במקביל העביר אבי אבסידון השתלמויות למדריכות קרב מגע בצה\"ל בדגש על ההיבט האזרחי לצורך הכשרתן כמדריכות בבתי הספר."
                                 },
-                                style = MaterialTheme.typography.bodyLarge,
+                                style = KmiTypography.body,
                                 textAlign = if (isEnglish) TextAlign.Start else TextAlign.Right,
                                 modifier = Modifier.fillMaxWidth()
                             )
 
-                            Divider()
+                            HorizontalDivider(
+                                color = MaterialTheme.colorScheme.outline.copy(
+                                    alpha = 0.28f
+                                )
+                            )
 
                             Text(
                                 text = if (isEnglish) "International activity:" else "פעילות בינלאומית:",
-                                style = MaterialTheme.typography.titleMedium,
+                                style = KmiTypography.sectionTitle,
                                 fontWeight = FontWeight.SemiBold,
                                 textAlign = if (isEnglish) TextAlign.Start else TextAlign.Right,
                                 modifier = Modifier.fillMaxWidth()
@@ -354,16 +406,20 @@ fun AboutAviAbisidonScreen(
                                 } else {
                                     "אבי מעורב בהכנת מאבטחים אישיים עבור נכבדים ופוליטיקאים בארץ ובחו\"ל ומעביר קורסים למשלחות המגיעות מטעם הקהילות היהודיות."
                                 },
-                                style = MaterialTheme.typography.bodyLarge,
+                                style = KmiTypography.body,
                                 textAlign = if (isEnglish) TextAlign.Start else TextAlign.Right,
                                 modifier = Modifier.fillMaxWidth()
                             )
 
-                            Divider()
+                            HorizontalDivider(
+                                color = MaterialTheme.colorScheme.outline.copy(
+                                    alpha = 0.28f
+                                )
+                            )
 
                             Text(
                                 text = if (isEnglish) "Academia and professional training:" else "אקדמיה והכשרות:",
-                                style = MaterialTheme.typography.titleMedium,
+                                style = KmiTypography.sectionTitle,
                                 fontWeight = FontWeight.SemiBold,
                                 textAlign = if (isEnglish) TextAlign.Start else TextAlign.Right,
                                 modifier = Modifier.fillMaxWidth()
@@ -375,16 +431,20 @@ fun AboutAviAbisidonScreen(
                                 } else {
                                     "אבי אבסידון מרכז תחום של אומנות לחימה במכללה האקדמית בוינגייט אשר כולל כל סוגי האומנות לחימה למיניהם.\nבמסגרת זו קיים קורסים שנתיים וקורסים מרוכזים עבור מדריכים, מאמנים ומאמנים בכירים."
                                 },
-                                style = MaterialTheme.typography.bodyLarge,
+                                style = KmiTypography.body,
                                 textAlign = if (isEnglish) TextAlign.Start else TextAlign.Right,
                                 modifier = Modifier.fillMaxWidth()
                             )
 
-                            Divider()
+                            HorizontalDivider(
+                                color = MaterialTheme.colorScheme.outline.copy(
+                                    alpha = 0.28f
+                                )
+                            )
 
                             Text(
                                 text = if (isEnglish) "Prison Service:" else "שב\"ס:",
-                                style = MaterialTheme.typography.titleMedium,
+                                style = KmiTypography.sectionTitle,
                                 fontWeight = FontWeight.SemiBold,
                                 textAlign = if (isEnglish) TextAlign.Start else TextAlign.Right,
                                 modifier = Modifier.fillMaxWidth()
@@ -396,12 +456,16 @@ fun AboutAviAbisidonScreen(
                                 } else {
                                     "אבי כיום מנחה את תוכנית ההדרכה של שירות בתי הסוהר ומעביר להם השתלמויות."
                                 },
-                                style = MaterialTheme.typography.bodyLarge,
+                                style = KmiTypography.body,
                                 textAlign = if (isEnglish) TextAlign.Start else TextAlign.Right,
                                 modifier = Modifier.fillMaxWidth()
                             )
 
-                            Divider()
+                            HorizontalDivider(
+                                color = MaterialTheme.colorScheme.outline.copy(
+                                    alpha = 0.28f
+                                )
+                            )
 
                             Text(
                                 text = if (isEnglish) {
@@ -409,7 +473,7 @@ fun AboutAviAbisidonScreen(
                                 } else {
                                     "החזון של אבי אביסידון: העצמת שיטת ק.מ.י בארץ ובעולם."
                                 },
-                                style = MaterialTheme.typography.titleMedium,
+                                style = KmiTypography.sectionTitle,
                                 textAlign = if (isEnglish) TextAlign.Start else TextAlign.Right,
                                 modifier = Modifier.fillMaxWidth()
                             )
@@ -430,38 +494,35 @@ private fun Bulleted(
 ) {
     Row(
         modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = if (isEnglish) Arrangement.Start else Arrangement.End,
+        horizontalArrangement =
+            if (isEnglish) {
+                Arrangement.Start
+            } else {
+                Arrangement.End
+            },
         verticalAlignment = Alignment.Top
     ) {
-        if (isEnglish) {
-            Text(
-                text = "•",
-                style = MaterialTheme.typography.bodyLarge
-            )
+        Text(
+            text = "•",
+            style = KmiTypography.body.copy(
+                fontWeight = FontWeight.ExtraBold
+            ),
+            color = MaterialTheme.colorScheme.primary
+        )
 
-            Spacer(Modifier.width(8.dp))
+        Spacer(Modifier.width(8.dp))
 
-            Text(
-                text = text,
-                style = MaterialTheme.typography.bodyLarge,
-                textAlign = TextAlign.Start,
-                modifier = Modifier.weight(1f)
-            )
-        } else {
-            // ✅ בעברית: הנקודה מופיעה בצד ימין
-            Text(
-                text = "•",
-                style = MaterialTheme.typography.bodyLarge
-            )
-
-            Spacer(Modifier.width(8.dp))
-
-            Text(
-                text = text,
-                style = MaterialTheme.typography.bodyLarge,
-                textAlign = TextAlign.Right,
-                modifier = Modifier.weight(1f)
-            )
-        }
+        Text(
+            text = text,
+            style = KmiTypography.body,
+            color = MaterialTheme.colorScheme.onSurface,
+            textAlign =
+                if (isEnglish) {
+                    TextAlign.Start
+                } else {
+                    TextAlign.Right
+                },
+            modifier = Modifier.weight(1f)
+        )
     }
 }

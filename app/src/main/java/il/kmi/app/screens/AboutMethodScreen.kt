@@ -2,15 +2,10 @@ package il.kmi.app.screens
 
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -20,7 +15,9 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.foundation.isSystemInDarkTheme
 import il.kmi.app.localization.rememberIsEnglish
+import il.kmi.app.ui.KmiTypography
 
 private fun amText(he: String, en: String, isEnglish: Boolean): String =
     if (isEnglish) en else he
@@ -38,6 +35,26 @@ fun AboutMethodScreen(
     onHome: () -> Unit
 ) {
     val isEnglish = rememberIsEnglish()
+    val isDarkMode = isSystemInDarkTheme()
+
+    val screenGradientColors =
+        if (isDarkMode) {
+            listOf(
+                Color(0xFF090D18),
+                Color(0xFF101827),
+                Color(0xFF13263A),
+                Color(0xFF123B58),
+                Color(0xFF062B4A)
+            )
+        } else {
+            listOf(
+                Color(0xFFF8FBFF),
+                Color(0xFFEAF4FF),
+                Color(0xFFB7DDF7),
+                Color(0xFF1F78B4),
+                Color(0xFF062B4A)
+            )
+        }
 
     Scaffold(
         topBar = {
@@ -65,13 +82,7 @@ fun AboutMethodScreen(
                 .padding(padding)
                 .background(
                     Brush.verticalGradient(
-                        colors = listOf(
-                            Color(0xFFF8FBFF),
-                            Color(0xFFEAF4FF),
-                            Color(0xFFB7DDF7),
-                            Color(0xFF1F78B4),
-                            Color(0xFF062B4A)
-                        )
+                        colors = screenGradientColors
                     )
                 )
         ) {
@@ -80,12 +91,25 @@ fun AboutMethodScreen(
                     .fillMaxSize()
                     .padding(horizontal = 16.dp, vertical = 12.dp),
                 shape = RoundedCornerShape(24.dp),
-                color = Color(0xFFEAF2FF),
+                color =
+                    if (isDarkMode) {
+                        MaterialTheme.colorScheme.surface
+                    } else {
+                        Color(0xFFEAF2FF)
+                    },
+                contentColor = MaterialTheme.colorScheme.onSurface,
                 tonalElevation = 2.dp,
                 shadowElevation = 8.dp,
                 border = BorderStroke(
                     width = 1.dp,
-                    color = Color(0xFFD8E3F5)
+                    color =
+                        if (isDarkMode) {
+                            MaterialTheme.colorScheme.outline.copy(
+                                alpha = 0.42f
+                            )
+                        } else {
+                            Color(0xFFD8E3F5)
+                        }
                 )
             ) {
                 Column(modifier = Modifier.fillMaxSize()) {
@@ -96,8 +120,8 @@ fun AboutMethodScreen(
                             "About the K.A.M.I Method - Israeli Protective Combat",
                             isEnglish
                         ),
-                        style = MaterialTheme.typography.headlineSmall,
-                        fontWeight = FontWeight.Bold,
+                        style = KmiTypography.screenTitle,
+                        color = MaterialTheme.colorScheme.onSurface,
                         modifier = Modifier
                             .fillMaxWidth()
                             .padding(20.dp),
@@ -105,7 +129,9 @@ fun AboutMethodScreen(
                     )
 
                     HorizontalDivider(
-                        color = Color(0xFFBFD0E8),
+                        color = MaterialTheme.colorScheme.outline.copy(
+                            alpha = 0.28f
+                        ),
                         thickness = 1.dp
                     )
 
@@ -146,7 +172,7 @@ Thus, the name symbolizes the method itself.
                                 """.trimIndent(),
                                 isEnglish
                             ),
-                            style = MaterialTheme.typography.bodyLarge,
+                            style = KmiTypography.body,
                             textAlign = amAlign(isEnglish),
                             modifier = Modifier.fillMaxWidth()
                         )
@@ -159,7 +185,7 @@ Thus, the name symbolizes the method itself.
                                 "The Difference Between K.A.M.I and Krav Maga",
                                 isEnglish
                             ),
-                            style = MaterialTheme.typography.titleMedium,
+                            style = KmiTypography.sectionTitle,
                             fontWeight = FontWeight.SemiBold,
                             textAlign = amAlign(isEnglish),
                             modifier = Modifier.fillMaxWidth()
@@ -217,7 +243,7 @@ The K.A.M.I method is approved by the Levinsky-Wingate Academic Center. Physical
                                 """.trimIndent(),
                                 isEnglish
                             ),
-                            style = MaterialTheme.typography.bodyLarge,
+                            style = KmiTypography.body,
                             textAlign = amAlign(isEnglish),
                             modifier = Modifier.fillMaxWidth()
                         )
@@ -230,7 +256,7 @@ The K.A.M.I method is approved by the Levinsky-Wingate Academic Center. Physical
                                 "The ideology of K.A.M.I is characterized by these principles:",
                                 isEnglish
                             ),
-                            style = MaterialTheme.typography.titleMedium,
+                            style = KmiTypography.sectionTitle,
                             fontWeight = FontWeight.SemiBold,
                             textAlign = amAlign(isEnglish),
                             modifier = Modifier.fillMaxWidth()
@@ -266,7 +292,7 @@ The K.A.M.I method is approved by the Wingate Academic College. Physical educati
                                 """.trimIndent(),
                                 isEnglish
                             ),
-                            style = MaterialTheme.typography.bodyLarge,
+                            style = KmiTypography.body,
                             textAlign = amAlign(isEnglish),
                             modifier = Modifier.fillMaxWidth()
                         )
@@ -279,7 +305,7 @@ The K.A.M.I method is approved by the Wingate Academic College. Physical educati
                                 "Israeli Protective Combat - K.A.M.I focuses on two main areas:",
                                 isEnglish
                             ),
-                            style = MaterialTheme.typography.titleMedium,
+                            style = KmiTypography.sectionTitle,
                             fontWeight = FontWeight.SemiBold,
                             textAlign = amAlign(isEnglish),
                             modifier = Modifier.fillMaxWidth()
@@ -321,7 +347,7 @@ The K.A.M.I method is approved by the Wingate Academic College. Physical educati
                                 "The techniques taught in the K.A.M.I method:",
                                 isEnglish
                             ),
-                            style = MaterialTheme.typography.titleMedium,
+                            style = KmiTypography.sectionTitle,
                             fontWeight = FontWeight.SemiBold,
                             textAlign = amAlign(isEnglish),
                             modifier = Modifier.fillMaxWidth()
@@ -357,7 +383,7 @@ The K.A.M.I method is approved by the Wingate Academic College. Physical educati
 
                         Text(
                             text = amText("עקרון הפשטות", "The Principle of Simplicity", isEnglish),
-                            style = MaterialTheme.typography.titleMedium,
+                            style = KmiTypography.sectionTitle,
                             fontWeight = FontWeight.SemiBold,
                             textAlign = amAlign(isEnglish),
                             modifier = Modifier.fillMaxWidth()
@@ -379,7 +405,7 @@ From this came Eli Avikzar's phrase: "Minimum defense against maximum attack."
                                 """.trimIndent(),
                                 isEnglish
                             ),
-                            style = MaterialTheme.typography.bodyLarge,
+                            style = KmiTypography.body,
                             textAlign = amAlign(isEnglish),
                             modifier = Modifier.fillMaxWidth()
                         )
@@ -388,7 +414,7 @@ From this came Eli Avikzar's phrase: "Minimum defense against maximum attack."
 
                         Text(
                             text = amText("פילוסופיה מעשית ומתעדכנת", "A Practical and Evolving Philosophy", isEnglish),
-                            style = MaterialTheme.typography.titleMedium,
+                            style = KmiTypography.sectionTitle,
                             fontWeight = FontWeight.SemiBold,
                             textAlign = amAlign(isEnglish),
                             modifier = Modifier.fillMaxWidth()
@@ -406,7 +432,7 @@ Unlike traditional martial arts, K.A.M.I adapts itself to the changing reality o
                                 """.trimIndent(),
                                 isEnglish
                             ),
-                            style = MaterialTheme.typography.bodyLarge,
+                            style = KmiTypography.body,
                             textAlign = amAlign(isEnglish),
                             modifier = Modifier.fillMaxWidth()
                         )
@@ -415,7 +441,7 @@ Unlike traditional martial arts, K.A.M.I adapts itself to the changing reality o
 
                         Text(
                             text = amText("דירוג חגורות", "Belt Ranking", isEnglish),
-                            style = MaterialTheme.typography.titleMedium,
+                            style = KmiTypography.sectionTitle,
                             fontWeight = FontWeight.SemiBold,
                             textAlign = amAlign(isEnglish),
                             modifier = Modifier.fillMaxWidth()
@@ -429,7 +455,7 @@ Unlike traditional martial arts, K.A.M.I adapts itself to the changing reality o
                                 "White, Yellow, Orange, Green, Blue, Brown, Black: Dan 1–2; red-white stripes: Dan 3–4; red-black sections: Dan 5; red-white sections: Dan 6–7; red: Dan 8–10.",
                                 isEnglish
                             ),
-                            style = MaterialTheme.typography.bodyLarge,
+                            style = KmiTypography.body,
                             textAlign = amAlign(isEnglish),
                             modifier = Modifier.fillMaxWidth()
                         )
@@ -438,7 +464,7 @@ Unlike traditional martial arts, K.A.M.I adapts itself to the changing reality o
 
                         Text(
                             text = amText("השפעה חינוכית וחברתית", "Educational and Social Impact", isEnglish),
-                            style = MaterialTheme.typography.titleMedium,
+                            style = KmiTypography.sectionTitle,
                             fontWeight = FontWeight.SemiBold,
                             textAlign = amAlign(isEnglish),
                             modifier = Modifier.fillMaxWidth()
@@ -452,7 +478,7 @@ Unlike traditional martial arts, K.A.M.I adapts itself to the changing reality o
                                 "K.A.M.I trainees report improvement in movement and coordination, increased personal confidence and self-confidence, courage, composure, discipline, self-control, and distancing themselves from violent environments.",
                                 isEnglish
                             ),
-                            style = MaterialTheme.typography.bodyLarge,
+                            style = KmiTypography.body,
                             textAlign = amAlign(isEnglish),
                             modifier = Modifier.fillMaxWidth()
                         )
@@ -474,7 +500,8 @@ private fun AMBullet(
 ) {
     Text(
         text = if (isEnglish) "• $text" else "•  $text",
-        style = MaterialTheme.typography.bodyLarge,
+        style = KmiTypography.body,
+        color = MaterialTheme.colorScheme.onSurface,
         modifier = Modifier.fillMaxWidth(),
         textAlign = amAlign(isEnglish)
     )
@@ -487,7 +514,7 @@ private fun AMBulletSub(
 ) {
     Text(
         text = if (isEnglish) "– $text" else "–  $text",
-        style = MaterialTheme.typography.bodyMedium,
+        style = KmiTypography.secondary,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
         modifier = Modifier
             .fillMaxWidth()
@@ -506,8 +533,8 @@ private fun AMBulletTitle(
 ) {
     Text(
         text = text,
-        style = MaterialTheme.typography.titleMedium,
-        fontWeight = FontWeight.SemiBold,
+        style = KmiTypography.sectionTitle,
+        color = MaterialTheme.colorScheme.onSurface,
         modifier = Modifier.fillMaxWidth(),
         textAlign = amAlign(isEnglish)
     )

@@ -11,7 +11,6 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
@@ -27,6 +26,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.text.font.FontWeight
@@ -45,7 +45,9 @@ import androidx.compose.material.icons.filled.Save
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.style.TextDirection
+import il.kmi.app.ui.KmiIconSize
 import il.kmi.app.ui.KmiTopBar
+import il.kmi.app.ui.KmiTypography
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.outlined.StarBorder
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -88,8 +90,14 @@ fun AttendanceScreen(
     val languageManager = remember(context) { AppLanguageManager(context) }
     val isEnglish = languageManager.getCurrentLanguage() == AppLanguage.ENGLISH
     fun tr(he: String, en: String): String = if (isEnglish) en else he
-    val screenTextAlign = if (isEnglish) TextAlign.Left else TextAlign.Right
-    val screenLayoutDirection = if (isEnglish) LayoutDirection.Ltr else LayoutDirection.Rtl
+    val screenTextAlign =
+        if (isEnglish) TextAlign.Left else TextAlign.Right
+
+    val screenLayoutDirection =
+        if (isEnglish) LayoutDirection.Ltr else LayoutDirection.Rtl
+
+    val isDarkMode =
+        MaterialTheme.colorScheme.background.luminance() < 0.5f
 
     LaunchedEffect(vm) {
         vm.events.collect { ev ->
@@ -359,8 +367,14 @@ fun AttendanceScreen(
                     .offset(y = (-28).dp) // ✅ מרים עוד למעלה (אפשר לשחק עם -24/-32)
             ) {
                 Icon(
-                    Icons.Filled.Add,
-                    contentDescription = tr("הוספת מתאמן", "Add trainee")
+                    imageVector = Icons.Filled.Add,
+                    contentDescription = tr(
+                        "הוספת מתאמן",
+                        "Add trainee"
+                    ),
+                    modifier = Modifier.size(
+                        KmiIconSize.large
+                    )
                 )
             }
         },
@@ -374,13 +388,24 @@ fun AttendanceScreen(
                 .fillMaxSize()
                 .background(
                     Brush.verticalGradient(
-                        colors = listOf(
-                            Color(0xFFF8FBFF),
-                            Color(0xFFEAF4FF),
-                            Color(0xFFB7DDF7),
-                            Color(0xFF1F78B4),
-                            Color(0xFF062B4A)
-                        )
+                        colors =
+                            if (isDarkMode) {
+                                listOf(
+                                    MaterialTheme.colorScheme.background,
+                                    MaterialTheme.colorScheme.surface,
+                                    Color(0xFF10243A),
+                                    Color(0xFF0A3657),
+                                    Color(0xFF041E33)
+                                )
+                            } else {
+                                listOf(
+                                    Color(0xFFF8FBFF),
+                                    Color(0xFFEAF4FF),
+                                    Color(0xFFB7DDF7),
+                                    Color(0xFF1F78B4),
+                                    Color(0xFF062B4A)
+                                )
+                            }
                     )
                 )
         ) {
@@ -430,10 +455,19 @@ fun AttendanceScreen(
 
                 item {
                     Text(
-                        text = tr("סימון נוכחות למתאמנים", "Mark trainee attendance"),
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.ExtraBold,
-                        color = Color(0xFF1E2A3D),
+                        text = tr(
+                            "סימון נוכחות למתאמנים",
+                            "Mark trainee attendance"
+                        ),
+                        style = KmiTypography.sectionTitle.copy(
+                            fontWeight = FontWeight.ExtraBold
+                        ),
+                        color =
+                            if (isDarkMode) {
+                                MaterialTheme.colorScheme.onBackground
+                            } else {
+                                Color(0xFF1E2A3D)
+                            },
                         modifier = Modifier.fillMaxWidth(),
                         textAlign = screenTextAlign
                     )
@@ -461,9 +495,17 @@ fun AttendanceScreen(
                                 text = uiName,
                                 modifier = Modifier.fillMaxWidth(),
                                 textAlign = TextAlign.Start,
-                                style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.ExtraBold,
-                                color = Color(0xFF1E2A3D)
+                                style = KmiTypography.cardTitle.copy(
+                                    fontWeight = FontWeight.ExtraBold
+                                ),
+                                color =
+                                    if (isDarkMode) {
+                                        MaterialTheme.colorScheme.onBackground
+                                    } else {
+                                        Color(0xFF1E2A3D)
+                                    },
+                                maxLines = 2,
+                                overflow = TextOverflow.Ellipsis
                             )
 
                             Spacer(Modifier.height(6.dp))
@@ -486,35 +528,54 @@ fun AttendanceScreen(
                                     color = bg,
                                     contentColor = fg,
                                     shape = RoundedCornerShape(999.dp),
-                                    tonalElevation = if (selected) 2.dp else 0.dp,
+                                    tonalElevation =
+                                        if (selected) 2.dp else 0.dp,
                                     shadowElevation = 0.dp,
                                     border = brd,
                                     modifier = modifier
-                                        .height(36.dp)
-                                        .clickable { onClick() }
+                                        .heightIn(min = 36.dp)
+                                        .clickable {
+                                            onClick()
+                                        }
                                 ) {
                                     Row(
                                         modifier = Modifier
-                                            .fillMaxSize()
-                                            .padding(horizontal = 10.dp),
-                                        horizontalArrangement = Arrangement.Center,
-                                        verticalAlignment = Alignment.CenterVertically
+                                            .fillMaxWidth()
+                                            .padding(
+                                                horizontal = 10.dp,
+                                                vertical = 8.dp
+                                            ),
+                                        horizontalArrangement =
+                                            Arrangement.Center,
+                                        verticalAlignment =
+                                            Alignment.CenterVertically
                                     ) {
-                                        Box(Modifier.size(14.dp)) {
+                                        Box(
+                                            modifier = Modifier.size(
+                                                KmiIconSize.tiny
+                                            )
+                                        ) {
                                             if (selected) {
                                                 Icon(
-                                                    imageVector = Icons.Filled.Check,
+                                                    imageVector =
+                                                        Icons.Filled.Check,
                                                     contentDescription = null,
-                                                    modifier = Modifier.size(14.dp)
+                                                    modifier = Modifier.size(
+                                                        KmiIconSize.tiny
+                                                    )
                                                 )
                                             }
                                         }
+
                                         Spacer(Modifier.width(4.dp))
+
                                         Text(
                                             text = text,
-                                            style = MaterialTheme.typography.labelMedium,
-                                            fontWeight = FontWeight.ExtraBold,
-                                            maxLines = 1,
+                                            style = KmiTypography.caption.copy(
+                                                fontWeight =
+                                                    FontWeight.ExtraBold
+                                            ),
+                                            maxLines = 2,
                                             overflow = TextOverflow.Ellipsis
                                         )
                                     }
@@ -522,11 +583,11 @@ fun AttendanceScreen(
                             }
 
                             Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .height(IntrinsicSize.Min),
-                                horizontalArrangement = Arrangement.spacedBy(12.dp),
-                                verticalAlignment = Alignment.CenterVertically
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement =
+                                    Arrangement.spacedBy(12.dp),
+                                verticalAlignment =
+                                    Alignment.CenterVertically
                             ) {
                                 Column(
                                     modifier = Modifier
@@ -571,9 +632,16 @@ fun AttendanceScreen(
                                             onOpenMemberStats(mid, uiName)
                                         }) {
                                             Icon(
-                                                Icons.Filled.Assessment,
-                                                contentDescription = tr("סטטיסטיקה", "Statistics"),
-                                                tint = Color(0xFF38BDF8)
+                                                imageVector =
+                                                    Icons.Filled.Assessment,
+                                                contentDescription = tr(
+                                                    "סטטיסטיקה",
+                                                    "Statistics"
+                                                ),
+                                                tint = Color(0xFF38BDF8),
+                                                modifier = Modifier.size(
+                                                    KmiIconSize.medium
+                                                )
                                             )
                                         }
 
@@ -585,18 +653,33 @@ fun AttendanceScreen(
                                             pendingDelete = id to uiName
                                         }) {
                                             Icon(
-                                                Icons.Filled.Delete,
-                                                contentDescription = tr("הסר מתאמן", "Remove trainee"),
-                                                tint = Color(0xFFF97316)
+                                                imageVector =
+                                                    Icons.Filled.Delete,
+                                                contentDescription = tr(
+                                                    "הסר מתאמן",
+                                                    "Remove trainee"
+                                                ),
+                                                tint = Color(0xFFF97316),
+                                                modifier = Modifier.size(
+                                                    KmiIconSize.medium
+                                                )
                                             )
                                         }
                                     }
                                 }
                             }
 
-                            Divider(
-                                modifier = Modifier.padding(vertical = 10.dp),
-                                color = Color(0xFF1F2937)
+                            HorizontalDivider(
+                                modifier = Modifier.padding(
+                                    vertical = 10.dp
+                                ),
+                                color =
+                                    if (isDarkMode) {
+                                        MaterialTheme.colorScheme.outline
+                                            .copy(alpha = 0.45f)
+                                    } else {
+                                        Color(0xFF1F2937)
+                                    }
                             )
                         }
                     }
@@ -606,8 +689,9 @@ fun AttendanceScreen(
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(52.dp),
-                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                            .heightIn(min = 52.dp),
+                        horizontalArrangement =
+                            Arrangement.spacedBy(10.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
 
@@ -615,16 +699,20 @@ fun AttendanceScreen(
 
                         @Composable
                         fun BtnText(text: String) {
-                            CompositionLocalProvider(LocalLayoutDirection provides screenLayoutDirection) {
+                            CompositionLocalProvider(
+                                LocalLayoutDirection provides
+                                        screenLayoutDirection
+                            ) {
                                 Text(
                                     text = text,
-                                    maxLines = 1,
-                                    softWrap = false,
-                                    overflow = TextOverflow.Clip,
-                                    style = MaterialTheme.typography.labelMedium,
-                                    fontWeight = FontWeight.SemiBold,
+                                    style = KmiTypography.action.copy(
+                                        fontWeight =
+                                            FontWeight.SemiBold
+                                    ),
                                     color = LocalContentColor.current,
-                                    textAlign = TextAlign.Center
+                                    textAlign = TextAlign.Center,
+                                    maxLines = 2,
+                                    overflow = TextOverflow.Ellipsis
                                 )
                             }
                         }
@@ -636,7 +724,9 @@ fun AttendanceScreen(
                                 }
                             },
                             enabled = hasRealMembers,
-                            modifier = Modifier.weight(1f).fillMaxHeight(),
+                            modifier = Modifier
+                                .weight(1f)
+                                .heightIn(min = 52.dp),
                             shape = RoundedCornerShape(20.dp),
                             contentPadding = compactPadding,
                             colors = ButtonDefaults.buttonColors(
@@ -648,9 +738,11 @@ fun AttendanceScreen(
                         ) {
                             CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) {
                                 Icon(
-                                    Icons.Filled.Save,
+                                    imageVector = Icons.Filled.Save,
                                     contentDescription = null,
-                                    modifier = Modifier.size(18.dp),
+                                    modifier = Modifier.size(
+                                        KmiIconSize.small
+                                    ),
                                     tint = LocalContentColor.current
                                 )
                                 Spacer(Modifier.width(6.dp))
@@ -659,8 +751,16 @@ fun AttendanceScreen(
                         }
 
                         OutlinedButton(
-                            onClick = { onOpenGroupStats(selectedBranch, selectedGroup) },
-                            modifier = Modifier.weight(1f).fillMaxHeight(),                            shape = RoundedCornerShape(20.dp),
+                            onClick = {
+                                onOpenGroupStats(
+                                    selectedBranch,
+                                    selectedGroup
+                                )
+                            },
+                            modifier = Modifier
+                                .weight(1f)
+                                .heightIn(min = 52.dp),
+                            shape = RoundedCornerShape(20.dp),
                             contentPadding = compactPadding,
                             border = BorderStroke(1.dp, Color(0xFF93C5FD)),
                             colors = ButtonDefaults.outlinedButtonColors(
@@ -765,23 +865,47 @@ fun AttendanceScreen(
                                             horizontalAlignment = if (isEnglish) Alignment.Start else Alignment.End
                                         ) {
                                             Text(
-                                                text = tr("בחירת תאריך אימון", "Select training date"),
+                                                text = tr(
+                                                    "בחירת תאריך אימון",
+                                                    "Select training date"
+                                                ),
+                                                style =
+                                                    KmiTypography.secondary.copy(
+                                                        fontWeight =
+                                                            FontWeight.Bold
+                                                    ),
                                                 color = Color(0xFFBFDBFE),
-                                                fontWeight = FontWeight.Bold,
-                                                style = MaterialTheme.typography.labelLarge,
-                                                textAlign = if (isEnglish) TextAlign.Left else TextAlign.Right,
-                                                modifier = Modifier.fillMaxWidth()
+                                                textAlign =
+                                                    if (isEnglish) {
+                                                        TextAlign.Left
+                                                    } else {
+                                                        TextAlign.Right
+                                                    },
+                                                modifier =
+                                                    Modifier.fillMaxWidth()
                                             )
 
                                             Spacer(Modifier.height(4.dp))
 
                                             Text(
                                                 text = selectedTitle,
+                                                style =
+                                                    KmiTypography.sectionTitle.copy(
+                                                        fontWeight =
+                                                            FontWeight.Black
+                                                    ),
                                                 color = Color.White,
-                                                fontWeight = FontWeight.Black,
-                                                style = MaterialTheme.typography.titleLarge,
-                                                textAlign = if (isEnglish) TextAlign.Left else TextAlign.Right,
-                                                modifier = Modifier.fillMaxWidth()
+                                                textAlign =
+                                                    if (isEnglish) {
+                                                        TextAlign.Left
+                                                    } else {
+                                                        TextAlign.Right
+                                                    },
+                                                modifier =
+                                                    Modifier.fillMaxWidth(),
+                                                maxLines = 2,
+                                                overflow =
+                                                    TextOverflow.Ellipsis
                                             )
                                         }
 
@@ -794,8 +918,10 @@ fun AttendanceScreen(
                                         ) {
                                             Text(
                                                 text = "📅",
-                                                fontSize = 22.sp,
-                                                modifier = Modifier.padding(10.dp)
+                                                style = KmiTypography.metric,
+                                                modifier = Modifier.padding(
+                                                    10.dp
+                                                )
                                             )
                                         }
                                     }
@@ -810,30 +936,47 @@ fun AttendanceScreen(
                                             onClick = { visibleMonth = visibleMonth.minusMonths(1) }
                                         ) {
                                             Text(
-                                                text = if (isEnglish) "‹" else "›",
-                                                color = Color.White,
-                                                fontSize = 32.sp,
-                                                fontWeight = FontWeight.Bold
+                                                text =
+                                                    if (isEnglish) {
+                                                        "‹"
+                                                    } else {
+                                                        "›"
+                                                    },
+                                                style = KmiTypography.metric.copy(
+                                                    fontWeight =
+                                                        FontWeight.Bold
+                                                ),
+                                                color = Color.White
                                             )
                                         }
 
                                         Text(
                                             text = monthTitle,
+                                            style = KmiTypography.cardTitle.copy(
+                                                fontWeight = FontWeight.Bold
+                                            ),
                                             color = Color.White,
-                                            fontWeight = FontWeight.Bold,
-                                            style = MaterialTheme.typography.titleMedium,
                                             textAlign = TextAlign.Center,
-                                            modifier = Modifier.weight(1f)
+                                            modifier = Modifier.weight(1f),
+                                            maxLines = 2,
+                                            overflow = TextOverflow.Ellipsis
                                         )
 
                                         IconButton(
                                             onClick = { visibleMonth = visibleMonth.plusMonths(1) }
                                         ) {
                                             Text(
-                                                text = if (isEnglish) "›" else "‹",
-                                                color = Color.White,
-                                                fontSize = 32.sp,
-                                                fontWeight = FontWeight.Bold
+                                                text =
+                                                    if (isEnglish) {
+                                                        "›"
+                                                    } else {
+                                                        "‹"
+                                                    },
+                                                style = KmiTypography.metric.copy(
+                                                    fontWeight =
+                                                        FontWeight.Bold
+                                                ),
+                                                color = Color.White
                                             )
                                         }
                                     }
@@ -855,11 +998,17 @@ fun AttendanceScreen(
                                         weekDays.forEach { dayName ->
                                             Text(
                                                 text = dayName,
+                                                style =
+                                                    KmiTypography.caption.copy(
+                                                        fontWeight =
+                                                            FontWeight.Black
+                                                    ),
                                                 color = Color(0xFF67E8F9),
-                                                fontWeight = FontWeight.Black,
-                                                fontSize = 13.sp,
                                                 textAlign = TextAlign.Center,
-                                                modifier = Modifier.weight(1f)
+                                                modifier = Modifier.weight(1f),
+                                                maxLines = 1,
+                                                overflow =
+                                                    TextOverflow.Ellipsis
                                             )
                                         }
                                     }
@@ -891,13 +1040,18 @@ fun AttendanceScreen(
                                                     Box(
                                                         modifier = Modifier
                                                             .weight(1f)
-                                                            .height(40.dp),
-                                                        contentAlignment = Alignment.Center
+                                                            .heightIn(
+                                                                min = 40.dp
+                                                            ),
+                                                        contentAlignment =
+                                                            Alignment.Center
                                                     ) {
                                                         if (day != null && cellDate != null) {
                                                             Surface(
                                                                 modifier = Modifier
-                                                                    .size(34.dp)
+                                                                    .size(
+                                                                        KmiIconSize.extraLarge
+                                                                    )
                                                                     .clickable {
                                                                         vm.selectAttendanceDate(cellDate)
                                                                         showDatePicker = false
@@ -919,15 +1073,21 @@ fun AttendanceScreen(
                                                                     contentAlignment = Alignment.Center
                                                                 ) {
                                                                     Text(
-                                                                        text = day.toString(),
-                                                                        color = if (isSelected) {
-                                                                            Color(0xFF020617)
-                                                                        } else {
-                                                                            Color.White
-                                                                        },
-                                                                        fontWeight = FontWeight.Black,
-                                                                        fontSize = 16.sp,
-                                                                        textAlign = TextAlign.Center
+                                                                        text =
+                                                                            day.toString(),
+                                                                        style =
+                                                                            KmiTypography.cardTitle.copy(
+                                                                                fontWeight =
+                                                                                    FontWeight.Black
+                                                                            ),
+                                                                        color =
+                                                                            if (isSelected) {
+                                                                                Color(0xFF020617)
+                                                                            } else {
+                                                                                Color.White
+                                                                            },
+                                                                        textAlign =
+                                                                            TextAlign.Center
                                                                     )
                                                                 }
                                                             }
@@ -1174,10 +1334,48 @@ private fun AttendanceSelectionCard(
 ) {
     fun tr(he: String, en: String): String = if (isEnglish) en else he
 
-    val align = if (isEnglish) TextAlign.Left else TextAlign.Right
-    val horizontal = if (isEnglish) Alignment.Start else Alignment.End
-    val layoutDirection = if (isEnglish) LayoutDirection.Ltr else LayoutDirection.Rtl
-    val textDirection = if (isEnglish) TextDirection.Ltr else TextDirection.Rtl
+    val align =
+        if (isEnglish) TextAlign.Left else TextAlign.Right
+
+    val horizontal =
+        if (isEnglish) Alignment.Start else Alignment.End
+
+    val layoutDirection =
+        if (isEnglish) LayoutDirection.Ltr else LayoutDirection.Rtl
+
+    val textDirection =
+        if (isEnglish) TextDirection.Ltr else TextDirection.Rtl
+
+    val isDarkMode =
+        MaterialTheme.colorScheme.surface.luminance() < 0.5f
+
+    val fieldContainerColor =
+        if (isDarkMode) {
+            MaterialTheme.colorScheme.surfaceVariant
+        } else {
+            Color.White.copy(alpha = 0.74f)
+        }
+
+    val fieldBorderColor =
+        if (isDarkMode) {
+            MaterialTheme.colorScheme.outline.copy(alpha = 0.55f)
+        } else {
+            Color(0xFFC7D7EE)
+        }
+
+    val labelColor =
+        if (isDarkMode) {
+            MaterialTheme.colorScheme.onSurfaceVariant
+        } else {
+            Color(0xFF64748B)
+        }
+
+    val valueColor =
+        if (isDarkMode) {
+            MaterialTheme.colorScheme.onSurface
+        } else {
+            Color(0xFF1E2A3D)
+        }
 
     val dateText = remember(selectedDate, isEnglish) {
         val locale = if (isEnglish) Locale.ENGLISH else Locale("he", "IL")
@@ -1212,12 +1410,17 @@ private fun AttendanceSelectionCard(
             Surface(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .heightIn(min = 38.dp)
+                    .heightIn(min = 44.dp)
                     .padding(end = 10.dp)
-                    .clickable { onClick() },
+                    .clickable {
+                        onClick()
+                    },
                 shape = RoundedCornerShape(15.dp),
-                color = Color.White.copy(alpha = 0.74f),
-                border = BorderStroke(1.dp, Color(0xFFC7D7EE)),
+                color = fieldContainerColor,
+                border = BorderStroke(
+                    width = 1.dp,
+                    color = fieldBorderColor
+                ),
                 tonalElevation = 0.dp,
                 shadowElevation = 0.dp
             ) {
@@ -1230,10 +1433,10 @@ private fun AttendanceSelectionCard(
                 ) {
                     Text(
                         text = label,
-                        color = Color(0xFF64748B),
-                        fontSize = 10.sp,
-                        lineHeight = 11.sp,
-                        fontWeight = FontWeight.Bold,
+                        style = KmiTypography.caption.copy(
+                            fontWeight = FontWeight.Bold
+                        ),
+                        color = labelColor,
                         textAlign = TextAlign.Center,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
@@ -1242,13 +1445,12 @@ private fun AttendanceSelectionCard(
 
                     Text(
                         text = value.ifBlank { "—" },
-                        color = Color(0xFF1E2A3D),
-                        fontSize = 8.sp,
-                        lineHeight = 9.sp,
-                        fontWeight = FontWeight.ExtraBold,
+                        style = KmiTypography.caption.copy(
+                            fontWeight = FontWeight.ExtraBold
+                        ),
+                        color = valueColor,
                         textAlign = TextAlign.Center,
-                        maxLines = 1,
-                        softWrap = false,
+                        maxLines = 2,
                         overflow = TextOverflow.Ellipsis,
                         modifier = Modifier.fillMaxWidth()
                     )
@@ -1257,12 +1459,22 @@ private fun AttendanceSelectionCard(
 
             Surface(
                 modifier = Modifier
-                    .size(20.dp)
+                    .size(KmiIconSize.medium)
                     .align(Alignment.CenterEnd)
-                    .clickable { onClick() },
+                    .clickable {
+                        onClick()
+                    },
                 shape = CircleShape,
-                color = Color(0xFFEAF2FF),
-                border = BorderStroke(1.dp, Color(0xFFC7D7EE)),
+                color =
+                    if (isDarkMode) {
+                        MaterialTheme.colorScheme.surface
+                    } else {
+                        Color(0xFFEAF2FF)
+                    },
+                border = BorderStroke(
+                    width = 1.dp,
+                    color = fieldBorderColor
+                ),
                 tonalElevation = 0.dp,
                 shadowElevation = 0.dp
             ) {
@@ -1272,10 +1484,10 @@ private fun AttendanceSelectionCard(
                 ) {
                     Text(
                         text = "▼",
-                        color = Color(0xFF64748B),
-                        fontSize = 9.sp,
-                        lineHeight = 9.sp,
-                        fontWeight = FontWeight.Black
+                        style = KmiTypography.caption.copy(
+                            fontWeight = FontWeight.Black
+                        ),
+                        color = labelColor
                     )
                 }
             }
@@ -1314,11 +1526,14 @@ private fun AttendanceSelectionCard(
                 Surface(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .heightIn(min = 38.dp)
+                        .heightIn(min = 44.dp)
                         .padding(end = 10.dp),
                     shape = RoundedCornerShape(15.dp),
-                    color = Color.White.copy(alpha = 0.74f),
-                    border = BorderStroke(1.dp, Color(0xFFC7D7EE)),
+                    color = fieldContainerColor,
+                    border = BorderStroke(
+                        width = 1.dp,
+                        color = fieldBorderColor
+                    ),
                     tonalElevation = 0.dp,
                     shadowElevation = 0.dp
                 ) {
@@ -1331,10 +1546,10 @@ private fun AttendanceSelectionCard(
                     ) {
                         Text(
                             text = label,
-                            color = Color(0xFF64748B),
-                            fontSize = 10.sp,
-                            lineHeight = 11.sp,
-                            fontWeight = FontWeight.Bold,
+                            style = KmiTypography.caption.copy(
+                                fontWeight = FontWeight.Bold
+                            ),
+                            color = labelColor,
                             textAlign = TextAlign.Center,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
@@ -1343,13 +1558,12 @@ private fun AttendanceSelectionCard(
 
                         Text(
                             text = compactChoiceText(selected),
-                            color = Color(0xFF1E2A3D),
-                            fontSize = 8.sp,
-                            lineHeight = 9.sp,
-                            fontWeight = FontWeight.ExtraBold,
+                            style = KmiTypography.caption.copy(
+                                fontWeight = FontWeight.ExtraBold
+                            ),
+                            color = valueColor,
                             textAlign = TextAlign.Center,
-                            maxLines = 1,
-                            softWrap = false,
+                            maxLines = 2,
                             overflow = TextOverflow.Ellipsis,
                             modifier = Modifier.fillMaxWidth()
                         )
@@ -1358,11 +1572,19 @@ private fun AttendanceSelectionCard(
 
                 Surface(
                     modifier = Modifier
-                        .size(20.dp)
+                        .size(KmiIconSize.medium)
                         .align(Alignment.CenterEnd),
                     shape = CircleShape,
-                    color = Color(0xFFEAF2FF),
-                    border = BorderStroke(1.dp, Color(0xFFC7D7EE)),
+                    color =
+                        if (isDarkMode) {
+                            MaterialTheme.colorScheme.surface
+                        } else {
+                            Color(0xFFEAF2FF)
+                        },
+                    border = BorderStroke(
+                        width = 1.dp,
+                        color = fieldBorderColor
+                    ),
                     tonalElevation = 0.dp,
                     shadowElevation = 0.dp
                 ) {
@@ -1372,10 +1594,10 @@ private fun AttendanceSelectionCard(
                     ) {
                         Text(
                             text = "▼",
-                            color = Color(0xFF64748B),
-                            fontSize = 9.sp,
-                            lineHeight = 9.sp,
-                            fontWeight = FontWeight.Black
+                            style = KmiTypography.caption.copy(
+                                fontWeight = FontWeight.Black
+                            ),
+                            color = labelColor
                         )
                     }
                 }
@@ -1391,9 +1613,10 @@ private fun AttendanceSelectionCard(
                         text = {
                             Text(
                                 text = option,
-                                fontSize = 12.sp,
-                                lineHeight = 15.sp,
-                                fontWeight = FontWeight.SemiBold,
+                                style = KmiTypography.secondary.copy(
+                                    fontWeight = FontWeight.SemiBold
+                                ),
+                                color = MaterialTheme.colorScheme.onSurface,
                                 textAlign = align,
                                 maxLines = 2,
                                 overflow = TextOverflow.Ellipsis,
@@ -1414,7 +1637,10 @@ private fun AttendanceSelectionCard(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(22.dp),
         color = Color.Transparent,
-        border = BorderStroke(1.dp, Color(0xFFC7D7EE)),
+        border = BorderStroke(
+            width = 1.dp,
+            color = fieldBorderColor
+        ),
         tonalElevation = 0.dp,
         shadowElevation = 4.dp
     ) {
@@ -1424,11 +1650,20 @@ private fun AttendanceSelectionCard(
                     .fillMaxWidth()
                     .background(
                         Brush.linearGradient(
-                            listOf(
-                                Color(0xFFF8FBFF),
-                                Color(0xFFE8F2FF),
-                                Color(0xFFD7E9FF)
-                            )
+                            colors =
+                                if (isDarkMode) {
+                                    listOf(
+                                        MaterialTheme.colorScheme.surface,
+                                        MaterialTheme.colorScheme.surfaceVariant,
+                                        MaterialTheme.colorScheme.surface
+                                    )
+                                } else {
+                                    listOf(
+                                        Color(0xFFF8FBFF),
+                                        Color(0xFFE8F2FF),
+                                        Color(0xFFD7E9FF)
+                                    )
+                                }
                         )
                     )
                     .padding(horizontal = 10.dp, vertical = 9.dp),
@@ -1436,13 +1671,16 @@ private fun AttendanceSelectionCard(
                 verticalArrangement = Arrangement.spacedBy(6.dp)
             ) {
                 Text(
-                    text = tr("בחירת אימון לנוכחות", "Select attendance class"),
-                    color = Color(0xFF1E2A3D),
-                    fontWeight = FontWeight.ExtraBold,
-                    fontSize = 14.sp,
-                    lineHeight = 16.sp,
+                    text = tr(
+                        "בחירת אימון לנוכחות",
+                        "Select attendance class"
+                    ),
+                    style = KmiTypography.cardTitle.copy(
+                        fontWeight = FontWeight.ExtraBold
+                    ),
+                    color = valueColor,
                     textAlign = align,
-                    maxLines = 1,
+                    maxLines = 2,
                     overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.fillMaxWidth()
                 )
@@ -1488,12 +1726,12 @@ private fun AttendanceSelectionCard(
                         "הרשימה תיטען לפי תאריך, סניף וקבוצה",
                         "The list loads by date, branch and group"
                     ),
-                    color = Color(0xFF64748B),
-                    fontSize = 10.sp,
-                    lineHeight = 12.sp,
-                    fontWeight = FontWeight.SemiBold,
+                    style = KmiTypography.caption.copy(
+                        fontWeight = FontWeight.SemiBold
+                    ),
+                    color = labelColor,
                     textAlign = align,
-                    maxLines = 1,
+                    maxLines = 2,
                     overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.fillMaxWidth()
                 )

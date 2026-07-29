@@ -77,6 +77,10 @@ import android.net.Uri
 import androidx.compose.foundation.layout.heightIn
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import androidx.compose.foundation.isSystemInDarkTheme
+import il.kmi.app.ui.KmiIconSize
+import il.kmi.app.ui.KmiTypography
+import il.kmi.app.ui.scaledIconSize
 import il.kmi.shared.domain.Explanations
 
 
@@ -275,7 +279,7 @@ private fun PremiumSubscriptionButton(
                 ) {
                     Box(
                         modifier = Modifier
-                            .size(34.dp)
+                            .size(scaledIconSize(34.dp))
                             .background(
                                 Color.White.copy(alpha = 0.14f),
                                 shape = CircleShape
@@ -284,13 +288,13 @@ private fun PremiumSubscriptionButton(
                     ) {
                         Text(
                             text = "👑",
-                            fontSize = 18.sp
+                            style = KmiTypography.sectionTitle
                         )
                     }
 
                     Text(
                         text = text,
-                        style = MaterialTheme.typography.titleLarge,
+                        style = KmiTypography.sectionTitle,
                         fontWeight = FontWeight.ExtraBold,
                         color = Color.White,
                         textAlign = TextAlign.Center,
@@ -299,7 +303,7 @@ private fun PremiumSubscriptionButton(
 
                     Box(
                         modifier = Modifier
-                            .size(34.dp)
+                            .size(scaledIconSize(34.dp))
                             .background(
                                 Color.White.copy(alpha = 0.12f),
                                 shape = CircleShape
@@ -309,7 +313,8 @@ private fun PremiumSubscriptionButton(
                         Icon(
                             imageVector = Icons.Filled.ChevronLeft,
                             contentDescription = null,
-                            tint = Color.White
+                            tint = Color.White,
+                            modifier = Modifier.size(KmiIconSize.medium)
                         )
                     }
                 }
@@ -323,7 +328,7 @@ private fun StatusIcon(active: Boolean) {
 
     Box(
         modifier = Modifier
-            .size(62.dp)
+            .size(scaledIconSize(62.dp))
             .background(
                 if (active) {
                     Brush.radialGradient(
@@ -348,7 +353,7 @@ private fun StatusIcon(active: Boolean) {
             text = if (active) "✓" else "!",
             fontWeight = FontWeight.ExtraBold,
             color = if (active) Color(0xFF166534) else Color(0xFFDC2626),
-            style = MaterialTheme.typography.titleLarge
+            style = KmiTypography.sectionTitle
         )
     }
 }
@@ -407,9 +412,45 @@ fun SubscriptionScreen(
     val isEnglish = langManager.getCurrentLanguage() ==
             il.kmi.shared.localization.AppLanguage.ENGLISH
 
-    val textAlign = if (isEnglish) TextAlign.Left else TextAlign.Right
-    val horizontalAlign = if (isEnglish) Alignment.Start else Alignment.End
-    val layoutDirection = if (isEnglish) LayoutDirection.Ltr else LayoutDirection.Rtl
+    val textAlign =
+        if (isEnglish) TextAlign.Left else TextAlign.Right
+
+    val horizontalAlign =
+        if (isEnglish) Alignment.Start else Alignment.End
+
+    val layoutDirection =
+        if (isEnglish) LayoutDirection.Ltr else LayoutDirection.Rtl
+
+    val isDarkMode = isSystemInDarkTheme()
+
+    val screenGradientColors =
+        if (isDarkMode) {
+            listOf(
+                Color(0xFF090D18),
+                Color(0xFF101827),
+                Color(0xFF13263A)
+            )
+        } else {
+            listOf(
+                Color(0xFFF7F2FF),
+                Color(0xFFF2F7FF),
+                Color(0xFFFFFBFE)
+            )
+        }
+
+    val mainCardColor =
+        if (isDarkMode) {
+            MaterialTheme.colorScheme.surface
+        } else {
+            Color.White
+        }
+
+    val innerCardColor =
+        if (isDarkMode) {
+            MaterialTheme.colorScheme.surfaceVariant
+        } else {
+            Color(0xFFF8FAFC)
+        }
 
     // דיאלוג קוד למפתח (מנהל אפליקציה)
     var showDevDialog by rememberSaveable { mutableStateOf(false) }
@@ -590,11 +631,7 @@ fun SubscriptionScreen(
                 .padding(padding)
                 .background(
                     brush = Brush.verticalGradient(
-                        colors = listOf(
-                            Color(0xFFF7F2FF),
-                            Color(0xFFF2F7FF),
-                            Color(0xFFFFFBFE)
-                        )
+                        colors = screenGradientColors
                     )
                 )
         ) {
@@ -640,8 +677,8 @@ fun SubscriptionScreen(
                             horizontalAlignment = Alignment.CenterHorizontally
                         ) {
                             Text(
-                                text = if (isEnglish) "KMI Subscription" else "ניהול מנוי KMI",
-                                style = MaterialTheme.typography.titleLarge,
+                                text = if (isEnglish) "KMI Subscription" else "ניהול מנוי KAMI",
+                                style = KmiTypography.sectionTitle,
                                 fontWeight = FontWeight.ExtraBold,
                                 color = Color.White,
                                 modifier = Modifier.fillMaxWidth(),
@@ -655,11 +692,10 @@ fun SubscriptionScreen(
                                 } else {
                                     "כאן אפשר לבדוק סטטוס מנוי, לרכוש מנוי חדש או לשחזר רכישות קיימות."
                                 },
-                                style = MaterialTheme.typography.bodySmall,
+                                style = KmiTypography.caption,
                                 color = Color.White.copy(alpha = 0.92f),
                                 modifier = Modifier.fillMaxWidth(),
-                                textAlign = TextAlign.Center,
-                                lineHeight = 18.sp
+                                textAlign = TextAlign.Center
                             )
                         }
                     }
@@ -674,7 +710,8 @@ fun SubscriptionScreen(
                         ),
                     shape = RoundedCornerShape(26.dp),
                     colors = CardDefaults.cardColors(
-                        containerColor = Color.White
+                        containerColor = mainCardColor,
+                        contentColor = MaterialTheme.colorScheme.onSurface
                     ),
                     elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
                 ) {
@@ -697,15 +734,16 @@ fun SubscriptionScreen(
                                     ) {
                                         Text(
                                             text = "סטטוס מנוי",
-                                            style = MaterialTheme.typography.labelLarge,
-                                            color = Color(0xFF6B7280),
+                                            style = KmiTypography.action,
+                                            color =
+                                                MaterialTheme.colorScheme.onSurfaceVariant,
                                             textAlign = TextAlign.Right,
                                             modifier = Modifier.fillMaxWidth()
                                         )
 
                                         Text(
                                             text = if (effectiveActive) "פעיל" else "לא פעיל",
-                                            style = MaterialTheme.typography.headlineSmall,
+                                            style = KmiTypography.screenTitle,
                                             fontWeight = FontWeight.ExtraBold,
                                             color = if (effectiveActive) Color(0xFF16A34A) else Color(0xFFDC2626),
                                             textAlign = TextAlign.Right,
@@ -725,7 +763,7 @@ fun SubscriptionScreen(
                                             Text(
                                                 text = if (effectiveActive) "מנוי פעיל" else "אין מנוי פעיל",
                                                 color = if (effectiveActive) Color(0xFF166534) else Color(0xFFB91C1C),
-                                                style = MaterialTheme.typography.labelLarge,
+                                                style = KmiTypography.action,
                                                 fontWeight = FontWeight.Bold,
                                                 modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
                                                 textAlign = TextAlign.Center
@@ -744,15 +782,16 @@ fun SubscriptionScreen(
                                     ) {
                                         Text(
                                             text = "Subscription status",
-                                            style = MaterialTheme.typography.labelLarge,
-                                            color = Color(0xFF6B7280),
+                                            style = KmiTypography.action,
+                                            color =
+                                                MaterialTheme.colorScheme.onSurfaceVariant,
                                             textAlign = TextAlign.Left,
                                             modifier = Modifier.fillMaxWidth()
                                         )
 
                                         Text(
                                             text = if (effectiveActive) "Active" else "Inactive",
-                                            style = MaterialTheme.typography.headlineSmall,
+                                            style = KmiTypography.screenTitle,
                                             fontWeight = FontWeight.ExtraBold,
                                             color = if (effectiveActive) Color(0xFF16A34A) else Color(0xFFDC2626),
                                             textAlign = TextAlign.Left,
@@ -772,7 +811,7 @@ fun SubscriptionScreen(
                                             Text(
                                                 text = if (effectiveActive) "Subscription active" else "No active subscription",
                                                 color = if (effectiveActive) Color(0xFF166534) else Color(0xFFB91C1C),
-                                                style = MaterialTheme.typography.labelLarge,
+                                                style = KmiTypography.action,
                                                 fontWeight = FontWeight.Bold,
                                                 modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
                                                 textAlign = TextAlign.Center
@@ -796,8 +835,8 @@ fun SubscriptionScreen(
                                         "כדי לפתוח את כל התכנים, יש לבחור מסלול מנוי פעיל."
                                     }
                                 },
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = Color(0xFF374151),
+                                style = KmiTypography.body,
+                                color = MaterialTheme.colorScheme.onSurface,
                                 modifier = Modifier.fillMaxWidth(),
                                 textAlign = textAlign
                             )
@@ -806,14 +845,20 @@ fun SubscriptionScreen(
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .height(1.dp)
-                                    .background(Color(0xFFE5E7EB))
+                                    .background(
+                                        MaterialTheme.colorScheme.outline.copy(
+                                            alpha = 0.28f
+                                        )
+                                    )
                             )
 
                             Card(
                                 modifier = Modifier.fillMaxWidth(),
                                 shape = RoundedCornerShape(16.dp),
                                 colors = CardDefaults.cardColors(
-                                    containerColor = Color(0xFFF8FAFC)
+                                    containerColor = innerCardColor,
+                                    contentColor =
+                                        MaterialTheme.colorScheme.onSurface
                                 )
                             ) {
                                 Column(
@@ -825,9 +870,9 @@ fun SubscriptionScreen(
                                 ) {
                                     Text(
                                         text = if (isEnglish) "Subscription details" else "פרטי המנוי",
-                                        style = MaterialTheme.typography.titleSmall,
+                                        style = KmiTypography.cardTitle,
                                         fontWeight = FontWeight.Bold,
-                                        color = Color(0xFF334155),
+                                        color = MaterialTheme.colorScheme.onSurface,
                                         modifier = Modifier.fillMaxWidth(),
                                         textAlign = textAlign
                                     )
@@ -841,16 +886,24 @@ fun SubscriptionScreen(
                                         ) {
                                             Text(
                                                 text = label,
-                                                style = MaterialTheme.typography.bodyMedium,
-                                                fontWeight = FontWeight.SemiBold,
-                                                color = Color(0xFF64748B),
-                                                textAlign = if (isEnglish) TextAlign.Left else TextAlign.Right
+                                                style = KmiTypography.body.copy(
+                                                    fontWeight = FontWeight.SemiBold
+                                                ),
+                                                color =
+                                                    MaterialTheme.colorScheme.onSurfaceVariant,
+                                                textAlign =
+                                                    if (isEnglish) {
+                                                        TextAlign.Left
+                                                    } else {
+                                                        TextAlign.Right
+                                                    }
                                             )
 
                                             Text(
                                                 text = value,
                                                 style = valueStyle,
-                                                color = Color(0xFF0F172A),
+                                                color =
+                                                    MaterialTheme.colorScheme.onSurface,
                                                 textAlign = if (isEnglish) TextAlign.Right else TextAlign.Left
                                             )
                                         }
@@ -859,31 +912,31 @@ fun SubscriptionScreen(
                                     DetailsRow(
                                         label = if (isEnglish) "Renewal date:" else "תאריך חידוש:",
                                         value = renewalLabel,
-                                        valueStyle = MaterialTheme.typography.bodyMedium
+                                        valueStyle = KmiTypography.body
                                     )
 
                                     DetailsRow(
                                         label = if (isEnglish) "Plan:" else "מסלול:",
                                         value = activePlanLabel,
-                                        valueStyle = MaterialTheme.typography.bodyMedium
+                                        valueStyle = KmiTypography.body
                                     )
 
                                     DetailsRow(
                                         label = if (isEnglish) "Monthly price:" else "מחיר חודשי:",
                                         value = monthlyPriceLabel,
-                                        valueStyle = MaterialTheme.typography.bodyMedium
+                                        valueStyle = KmiTypography.body
                                     )
 
                                     DetailsRow(
                                         label = if (isEnglish) "Yearly price:" else "מחיר שנתי:",
                                         value = yearlyPriceLabel,
-                                        valueStyle = MaterialTheme.typography.bodyMedium
+                                        valueStyle = KmiTypography.body
                                     )
 
                                     DetailsRow(
                                         label = if (isEnglish) "Product ID:" else "מזהה מוצר:",
                                         value = savedProductId ?: "-",
-                                        valueStyle = MaterialTheme.typography.bodySmall
+                                        valueStyle = KmiTypography.caption
                                     )
                                 }
                             }
@@ -927,14 +980,14 @@ fun SubscriptionScreen(
                                         Text(
                                             text = if (isEnglish) "Connection error" else "שגיאת חיבור",
                                             color = Color(0xFFB91C1C),
-                                            style = MaterialTheme.typography.labelLarge,
+                                            style = KmiTypography.action,
                                             fontWeight = FontWeight.Bold
                                         )
 
                                         Text(
                                             text = state.error ?: "",
                                             color = Color(0xFFDC2626),
-                                            style = MaterialTheme.typography.bodyMedium,
+                                            style = KmiTypography.body,
                                             textAlign = TextAlign.Center
                                         )
                                     }
@@ -958,9 +1011,12 @@ fun SubscriptionScreen(
                         ),
                     shape = RoundedCornerShape(24.dp),
                     colors = CardDefaults.cardColors(
-                        containerColor = Color.White
+                        containerColor = mainCardColor,
+                        contentColor = MaterialTheme.colorScheme.onSurface
                     ),
-                    elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
+                    elevation = CardDefaults.cardElevation(
+                        defaultElevation = 0.dp
+                    )
                 ) {
                     Column(
                         modifier = Modifier.padding(16.dp),
@@ -969,10 +1025,14 @@ fun SubscriptionScreen(
                     ) {
 
                         Text(
-                            text = if (isEnglish) "More actions" else "פעולות נוספות",
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.ExtraBold,
-                            color = Color(0xFF374151)
+                            text =
+                                if (isEnglish) {
+                                    "More actions"
+                                } else {
+                                    "פעולות נוספות"
+                                },
+                            style = KmiTypography.sectionTitle,
+                            color = MaterialTheme.colorScheme.onSurface
                         )
 
                         if (activity != null) {
@@ -1174,13 +1234,13 @@ fun SubscriptionScreen(
                                 ) {
                                     Text(
                                         text = itemRaw,
-                                        style = MaterialTheme.typography.titleMedium,
+                                        style = KmiTypography.sectionTitle,
                                         fontWeight = FontWeight.Bold,
                                         textAlign = TextAlign.Right
                                     )
                                     Text(
                                         text = "(${b.heb}${if (t.isNotBlank()) " · $t" else ""})",
-                                        style = MaterialTheme.typography.labelMedium,
+                                        style = KmiTypography.secondary,
                                         textAlign = TextAlign.Right
                                     )
                                 }
@@ -1189,7 +1249,8 @@ fun SubscriptionScreen(
                         text = {
                             Text(
                                 text = explanation,
-                                style = MaterialTheme.typography.bodyMedium,
+                                style = KmiTypography.body,
+                                color = MaterialTheme.colorScheme.onSurface,
                                 textAlign = TextAlign.Right
                             )
                         },
@@ -1208,7 +1269,7 @@ fun SubscriptionScreen(
                         title = {
                             Text(
                                 text = "קוד גישה",
-                                style = MaterialTheme.typography.titleMedium,
+                                style = KmiTypography.sectionTitle,
                                 fontWeight = FontWeight.Bold
                             )
                         },
@@ -1218,7 +1279,8 @@ fun SubscriptionScreen(
                             ) {
                                 Text(
                                     text = "קוד אדמין מסמן את המשתמש כמנהל, אך בזמן בדיקות פתיחת התכנים מתבצעת לפי מנוי Google Play פעיל בלבד.",
-                                    style = MaterialTheme.typography.bodyMedium
+                                    style = KmiTypography.body,
+                                    color = MaterialTheme.colorScheme.onSurface
                                 )
                                 OutlinedTextField(
                                     value = devCode,
@@ -1295,41 +1357,57 @@ private fun PremiumActionRow(
     onClick: () -> Unit
 ) {
     val ctx = LocalContext.current
-    val langManager = remember { il.kmi.shared.localization.AppLanguageManager(ctx) }
-    val isEnglish = langManager.getCurrentLanguage() ==
-            il.kmi.shared.localization.AppLanguage.ENGLISH
+    val langManager = remember {
+        il.kmi.shared.localization.AppLanguageManager(ctx)
+    }
+    val isEnglish =
+        langManager.getCurrentLanguage() ==
+                il.kmi.shared.localization.AppLanguage.ENGLISH
 
-    val textAlign = if (isEnglish) TextAlign.Left else TextAlign.Right
-    val layoutDirection = if (isEnglish) LayoutDirection.Ltr else LayoutDirection.Rtl
+    val textAlign =
+        if (isEnglish) TextAlign.Left else TextAlign.Right
 
-    CompositionLocalProvider(LocalLayoutDirection provides layoutDirection) {
+    val layoutDirection =
+        if (isEnglish) LayoutDirection.Ltr else LayoutDirection.Rtl
+
+    CompositionLocalProvider(
+        LocalLayoutDirection provides layoutDirection
+    ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .shadow(2.dp, RoundedCornerShape(16.dp))
-                .background(
-                    Color(0xFFF8FAFC),
-                    RoundedCornerShape(16.dp)
+                .shadow(
+                    elevation = 2.dp,
+                    shape = RoundedCornerShape(16.dp)
                 )
-                .clickable { onClick() }
+                .background(
+                    color = MaterialTheme.colorScheme.surfaceVariant,
+                    shape = RoundedCornerShape(16.dp)
+                )
+                .clickable(onClick = onClick)
                 .padding(horizontal = 14.dp, vertical = 12.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Box(
                 modifier = Modifier
-                    .size(34.dp)
+                    .size(scaledIconSize(34.dp))
                     .background(
-                        Color(0xFFE0E7FF),
-                        CircleShape
+                        color =
+                            MaterialTheme.colorScheme.primaryContainer,
+                        shape = CircleShape
                     ),
                 contentAlignment = Alignment.Center
             ) {
-                Text(icon)
+                Text(
+                    text = icon,
+                    style = KmiTypography.cardTitle
+                )
             }
 
             Text(
                 text = text,
-                style = MaterialTheme.typography.bodyLarge,
+                style = KmiTypography.body,
+                color = MaterialTheme.colorScheme.onSurface,
                 modifier = Modifier
                     .weight(1f)
                     .padding(horizontal = 12.dp),
@@ -1339,7 +1417,8 @@ private fun PremiumActionRow(
             Icon(
                 imageVector = Icons.Filled.ChevronLeft,
                 contentDescription = null,
-                tint = Color(0xFF64748B)
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.size(KmiIconSize.medium)
             )
         }
     }

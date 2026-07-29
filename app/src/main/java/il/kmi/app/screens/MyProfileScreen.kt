@@ -32,6 +32,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.text.font.FontWeight
@@ -57,7 +58,9 @@ import com.google.firebase.ktx.Firebase
 import kotlinx.coroutines.tasks.await
 import il.kmi.shared.localization.AppLanguage
 import il.kmi.shared.localization.AppLanguageManager
+import il.kmi.app.ui.KmiIconSize
 import il.kmi.app.ui.KmiTopBar
+import il.kmi.app.ui.KmiTypography
 import il.kmi.app.R
 import il.kmi.app.KmiCalendarSync
 import il.kmi.app.hasCalendarPermission
@@ -506,9 +509,18 @@ fun MyProfileScreen(
     val userSp = remember(key1 = ctx) { ctx.getSharedPreferences("kmi_user", Context.MODE_PRIVATE) }
     val scroll = rememberScrollState()   // ✅ גלילה
 
-    val langManager = remember(ctx) { AppLanguageManager(ctx) }
-    val isEnglish = langManager.getCurrentLanguage() == AppLanguage.ENGLISH
-    val screenLayoutDirection = profileLayoutDirection(isEnglish)
+    val langManager = remember(ctx) {
+        AppLanguageManager(ctx)
+    }
+
+    val isEnglish =
+        langManager.getCurrentLanguage() == AppLanguage.ENGLISH
+
+    val screenLayoutDirection =
+        profileLayoutDirection(isEnglish)
+
+    val isDarkMode =
+        MaterialTheme.colorScheme.background.luminance() < 0.5f
 
     var firestoreProfile by remember {
         mutableStateOf(FirestoreProfileInfo())
@@ -1151,13 +1163,24 @@ fun MyProfileScreen(
                     .padding(padding)
                     .background(
                         Brush.verticalGradient(
-                            colors = listOf(
-                                Color(0xFFF8FBFF),
-                                Color(0xFFEAF4FF),
-                                Color(0xFFB7DDF7),
-                                Color(0xFF1F78B4),
-                                Color(0xFF062B4A)
-                            )
+                            colors =
+                                if (isDarkMode) {
+                                    listOf(
+                                        MaterialTheme.colorScheme.background,
+                                        MaterialTheme.colorScheme.surface,
+                                        Color(0xFF10243A),
+                                        Color(0xFF0A3657),
+                                        Color(0xFF041E33)
+                                    )
+                                } else {
+                                    listOf(
+                                        Color(0xFFF8FBFF),
+                                        Color(0xFFEAF4FF),
+                                        Color(0xFFB7DDF7),
+                                        Color(0xFF1F78B4),
+                                        Color(0xFF062B4A)
+                                    )
+                                }
                         )
                     )
             ) {
@@ -1189,10 +1212,14 @@ fun MyProfileScreen(
                                     "מסנכרן פרופיל...",
                                     "Syncing profile..."
                                 ),
+                                style = KmiTypography.secondary.copy(
+                                    fontWeight = FontWeight.Bold
+                                ),
                                 color = Color.White,
-                                style = MaterialTheme.typography.bodySmall,
-                                fontWeight = FontWeight.Bold,
-                                modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp)
+                                modifier = Modifier.padding(
+                                    horizontal = 14.dp,
+                                    vertical = 8.dp
+                                )
                             )
                         }
 
@@ -1228,18 +1255,43 @@ private fun UserProfileCard(
 ) {
     val shape = RoundedCornerShape(28.dp)
 
+    val isDarkMode =
+        MaterialTheme.colorScheme.surface.luminance() < 0.5f
+
+    val cardContainerColor =
+        if (isDarkMode) {
+            MaterialTheme.colorScheme.surfaceVariant
+                .copy(alpha = 0.96f)
+        } else {
+            Color(0xFFEAF2FF)
+        }
+
+    val cardContentColor =
+        if (isDarkMode) {
+            MaterialTheme.colorScheme.onSurface
+        } else {
+            Color(0xFF111827)
+        }
+
+    val cardBorderColor =
+        if (isDarkMode) {
+            MaterialTheme.colorScheme.outline.copy(alpha = 0.55f)
+        } else {
+            Color(0xFFD8E3F5)
+        }
+
     Surface(
         modifier = modifier
             .fillMaxWidth()
             .clip(shape),
-        color = Color(0xFFEAF2FF),
-        contentColor = Color(0xFF111827),
+        color = cardContainerColor,
+        contentColor = cardContentColor,
         shape = shape,
         tonalElevation = 2.dp,
         shadowElevation = 4.dp,
         border = BorderStroke(
             width = 1.dp,
-            color = Color(0xFFD8E3F5)
+            color = cardBorderColor
         )
     ) {
         Column(
@@ -1281,14 +1333,12 @@ private fun UserProfileCard(
                     ) {
                         Text(
                             text = info.userName,
-                            style = MaterialTheme.typography.headlineSmall.copy(
-                                fontWeight = FontWeight.ExtraBold,
-                                letterSpacing = (-0.2).sp,
-                                lineHeight = 30.sp
+                            style = KmiTypography.screenTitle.copy(
+                                fontWeight = FontWeight.ExtraBold
                             ),
-                            maxLines = 1,
+                            maxLines = 2,
                             overflow = TextOverflow.Ellipsis,
-                            color = Color(0xFF111827),
+                            color = cardContentColor,
                             modifier = Modifier.fillMaxWidth(),
                             textAlign = TextAlign.Left
                         )
@@ -1297,17 +1347,19 @@ private fun UserProfileCard(
 
                         Text(
                             text = info.belt,
-                            style = MaterialTheme.typography.titleMedium.copy(
-                                fontWeight = FontWeight.SemiBold,
-                                fontSize = 14.sp,
-                                lineHeight = 16.sp,
-                                color = Color(0xFF31528A)
+                            style = KmiTypography.secondary.copy(
+                                fontWeight = FontWeight.SemiBold
                             ),
+                            color =
+                                if (isDarkMode) {
+                                    MaterialTheme.colorScheme.primary
+                                } else {
+                                    Color(0xFF31528A)
+                                },
                             modifier = Modifier.fillMaxWidth(),
-                            textAlign = TextAlign.Right,
-                            maxLines = 1,
-                            softWrap = false,
-                            overflow = TextOverflow.Clip
+                            textAlign = TextAlign.Left,
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis
                         )
                     }
                 }
@@ -1325,14 +1377,12 @@ private fun UserProfileCard(
                     ) {
                         Text(
                             text = info.userName,
-                            style = MaterialTheme.typography.headlineSmall.copy(
-                                fontWeight = FontWeight.ExtraBold,
-                                letterSpacing = (-0.2).sp,
-                                lineHeight = 30.sp
+                            style = KmiTypography.screenTitle.copy(
+                                fontWeight = FontWeight.ExtraBold
                             ),
-                            maxLines = 1,
+                            maxLines = 2,
                             overflow = TextOverflow.Ellipsis,
-                            color = Color(0xFF111827),
+                            color = cardContentColor,
                             modifier = Modifier.fillMaxWidth(),
                             textAlign = TextAlign.Right
                         )
@@ -1341,12 +1391,19 @@ private fun UserProfileCard(
 
                         Text(
                             text = info.belt,
-                            style = MaterialTheme.typography.titleMedium.copy(
-                                fontWeight = FontWeight.SemiBold,
-                                color = Color(0xFF31528A)
+                            style = KmiTypography.secondary.copy(
+                                fontWeight = FontWeight.SemiBold
                             ),
+                            color =
+                                if (isDarkMode) {
+                                    MaterialTheme.colorScheme.primary
+                                } else {
+                                    Color(0xFF31528A)
+                                },
                             modifier = Modifier.fillMaxWidth(),
-                            textAlign = TextAlign.Right
+                            textAlign = TextAlign.Right,
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis
                         )
                     }
 
@@ -1375,7 +1432,9 @@ private fun UserProfileCard(
 
             Button(
                 onClick = onEditProfile,
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(min = 48.dp),
                 shape = RoundedCornerShape(18.dp),
                 colors = ButtonDefaults.buttonColors(
                     containerColor = Color(0xFF6D55AA),
@@ -1392,13 +1451,21 @@ private fun UserProfileCard(
                         "עריכת פרופיל",
                         "Edit profile"
                     ),
-                    fontWeight = FontWeight.Bold
+                    style = KmiTypography.action.copy(
+                        fontWeight = FontWeight.Bold
+                    ),
+                    textAlign = TextAlign.Center,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis
                 )
             }
 
             // מפריד דק
             Spacer(Modifier.height(16.dp))
-            Divider(color = Color(0xFFBFD0E8), thickness = 1.dp)
+            HorizontalDivider(
+                thickness = 1.dp,
+                color = cardBorderColor
+            )
             Spacer(Modifier.height(10.dp))
 
             // ─────────────────────────────────────────────
@@ -1437,7 +1504,10 @@ private fun UserProfileCard(
 
             // מפריד קטן לפני השורה התחתונה
             Spacer(Modifier.height(8.dp))
-            Divider(color = Color(0xFFBFD0E8), thickness = 1.dp)
+            HorizontalDivider(
+                thickness = 1.dp,
+                color = cardBorderColor
+            )
             Spacer(Modifier.height(8.dp))
 
             // שורת הדגשה תחתונה – “מתאמן לחגורה”
@@ -1450,10 +1520,15 @@ private fun UserProfileCard(
             Surface(
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(22.dp),
-                color = Color(0xFFDDEAFF),
+                color =
+                    if (isDarkMode) {
+                        MaterialTheme.colorScheme.surface
+                    } else {
+                        Color(0xFFDDEAFF)
+                    },
                 border = BorderStroke(
-                    1.dp,
-                    Color(0xFFBFD0E8)
+                    width = 1.dp,
+                    color = cardBorderColor
                 ),
                 tonalElevation = 0.dp,
                 shadowElevation = 0.dp
@@ -1470,13 +1545,18 @@ private fun UserProfileCard(
                             "מתאמן לחגורה",
                             "Training toward belt"
                         ),
-                        style = MaterialTheme.typography.bodySmall.copy(
-                            color = Color(0xFF52627A),
+                        style = KmiTypography.secondary.copy(
                             fontWeight = FontWeight.SemiBold
                         ),
+                        color =
+                            if (isDarkMode) {
+                                MaterialTheme.colorScheme.onSurfaceVariant
+                            } else {
+                                Color(0xFF52627A)
+                            },
                         textAlign = TextAlign.Center,
                         modifier = Modifier.fillMaxWidth(),
-                        maxLines = 1,
+                        maxLines = 2,
                         overflow = TextOverflow.Ellipsis
                     )
 
@@ -1484,13 +1564,18 @@ private fun UserProfileCard(
 
                     Text(
                         text = trainingTargetText,
-                        style = MaterialTheme.typography.titleMedium.copy(
-                            fontWeight = FontWeight.ExtraBold,
-                            color = Color(0xFF1E3A8A)
+                        style = KmiTypography.cardTitle.copy(
+                            fontWeight = FontWeight.ExtraBold
                         ),
+                        color =
+                            if (isDarkMode) {
+                                MaterialTheme.colorScheme.primary
+                            } else {
+                                Color(0xFF1E3A8A)
+                            },
                         textAlign = TextAlign.Center,
                         modifier = Modifier.fillMaxWidth(),
-                        maxLines = 1,
+                        maxLines = 2,
                         overflow = TextOverflow.Ellipsis
                     )
 
@@ -1506,6 +1591,7 @@ private fun UserProfileCard(
         }
     }
 }
+
 @Composable
 private fun ProfileBeltImage(
     rawBeltId: String?,
@@ -1543,6 +1629,37 @@ private fun BranchAddressListBlock(
     entries: List<ProfileBranchEntry>,
     isEnglish: Boolean
 ) {
+    val isDarkMode =
+        MaterialTheme.colorScheme.surface.luminance() < 0.5f
+
+    val labelColor =
+        if (isDarkMode) {
+            MaterialTheme.colorScheme.onSurfaceVariant
+        } else {
+            Color(0xFF52627A)
+        }
+
+    val valueColor =
+        if (isDarkMode) {
+            MaterialTheme.colorScheme.onSurface
+        } else {
+            Color(0xFF111827)
+        }
+
+    val accentTextColor =
+        if (isDarkMode) {
+            MaterialTheme.colorScheme.primary
+        } else {
+            Color(0xFF1E3A8A)
+        }
+
+    val dividerColor =
+        if (isDarkMode) {
+            MaterialTheme.colorScheme.outline.copy(alpha = 0.45f)
+        } else {
+            Color(0xFFBFD0E8)
+        }
+
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -1551,10 +1668,10 @@ private fun BranchAddressListBlock(
     ) {
         Text(
             text = label,
-            style = MaterialTheme.typography.bodySmall.copy(
-                color = Color(0xFF52627A),
+            style = KmiTypography.secondary.copy(
                 fontWeight = FontWeight.Medium
             ),
+            color = labelColor,
             textAlign = profileTextAlign(isEnglish),
             modifier = Modifier.fillMaxWidth()
         )
@@ -1564,10 +1681,10 @@ private fun BranchAddressListBlock(
         if (entries.isEmpty()) {
             Text(
                 text = "—",
-                style = MaterialTheme.typography.titleSmall.copy(
-                    fontWeight = FontWeight.Bold,
-                    color = Color(0xFF111827)
+                style = KmiTypography.cardTitle.copy(
+                    fontWeight = FontWeight.Bold
                 ),
+                color = valueColor,
                 textAlign = profileTextAlign(isEnglish),
                 modifier = Modifier.fillMaxWidth()
             )
@@ -1576,14 +1693,23 @@ private fun BranchAddressListBlock(
                 Surface(
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(16.dp),
-                    color = if (index % 2 == 0) {
-                        Color(0xFFDDEAFF)
-                    } else {
-                        Color(0xFFF3F7FF)
-                    },
+                    color =
+                        if (isDarkMode) {
+                            if (index % 2 == 0) {
+                                MaterialTheme.colorScheme.surface
+                            } else {
+                                MaterialTheme.colorScheme.surfaceVariant
+                            }
+                        } else {
+                            if (index % 2 == 0) {
+                                Color(0xFFDDEAFF)
+                            } else {
+                                Color(0xFFF3F7FF)
+                            }
+                        },
                     border = BorderStroke(
-                        1.dp,
-                        Color(0xFFBFD0E8)
+                        width = 1.dp,
+                        color = dividerColor
                     ),
                     tonalElevation = 0.dp,
                     shadowElevation = 0.dp
@@ -1596,22 +1722,29 @@ private fun BranchAddressListBlock(
                     ) {
                         Text(
                             text = entry.branch.ifBlank { "—" },
-                            style = MaterialTheme.typography.titleSmall.copy(
-                                fontWeight = FontWeight.ExtraBold,
-                                color = Color(0xFF1E3A8A)
+                            style = KmiTypography.cardTitle.copy(
+                                fontWeight = FontWeight.ExtraBold
                             ),
+                            color = accentTextColor,
                             textAlign = profileTextAlign(isEnglish),
-                            modifier = Modifier.fillMaxWidth()
+                            modifier = Modifier.fillMaxWidth(),
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis
                         )
 
                         Spacer(Modifier.height(4.dp))
 
                         Text(
                             text = entry.address.ifBlank { "—" },
-                            style = MaterialTheme.typography.bodyMedium.copy(
-                                fontWeight = FontWeight.SemiBold,
-                                color = Color(0xFF374151)
+                            style = KmiTypography.body.copy(
+                                fontWeight = FontWeight.SemiBold
                             ),
+                            color =
+                                if (isDarkMode) {
+                                    MaterialTheme.colorScheme.onSurfaceVariant
+                                } else {
+                                    Color(0xFF374151)
+                                },
                             textAlign = profileTextAlign(isEnglish),
                             modifier = Modifier.fillMaxWidth()
                         )
@@ -1619,11 +1752,15 @@ private fun BranchAddressListBlock(
                         Spacer(Modifier.height(8.dp))
 
                         Text(
-                            text = profileTr(isEnglish, "קבוצה:", "Group:"),
-                            style = MaterialTheme.typography.bodySmall.copy(
-                                color = Color(0xFF52627A),
+                            text = profileTr(
+                                isEnglish,
+                                "קבוצה:",
+                                "Group:"
+                            ),
+                            style = KmiTypography.secondary.copy(
                                 fontWeight = FontWeight.Medium
                             ),
+                            color = labelColor,
                             textAlign = profileTextAlign(isEnglish),
                             modifier = Modifier.fillMaxWidth()
                         )
@@ -1641,10 +1778,10 @@ private fun BranchAddressListBlock(
                                 .forEach { groupLine ->
                                     Text(
                                         text = groupLine,
-                                        style = MaterialTheme.typography.bodyMedium.copy(
-                                            fontWeight = FontWeight.ExtraBold,
-                                            color = Color(0xFF111827)
+                                        style = KmiTypography.body.copy(
+                                            fontWeight = FontWeight.ExtraBold
                                         ),
+                                        color = valueColor,
                                         textAlign = profileTextAlign(isEnglish),
                                         modifier = Modifier.fillMaxWidth()
                                     )
@@ -1654,21 +1791,25 @@ private fun BranchAddressListBlock(
                         Spacer(Modifier.height(6.dp))
 
                         Text(
-                            text = profileTr(isEnglish, "מאמן:", "Coach:"),
-                            style = MaterialTheme.typography.bodySmall.copy(
-                                color = Color(0xFF52627A),
+                            text = profileTr(
+                                isEnglish,
+                                "מאמן:",
+                                "Coach:"
+                            ),
+                            style = KmiTypography.secondary.copy(
                                 fontWeight = FontWeight.Medium
                             ),
+                            color = labelColor,
                             textAlign = profileTextAlign(isEnglish),
                             modifier = Modifier.fillMaxWidth()
                         )
 
                         Text(
                             text = entry.coach.ifBlank { "—" },
-                            style = MaterialTheme.typography.bodyMedium.copy(
-                                fontWeight = FontWeight.ExtraBold,
-                                color = Color(0xFF111827)
+                            style = KmiTypography.body.copy(
+                                fontWeight = FontWeight.ExtraBold
                             ),
+                            color = valueColor,
                             textAlign = profileTextAlign(isEnglish),
                             modifier = Modifier.fillMaxWidth()
                         )
@@ -1683,7 +1824,10 @@ private fun BranchAddressListBlock(
 
         Spacer(Modifier.height(8.dp))
 
-        Divider(color = Color(0xFFBFD0E8), thickness = 1.dp)
+        HorizontalDivider(
+            thickness = 1.dp,
+            color = dividerColor
+        )
     }
 }
 
@@ -1696,18 +1840,27 @@ private fun LabeledValueBlock(
     value: String,
     isEnglish: Boolean
 ) {
+    val isDarkMode =
+        MaterialTheme.colorScheme.surface.luminance() < 0.5f
+
     Column(
         modifier = Modifier
             .fillMaxWidth()
             .padding(vertical = 6.dp),
-        horizontalAlignment = profileHorizontalAlignment(isEnglish)
+        horizontalAlignment =
+            profileHorizontalAlignment(isEnglish)
     ) {
         Text(
             text = label,
-            style = MaterialTheme.typography.bodySmall.copy(
-                color = Color(0xFF52627A),
+            style = KmiTypography.secondary.copy(
                 fontWeight = FontWeight.Medium
             ),
+            color =
+                if (isDarkMode) {
+                    MaterialTheme.colorScheme.onSurfaceVariant
+                } else {
+                    Color(0xFF52627A)
+                },
             textAlign = profileTextAlign(isEnglish),
             modifier = Modifier.fillMaxWidth()
         )
@@ -1716,17 +1869,32 @@ private fun LabeledValueBlock(
 
         Text(
             text = value,
-            style = MaterialTheme.typography.titleSmall.copy(
-                fontWeight = FontWeight.Bold,
-                color = Color(0xFF111827)
+            style = KmiTypography.cardTitle.copy(
+                fontWeight = FontWeight.Bold
             ),
+            color =
+                if (isDarkMode) {
+                    MaterialTheme.colorScheme.onSurface
+                } else {
+                    Color(0xFF111827)
+                },
             textAlign = profileTextAlign(isEnglish),
             modifier = Modifier.fillMaxWidth()
         )
 
         Spacer(Modifier.height(8.dp))
 
-        Divider(color = Color(0xFFBFD0E8), thickness = 1.dp)
+        HorizontalDivider(
+            thickness = 1.dp,
+            color =
+                if (isDarkMode) {
+                    MaterialTheme.colorScheme.outline.copy(
+                        alpha = 0.45f
+                    )
+                } else {
+                    Color(0xFFBFD0E8)
+                }
+        )
     }
 }
 
@@ -1746,7 +1914,26 @@ private fun PasswordRow(
     password: String,
     isEnglish: Boolean
 ) {
-    var visible by remember { mutableStateOf(false) }
+    var visible by remember {
+        mutableStateOf(false)
+    }
+
+    val isDarkMode =
+        MaterialTheme.colorScheme.surface.luminance() < 0.5f
+
+    val labelColor =
+        if (isDarkMode) {
+            MaterialTheme.colorScheme.onSurfaceVariant
+        } else {
+            Color(0xFF52627A)
+        }
+
+    val valueColor =
+        if (isDarkMode) {
+            MaterialTheme.colorScheme.onSurface
+        } else {
+            Color(0xFF111827)
+        }
 
     Row(
         modifier = Modifier
@@ -1756,33 +1943,75 @@ private fun PasswordRow(
     ) {
         Text(
             text = label,
-            style = MaterialTheme.typography.bodySmall.copy(
-                color = Color(0xFF52627A),
+            style = KmiTypography.secondary.copy(
                 fontWeight = FontWeight.Medium
             ),
+            color = labelColor,
             textAlign = profileTextAlign(isEnglish)
         )
+
         Spacer(Modifier.weight(1f))
 
-        Row(verticalAlignment = Alignment.CenterVertically) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically
+        ) {
             Text(
-                text = if (visible) password else "••••••••",
-                style = MaterialTheme.typography.titleSmall.copy(
-                    fontWeight = FontWeight.Bold,
-                    color = Color(0xFF111827)
-                ),
-                textAlign = if (isEnglish) TextAlign.Right else TextAlign.Left
-            )
-            Spacer(Modifier.width(8.dp))   // תוקן
-            IconButton(onClick = { visible = !visible }) {
-                Icon(
-                    imageVector = if (visible) Icons.Outlined.VisibilityOff else Icons.Outlined.Visibility,
-                    contentDescription = if (visible) {
-                        profileTr(isEnglish, "הסתר סיסמה", "Hide password")
+                text =
+                    if (visible) {
+                        password
                     } else {
-                        profileTr(isEnglish, "הצג סיסמה", "Show password")
+                        "••••••••"
                     },
-                    tint = Color(0xFF52627A)
+                style = KmiTypography.cardTitle.copy(
+                    fontWeight = FontWeight.Bold
+                ),
+                color = valueColor,
+                textAlign =
+                    if (isEnglish) {
+                        TextAlign.Right
+                    } else {
+                        TextAlign.Left
+                    },
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(
+                    weight = 1f,
+                    fill = false
+                )
+            )
+
+            Spacer(Modifier.width(8.dp))
+
+            IconButton(
+                onClick = {
+                    visible = !visible
+                }
+            ) {
+                Icon(
+                    imageVector =
+                        if (visible) {
+                            Icons.Outlined.VisibilityOff
+                        } else {
+                            Icons.Outlined.Visibility
+                        },
+                    contentDescription =
+                        if (visible) {
+                            profileTr(
+                                isEnglish,
+                                "הסתר סיסמה",
+                                "Hide password"
+                            )
+                        } else {
+                            profileTr(
+                                isEnglish,
+                                "הצג סיסמה",
+                                "Show password"
+                            )
+                        },
+                    tint = labelColor,
+                    modifier = Modifier.size(
+                        KmiIconSize.medium
+                    )
                 )
             }
         }

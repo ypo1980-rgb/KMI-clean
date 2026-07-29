@@ -59,7 +59,6 @@ import il.kmi.shared.questions.model.util.ExerciseTitleFormatter
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import kotlinx.coroutines.delay
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -81,10 +80,10 @@ import il.kmi.app.subscription.AccessModeResolver
 import il.kmi.app.subscription.LockedContentPolicy
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.unit.sp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
+
 
 //==================================================================
 
@@ -1430,6 +1429,16 @@ private fun InlineSubTopicsExpansionCard(
     accent: Color,
     onPick: (String) -> Unit
 ) {
+    val isDarkMode =
+        MaterialTheme.colorScheme.surface.luminance() < 0.5f
+
+    val itemTitleColor =
+        if (isDarkMode) {
+            Color.White.copy(alpha = 0.94f)
+        } else {
+            Color(0xFF111827)
+        }
+
     fun countLabel(n: Int): String =
         if (isEnglish) "exercises $n" else "$n תרגילים"
 
@@ -1514,7 +1523,7 @@ private fun InlineSubTopicsExpansionCard(
                         Text(
                             text = cleanTitle,
                             style = KmiTypography.cardTitle,
-                            color = Color(0xFF111827),
+                            color = itemTitleColor,
                             maxLines = 2,
                             overflow = TextOverflow.Ellipsis,
                             textAlign =
@@ -1577,13 +1586,14 @@ private fun SubjectRootCardPremium(
     val imageRes = remember(subjectId) { subjectImageFor(subjectId) }
     val bgColors = remember(subjectId) { subjectPremiumBackgroundColors(subjectId) }
 
-    val titleColor = if (isDarkMode) Color.White else Color(0xFF18212F)
-    val subtitleColor = if (isDarkMode) {
-        Color.White.copy(alpha = 0.80f)
-    } else {
-        Color(0xFF5F6C7B)
-    }
-    val countColor = if (isDarkMode) Color.White.copy(alpha = 0.92f) else Color(0xFF2F3B4A)
+    /*
+     * הכרטיסים נשארים בגווני פסטל בהירים גם במצב כהה.
+     * לכן הטקסט בתוכם חייב להישאר כהה ובעל ניגודיות גבוהה
+     * ללא תלות בערכת הצבעים של המסך.
+     */
+    val titleColor = Color(0xFF18212F)
+    val subtitleColor = Color(0xFF4B5968)
+    val countColor = Color(0xFF2F3B4A)
 
     val isTitleLocked = title.endsWith(" 🔒")
     val displayTitle = stripLockSuffix(title)
@@ -1699,9 +1709,10 @@ private fun SubjectRootCardPremium(
                                     Spacer(modifier = Modifier.width(6.dp))
                                     Text(
                                         text = if (isExpanded) "⌃" else "⌄",
-                                        color = accent,
-                                        fontSize = 13.sp,
-                                        fontWeight = FontWeight.ExtraBold
+                                        style = KmiTypography.caption.copy(
+                                            fontWeight = FontWeight.ExtraBold
+                                        ),
+                                        color = accent
                                     )
                                 }
                             }
@@ -1748,9 +1759,10 @@ private fun SubjectRootCardPremium(
                                 if (showExpandArrow) {
                                     Text(
                                         text = if (isExpanded) "⌃" else "⌄",
-                                        color = accent,
-                                        fontSize = 13.sp,
-                                        fontWeight = FontWeight.ExtraBold
+                                        style = KmiTypography.caption.copy(
+                                            fontWeight = FontWeight.ExtraBold
+                                        ),
+                                        color = accent
                                     )
                                 }
                             }
