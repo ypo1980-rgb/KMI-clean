@@ -59,7 +59,6 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -84,6 +83,7 @@ import il.kmi.app.KmiViewModel
 import il.kmi.shared.domain.Explanations
 import il.kmi.app.domain.color
 import il.kmi.app.favorites.FavoritesStore
+import il.kmi.app.ui.KmiTypography
 import il.kmi.shared.domain.Belt
 import il.kmi.shared.domain.content.ExerciseIdentityRegistry
 import il.kmi.shared.domain.content.HardSectionsResolver
@@ -894,9 +894,22 @@ fun UnifiedSubjectExercisesScreen(
                         modifier = Modifier.fillMaxSize()
                     ) {
                         Text(
-                            text = "אין נתונים להצגה",
-                            style = MaterialTheme.typography.bodyLarge,
-                            modifier = Modifier.padding(20.dp)
+                            text =
+                                if (isEnglish) {
+                                    "No data to display"
+                                } else {
+                                    "אין נתונים להצגה"
+                                },
+                            style = KmiTypography.body,
+                            textAlign =
+                                if (isEnglish) {
+                                    TextAlign.Left
+                                } else {
+                                    TextAlign.Right
+                                },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(20.dp)
                         )
                     }
                 }
@@ -1053,20 +1066,31 @@ private fun SectionsContent(
     ) {
         item {
             Text(
-                text = if (isEnglish) translateHardTopicTitle(title ?: "נושאים") else title ?: "נושאים",
-                style = MaterialTheme.typography.headlineSmall,
-                fontWeight = FontWeight.ExtraBold,
-                textAlign = if (isEnglish) TextAlign.Left else TextAlign.Right,
+                text =
+                    if (isEnglish) {
+                        translateHardTopicTitle(title ?: "נושאים")
+                    } else {
+                        title ?: "נושאים"
+                    },
+                style = KmiTypography.sectionTitle,
+                textAlign =
+                    if (isEnglish) TextAlign.Left else TextAlign.Right,
                 modifier = Modifier.fillMaxWidth()
             )
 
             Spacer(Modifier.height(6.dp))
 
             Text(
-                text = if (isEnglish) "Choose a sub-topic" else "בחר תת־נושא",
-                style = MaterialTheme.typography.bodyMedium,
+                text =
+                    if (isEnglish) {
+                        "Choose a sub-topic"
+                    } else {
+                        "בחר תת־נושא"
+                    },
+                style = KmiTypography.body,
                 color = Color(0xFF6C6880),
-                textAlign = if (isEnglish) TextAlign.Left else TextAlign.Right,
+                textAlign =
+                    if (isEnglish) TextAlign.Left else TextAlign.Right,
                 modifier = Modifier.fillMaxWidth()
             )
         }
@@ -1121,9 +1145,11 @@ private fun SubjectSectionCard(
             ) {
                 Text(
                     text = title,
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.ExtraBold,
-                    textAlign = if (isEnglish) TextAlign.Left else TextAlign.Right,
+                    style = KmiTypography.cardTitle,
+                    textAlign =
+                        if (isEnglish) TextAlign.Left else TextAlign.Right,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.fillMaxWidth()
                 )
 
@@ -1134,15 +1160,22 @@ private fun SubjectSectionCard(
                     color = Color(0xFFF1F4F8)
                 ) {
                     Text(
-                        text = if (isEnglish) {
-                            if (count == 1) "1 exercise" else "$count exercises"
-                        } else {
-                            "$count תרגילים"
-                        },
-                        style = MaterialTheme.typography.labelLarge,
+                        text =
+                            if (isEnglish) {
+                                if (count == 1) {
+                                    "1 exercise"
+                                } else {
+                                    "$count exercises"
+                                }
+                            } else {
+                                "$count תרגילים"
+                            },
+                        style = KmiTypography.caption,
                         color = Color(0xFF4E6D73),
-                        fontWeight = FontWeight.Bold,
-                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)
+                        modifier = Modifier.padding(
+                            horizontal = 10.dp,
+                            vertical = 5.dp
+                        )
                     )
                 }
             }
@@ -1203,19 +1236,15 @@ private fun HardTopStatChip(
         ) {
             Text(
                 text = value,
+                style = KmiTypography.cardTitle,
                 color = contentColor,
-                fontSize = 14.sp,
-                lineHeight = 16.sp,
-                fontWeight = FontWeight.ExtraBold,
                 maxLines = 1
             )
 
             Text(
                 text = label,
+                style = KmiTypography.caption,
                 color = contentColor.copy(alpha = 0.92f),
-                fontSize = 10.sp,
-                lineHeight = 12.sp,
-                fontWeight = FontWeight.SemiBold,
                 maxLines = 1
             )
         }
@@ -1239,12 +1268,16 @@ private fun HardExerciseMetaBadge(
     ) {
         Text(
             text = text,
+            style = KmiTypography.caption.copy(
+                fontWeight = FontWeight.ExtraBold
+            ),
             color = contentColor,
-            fontSize = 9.sp,
-            lineHeight = 10.5.sp,
-            fontWeight = FontWeight.ExtraBold,
-            modifier = Modifier.padding(horizontal = 7.dp, vertical = 2.dp),
-            maxLines = 1
+            modifier = Modifier.padding(
+                horizontal = 7.dp,
+                vertical = 2.dp
+            ),
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
         )
     }
 }
@@ -1670,23 +1703,39 @@ private fun BeltGroupsContent(
             title = {
                 Text(
                     text = selected.displayItem,
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold,
-                    textAlign = if (isEnglish) TextAlign.Left else TextAlign.Right,
+                    style = KmiTypography.cardTitle,
+                    textAlign =
+                        if (isEnglish) {
+                            TextAlign.Left
+                        } else {
+                            TextAlign.Right
+                        },
                     modifier = Modifier.fillMaxWidth()
                 )
             },
             text = {
                 Text(
                     text = explanation,
-                    style = MaterialTheme.typography.bodyMedium,
-                    textAlign = if (isEnglish) TextAlign.Left else TextAlign.Right,
+                    style = KmiTypography.body,
+                    textAlign =
+                        if (isEnglish) {
+                            TextAlign.Left
+                        } else {
+                            TextAlign.Right
+                        },
                     modifier = Modifier.fillMaxWidth()
                 )
             },
             confirmButton = {
-                TextButton(onClick = { selectedExercise = null }) {
-                    Text(if (isEnglish) "Close" else "סגור")
+                TextButton(
+                    onClick = {
+                        selectedExercise = null
+                    }
+                ) {
+                    Text(
+                        text = if (isEnglish) "Close" else "סגור",
+                        style = KmiTypography.action
+                    )
                 }
             }
         )
@@ -1739,14 +1788,20 @@ private fun HardExerciseSectionHeader(
 ) {
     Text(
         text = text,
+        style = KmiTypography.cardTitle,
         color = Color(0xFF4CAF50),
-        fontSize = 12.sp,
-        lineHeight = 14.sp,
-        fontWeight = FontWeight.ExtraBold,
-        textAlign = if (isEnglish) TextAlign.Left else TextAlign.Right,
+        textAlign =
+            if (isEnglish) {
+                TextAlign.Left
+            } else {
+                TextAlign.Right
+            },
         modifier = Modifier
             .fillMaxWidth()
-            .padding(top = 8.dp, bottom = 4.dp)
+            .padding(
+                top = 8.dp,
+                bottom = 4.dp
+            )
     )
 }
 
@@ -1787,21 +1842,32 @@ private fun HardBeltStickyHeader(
                 ) {
                     Text(
                         text = beltTitle(belt, isEnglish),
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold,
-                        textAlign = if (isEnglish) TextAlign.Left else TextAlign.Right,
+                        style = KmiTypography.sectionTitle,
+                        textAlign =
+                            if (isEnglish) {
+                                TextAlign.Left
+                            } else {
+                                TextAlign.Right
+                            },
                         modifier = Modifier.weight(1f)
                     )
 
                     Text(
-                        text = if (isEnglish) {
-                            if (count == 1) "1 exercise" else "$count exercises"
-                        } else {
-                            "$count תרגילים"
-                        },
-                        style = MaterialTheme.typography.labelLarge,
-                        fontWeight = FontWeight.Bold,
-                        color = belt.color
+                        text =
+                            if (isEnglish) {
+                                if (count == 1) {
+                                    "1 exercise"
+                                } else {
+                                    "$count exercises"
+                                }
+                            } else {
+                                "$count תרגילים"
+                            },
+                        style = KmiTypography.secondary.copy(
+                            fontWeight = FontWeight.Bold
+                        ),
+                        color = belt.color,
+                        maxLines = 1
                     )
                 }
             }
@@ -1890,21 +1956,32 @@ private fun BeltSectionCard(
                 ) {
                     Text(
                         text = beltTitle(group.belt, isEnglish),
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold,
-                        textAlign = if (isEnglish) TextAlign.Left else TextAlign.Right,
+                        style = KmiTypography.sectionTitle,
+                        textAlign =
+                            if (isEnglish) {
+                                TextAlign.Left
+                            } else {
+                                TextAlign.Right
+                            },
                         modifier = Modifier.weight(1f)
                     )
 
                     Text(
-                        text = if (isEnglish) {
-                            if (rawItems.size == 1) "1 exercise" else "${rawItems.size} exercises"
-                        } else {
-                            "${rawItems.size} תרגילים"
-                        },
-                        style = MaterialTheme.typography.labelLarge,
-                        fontWeight = FontWeight.Bold,
-                        color = group.belt.color
+                        text =
+                            if (isEnglish) {
+                                if (rawItems.size == 1) {
+                                    "1 exercise"
+                                } else {
+                                    "${rawItems.size} exercises"
+                                }
+                            } else {
+                                "${rawItems.size} תרגילים"
+                            },
+                        style = KmiTypography.secondary.copy(
+                            fontWeight = FontWeight.Bold
+                        ),
+                        color = group.belt.color,
+                        maxLines = 1
                     )
                 }
             }
@@ -2112,13 +2189,16 @@ private fun HardExerciseRowCard(
 
                 Text(
                     text = item,
-                    style = MaterialTheme.typography.bodySmall.copy(
-                        fontSize = 11.sp,
-                        lineHeight = 13.sp
+                    style = KmiTypography.body.copy(
+                        fontWeight = FontWeight.ExtraBold
                     ),
-                    fontWeight = FontWeight.ExtraBold,
                     color = Color(0xFF263238),
-                    textAlign = if (isEnglish) TextAlign.Left else TextAlign.Right,
+                    textAlign =
+                        if (isEnglish) {
+                            TextAlign.Left
+                        } else {
+                            TextAlign.Right
+                        },
                     maxLines = 3,
                     overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.fillMaxWidth()

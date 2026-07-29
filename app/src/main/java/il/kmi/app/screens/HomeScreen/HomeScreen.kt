@@ -111,6 +111,7 @@ import il.kmi.app.domain.ExerciseExplanationResolver
 import il.kmi.app.training.TrainingCatalog
 import il.kmi.app.training.TrainingDirectory
 import il.kmi.app.ui.KmiTopBar
+import il.kmi.app.ui.KmiTypography
 import il.kmi.shared.domain.content.ExerciseTitlesEn
 import kotlinx.coroutines.delay
 import org.json.JSONArray
@@ -167,8 +168,7 @@ private fun CoachInfoCard(
             ) {
                 Text(
                     text = "מאמן: ${coachName.orEmpty()}",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.SemiBold,
+                    style = KmiTypography.cardTitle,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
@@ -177,9 +177,10 @@ private fun CoachInfoCard(
                     if (!city.isNullOrBlank()) append(city).append(" · ")
                     append(branchName.orEmpty())
                 }
+
                 Text(
                     text = branchLine,
-                    style = MaterialTheme.typography.bodyMedium,
+                    style = KmiTypography.secondary,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
@@ -187,7 +188,7 @@ private fun CoachInfoCard(
 
                 Text(
                     text = "קבוצה: ${groupName.orEmpty()}",
-                    style = MaterialTheme.typography.bodyMedium,
+                    style = KmiTypography.secondary,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
@@ -2875,9 +2876,8 @@ fun HomeScreen(
                                                 } else {
                                                     "הודעות ואירועים"
                                                 },
-                                            fontWeight = FontWeight.Bold,
+                                            style = KmiTypography.cardTitle,
                                             color = Color(0xFF0C4A6E),
-                                            style = MaterialTheme.typography.bodyMedium,
                                             maxLines = 1,
                                             overflow = TextOverflow.Ellipsis,
                                             modifier = Modifier.weight(1f)
@@ -2924,13 +2924,13 @@ fun HomeScreen(
                                             } else {
                                                 "אין הודעות חדשות כרגע"
                                             },
-                                            style = MaterialTheme.typography.bodyMedium,
+                                            style = KmiTypography.body,
                                             color = Color(0xFF64748B)
                                         )
                                     } else {
                                         Text(
                                             text = msg,
-                                            style = MaterialTheme.typography.bodyMedium,
+                                            style = KmiTypography.body,
                                             color = Color(0xFF1E293B),
                                             maxLines = 2,
                                             overflow = TextOverflow.Ellipsis
@@ -2965,7 +2965,7 @@ fun HomeScreen(
                                             Spacer(Modifier.height(4.dp))
                                             Text(
                                                 text = branchGroupLine,
-                                                style = MaterialTheme.typography.labelSmall,
+                                                style = KmiTypography.secondary,
                                                 color = Color(0xFF475569),
                                                 maxLines = 2,
                                                 overflow = TextOverflow.Ellipsis
@@ -3004,12 +3004,14 @@ fun HomeScreen(
                                             if (timeText.isNotBlank()) {
                                                 Text(
                                                     text = timeText,
-                                                    style = MaterialTheme.typography.labelSmall.copy(
-                                                        fontSize = 11.2.sp,
-                                                        lineHeight = 13.sp
-                                                    ),
+                                                    style = KmiTypography.caption,
                                                     color = Color(0xFF64748B),
-                                                    textAlign = if (isEnglish) TextAlign.Left else TextAlign.Right,
+                                                    textAlign =
+                                                        if (isEnglish) {
+                                                            TextAlign.Left
+                                                        } else {
+                                                            TextAlign.Right
+                                                        },
                                                     maxLines = 1,
                                                     overflow = TextOverflow.Ellipsis,
                                                     modifier = Modifier.fillMaxWidth()
@@ -3021,13 +3023,16 @@ fun HomeScreen(
 
                                                 Text(
                                                     text = openRecentText,
-                                                    style = MaterialTheme.typography.labelSmall.copy(
-                                                        fontSize = 11.2.sp,
-                                                        lineHeight = 13.sp
+                                                    style = KmiTypography.caption.copy(
+                                                        fontWeight = FontWeight.Bold
                                                     ),
-                                                    fontWeight = FontWeight.Bold,
                                                     color = Color(0xFF0369A1),
-                                                    textAlign = if (isEnglish) TextAlign.Right else TextAlign.Left,
+                                                    textAlign =
+                                                        if (isEnglish) {
+                                                            TextAlign.Right
+                                                        } else {
+                                                            TextAlign.Left
+                                                        },
                                                     maxLines = 1,
                                                     overflow = TextOverflow.Ellipsis,
                                                     modifier = Modifier
@@ -3242,9 +3247,7 @@ fun HomeScreen(
 
                                 Text(
                                     text =
-                                        when (
-                                            trainingManagementMode
-                                        ) {
+                                        when (trainingManagementMode) {
                                             TrainingManagementMode.MENU ->
                                                 if (isEnglish) {
                                                     "Manage training"
@@ -3266,12 +3269,11 @@ fun HomeScreen(
                                                     "שינוי שעת האימון"
                                                 }
                                         },
-                                    fontWeight = FontWeight.Black,
-                                    fontSize = 22.sp,
-                                    lineHeight = 24.sp,
+                                    style = KmiTypography.screenTitle,
                                     color = Color(0xFF172033),
                                     textAlign = TextAlign.Center,
-                                    maxLines = 1
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
                                 )
                             }
                         },
@@ -3324,9 +3326,7 @@ fun HomeScreen(
                                                     .ifBlank {
                                                         selectedItem.branch
                                                     },
-                                            fontWeight =
-                                                FontWeight.ExtraBold,
-                                            fontSize = 16.sp,
+                                            style = KmiTypography.cardTitle,
                                             color = Color(0xFF1E293B),
                                             textAlign =
                                                 if (isEnglish) {
@@ -3334,8 +3334,9 @@ fun HomeScreen(
                                                 } else {
                                                     TextAlign.Right
                                                 },
-                                            modifier =
-                                                Modifier.fillMaxWidth()
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis,
+                                            modifier = Modifier.fillMaxWidth()
                                         )
 
                                         Text(
@@ -3521,11 +3522,10 @@ fun HomeScreen(
                                                             } else {
                                                                 "שינוי שעת אימון"
                                                             },
-                                                        fontWeight =
-                                                            FontWeight.ExtraBold,
+                                                        style =
+                                                            KmiTypography.sectionTitle,
                                                         color =
-                                                            Color(0xFF5B3AA8),
-                                                        fontSize = 17.sp
+                                                            Color(0xFF5B3AA8)
                                                     )
 
                                                     Text(
@@ -3535,9 +3535,10 @@ fun HomeScreen(
                                                             } else {
                                                                 "בחירת שעת התחלה וסיום חדשות"
                                                             },
+                                                        style =
+                                                            KmiTypography.secondary,
                                                         color =
-                                                            Color(0xFF655A78),
-                                                        fontSize = 13.sp
+                                                            Color(0xFF655A78)
                                                     )
                                                 }
                                             }
@@ -3604,11 +3605,10 @@ fun HomeScreen(
                                                             } else {
                                                                 "ביטול אימון"
                                                             },
-                                                        fontWeight =
-                                                            FontWeight.ExtraBold,
+                                                        style =
+                                                            KmiTypography.sectionTitle,
                                                         color =
-                                                            Color(0xFFB91C1C),
-                                                        fontSize = 17.sp
+                                                            Color(0xFFB91C1C)
                                                     )
 
                                                     Text(
@@ -3618,9 +3618,10 @@ fun HomeScreen(
                                                             } else {
                                                                 "ביטול האימון ושליחת עדכון למתאמנים"
                                                             },
+                                                        style =
+                                                            KmiTypography.secondary,
                                                         color =
-                                                            Color(0xFF7F1D1D),
-                                                        fontSize = 13.sp
+                                                            Color(0xFF7F1D1D)
                                                     )
                                                 }
                                             }
@@ -4650,14 +4651,12 @@ fun HomeScreen(
                     title = {
                         Text(
                             text =
-                            if (isEnglish) {
-                                "Recent messages and events"
-                            } else {
-                                "הודעות ואירועים אחרונים"
-                            },
-                            fontWeight = FontWeight.Black,
-                            fontSize = 16.sp,
-                            lineHeight = 18.sp,
+                                if (isEnglish) {
+                                    "Recent messages and events"
+                                } else {
+                                    "הודעות ואירועים אחרונים"
+                                },
+                            style = KmiTypography.sectionTitle,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
                             color = Color(0xFF0F172A),
@@ -4796,15 +4795,22 @@ fun HomeScreen(
 
                                                         Text(
                                                             text = message.coachName.ifBlank {
-                                                                if (isEnglish) "Coach" else "המאמן"
+                                                                if (isEnglish) {
+                                                                    "Coach"
+                                                                } else {
+                                                                    "המאמן"
+                                                                }
                                                             },
-                                                            fontWeight = FontWeight.ExtraBold,
+                                                            style = KmiTypography.cardTitle,
                                                             color = Color(0xFF0B5E8E),
-                                                            fontSize = 17.sp,
-                                                            lineHeight = 20.sp,
                                                             maxLines = 1,
                                                             overflow = TextOverflow.Ellipsis,
-                                                            textAlign = if (isEnglish) TextAlign.Left else TextAlign.Right,
+                                                            textAlign =
+                                                                if (isEnglish) {
+                                                                    TextAlign.Left
+                                                                } else {
+                                                                    TextAlign.Right
+                                                                },
                                                             modifier = Modifier.weight(1f)
                                                         )
 
@@ -4835,11 +4841,16 @@ fun HomeScreen(
 
                                                     Text(
                                                         text = message.text,
+                                                        style = KmiTypography.body.copy(
+                                                            fontWeight = FontWeight.Bold
+                                                        ),
                                                         color = Color(0xFF1E293B),
-                                                        fontWeight = FontWeight.Bold,
-                                                        fontSize = 16.sp,
-                                                        lineHeight = 20.sp,
-                                                        textAlign = if (isEnglish) TextAlign.Left else TextAlign.Right,
+                                                        textAlign =
+                                                            if (isEnglish) {
+                                                                TextAlign.Left
+                                                            } else {
+                                                                TextAlign.Right
+                                                            },
                                                         modifier = Modifier.fillMaxWidth()
                                                     )
 
@@ -4872,13 +4883,20 @@ fun HomeScreen(
                                                         ) {
                                                             Text(
                                                                 text = branchGroupLine,
+                                                                style =
+                                                                    KmiTypography.secondary.copy(
+                                                                        fontWeight =
+                                                                            FontWeight.SemiBold
+                                                                    ),
                                                                 color = Color(0xFF475569),
-                                                                fontWeight = FontWeight.SemiBold,
-                                                                fontSize = 11.5.sp,
-                                                                lineHeight = 14.sp,
                                                                 maxLines = 2,
                                                                 overflow = TextOverflow.Ellipsis,
-                                                                textAlign = if (isEnglish) TextAlign.Left else TextAlign.Right,
+                                                                textAlign =
+                                                                    if (isEnglish) {
+                                                                        TextAlign.Left
+                                                                    } else {
+                                                                        TextAlign.Right
+                                                                    },
                                                                 modifier = Modifier
                                                                     .fillMaxWidth()
                                                                     .padding(
@@ -4931,12 +4949,13 @@ fun HomeScreen(
 
                                                                     Text(
                                                                         text = timeText,
-                                                                        color = Color(0xFF64748B),
-                                                                        fontWeight = FontWeight.Bold,
-                                                                        fontSize = 11.5.sp,
-                                                                        lineHeight = 13.sp,
+                                                                        style =
+                                                                            KmiTypography.caption,
+                                                                        color =
+                                                                            Color(0xFF64748B),
                                                                         maxLines = 1,
-                                                                        overflow = TextOverflow.Ellipsis
+                                                                        overflow =
+                                                                            TextOverflow.Ellipsis
                                                                     )
                                                                 }
                                                             }
@@ -5209,9 +5228,8 @@ private fun HomePremiumQuickMenuPanel(
                             textAlign = TextAlign.Start,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
-                            style = MaterialTheme.typography.titleSmall.copy(
-                                fontSize = 13.sp,
-                                lineHeight = 15.sp
+                            style = KmiTypography.secondary.copy(
+                                fontWeight = FontWeight.ExtraBold
                             ),
                             modifier = Modifier.weight(1f)
                         )
@@ -5314,9 +5332,8 @@ private fun HomePremiumQuickMenuRow(
                 color = Color(0xFF16A34A).copy(alpha = 0.94f),
                 fontWeight = FontWeight.SemiBold,
                 textAlign = TextAlign.Start,
-                style = MaterialTheme.typography.bodySmall.copy(
-                    fontSize = 11.sp,
-                    lineHeight = 13.sp,
+                style = KmiTypography.caption.copy(
+                    fontWeight = FontWeight.SemiBold,
                     letterSpacing = (-0.14).sp
                 ),
                 maxLines = 1,
@@ -5807,11 +5824,7 @@ private fun TrainingCardCompact(
 
             Text(
                 text = branchLine,
-                style = MaterialTheme.typography.bodyMedium.copy(
-                    fontSize = 14.sp,    // גודל הכותרת של שם המקום
-                    lineHeight = 19.sp
-                ),
-                fontWeight = FontWeight.Bold,
+                style = KmiTypography.cardTitle,
                 color = MaterialTheme.colorScheme.onSurface,
                 textAlign = TextAlign.Center,
                 modifier = Modifier.fillMaxWidth(),
@@ -5821,11 +5834,9 @@ private fun TrainingCardCompact(
 
             Text(
                 text = dateTimeText,
-                style = MaterialTheme.typography.labelMedium.copy(
-                    fontSize = 12.4.sp,
-                    lineHeight = 15.sp
+                style = KmiTypography.secondary.copy(
+                    fontWeight = FontWeight.Bold
                 ),
-                fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.onSurface,
                 textAlign = TextAlign.Center,
                 maxLines = 2,
@@ -5914,9 +5925,9 @@ private fun TrainingCardCompact(
                                 vertical = 5.dp
                             ),
                             textAlign = TextAlign.Center,
-                            style =
-                                MaterialTheme.typography.labelMedium,
-                            fontWeight = FontWeight.Bold,
+                            style = KmiTypography.caption.copy(
+                                fontWeight = FontWeight.Bold
+                            ),
                             color = statusContentColor,
                             maxLines = 1
                         )
@@ -6021,23 +6032,20 @@ private fun NavigationChip(
             ) {
                 Text(
                     text = if (isEnglish) "Navigate" else "ניווט",
-                    style = MaterialTheme.typography.labelMedium,
-                    fontWeight = FontWeight.Bold,
+                    style = KmiTypography.action,
                     // ✅ הכרטיס לבן גם במצב כהה, לכן צבע קבוע וכהה
                     color = Color(0xFF0B1220),
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
+
                 Text(
                     text = if (safeAddress.isBlank()) {
                         if (isEnglish) "No address" else "אין כתובת"
                     } else {
                         safeAddress
                     },
-                    style = MaterialTheme.typography.labelSmall.copy(
-                        fontSize = 10.4.sp,
-                        lineHeight = 13.8.sp
-                    ),
+                    style = KmiTypography.secondary,
                     // ✅ לא להשתמש כאן ב-onSurfaceVariant,
                     // כי במצב כהה הוא יוצא בהיר מדי על כרטיס לבן.
                     color = Color(0xFF475569),

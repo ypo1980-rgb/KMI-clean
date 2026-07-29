@@ -80,6 +80,7 @@ import androidx.compose.ui.unit.sp
 import il.kmi.shared.localization.AppLanguage
 import il.kmi.shared.localization.AppLanguageManager
 import il.kmi.app.ui.QuickMenuTriggerMode
+import il.kmi.app.ui.KmiTypography
 import il.kmi.app.subscription.AccessMode
 import il.kmi.app.subscription.AccessModeResolver
 import il.kmi.app.subscription.LockedContentPolicy
@@ -1077,8 +1078,10 @@ internal fun TopicsViewModeToggle(
                             text = {
                                 Text(
                                     text = label,
-                                    fontWeight = FontWeight.Bold,
-                                    textAlign = TextAlign.Center
+                                    style = KmiTypography.action,
+                                    textAlign = TextAlign.Center,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
                                 )
                             },
                             selectedContentColor = Color.White,
@@ -1304,22 +1307,33 @@ private fun TopicsCardForBelt(
     ) {
         Column(Modifier.padding(vertical = 6.dp)) {
             Text(
-                text = if (isEnglish) "Topics in Belt" else "נושאים בחגורה",
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold,
+                text =
+                    if (isEnglish) {
+                        "Topics in Belt"
+                    } else {
+                        "נושאים בחגורה"
+                    },
+                style = KmiTypography.sectionTitle,
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(horizontal = 14.dp),
                 textAlign = TextAlign.Center,
                 color = titleColor,
-                maxLines = 1
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
             )
 
             Spacer(Modifier.height(2.dp))
 
             if (topicTitles.isEmpty()) {
                 Text(
-                    text = if (isEnglish) "No topics to display" else "אין נושאים להצגה",
+                    text =
+                        if (isEnglish) {
+                            "No topics to display"
+                        } else {
+                            "אין נושאים להצגה"
+                        },
+                    style = KmiTypography.body,
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(20.dp),
@@ -1378,15 +1392,6 @@ private fun TopicsCardForBelt(
                                 "$itemCount תרגילים"
                             }
                         }
-
-                        val isCombinedCountText =
-                            subCount > 0
-
-                        val topicTitleFontSize = 10.8.sp
-                        val topicTitleLineHeight = 12.8.sp
-
-                        val topicCountFontSize = 7.8.sp
-                        val topicCountLineHeight = 9.2.sp
 
                         val isExpanded = expandedTopic == title
                         val isDefenseTopic = title.trim().contains("הגנות")
@@ -1486,14 +1491,10 @@ private fun TopicsCardForBelt(
                                         ) {
                                             Text(
                                                 text = displayTitle,
-                                                style = MaterialTheme.typography.titleSmall.copy(
-                                                    fontSize = topicTitleFontSize,
-                                                    lineHeight = topicTitleLineHeight
-                                                ),
-                                                fontWeight = FontWeight.ExtraBold,
+                                                style = KmiTypography.cardTitle,
                                                 color = floatingTitleColor,
                                                 textAlign = titleTextAlignByLang,
-                                                maxLines = 1,
+                                                maxLines = 2,
                                                 overflow = TextOverflow.Ellipsis,
                                                 modifier = Modifier.fillMaxWidth()
                                             )
@@ -1502,15 +1503,13 @@ private fun TopicsCardForBelt(
 
                                             Text(
                                                 text = countsLine,
-                                                style = MaterialTheme.typography.labelSmall.copy(
-                                                    fontSize = topicCountFontSize,
-                                                    lineHeight = topicCountLineHeight
+                                                style = KmiTypography.caption.copy(
+                                                    fontWeight = FontWeight.ExtraBold
                                                 ),
-                                                fontWeight = FontWeight.ExtraBold,
                                                 color = floatingSubColor,
                                                 textAlign = titleTextAlignByLang,
-                                                maxLines = 1,
-                                                overflow = TextOverflow.Clip,
+                                                maxLines = 2,
+                                                overflow = TextOverflow.Ellipsis,
                                                 modifier = Modifier.fillMaxWidth()
                                             )
                                         }
@@ -1641,11 +1640,7 @@ private fun TopicsCardForBelt(
                                                             modifier = Modifier.fillMaxWidth(),
                                                             textAlign = titleTextAlignByLang,
                                                             color = rowTitleColor,
-                                                            style = MaterialTheme.typography.bodySmall.copy(
-                                                                fontSize = 10.2.sp,
-                                                                lineHeight = 11.8.sp
-                                                            ),
-                                                            fontWeight = FontWeight.ExtraBold,
+                                                            style = KmiTypography.cardTitle,
                                                             maxLines = 2,
                                                             overflow = TextOverflow.Ellipsis
                                                         )
@@ -1657,14 +1652,16 @@ private fun TopicsCardForBelt(
                                                                 text = subTopicStatsLine,
                                                                 modifier = Modifier.fillMaxWidth(),
                                                                 textAlign = titleTextAlignByLang,
-                                                                color = belt.color.copy(alpha = 1f),
-                                                                style = MaterialTheme.typography.labelSmall.copy(
-                                                                    fontSize = 8.6.sp,
-                                                                    lineHeight = 10.sp
-                                                                ),
-                                                                fontWeight = FontWeight.Bold,
-                                                                maxLines = 1,
-                                                                overflow = TextOverflow.Ellipsis
+                                                                color =
+                                                                    belt.color.copy(alpha = 1f),
+                                                                style =
+                                                                    KmiTypography.caption.copy(
+                                                                        fontWeight =
+                                                                            FontWeight.Bold
+                                                                    ),
+                                                                maxLines = 2,
+                                                                overflow =
+                                                                    TextOverflow.Ellipsis
                                                             )
                                                         }
                                                     }
@@ -1690,7 +1687,12 @@ private fun TopicsCardForBelt(
                                             Spacer(Modifier.height(4.dp))
 
                                             Text(
-                                                text = if (isEnglish) "Close topic" else "סגור נושא",
+                                                text =
+                                                    if (isEnglish) {
+                                                        "Close topic"
+                                                    } else {
+                                                        "סגור נושא"
+                                                    },
                                                 modifier = Modifier
                                                     .align(horizontalByLang)
                                                     .clip(RoundedCornerShape(12.dp))
@@ -1699,19 +1701,24 @@ private fun TopicsCardForBelt(
                                                         haptic(true)
                                                         expandedTopic = null
                                                     }
-                                                    .padding(horizontal = 8.dp, vertical = 4.dp),
-                                                color = belt.color.copy(alpha = 1f),
-                                                style = MaterialTheme.typography.bodySmall.copy(
-                                                    fontSize = 11.sp,
-                                                    lineHeight = 13.sp
-                                                ),
-                                                fontWeight = FontWeight.Bold
+                                                    .padding(
+                                                        horizontal = 8.dp,
+                                                        vertical = 4.dp
+                                                    ),
+                                                color =
+                                                    belt.color.copy(alpha = 1f),
+                                                style = KmiTypography.action
                                             )
 
                                             Spacer(Modifier.height(2.dp))
 
                                             Text(
-                                                text = if (isEnglish) "Open full topic" else "פתח את כל הנושא",
+                                                text =
+                                                    if (isEnglish) {
+                                                        "Open full topic"
+                                                    } else {
+                                                        "פתח את כל הנושא"
+                                                    },
                                                 modifier = Modifier
                                                     .align(horizontalByLang)
                                                     .clip(RoundedCornerShape(12.dp))
@@ -1720,18 +1727,24 @@ private fun TopicsCardForBelt(
                                                         haptic(true)
 
                                                         if (isDefenseTopic) {
-                                                            onOpenDefenseMenu(belt, title)
+                                                            onOpenDefenseMenu(
+                                                                belt,
+                                                                title
+                                                            )
                                                         } else {
-                                                            onOpenTopic(belt, title)
+                                                            onOpenTopic(
+                                                                belt,
+                                                                title
+                                                            )
                                                         }
                                                     }
-                                                    .padding(horizontal = 8.dp, vertical = 4.dp),
-                                                color = belt.color.copy(alpha = 1f),
-                                                style = MaterialTheme.typography.bodySmall.copy(
-                                                    fontSize = 11.sp,
-                                                    lineHeight = 13.sp
-                                                ),
-                                                fontWeight = FontWeight.Bold
+                                                    .padding(
+                                                        horizontal = 8.dp,
+                                                        vertical = 4.dp
+                                                    ),
+                                                color =
+                                                    belt.color.copy(alpha = 1f),
+                                                style = KmiTypography.action
                                             )
                                         }
                                     }
@@ -1934,16 +1947,22 @@ private fun BeltArcPicker(
                                     beltShortNameForUi(belt, lang)
                                 }
                                 Text(
-                                    text = if (lang == AppLanguage.ENGLISH) {
-                                        "Belt\n$clean"
-                                    } else {
-                                        "חגורה\n$clean"
-                                    },
-                                    color = if (belt.color.luminance() < 0.5f) Color.White else Color.Black,
-                                    style = MaterialTheme.typography.bodyMedium,
+                                    text =
+                                        if (lang == AppLanguage.ENGLISH) {
+                                            "Belt\n$clean"
+                                        } else {
+                                            "חגורה\n$clean"
+                                        },
+                                    style = KmiTypography.action,
+                                    color =
+                                        if (belt.color.luminance() < 0.5f) {
+                                            Color.White
+                                        } else {
+                                            Color.Black
+                                        },
                                     textAlign = TextAlign.Center,
-                                    fontWeight = FontWeight.Bold,
-                                    lineHeight = MaterialTheme.typography.bodyMedium.lineHeight,
+                                    maxLines = 2,
+                                    overflow = TextOverflow.Ellipsis,
                                     modifier = Modifier.padding(8.dp)
                                 )
                             }

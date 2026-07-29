@@ -203,7 +203,7 @@ private fun ModernGlowFab(    accentColor: Color,
                     contentDescription = if (expanded) "סגור" else "תפריט מהיר",
                     tint = Color.White,
                     modifier = Modifier
-                        .size(26.dp)
+                        .size(KmiIconSize.large)
                         .graphicsLayer { rotationZ = iconRotation }
                 )
             }
@@ -274,7 +274,7 @@ private fun SideRailQuickMenuTrigger(
                 contentDescription = if (expanded) "סגור תפריט מהיר" else "פתח תפריט מהיר",
                 tint = Color.White,
                 modifier = Modifier
-                    .size(26.dp)
+                    .size(KmiIconSize.large)
                     .graphicsLayer {
                         rotationZ = iconRotation
                     }
@@ -322,16 +322,22 @@ private fun BottomQuickMenuButton(
                 imageVector = Icons.Filled.Menu,
                 contentDescription = null,
                 tint = belt.color,
-                modifier = Modifier.size(18.dp)
+                modifier = Modifier.size(KmiIconSize.small)
             )
 
             Spacer(Modifier.width(8.dp))
 
             Text(
-                text = if (isEnglish) "More Actions" else "פעולות נוספות",
-                fontWeight = FontWeight.Bold,
+                text =
+                    if (isEnglish) {
+                        "More Actions"
+                    } else {
+                        "פעולות נוספות"
+                    },
+                style = KmiTypography.action,
                 color = belt.color,
-                style = MaterialTheme.typography.titleMedium
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
             )
         }
     }
@@ -634,8 +640,8 @@ private fun PremiumQuickMenuPanel(
     onLockedItemClick: () -> Unit,
     onClose: () -> Unit
 ) {
-    val panelWidth = 190.dp
-    val panelHeight = 214.dp
+    val panelMinWidth = 220.dp
+    val panelMaxWidth = 280.dp
     val panelShape = RoundedCornerShape(20.dp)
 
     // ✅ המלל מקבל את צבע החגורה, אבל בצורה כהה/יוקרתית מספיק לקריאה.
@@ -675,10 +681,17 @@ private fun PremiumQuickMenuPanel(
             color = borderAccent.copy(alpha = 0.58f)
         ),
         modifier = Modifier
-            .requiredWidth(panelWidth)
-            .height(panelHeight)
+            .widthIn(
+                min = panelMinWidth,
+                max = panelMaxWidth
+            )
+            .wrapContentHeight()
             .wrapContentWidth(
-                if (isEnglish) Alignment.Start else Alignment.End
+                if (isEnglish) {
+                    Alignment.Start
+                } else {
+                    Alignment.End
+                }
             )
     ) {
         Box(
@@ -735,11 +748,11 @@ private fun PremiumQuickMenuPanel(
                         ) {
                             Text(
                                 text = title,
+                                style = KmiTypography.cardTitle,
                                 color = titleAccent,
-                                fontWeight = FontWeight.ExtraBold,
-                                fontSize = 13.sp,
-                                lineHeight = 15.sp,
                                 textAlign = TextAlign.Start,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
                                 modifier = Modifier.fillMaxWidth()
                             )
                         }
@@ -751,7 +764,7 @@ private fun PremiumQuickMenuPanel(
                             contentDescription = "close",
                             tint = titleAccent,
                             modifier = Modifier
-                                .size(18.dp)
+                                .size(KmiIconSize.small)
                                 .clickable { onClose() }
                         )
                     } else {
@@ -761,11 +774,11 @@ private fun PremiumQuickMenuPanel(
                         ) {
                             Text(
                                 text = title,
+                                style = KmiTypography.cardTitle,
                                 color = titleAccent,
-                                fontWeight = FontWeight.ExtraBold,
-                                fontSize = 13.sp,
-                                lineHeight = 15.sp,
                                 textAlign = TextAlign.Right,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
                                 modifier = Modifier.fillMaxWidth()
                             )
                         }
@@ -777,7 +790,7 @@ private fun PremiumQuickMenuPanel(
                             contentDescription = "close",
                             tint = titleAccent,
                             modifier = Modifier
-                                .size(18.dp)
+                                .size(KmiIconSize.small)
                                 .clickable { onClose() }
                         )
                     }
@@ -875,15 +888,13 @@ private fun PremiumQuickMenuRow(
             ) {
                 Text(
                     text = text,
-                    color = textColor,
-                    fontWeight = FontWeight.SemiBold,
-                    style = MaterialTheme.typography.bodySmall.copy(
-                        fontSize = 11.sp,
-                        lineHeight = 13.sp,
+                    style = KmiTypography.action.copy(
+                        fontWeight = FontWeight.SemiBold,
                         letterSpacing = (-0.14).sp
                     ),
+                    color = textColor,
                     textAlign = TextAlign.Start,
-                    maxLines = 1,
+                    maxLines = 2,
                     overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.weight(1f)
                 )
@@ -916,15 +927,13 @@ private fun PremiumQuickMenuRow(
 
                 Text(
                     text = text,
-                    color = textColor,
-                    fontWeight = FontWeight.SemiBold,
-                    style = MaterialTheme.typography.bodySmall.copy(
-                        fontSize = 11.sp,
-                        lineHeight = 13.sp,
+                    style = KmiTypography.action.copy(
+                        fontWeight = FontWeight.SemiBold,
                         letterSpacing = (-0.14).sp
                     ),
+                    color = textColor,
                     textAlign = TextAlign.Right,
-                    maxLines = 1,
+                    maxLines = 2,
                     overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.weight(1f)
                 )
@@ -951,7 +960,7 @@ private fun PremiumAnimatedLockIcon(
         contentDescription = null,
         tint = accentColor,
         modifier = Modifier
-            .size(13.dp)
+            .size(KmiIconSize.tiny)
             .graphicsLayer {
                 scaleX = scale
                 scaleY = scale
@@ -981,7 +990,9 @@ private fun PremiumQuickMenuIcon(
             imageVector = icon,
             contentDescription = null,
             tint = accentColor,
-            modifier = Modifier.size(10.5.dp)
+            modifier = Modifier.size(
+                scaledIconSize(10.5.dp)
+            )
         )
     }
 }

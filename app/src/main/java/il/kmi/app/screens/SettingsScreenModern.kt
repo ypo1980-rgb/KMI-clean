@@ -70,6 +70,8 @@ import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.Language
 import il.kmi.shared.localization.AppLanguage
 import il.kmi.shared.localization.AppLanguageManager
+import il.kmi.app.ui.AppFontSize
+import il.kmi.app.ui.KmiTypography
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.window.Dialog
@@ -295,6 +297,19 @@ fun SettingsScreenModern(
 
                 else -> "light"
             }
+        )
+    }
+
+    var fontSizeModeLocal by rememberSaveable {
+        mutableStateOf(
+            AppFontSize.fromStorageValue(
+                kmiPrefs.fontSize
+                    .takeIf { it.isNotBlank() }
+                    ?: sp.getString(
+                        AppFontSize.PREFERENCE_KEY,
+                        AppFontSize.MEDIUM.storageValue
+                    )
+            ).storageValue
         )
     }
 
@@ -2068,6 +2083,135 @@ fun SettingsScreenModern(
                     )
 
                     SettingsListItem(
+                        title = tr("גודל כתב", "Font size"),
+                        value = when (
+                            AppFontSize.fromStorageValue(fontSizeModeLocal)
+                        ) {
+                            AppFontSize.SMALL ->
+                                tr("קטן", "Small")
+
+                            AppFontSize.MEDIUM ->
+                                tr("בינוני", "Medium")
+
+                            AppFontSize.LARGE ->
+                                tr("גדול", "Large")
+                        },
+                        icon = Icons.Filled.AccessibilityNew,
+                        iconTint = Color(0xFF0F8B8D)
+                    ) {
+                        fun applyFontSize(newSize: AppFontSize) {
+                            if (fontSizeModeLocal == newSize.storageValue) {
+                                return
+                            }
+
+                            fontSizeModeLocal = newSize.storageValue
+                            kmiPrefs.fontSize = newSize.storageValue
+
+                            sp.edit()
+                                .putString(
+                                    AppFontSize.PREFERENCE_KEY,
+                                    newSize.storageValue
+                                )
+                                .apply()
+                        }
+
+                        val selectedFontSize =
+                            AppFontSize.fromStorageValue(fontSizeModeLocal)
+
+                        val selectedIndex = when (selectedFontSize) {
+                            AppFontSize.SMALL -> 0
+                            AppFontSize.MEDIUM -> 1
+                            AppFontSize.LARGE -> 2
+                        }
+
+                        Column(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Text(
+                                text = tr(
+                                    "בחר גודל כתב אחיד לכל מסכי האפליקציה",
+                                    "Choose one font size for all app screens"
+                                ),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                textAlign = textAlignPrimary,
+                                modifier = Modifier.fillMaxWidth()
+                            )
+
+                            TabRow(
+                                selectedTabIndex = selectedIndex
+                            ) {
+                                Tab(
+                                    selected =
+                                        selectedFontSize == AppFontSize.SMALL,
+                                    onClick = {
+                                        applyFontSize(AppFontSize.SMALL)
+                                    },
+                                    text = {
+                                        Text(
+                                            text = tr("קטן", "Small"),
+                                            maxLines = 1,
+                                            style =
+                                                MaterialTheme.typography.labelMedium
+                                        )
+                                    }
+                                )
+
+                                Tab(
+                                    selected =
+                                        selectedFontSize == AppFontSize.MEDIUM,
+                                    onClick = {
+                                        applyFontSize(AppFontSize.MEDIUM)
+                                    },
+                                    text = {
+                                        Text(
+                                            text = tr("בינוני", "Medium"),
+                                            maxLines = 1,
+                                            style =
+                                                MaterialTheme.typography.labelMedium
+                                        )
+                                    }
+                                )
+
+                                Tab(
+                                    selected =
+                                        selectedFontSize == AppFontSize.LARGE,
+                                    onClick = {
+                                        applyFontSize(AppFontSize.LARGE)
+                                    },
+                                    text = {
+                                        Text(
+                                            text = tr("גדול", "Large"),
+                                            maxLines = 1,
+                                            style =
+                                                MaterialTheme.typography.labelMedium
+                                        )
+                                    }
+                                )
+                            }
+
+                            Text(
+                                text = tr(
+                                    "השינוי חל מיד ונשמר גם לאחר סגירת האפליקציה.",
+                                    "The change applies immediately and remains after closing the app."
+                                ),
+                                style = MaterialTheme.typography.bodySmall.copy(
+                                    fontWeight = FontWeight.SemiBold
+                                ),
+                                color = MaterialTheme.colorScheme.primary,
+                                textAlign = textAlignPrimary,
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                        }
+                    }
+
+                    HorizontalDivider(
+                        color = MaterialTheme.colorScheme.outline.copy(alpha = 0.16f),
+                        modifier = Modifier.padding(horizontal = 12.dp)
+                    )
+
+                    SettingsListItem(
                         title = tr("נעילת אפליקציה", "App lock"),
                         value = when (sp.getString("app_lock_mode", "none") ?: "none") {
                             "biometric" -> tr("נעילה באצבע", "Biometric lock")
@@ -2457,9 +2601,7 @@ fun SettingsScreenModern(
                     ) {
                         Text(
                             text = tr("ביטול", "Cancel"),
-                            style = MaterialTheme.typography.titleMedium.copy(
-                                fontWeight = FontWeight.Bold
-                            )
+                            style = KmiTypography.action
                         )
                     }
 
@@ -2483,7 +2625,7 @@ fun SettingsScreenModern(
                     ) {
                         Text(
                             text = tr("אישור", "Confirm"),
-                            style = MaterialTheme.typography.titleMedium.copy(
+                            style = KmiTypography.action.copy(
                                 fontWeight = FontWeight.ExtraBold
                             )
                         )
@@ -2510,11 +2652,12 @@ private fun RowScope.LegalLink(
     ) {
         Text(
             text = text,
-            style = MaterialTheme.typography.titleMedium,
+            style = KmiTypography.action,
             textAlign = TextAlign.Center,
             minLines = 2,
             maxLines = 2,
             softWrap = true,
+            overflow = TextOverflow.Ellipsis,
             modifier = Modifier.fillMaxWidth()
         )
     }
@@ -2601,11 +2744,7 @@ fun SettingsListSection(
                 ) {
                     Text(
                         text = title,
-                        style = MaterialTheme.typography.titleMedium.copy(
-                            fontSize = 13.2.sp,
-                            lineHeight = 16.sp,
-                            fontWeight = FontWeight.ExtraBold
-                        ),
+                        style = KmiTypography.sectionTitle,
                         textAlign = textAlignPrimary,
                         color = MaterialTheme.colorScheme.onSurface,
                         maxLines = 1,
@@ -2616,14 +2755,12 @@ fun SettingsListSection(
                     if (!subtitle.isNullOrBlank()) {
                         Text(
                             text = subtitle,
-                            style = MaterialTheme.typography.bodySmall.copy(
-                                fontSize = 10.6.sp,
-                                lineHeight = 13.sp,
+                            style = KmiTypography.secondary.copy(
                                 fontWeight = FontWeight.SemiBold
                             ),
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             textAlign = textAlignPrimary,
-                            maxLines = 1,
+                            maxLines = 2,
                             overflow = TextOverflow.Ellipsis,
                             modifier = Modifier.fillMaxWidth()
                         )
@@ -2745,11 +2882,7 @@ fun SettingsListItem(
                 ) {
                     Text(
                         text = title,
-                        style = MaterialTheme.typography.titleMedium.copy(
-                            fontSize = 12.0.sp,
-                            lineHeight = 14.6.sp,
-                            fontWeight = FontWeight.ExtraBold
-                        ),
+                        style = KmiTypography.cardTitle,
                         textAlign = TextAlign.Left,
                         color = MaterialTheme.colorScheme.onSurface,
                         maxLines = 1,
@@ -2759,9 +2892,7 @@ fun SettingsListItem(
 
                     Text(
                         text = value,
-                        style = MaterialTheme.typography.bodySmall.copy(
-                            fontSize = 9.8.sp,
-                            lineHeight = 12.2.sp,
+                        style = KmiTypography.secondary.copy(
                             fontWeight = FontWeight.SemiBold
                         ),
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -2806,11 +2937,7 @@ fun SettingsListItem(
                 ) {
                     Text(
                         text = title,
-                        style = MaterialTheme.typography.titleMedium.copy(
-                            fontSize = 12.4.sp,
-                            lineHeight = 15.sp,
-                            fontWeight = FontWeight.ExtraBold
-                        ),
+                        style = KmiTypography.cardTitle,
                         textAlign = textAlignPrimary,
                         color = MaterialTheme.colorScheme.onSurface,
                         maxLines = 1,
@@ -2820,9 +2947,7 @@ fun SettingsListItem(
 
                     Text(
                         text = value,
-                        style = MaterialTheme.typography.bodySmall.copy(
-                            fontSize = 9.8.sp,
-                            lineHeight = 12.2.sp,
+                        style = KmiTypography.secondary.copy(
                             fontWeight = FontWeight.SemiBold
                         ),
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -2866,10 +2991,7 @@ fun SettingsListItem(
                 verticalArrangement = Arrangement.spacedBy(9.dp)
             ) {
                 ProvideTextStyle(
-                    value = MaterialTheme.typography.bodyMedium.copy(
-                        fontSize = 12.6.sp,
-                        lineHeight = 16.sp
-                    )
+                    value = KmiTypography.body
                 ) {
                     content()
                 }

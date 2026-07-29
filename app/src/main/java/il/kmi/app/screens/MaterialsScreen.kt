@@ -61,6 +61,7 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.border
 import androidx.compose.ui.unit.Dp
 import il.kmi.app.ui.color
+import il.kmi.app.ui.KmiTypography
 import il.kmi.app.ui.dialogs.ExerciseExplanationDialog
 import il.kmi.app.ui.dialogs.ExerciseNoteEditorDialog
 import il.kmi.shared.localization.AppLanguage
@@ -1577,19 +1578,23 @@ fun MaterialsScreen(
                                 modifier = Modifier.fillMaxWidth()
                             ) {
                                 Text(
-                                    text = if (isEnglish) {
-                                        "← Swipe sideways to see more stats →"
-                                    } else {
-                                        "→→ הזז לצד כדי לראות עוד נתונים →→"
-                                    },
+                                    text =
+                                        if (isEnglish) {
+                                            "← Swipe sideways to see more stats →"
+                                        } else {
+                                            "→→ הזז לצד כדי לראות עוד נתונים →→"
+                                        },
+                                    style = KmiTypography.caption.copy(
+                                        fontWeight = FontWeight.SemiBold
+                                    ),
                                     color = Color(0xFF5B6472),
-                                    fontSize = 10.sp,
-                                    lineHeight = 12.sp,
-                                    fontWeight = FontWeight.SemiBold,
                                     textAlign = TextAlign.Center,
                                     modifier = Modifier
                                         .fillMaxWidth()
-                                        .padding(top = 4.dp, bottom = 2.dp)
+                                        .padding(
+                                            top = 4.dp,
+                                            bottom = 2.dp
+                                        )
                                 )
 
                                 Row(
@@ -1687,19 +1692,23 @@ fun MaterialsScreen(
                                 }
 
                                 Text(
-                                    text = if (isEnglish) {
-                                        "More cards are available off-screen"
-                                    } else {
-                                        "יש עוד כרטיסים בהמשך הגלילה"
-                                    },
+                                    text =
+                                        if (isEnglish) {
+                                            "More cards are available off-screen"
+                                        } else {
+                                            "יש עוד כרטיסים בהמשך הגלילה"
+                                        },
+                                    style = KmiTypography.caption.copy(
+                                        fontWeight = FontWeight.Medium
+                                    ),
                                     color = Color(0xFF7A8392),
-                                    fontSize = 9.sp,
-                                    lineHeight = 11.sp,
-                                    fontWeight = FontWeight.Medium,
                                     textAlign = TextAlign.Center,
                                     modifier = Modifier
                                         .fillMaxWidth()
-                                        .padding(top = 0.dp, bottom = 4.dp)
+                                        .padding(
+                                            top = 0.dp,
+                                            bottom = 4.dp
+                                        )
                                 )
                             }
 
@@ -1753,31 +1762,55 @@ fun MaterialsScreen(
                                             verticalAlignment = Alignment.CenterVertically
                                         ) {
                                             Text(
-                                                text = topicTitleForUi(nestedTitle, currentLang),
-                                                style = MaterialTheme.typography.titleSmall,
-                                                fontWeight = FontWeight.ExtraBold,
-                                                textAlign = if (isEnglish) TextAlign.Left else TextAlign.Right,
+                                                text =
+                                                    topicTitleForUi(
+                                                        nestedTitle,
+                                                        currentLang
+                                                    ),
+                                                style = KmiTypography.cardTitle,
+                                                textAlign =
+                                                    if (isEnglish) {
+                                                        TextAlign.Left
+                                                    } else {
+                                                        TextAlign.Right
+                                                    },
                                                 color = Color(0xFF1F2937),
                                                 maxLines = 2,
                                                 overflow = TextOverflow.Ellipsis,
-                                                lineHeight = MaterialTheme.typography.titleSmall.lineHeight,
                                                 modifier = Modifier.weight(1f)
                                             )
 
                                             Spacer(Modifier.width(10.dp))
 
                                             Text(
-                                                text = if (isEnglish) {
-                                                    if (count == 1) "1 exercise" else "$count exercises"
-                                                } else {
-                                                    "$count תרגילים"
-                                                },
-                                                style = MaterialTheme.typography.labelMedium,
-                                                fontWeight = FontWeight.ExtraBold,
+                                                text =
+                                                    if (isEnglish) {
+                                                        if (count == 1) {
+                                                            "1 exercise"
+                                                        } else {
+                                                            "$count exercises"
+                                                        }
+                                                    } else {
+                                                        "$count תרגילים"
+                                                    },
+                                                style = KmiTypography.caption.copy(
+                                                    fontWeight =
+                                                        FontWeight.ExtraBold
+                                                ),
                                                 color = belt.color,
-                                                textAlign = if (isEnglish) TextAlign.Right else TextAlign.Left,
-                                                maxLines = 1,
-                                                modifier = Modifier.widthIn(min = 74.dp)
+                                                textAlign =
+                                                    if (isEnglish) {
+                                                        TextAlign.Right
+                                                    } else {
+                                                        TextAlign.Left
+                                                    },
+                                                maxLines = 2,
+                                                overflow =
+                                                    TextOverflow.Ellipsis,
+                                                modifier =
+                                                    Modifier.widthIn(
+                                                        min = 74.dp
+                                                    )
                                             )
                                         }
                                     }
@@ -1814,25 +1847,30 @@ fun MaterialsScreen(
                                                 shadowElevation = 0.dp
                                             ) {
                                                 Text(
-                                                    text = topicTitleForUi(
-                                                        currentSectionTitle,
-                                                        currentLang
-                                                    ),
+                                                    text =
+                                                        topicTitleForUi(
+                                                            currentSectionTitle,
+                                                            currentLang
+                                                        ),
                                                     modifier = Modifier
                                                         .fillMaxWidth()
-                                                        .background(belt.lightColor)
+                                                        .background(
+                                                            belt.lightColor
+                                                        )
                                                         .padding(
                                                             start = 8.dp,
                                                             end = 8.dp,
                                                             top = 8.dp,
                                                             bottom = 6.dp
                                                         ),
-                                                    textAlign = if (isEnglish) TextAlign.Left else TextAlign.Right,
-                                                    style = MaterialTheme.typography.labelLarge.copy(
-                                                        fontSize = 13.sp,
-                                                        lineHeight = 16.sp
-                                                    ),
-                                                    fontWeight = FontWeight.ExtraBold,
+                                                    textAlign =
+                                                        if (isEnglish) {
+                                                            TextAlign.Left
+                                                        } else {
+                                                            TextAlign.Right
+                                                        },
+                                                    style =
+                                                        KmiTypography.cardTitle,
                                                     color = belt.color
                                                 )
                                             }
@@ -2047,49 +2085,61 @@ fun MaterialsScreen(
                                                     ) {
                                                         Text(
                                                             text = displayName,
-                                                            textAlign = TextAlign.Start,
+                                                            textAlign =
+                                                                TextAlign.Start,
                                                             modifier = Modifier
                                                                 .fillMaxWidth()
                                                                 .clickable {
                                                                     pressed = true
 
-                                                                    explainTriple = Triple(
-                                                                        belt,
-                                                                        materialRootTopic,
-                                                                        item
-                                                                    )
+                                                                    explainTriple =
+                                                                        Triple(
+                                                                            belt,
+                                                                            materialRootTopic,
+                                                                            item
+                                                                        )
 
                                                                     scope.launch {
-                                                                        kotlinx.coroutines.delay(150)
-                                                                        pressed = false
+                                                                        kotlinx.coroutines.delay(
+                                                                            150
+                                                                        )
+                                                                        pressed =
+                                                                            false
                                                                     }
                                                                 }
                                                                 .padding(
                                                                     top = 4.dp,
                                                                     bottom = 4.dp
                                                                 ),
-                                                            color = when {
-                                                                isExcluded ->
-                                                                    Color.Gray
+                                                            color =
+                                                                when {
+                                                                    isExcluded ->
+                                                                        Color.Gray
 
-                                                                isHighlighted ->
-                                                                    belt.color.copy(alpha = 0.95f)
+                                                                    isHighlighted ->
+                                                                        belt.color.copy(
+                                                                            alpha = 0.95f
+                                                                        )
 
-                                                                else ->
-                                                                    Color(0xFF111827)
-                                                            },
-                                                            style = MaterialTheme.typography.bodySmall.copy(
-                                                                fontSize = 11.sp,
-                                                                lineHeight = 13.sp
-                                                            ),
-                                                            fontWeight =
-                                                                if (isHighlighted) {
-                                                                    FontWeight.Bold
-                                                                } else {
-                                                                    FontWeight.SemiBold
+                                                                    else ->
+                                                                        Color(
+                                                                            0xFF111827
+                                                                        )
                                                                 },
+                                                            style =
+                                                                KmiTypography.body.copy(
+                                                                    fontWeight =
+                                                                        if (
+                                                                            isHighlighted
+                                                                        ) {
+                                                                            FontWeight.Bold
+                                                                        } else {
+                                                                            FontWeight.SemiBold
+                                                                        }
+                                                                ),
                                                             maxLines = 3,
-                                                            overflow = TextOverflow.Ellipsis
+                                                            overflow =
+                                                                TextOverflow.Ellipsis
                                                         )
                                                     }
                                                 }
@@ -2811,13 +2861,11 @@ fun AnimatedButton(
     ) {
         Text(
             text = text,
+            style = KmiTypography.action,
             color = contentOnContainer,
-            fontWeight = FontWeight.Bold,
             textAlign = TextAlign.Center,
-            fontSize = 14.5.sp,
-            lineHeight = 16.sp,
             maxLines = 1,
-            overflow = TextOverflow.Clip
+            overflow = TextOverflow.Ellipsis
         )
     }
 }
@@ -2850,20 +2898,19 @@ private fun MaterialsTopStatChip(
         ) {
             Text(
                 text = value,
+                style = KmiTypography.cardTitle,
                 color = contentColor,
-                fontSize = 14.sp,
-                lineHeight = 16.sp,
-                fontWeight = FontWeight.ExtraBold,
                 maxLines = 1
             )
 
             Text(
                 text = label,
+                style = KmiTypography.caption.copy(
+                    fontWeight = FontWeight.SemiBold
+                ),
                 color = contentColor.copy(alpha = 0.92f),
-                fontSize = 10.sp,
-                lineHeight = 12.sp,
-                fontWeight = FontWeight.SemiBold,
-                maxLines = 1
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
             )
         }
     }
@@ -2936,7 +2983,10 @@ private fun CoachMaterialStatusSelector(
     ) {
         Column(
             modifier = Modifier
-                .widthIn(min = 68.dp, max = 82.dp)
+                .widthIn(
+                    min = 84.dp,
+                    max = 108.dp
+                )
                 .clickable {
                     expanded = true
                 }
@@ -2972,23 +3022,24 @@ private fun CoachMaterialStatusSelector(
 
             Text(
                 text = statusLabel,
+                style = KmiTypography.caption.copy(
+                    fontWeight = FontWeight.ExtraBold
+                ),
                 color = statusColor,
-                fontSize = 9.sp,
-                lineHeight = 10.sp,
-                fontWeight = FontWeight.ExtraBold,
                 textAlign = TextAlign.Center,
-                maxLines = 1,
+                maxLines = 2,
                 overflow = TextOverflow.Ellipsis
             )
 
             Text(
                 text = dateText,
+                style = KmiTypography.caption.copy(
+                    fontWeight = FontWeight.Medium
+                ),
                 color = Color(0xFF6B7280),
-                fontSize = 7.5.sp,
-                lineHeight = 9.sp,
-                fontWeight = FontWeight.Medium,
                 textAlign = TextAlign.Center,
-                maxLines = 1
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
             )
         }
 
@@ -3038,17 +3089,21 @@ private fun CoachMaterialStatusSelector(
                     text = {
                         Text(
                             text = optionLabel,
+                            style = KmiTypography.action.copy(
+                                fontWeight =
+                                    if (progress.status == status) {
+                                        FontWeight.ExtraBold
+                                    } else {
+                                        FontWeight.SemiBold
+                                    }
+                            ),
                             color = optionColor,
-                            fontWeight = if (progress.status == status) {
-                                FontWeight.ExtraBold
-                            } else {
-                                FontWeight.SemiBold
-                            },
-                            textAlign = if (isEnglish) {
-                                TextAlign.Left
-                            } else {
-                                TextAlign.Right
-                            },
+                            textAlign =
+                                if (isEnglish) {
+                                    TextAlign.Left
+                                } else {
+                                    TextAlign.Right
+                                },
                             modifier = Modifier.fillMaxWidth()
                         )
                     },
@@ -3080,12 +3135,16 @@ private fun ExerciseMetaBadge(
     ) {
         Text(
             text = text,
+            style = KmiTypography.caption.copy(
+                fontWeight = FontWeight.ExtraBold
+            ),
             color = contentColor,
-            fontSize = 9.sp,
-            lineHeight = 10.5.sp,
-            fontWeight = FontWeight.ExtraBold,
-            modifier = Modifier.padding(horizontal = 7.dp, vertical = 2.dp),
-            maxLines = 1
+            modifier = Modifier.padding(
+                horizontal = 7.dp,
+                vertical = 2.dp
+            ),
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
         )
     }
 }
@@ -3105,8 +3164,11 @@ private fun CompactDropdownAction(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(32.dp)
-                .clickable(enabled = enabled, onClick = onClick)
+                .heightIn(min = 40.dp)
+                .clickable(
+                    enabled = enabled,
+                    onClick = onClick
+                )
                 .padding(horizontal = 14.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = if (isEnglish) Arrangement.Start else Arrangement.End
@@ -3114,18 +3176,23 @@ private fun CompactDropdownAction(
             Text(
                 text = text,
                 modifier = Modifier.fillMaxWidth(),
-                color = if (enabled) {
-                    textColor
-                } else {
-                    Color(0xFF6B7280)
-                },
-                style = MaterialTheme.typography.labelMedium.copy(
-                    fontSize = 11.5.sp,
-                    lineHeight = 13.sp
+                style = KmiTypography.action.copy(
+                    fontWeight = fontWeight
                 ),
-                fontWeight = fontWeight,
-                textAlign = if (isEnglish) TextAlign.Left else TextAlign.Right,
-                maxLines = 1
+                color =
+                    if (enabled) {
+                        textColor
+                    } else {
+                        Color(0xFF6B7280)
+                    },
+                textAlign =
+                    if (isEnglish) {
+                        TextAlign.Left
+                    } else {
+                        TextAlign.Right
+                    },
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
             )
         }
     }
@@ -3238,18 +3305,23 @@ private fun ItemFloatingActions(
                     horizontalArrangement = if (isEnglish) Arrangement.Start else Arrangement.End
                 ) {
                     Text(
-                        text = if (isEnglish) {
-                            "What does “Exclude” mean?\nRemoves this exercise from practice."
-                        } else {
-                            "מה זה “החרג”?\nמנטרל את התרגיל מהתרגול."
-                        },
-                        style = MaterialTheme.typography.labelSmall.copy(
-                            fontSize = 10.5.sp,
-                            lineHeight = 12.5.sp
+                        text =
+                            if (isEnglish) {
+                                "What does “Exclude” mean?\nRemoves this exercise from practice."
+                            } else {
+                                "מה זה “החרג”?\nמנטרל את התרגיל מהתרגול."
+                            },
+                        style = KmiTypography.secondary.copy(
+                            fontWeight = FontWeight.SemiBold
                         ),
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        fontWeight = FontWeight.SemiBold,
-                        textAlign = if (isEnglish) TextAlign.Left else TextAlign.Right
+                        color =
+                            MaterialTheme.colorScheme.onSurfaceVariant,
+                        textAlign =
+                            if (isEnglish) {
+                                TextAlign.Left
+                            } else {
+                                TextAlign.Right
+                            }
                     )
                 }
 

@@ -39,6 +39,7 @@ import androidx.compose.ui.unit.LayoutDirection
 import il.kmi.app.KmiViewModel
 import il.kmi.app.favorites.FavoritesStore
 import il.kmi.app.ui.color
+import il.kmi.app.ui.KmiTypography
 import il.kmi.shared.domain.Belt
 import il.kmi.shared.questions.model.util.ExerciseTitleFormatter
 import java.io.File
@@ -580,31 +581,34 @@ fun ProgressMeter(
         ) {
             Text(
                 text = "$pct%",
-                style = MaterialTheme.typography.headlineSmall,
-                fontWeight = FontWeight.ExtraBold,
-                color = centerTextColor
+                style = KmiTypography.metric,
+                color = centerTextColor,
+                maxLines = 1
             )
 
             Spacer(Modifier.height(4.dp))
 
             Text(
                 text = if (isEnglish) "Marked" else "סומנו",
-                style = MaterialTheme.typography.titleSmall,
-                fontWeight = FontWeight.ExtraBold,
-                color = knownColor
+                style = KmiTypography.cardTitle,
+                color = knownColor,
+                maxLines = 1
             )
 
             Spacer(Modifier.height(3.dp))
 
             Text(
-                text = if (isEnglish) {
-                    "$effectiveCompleted out of $effectiveTotal"
-                } else {
-                    "$effectiveCompleted מתוך $effectiveTotal"
-                },
-                style = MaterialTheme.typography.bodyMedium,
-                fontWeight = FontWeight.Bold,
-                color = subTextColor
+                text =
+                    if (isEnglish) {
+                        "$effectiveCompleted out of $effectiveTotal"
+                    } else {
+                        "$effectiveCompleted מתוך $effectiveTotal"
+                    },
+                style = KmiTypography.body.copy(
+                    fontWeight = FontWeight.Bold
+                ),
+                color = subTextColor,
+                maxLines = 1
             )
 
             Spacer(Modifier.height(10.dp))
@@ -618,19 +622,26 @@ fun ProgressMeter(
                 )
             ) {
                 Text(
-                    text = if (!topic.isNullOrBlank()) {
-                        topic
-                    } else {
-                        if (isEnglish) {
-                            "$remaining remaining"
+                    text =
+                        if (!topic.isNullOrBlank()) {
+                            topic
                         } else {
-                            "נותרו $remaining"
-                        }
-                    },
-                    style = MaterialTheme.typography.labelLarge,
-                    fontWeight = FontWeight.ExtraBold,
+                            if (isEnglish) {
+                                "$remaining remaining"
+                            } else {
+                                "נותרו $remaining"
+                            }
+                        },
+                    style = KmiTypography.secondary.copy(
+                        fontWeight = FontWeight.ExtraBold
+                    ),
                     color = Color(0xFF344054),
-                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 7.dp)
+                    textAlign = TextAlign.Center,
+                    maxLines = 2,
+                    modifier = Modifier.padding(
+                        horizontal = 14.dp,
+                        vertical = 7.dp
+                    )
                 )
             }
         }
@@ -748,10 +759,14 @@ private fun UserProgressComparisonCard(
                 ) {
                     Text(
                         text = titleText,
-                        style = MaterialTheme.typography.titleLarge,
-                        fontWeight = FontWeight.ExtraBold,
+                        style = KmiTypography.sectionTitle,
                         color = Color(0xFF172033),
-                        textAlign = if (isEnglish) TextAlign.Left else TextAlign.Right,
+                        textAlign =
+                            if (isEnglish) {
+                                TextAlign.Left
+                            } else {
+                                TextAlign.Right
+                            },
                         maxLines = 1,
                         modifier = Modifier.fillMaxWidth()
                     )
@@ -761,8 +776,9 @@ private fun UserProgressComparisonCard(
             if (!isLoaded) {
                 Text(
                     text = loadingText,
-                    style = MaterialTheme.typography.bodyMedium,
-                    fontWeight = FontWeight.SemiBold,
+                    style = KmiTypography.body.copy(
+                        fontWeight = FontWeight.SemiBold
+                    ),
                     color = Color(0xFF475467),
                     textAlign = textAlign,
                     modifier = Modifier.fillMaxWidth()
@@ -779,12 +795,15 @@ private fun UserProgressComparisonCard(
                 ) {
                     Text(
                         text = notEnoughText,
-                        style = MaterialTheme.typography.bodySmall,
-                        fontWeight = FontWeight.SemiBold,
+                        style = KmiTypography.secondary.copy(
+                            fontWeight = FontWeight.SemiBold
+                        ),
                         color = Color(0xFF667085),
                         textAlign = textAlign,
-                        lineHeight = 18.sp,
-                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp)
+                        modifier = Modifier.padding(
+                            horizontal = 14.dp,
+                            vertical = 12.dp
+                        )
                     )
                 }
             } else {
@@ -816,13 +835,15 @@ private fun UserProgressComparisonCard(
                 }
 
                 Text(
-                    text = if (isEnglish) {
-                        "You are above ${c.percentileAbove}% of trainees in your belt."
-                    } else {
-                        "אתה מעל ${c.percentileAbove}% מהמתאמנים בחגורה שלך."
-                    },
-                    style = MaterialTheme.typography.bodyMedium,
-                    fontWeight = FontWeight.Bold,
+                    text =
+                        if (isEnglish) {
+                            "You are above ${c.percentileAbove}% of trainees in your belt."
+                        } else {
+                            "אתה מעל ${c.percentileAbove}% מהמתאמנים בחגורה שלך."
+                        },
+                    style = KmiTypography.body.copy(
+                        fontWeight = FontWeight.Bold
+                    ),
                     color = belt.color,
                     textAlign = textAlign,
                     modifier = Modifier.fillMaxWidth()
@@ -857,8 +878,7 @@ private fun SummaryMiniProgressChip(
         ) {
             Text(
                 text = value,
-                style = MaterialTheme.typography.labelLarge,
-                fontWeight = FontWeight.ExtraBold,
+                style = KmiTypography.metric,
                 color = color,
                 textAlign = TextAlign.Center,
                 maxLines = 1
@@ -868,8 +888,9 @@ private fun SummaryMiniProgressChip(
 
             Text(
                 text = title,
-                style = MaterialTheme.typography.labelSmall,
-                fontWeight = FontWeight.Bold,
+                style = KmiTypography.caption.copy(
+                    fontWeight = FontWeight.Bold
+                ),
                 color = Color(0xFF344054),
                 textAlign = TextAlign.Center,
                 maxLines = 1
@@ -1009,9 +1030,13 @@ private fun SummaryToggleButton(
             ) {
                 Text(
                     text = text,
-                    style = MaterialTheme.typography.labelLarge,
-                    fontWeight = FontWeight.ExtraBold,
-                    color = if (selected) Color(0xFF172033) else Color(0xFF263238),
+                    style = KmiTypography.action,
+                    color =
+                        if (selected) {
+                            Color(0xFF172033)
+                        } else {
+                            Color(0xFF263238)
+                        },
                     maxLines = 1,
                     textAlign = TextAlign.Center
                 )
@@ -1982,11 +2007,11 @@ fun SummaryScreen(
                                     "חזרה למסך הנושאים",
                                     "Back to topics screen"
                                 ),
-                                style = MaterialTheme.typography.titleMedium.copy(
-                                    fontSize = 14.4.sp
+                                style = KmiTypography.action.copy(
+                                    fontWeight = FontWeight.ExtraBold
                                 ),
-                                fontWeight = FontWeight.ExtraBold,
-                                color = Color.White
+                                color = Color.White,
+                                maxLines = 1
                             )
                         }
                     }
@@ -2034,10 +2059,10 @@ fun SummaryScreen(
                                 "טוען את כל סימוני התרגילים...",
                                 "Loading all exercise marks..."
                             ),
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.ExtraBold,
+                            style = KmiTypography.sectionTitle,
                             color = Color(0xFF172033),
-                            textAlign = TextAlign.Center
+                            textAlign = TextAlign.Center,
+                            maxLines = 2
                         )
 
                         Text(
@@ -2045,7 +2070,7 @@ fun SummaryScreen(
                                 "מסך הסיכום יוצג מיד כשהנתונים יהיו מוכנים",
                                 "The summary will appear when all data is ready"
                             ),
-                            style = MaterialTheme.typography.bodySmall,
+                            style = KmiTypography.secondary,
                             color = Color(0xFF667085),
                             textAlign = TextAlign.Center
                         )
@@ -2381,11 +2406,18 @@ fun SummaryScreen(
                                     horizontalAlignment = if (isEnglish) Alignment.Start else Alignment.End
                                 ) {
                                     Text(
-                                        text = tr("מד התקדמות", "Progress meter"),
-                                        style = MaterialTheme.typography.titleLarge,
-                                        fontWeight = FontWeight.ExtraBold,
+                                        text = tr(
+                                            "מד התקדמות",
+                                            "Progress meter"
+                                        ),
+                                        style = KmiTypography.sectionTitle,
                                         color = Color(0xFF172033),
-                                        textAlign = if (isEnglish) TextAlign.Left else TextAlign.Right,
+                                        textAlign =
+                                            if (isEnglish) {
+                                                TextAlign.Left
+                                            } else {
+                                                TextAlign.Right
+                                            },
                                         maxLines = 1,
                                         modifier = Modifier.fillMaxWidth()
                                     )
@@ -2427,9 +2459,13 @@ fun SummaryScreen(
                                         contentAlignment = Alignment.Center
                                     ) {
                                         Text(
-                                            text = tr("יודע: $overallDone", "Known: $overallDone"),
-                                            style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
-                                            fontWeight = FontWeight.ExtraBold,
+                                            text = tr(
+                                                "יודע: $overallDone",
+                                                "Known: $overallDone"
+                                            ),
+                                            style = KmiTypography.caption.copy(
+                                                fontWeight = FontWeight.ExtraBold
+                                            ),
                                             color = Color(0xFF2E7D32),
                                             textAlign = TextAlign.Center,
                                             maxLines = 1
@@ -2453,9 +2489,13 @@ fun SummaryScreen(
                                         contentAlignment = Alignment.Center
                                     ) {
                                         Text(
-                                            text = tr("לא יודע: $notKnownCount", "No: $notKnownCount"),
-                                            style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
-                                            fontWeight = FontWeight.ExtraBold,
+                                            text = tr(
+                                                "לא יודע: $notKnownCount",
+                                                "No: $notKnownCount"
+                                            ),
+                                            style = KmiTypography.caption.copy(
+                                                fontWeight = FontWeight.ExtraBold
+                                            ),
                                             color = Color(0xFFC62828),
                                             textAlign = TextAlign.Center,
                                             maxLines = 1
@@ -2481,9 +2521,13 @@ fun SummaryScreen(
                                         contentAlignment = Alignment.Center
                                     ) {
                                         Text(
-                                            text = tr("לא סומן: $unmarkedCount", "Open: $unmarkedCount"),
-                                            style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
-                                            fontWeight = FontWeight.ExtraBold,
+                                            text = tr(
+                                                "לא סומן: $unmarkedCount",
+                                                "Open: $unmarkedCount"
+                                            ),
+                                            style = KmiTypography.caption.copy(
+                                                fontWeight = FontWeight.ExtraBold
+                                            ),
                                             color = Color(0xFF667085),
                                             textAlign = TextAlign.Center,
                                             maxLines = 1
@@ -2574,13 +2618,20 @@ fun SummaryScreen(
                                         verticalAlignment = Alignment.CenterVertically
                                     ) {
                                         Text(
-                                            text = if (isEnglish)
-                                                "${topicDisplayName(topicTitle, true)} - $pct%"
-                                            else
-                                                "$topicTitle – $pct%",
-                                            style = MaterialTheme.typography.titleSmall,
-                                            fontWeight = FontWeight.ExtraBold,
-                                            textAlign = if (isEnglish) TextAlign.Left else TextAlign.Right,
+                                            text =
+                                                if (isEnglish) {
+                                                    "${topicDisplayName(topicTitle, true)} - $pct%"
+                                                } else {
+                                                    "$topicTitle – $pct%"
+                                                },
+                                            style = KmiTypography.cardTitle,
+                                            textAlign =
+                                                if (isEnglish) {
+                                                    TextAlign.Left
+                                                } else {
+                                                    TextAlign.Right
+                                                },
+                                            maxLines = 2,
                                             modifier = Modifier.weight(1f),
                                             color = Color(0xFF263238)
                                         )
@@ -2588,11 +2639,20 @@ fun SummaryScreen(
 
                                     if (items.isEmpty()) {
                                         Text(
-                                            text = tr("אין פריטים בנושא הזה.", "No items in this topic."),
-                                            style = MaterialTheme.typography.bodyMedium,
-                                            textAlign = if (isEnglish) TextAlign.Left else TextAlign.Right,
+                                            text = tr(
+                                                "אין פריטים בנושא הזה.",
+                                                "No items in this topic."
+                                            ),
+                                            style = KmiTypography.body,
+                                            textAlign =
+                                                if (isEnglish) {
+                                                    TextAlign.Left
+                                                } else {
+                                                    TextAlign.Right
+                                                },
                                             modifier = Modifier.fillMaxWidth(),
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                            color =
+                                                MaterialTheme.colorScheme.onSurfaceVariant
                                         )
                                     } else {
                                         rowsBySubTopic.forEach { (subTopicTitleRaw, rowsInSubTopic) ->
@@ -2639,16 +2699,23 @@ fun SummaryScreen(
                                                     verticalArrangement = Arrangement.spacedBy(6.dp)
                                                 ) {
                                                     Text(
-                                                        text = if (isEnglish) {
-                                                            "${subTopicDisplayName(subTopicTitleRaw, topicTitle, true)} - $subPct%"
-                                                        } else {
-                                                            "${subTopicDisplayName(subTopicTitleRaw, topicTitle, false)} – $subPct%"
-                                                        },
-                                                        style = MaterialTheme.typography.labelLarge,
-                                                        fontWeight = FontWeight.ExtraBold,
+                                                        text =
+                                                            if (isEnglish) {
+                                                                "${subTopicDisplayName(subTopicTitleRaw, topicTitle, true)} - $subPct%"
+                                                            } else {
+                                                                "${subTopicDisplayName(subTopicTitleRaw, topicTitle, false)} – $subPct%"
+                                                            },
+                                                        style = KmiTypography.cardTitle,
                                                         color = Color(0xFF455A64),
-                                                        textAlign = if (isEnglish) TextAlign.Left else TextAlign.Right,
-                                                        modifier = Modifier.fillMaxWidth()
+                                                        textAlign =
+                                                            if (isEnglish) {
+                                                                TextAlign.Left
+                                                            } else {
+                                                                TextAlign.Right
+                                                            },
+                                                        maxLines = 2,
+                                                        modifier =
+                                                            Modifier.fillMaxWidth()
                                                     )
 
                                                     rowsInSubTopic.forEach { row ->
@@ -2791,9 +2858,15 @@ fun SummaryScreen(
                                                         ) {
                                                             Column(
                                                                 modifier = Modifier.widthIn(
-                                                                    min = if (isCoach) 62.dp else 34.dp
+                                                                    min =
+                                                                        if (isCoach) {
+                                                                            66.dp
+                                                                        } else {
+                                                                            54.dp
+                                                                        }
                                                                 ),
-                                                                horizontalAlignment = Alignment.CenterHorizontally
+                                                                horizontalAlignment =
+                                                                    Alignment.CenterHorizontally
                                                             ) {
                                                                 Surface(
                                                                     modifier = Modifier.size(
@@ -2841,16 +2914,18 @@ fun SummaryScreen(
 
                                                                 Text(
                                                                     text = statusLabel,
-                                                                    color = statusBackgroundColor,
-                                                                    fontSize = if (isCoach) {
-                                                                        8.5.sp
-                                                                    } else {
-                                                                        8.sp
-                                                                    },
-                                                                    lineHeight = 10.sp,
-                                                                    fontWeight = FontWeight.ExtraBold,
-                                                                    textAlign = TextAlign.Center,
-                                                                    maxLines = if (isCoach) 2 else 1
+                                                                    style =
+                                                                        KmiTypography.caption.copy(
+                                                                            fontWeight =
+                                                                                FontWeight.ExtraBold
+                                                                        ),
+                                                                    color =
+                                                                        statusBackgroundColor,
+                                                                    textAlign =
+                                                                        TextAlign.Center,
+                                                                    maxLines = 2,
+                                                                    overflow =
+                                                                        androidx.compose.ui.text.style.TextOverflow.Ellipsis
                                                                 )
                                                             }
 
@@ -2861,23 +2936,47 @@ fun SummaryScreen(
                                                                 horizontalAlignment = if (isEnglish) Alignment.Start else Alignment.End
                                                             ) {
                                                                 Text(
-                                                                    text = exerciseDisplayNameForUi(row.sourceTopicTitle, itemRaw, isEnglish),
-                                                                    style = MaterialTheme.typography.bodyMedium.copy(
-                                                                        fontSize = 9.75375.sp,
-                                                                        lineHeight = 12.24.sp
-                                                                    ),
-                                                                    textAlign = if (isEnglish) TextAlign.Left else TextAlign.Right,
-                                                                    modifier = Modifier.fillMaxWidth(),
-                                                                    color = Color(0xFF1B1B1B)
+                                                                    text =
+                                                                        exerciseDisplayNameForUi(
+                                                                            row.sourceTopicTitle,
+                                                                            itemRaw,
+                                                                            isEnglish
+                                                                        ),
+                                                                    style =
+                                                                        KmiTypography.body,
+                                                                    textAlign =
+                                                                        if (isEnglish) {
+                                                                            TextAlign.Left
+                                                                        } else {
+                                                                            TextAlign.Right
+                                                                        },
+                                                                    maxLines = 3,
+                                                                    overflow =
+                                                                        androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                                                                    modifier =
+                                                                        Modifier.fillMaxWidth(),
+                                                                    color =
+                                                                        Color(0xFF1B1B1B)
                                                                 )
 
                                                                 if (itemHasNote) {
                                                                     Text(
-                                                                        text = tr("יש הערה שמורה", "Saved note exists"),
-                                                                        style = MaterialTheme.typography.labelSmall,
-                                                                        color = MaterialTheme.colorScheme.primary,
-                                                                        textAlign = if (isEnglish) TextAlign.Left else TextAlign.Right,
-                                                                        modifier = Modifier.fillMaxWidth()
+                                                                        text = tr(
+                                                                            "יש הערה שמורה",
+                                                                            "Saved note exists"
+                                                                        ),
+                                                                        style =
+                                                                            KmiTypography.caption,
+                                                                        color =
+                                                                            MaterialTheme.colorScheme.primary,
+                                                                        textAlign =
+                                                                            if (isEnglish) {
+                                                                                TextAlign.Left
+                                                                            } else {
+                                                                                TextAlign.Right
+                                                                            },
+                                                                        modifier =
+                                                                            Modifier.fillMaxWidth()
                                                                     )
                                                                 }
                                                             }

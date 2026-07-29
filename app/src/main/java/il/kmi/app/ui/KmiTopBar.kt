@@ -730,11 +730,7 @@ fun KmiTopBar(
         ) {
             Text(
                 text = title,
-                style = MaterialTheme.typography.titleLarge.copy(
-                    fontSize = 20.sp,
-                    lineHeight = 24.sp
-                ),
-                fontWeight = FontWeight.ExtraBold,
+                style = KmiTypography.screenTitle,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
                 textAlign = TextAlign.Center,
@@ -1839,7 +1835,7 @@ fun KmiTopBar(
                                         imageVector = Icons.Filled.Close,
                                         contentDescription = if (isEnglish) "Close search" else "סגור חיפוש",
                                         tint = Color.White,
-                                        modifier = Modifier.size(24.dp)
+                                        modifier = Modifier.size(KmiIconSize.medium)
                                     )
                                 }
 
@@ -1957,7 +1953,7 @@ fun KmiTopBar(
                                             imageVector = Icons.Filled.Search,
                                             contentDescription = searchLabel,
                                             tint = Color(0xFF10B981),
-                                            modifier = Modifier.size(21.dp)
+                                            modifier = Modifier.size(KmiIconSize.medium)
                                         )
                                     },
                                     trailingIcon = {
@@ -1971,7 +1967,7 @@ fun KmiTopBar(
                                                     imageVector = Icons.Filled.Close,
                                                     contentDescription = if (isEnglish) "Clear" else "נקה",
                                                     tint = Color(0xFF6D4ED8),
-                                                    modifier = Modifier.size(20.dp)
+                                                    modifier = Modifier.size(KmiIconSize.medium)
                                                 )
                                             }
                                         }
@@ -2147,7 +2143,7 @@ fun KmiTopBar(
                                                 imageVector = Icons.Filled.ChevronLeft,
                                                 contentDescription = null,
                                                 tint = Color(0xFF6D4ED8),
-                                                modifier = Modifier.size(15.dp)
+                                                modifier = Modifier.size(KmiIconSize.tiny)
                                             )
 
                                             Spacer(Modifier.width(8.dp))
@@ -2380,7 +2376,8 @@ fun KmiTopBar(
                         IconButton(onClick = { historyExpanded = true }) {
                             Icon(
                                 imageVector = Icons.Filled.History,
-                                contentDescription = if (isEnglish) "Previous messages" else "הודעות קודמות"
+                                contentDescription = if (isEnglish) "Previous messages" else "הודעות קודמות",
+                                modifier = Modifier.size(KmiIconSize.medium)
                             )
                         }
                         DropdownMenu(
@@ -2531,7 +2528,7 @@ fun PremiumActionIcon(
             imageVector = icon,
             contentDescription = contentDescription,
             tint = Color(0xFF4B478F),
-            modifier = Modifier.size(19.dp)
+            modifier = Modifier.size(KmiIconSize.small)
         )
     }
 }
@@ -2542,6 +2539,7 @@ private fun PremiumMenuImageIcon(
     onClick: () -> Unit
 ) {
     var pressed by remember { mutableStateOf(false) }
+    val iconScale = LocalAppIconScale.current
 
     LaunchedEffect(pressed) {
         if (pressed) {
@@ -2575,6 +2573,10 @@ private fun PremiumMenuImageIcon(
         Box(
             modifier = Modifier
                 .size(38.dp)
+                .graphicsLayer {
+                    scaleX = iconScale
+                    scaleY = iconScale
+                }
                 .clip(RoundedCornerShape(11.dp))
                 .background(
                     Brush.verticalGradient(
@@ -2799,7 +2801,7 @@ private fun VoiceCommandsAttachedHandle(
                         "פקודות קוליות"
                     },
                 tint = Color(0xFF4B478F),
-                modifier = Modifier.size(20.dp)
+                modifier = Modifier.size(KmiIconSize.medium)
             )
         }
     }
@@ -2909,7 +2911,7 @@ private fun IconsRailAttachedHandle(
                     },
                 tint = Color(0xFF4B478F),
                 modifier = Modifier
-                    .size(22.dp)
+                    .size(KmiIconSize.medium)
                     .graphicsLayer {
                         rotationZ = arrowRotation
                     }
@@ -2964,7 +2966,7 @@ private fun VerticalQuickActionItem(
                     imageVector = icon,
                     contentDescription = label,
                     tint = tint.copy(alpha = itemAlpha),
-                    modifier = Modifier.size(17.dp)
+                    modifier = Modifier.size(KmiIconSize.small)
                 )
             }
         }

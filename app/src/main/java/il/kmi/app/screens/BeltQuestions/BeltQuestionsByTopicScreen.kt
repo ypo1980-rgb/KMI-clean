@@ -50,6 +50,7 @@ import il.kmi.app.domain.SubjectTopic
 import il.kmi.app.localization.rememberIsEnglish
 import il.kmi.app.ui.FloatingQuickMenu
 import il.kmi.app.ui.QuickMenuTriggerMode
+import il.kmi.app.ui.KmiTypography
 import il.kmi.app.screens.PracticeByTopicsSelection
 import il.kmi.app.screens.PracticeMenuDialog
 import il.kmi.shared.domain.Belt
@@ -352,19 +353,26 @@ private fun HardSubjectLoadingScreen(
 
                 Text(
                     text = title,
+                    style = KmiTypography.sectionTitle,
                     color = Color(0xFF102033),
-                    fontWeight = FontWeight.ExtraBold,
-                    fontSize = 18.sp,
-                    textAlign = TextAlign.Center
+                    textAlign = TextAlign.Center,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis
                 )
 
                 Spacer(Modifier.height(4.dp))
 
                 Text(
-                    text = "טוען תרגילים...",
+                    text =
+                        if (rememberIsEnglish()) {
+                            "Loading exercises..."
+                        } else {
+                            "טוען תרגילים..."
+                        },
+                    style = KmiTypography.secondary.copy(
+                        fontWeight = FontWeight.SemiBold
+                    ),
                     color = Color(0xFF475569),
-                    fontWeight = FontWeight.SemiBold,
-                    fontSize = 12.sp,
                     textAlign = TextAlign.Center
                 )
             }
@@ -1505,13 +1513,16 @@ private fun InlineSubTopicsExpansionCard(
                     ) {
                         Text(
                             text = cleanTitle,
+                            style = KmiTypography.cardTitle,
                             color = Color(0xFF111827),
-                            fontWeight = FontWeight.ExtraBold,
-                            fontSize = 11.sp,
-                            lineHeight = 13.sp,
                             maxLines = 2,
                             overflow = TextOverflow.Ellipsis,
-                            textAlign = if (isEnglish) TextAlign.Start else TextAlign.Right,
+                            textAlign =
+                                if (isEnglish) {
+                                    TextAlign.Start
+                                } else {
+                                    TextAlign.Right
+                                },
                             modifier = Modifier.fillMaxWidth()
                         )
 
@@ -1519,11 +1530,16 @@ private fun InlineSubTopicsExpansionCard(
 
                         Text(
                             text = countLabel(countForDisplay(pick)),
+                            style = KmiTypography.caption.copy(
+                                fontWeight = FontWeight.ExtraBold
+                            ),
                             color = accent,
-                            fontWeight = FontWeight.ExtraBold,
-                            fontSize = 9.sp,
-                            lineHeight = 11.sp,
-                            textAlign = if (isEnglish) TextAlign.Start else TextAlign.Right,
+                            textAlign =
+                                if (isEnglish) {
+                                    TextAlign.Start
+                                } else {
+                                    TextAlign.Right
+                                },
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .padding(top = 2.dp)
@@ -1572,19 +1588,11 @@ private fun SubjectRootCardPremium(
     val isTitleLocked = title.endsWith(" 🔒")
     val displayTitle = stripLockSuffix(title)
 
-    val isRollsBreakfallsCard = subjectId.trim().lowercase() == "rolls_breakfalls" ||
-            subjectId.trim().lowercase() == "topic_breakfalls_rolls"
-
-    val titleFontSize = if (isRollsBreakfallsCard) 9.8.sp else 10.8.sp
-    val titleLineHeight = if (isRollsBreakfallsCard) 11.4.sp else 12.8.sp
-    val titleMaxLines = if (isRollsBreakfallsCard) 1 else 2
-
-    val isCombinedCountText =
-        countText.contains("תתי נושאים") ||
-                countText.contains("sub-topics", ignoreCase = true)
-
-    val countFontSize = if (isCombinedCountText) 8.6.sp else 10.sp
-    val countLineHeight = if (isCombinedCountText) 10.sp else 12.sp
+    /*
+     * כל כרטיסי הנושאים משתמשים כעת באותם סגנונות.
+     * כותרות ארוכות מקבלות עד שתי שורות במקום גודל כתב מוקטן.
+     */
+    val titleMaxLines = 2
 
     @Composable
     fun SubjectVisual() {
@@ -1672,11 +1680,7 @@ private fun SubjectRootCardPremium(
                             ) {
                                 Text(
                                     text = displayTitle,
-                                    style = MaterialTheme.typography.titleSmall.copy(
-                                        fontSize = titleFontSize,
-                                        lineHeight = titleLineHeight
-                                    ),
-                                    fontWeight = FontWeight.ExtraBold,
+                                    style = KmiTypography.cardTitle,
                                     textAlign = TextAlign.Start,
                                     color = titleColor,
                                     maxLines = titleMaxLines,
@@ -1706,15 +1710,13 @@ private fun SubjectRootCardPremium(
                                 Spacer(modifier = Modifier.height(2.dp))
                                 Text(
                                     text = subtitle,
-                                    style = MaterialTheme.typography.bodySmall.copy(
-                                        fontSize = 10.sp,
-                                        lineHeight = 12.sp
+                                    style = KmiTypography.secondary.copy(
+                                        fontWeight = FontWeight.SemiBold
                                     ),
-                                    fontWeight = FontWeight.SemiBold,
                                     textAlign = TextAlign.Start,
                                     color = subtitleColor,
                                     modifier = Modifier.fillMaxWidth(),
-                                    maxLines = 1,
+                                    maxLines = 2,
                                     overflow = TextOverflow.Ellipsis
                                 )
                             }
@@ -1723,16 +1725,14 @@ private fun SubjectRootCardPremium(
 
                             Text(
                                 text = countText,
-                                style = MaterialTheme.typography.labelSmall.copy(
-                                    fontSize = countFontSize,
-                                    lineHeight = countLineHeight
+                                style = KmiTypography.caption.copy(
+                                    fontWeight = FontWeight.ExtraBold
                                 ),
-                                fontWeight = FontWeight.ExtraBold,
                                 textAlign = TextAlign.Start,
                                 color = countColor,
                                 modifier = Modifier.fillMaxWidth(),
-                                maxLines = 1,
-                                overflow = TextOverflow.Clip
+                                maxLines = 2,
+                                overflow = TextOverflow.Ellipsis
                             )
                         }
                     } else {
@@ -1777,11 +1777,7 @@ private fun SubjectRootCardPremium(
                         ) {
                             Text(
                                 text = displayTitle,
-                                style = MaterialTheme.typography.titleSmall.copy(
-                                    fontSize = titleFontSize,
-                                    lineHeight = titleLineHeight
-                                ),
-                                fontWeight = FontWeight.ExtraBold,
+                                style = KmiTypography.cardTitle,
                                 textAlign = TextAlign.Right,
                                 color = titleColor,
                                 modifier = Modifier.fillMaxWidth(),
@@ -1793,15 +1789,13 @@ private fun SubjectRootCardPremium(
                                 Spacer(modifier = Modifier.height(2.dp))
                                 Text(
                                     text = subtitle,
-                                    style = MaterialTheme.typography.bodySmall.copy(
-                                        fontSize = 10.sp,
-                                        lineHeight = 12.sp
+                                    style = KmiTypography.secondary.copy(
+                                        fontWeight = FontWeight.SemiBold
                                     ),
-                                    fontWeight = FontWeight.SemiBold,
                                     textAlign = TextAlign.Right,
                                     color = subtitleColor,
                                     modifier = Modifier.fillMaxWidth(),
-                                    maxLines = 1,
+                                    maxLines = 2,
                                     overflow = TextOverflow.Ellipsis
                                 )
                             }
@@ -1810,16 +1804,14 @@ private fun SubjectRootCardPremium(
 
                             Text(
                                 text = countText,
-                                style = MaterialTheme.typography.labelSmall.copy(
-                                    fontSize = countFontSize,
-                                    lineHeight = countLineHeight
+                                style = KmiTypography.caption.copy(
+                                    fontWeight = FontWeight.ExtraBold
                                 ),
-                                fontWeight = FontWeight.ExtraBold,
                                 textAlign = TextAlign.Right,
                                 color = countColor,
                                 modifier = Modifier.fillMaxWidth(),
-                                maxLines = 1,
-                                overflow = TextOverflow.Clip
+                                maxLines = 2,
+                                overflow = TextOverflow.Ellipsis
                             )
                         }
 
@@ -2586,27 +2578,43 @@ internal fun TopicsBySubjectCard(
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Text(
-                        text = if (isEnglish) "Subjects (Categories)" else "נושאים (קטגוריות)",
-                        style = if (isDarkMode) {
-                            MaterialTheme.typography.titleSmall
-                        } else {
-                            MaterialTheme.typography.labelLarge
-                        },
-                        fontWeight = FontWeight.ExtraBold,
+                        text =
+                            if (isEnglish) {
+                                "Subjects (Categories)"
+                            } else {
+                                "נושאים (קטגוריות)"
+                            },
+                        style = KmiTypography.sectionTitle,
                         textAlign = TextAlign.Center,
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(top = 8.dp, bottom = 6.dp),
-                        color = if (isDarkMode) Color.White else Color(0xFF263238)
+                            .padding(
+                                top = 8.dp,
+                                bottom = 6.dp
+                            ),
+                        color =
+                            if (isDarkMode) {
+                                Color.White
+                            } else {
+                                Color(0xFF263238)
+                            }
                     )
 
                     if (!countsReady) {
                         Text(
-                            text = if (isEnglish) "Loading data..." else "טוען נתונים…",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = if (isDarkMode) Color.White.copy(alpha = 0.78f) else Color(
-                                0xFF475569
-                            ),
+                            text =
+                                if (isEnglish) {
+                                    "Loading data..."
+                                } else {
+                                    "טוען נתונים…"
+                                },
+                            style = KmiTypography.secondary,
+                            color =
+                                if (isDarkMode) {
+                                    Color.White.copy(alpha = 0.78f)
+                                } else {
+                                    Color(0xFF475569)
+                                },
                             textAlign = TextAlign.Center,
                             modifier = Modifier.fillMaxWidth()
                         )

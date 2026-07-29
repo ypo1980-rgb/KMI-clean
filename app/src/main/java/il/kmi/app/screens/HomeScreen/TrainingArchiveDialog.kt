@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.material3.Scaffold
 import androidx.compose.ui.platform.LocalContext
 import il.kmi.app.ui.KmiTopBar
+import il.kmi.app.ui.KmiTypography
 import il.kmi.shared.localization.AppLanguage
 import il.kmi.shared.localization.AppLanguageManager
 import androidx.compose.foundation.layout.fillMaxSize
@@ -987,10 +988,10 @@ private fun ArchiveDateField(
             ) {
                 Text(
                     text = title,
+                    style = KmiTypography.caption.copy(
+                        fontWeight = FontWeight.Bold
+                    ),
                     color = Color(0xFF64748B),
-                    fontSize = 10.sp,
-                    lineHeight = 11.sp,
-                    fontWeight = FontWeight.Bold,
                     maxLines = 1,
                     textAlign = TextAlign.Center,
                     modifier = Modifier.fillMaxWidth()
@@ -1002,10 +1003,10 @@ private fun ArchiveDateField(
 
                 Text(
                     text = value,
+                    style = KmiTypography.body.copy(
+                        fontWeight = FontWeight.Black
+                    ),
                     color = Color(0xFF172033),
-                    fontSize = 13.sp,
-                    lineHeight = 14.sp,
-                    fontWeight = FontWeight.Black,
                     maxLines = 1,
                     softWrap = false,
                     textAlign = TextAlign.Center,
@@ -1055,10 +1056,11 @@ private fun ArchiveQuickRangeChip(
                 } else {
                     Color(0xFF075985)
                 },
-            style =
-                MaterialTheme.typography.labelMedium,
-            fontWeight = FontWeight.Bold,
-            maxLines = 1
+            style = KmiTypography.caption.copy(
+                fontWeight = FontWeight.Bold
+            ),
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
         )
     }
 }
@@ -1107,47 +1109,41 @@ private fun ArchiveSummaryChip(
         ) {
             Text(
                 text = value.toString(),
+                style = KmiTypography.cardTitle.copy(
+                    fontWeight =
+                        if (selected) {
+                            FontWeight.Black
+                        } else {
+                            FontWeight.Bold
+                        }
+                ),
                 color =
                     if (selected) {
                         color
                     } else {
                         Color(0xFF64748B)
                     },
-                fontWeight =
-                    if (selected) {
-                        FontWeight.Black
-                    } else {
-                        FontWeight.Bold
-                    },
-                fontSize =
-                    if (selected) {
-                        16.sp
-                    } else {
-                        15.sp
-                    },
-                lineHeight = 17.sp
+                maxLines = 1
             )
 
             Text(
                 text = title,
+                style = KmiTypography.caption.copy(
+                    fontWeight =
+                        if (selected) {
+                            FontWeight.Black
+                        } else {
+                            FontWeight.Bold
+                        }
+                ),
                 color =
                     if (selected) {
                         color
                     } else {
                         Color(0xFF64748B)
                     },
-                style =
-                    MaterialTheme.typography.labelSmall.copy(
-                        fontSize = 11.sp,
-                        lineHeight = 12.sp
-                    ),
-                fontWeight =
-                    if (selected) {
-                        FontWeight.Black
-                    } else {
-                        FontWeight.Bold
-                    },
-                maxLines = 1
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
             )
         }
     }
@@ -1211,10 +1207,8 @@ private fun ArchiveEmptyState(
                         } else {
                             "אין אימונים בטווח שנבחר"
                         },
+                    style = KmiTypography.sectionTitle,
                     color = Color(0xFF172033),
-                    style =
-                        MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Black,
                     textAlign = TextAlign.Center
                 )
 
@@ -1225,9 +1219,8 @@ private fun ArchiveEmptyState(
                         } else {
                             "אפשר לבחור טווח תאריכים אחר או להשתמש באחד מהסינונים המהירים."
                         },
+                    style = KmiTypography.body,
                     color = Color(0xFF64748B),
-                    style =
-                        MaterialTheme.typography.bodyMedium,
                     textAlign = TextAlign.Center
                 )
             }
@@ -1387,23 +1380,22 @@ private fun TrainingArchiveCard(
                                     "אימון"
                                 }
                             },
+                        style = KmiTypography.sectionTitle.copy(
+                            fontWeight = FontWeight.Black
+                        ),
                         color = Color(0xFF172033),
-                        fontSize = 17.sp,
-                        lineHeight = 19.sp,
-                        fontWeight = FontWeight.Black,
                         maxLines = 1,
-                        overflow =
-                            TextOverflow.Ellipsis
+                        overflow = TextOverflow.Ellipsis
                     )
 
                     Text(
                         text = "$dateText · $timeText",
+                        style = KmiTypography.secondary.copy(
+                            fontWeight = FontWeight.Bold
+                        ),
                         color = Color(0xFF334155),
-                        fontSize = 13.sp,
-                        lineHeight = 15.sp,
-                        fontWeight = FontWeight.Bold,
-                        maxLines = 1,
-                        softWrap = false,
+                        maxLines = 2,
+                        softWrap = true,
                         overflow = TextOverflow.Ellipsis
                     )
                 }
@@ -1468,19 +1460,18 @@ private fun TrainingArchiveCard(
                             status.displayText(
                                 isEnglish
                             ),
+                        style = KmiTypography.secondary.copy(
+                            fontWeight = FontWeight.Black
+                        ),
                         modifier =
                             Modifier.padding(
                                 horizontal = 11.dp,
                                 vertical = 4.dp
                             ),
-                        textAlign =
-                            TextAlign.Center,
-                        fontSize = 13.sp,
-                        lineHeight = 15.sp,
-                        fontWeight =
-                            FontWeight.Black,
+                        textAlign = TextAlign.Center,
                         color = statusColor,
-                        maxLines = 2
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis
                     )
                 }
             }
@@ -1502,23 +1493,22 @@ private fun ArchiveDetailLine(
     ) {
         Text(
             text = "$title:",
+            style = KmiTypography.secondary.copy(
+                fontWeight = FontWeight.Bold
+            ),
             color = Color(0xFF64748B),
-            fontSize = 12.sp,
-            lineHeight = 14.sp,
-            fontWeight = FontWeight.Bold,
             maxLines = 1
         )
 
         Text(
             text = value,
+            style = KmiTypography.secondary.copy(
+                fontWeight = FontWeight.SemiBold
+            ),
             modifier = Modifier.weight(1f),
             color = Color(0xFF334155),
-            fontSize = 12.sp,
-            lineHeight = 14.sp,
-            fontWeight = FontWeight.SemiBold,
-            maxLines = 1,
-            overflow =
-                TextOverflow.Ellipsis
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis
         )
     }
 }

@@ -61,6 +61,7 @@ import androidx.core.graphics.ColorUtils
 import il.kmi.app.KmiViewModel
 import il.kmi.app.ui.ext.color
 import il.kmi.app.ui.ext.lightColor
+import il.kmi.app.ui.KmiTypography
 import il.kmi.shared.domain.Belt
 import il.kmi.shared.domain.content.ExerciseIdentityRegistry
 import il.kmi.shared.questions.model.util.ExerciseTitleFormatter
@@ -558,8 +559,10 @@ fun ProgressScreen(
                     ) {
                         Text(
                             text = "מעבר למסך התרגילים",
-                            fontWeight = FontWeight.ExtraBold,
-                            fontSize = 17.sp
+                            style = KmiTypography.action.copy(
+                                fontWeight = FontWeight.ExtraBold
+                            ),
+                            maxLines = 1
                         )
                     }
                 }
@@ -585,20 +588,20 @@ fun ProgressScreen(
 
                         Text(
                             text = "טוען נתוני התקדמות...",
-                            fontWeight = FontWeight.ExtraBold,
+                            style = KmiTypography.sectionTitle,
                             color = Color(0xFF3F3A4A),
                             textAlign = TextAlign.Center,
-                            fontSize = 19.sp,
-                            lineHeight = 23.sp
+                            maxLines = 2
                         )
 
                         Text(
                             text = "מסדר את נתוני החגורות שלך",
-                            fontWeight = FontWeight.SemiBold,
+                            style = KmiTypography.secondary.copy(
+                                fontWeight = FontWeight.SemiBold
+                            ),
                             color = Color(0xFF7A7288),
                             textAlign = TextAlign.Center,
-                            fontSize = 13.sp,
-                            lineHeight = 16.sp
+                            maxLines = 2
                         )
                     }
                 }
@@ -777,21 +780,28 @@ private fun ProgressCard(
                 ) {
                     Text(
                         text = "$percent%",
-                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
-                        fontWeight = FontWeight.ExtraBold,
-                        fontSize = 15.sp
+                        style = KmiTypography.metric,
+                        modifier = Modifier.padding(
+                            horizontal = 12.dp,
+                            vertical = 6.dp
+                        ),
+                        maxLines = 1
                     )
                 }
 
                 Spacer(modifier = Modifier.width(10.dp))
 
                 Text(
-                    text = "חגורה: ${belt.heb.removePrefix("חגורה").trim()}",
-                    fontWeight = FontWeight.ExtraBold,
+                    text =
+                        "חגורה: ${
+                            belt.heb
+                                .removePrefix("חגורה")
+                                .trim()
+                        }",
+                    style = KmiTypography.sectionTitle,
                     color = readableBeltColor,
-                    fontSize = 18.sp,
-                    lineHeight = 21.sp,
                     textAlign = TextAlign.Right,
+                    maxLines = 1,
                     modifier = Modifier.weight(1f)
                 )
 
@@ -826,11 +836,12 @@ private fun ProgressCard(
 
             Text(
                 text = "($done מתוך $total)",
+                style = KmiTypography.body.copy(
+                    fontWeight = FontWeight.SemiBold
+                ),
                 textAlign = TextAlign.Right,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.fillMaxWidth(),
-                fontSize = 14.sp,
-                fontWeight = FontWeight.SemiBold
+                modifier = Modifier.fillMaxWidth()
             )
         }
     }

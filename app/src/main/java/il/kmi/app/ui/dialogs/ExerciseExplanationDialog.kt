@@ -28,6 +28,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import il.kmi.app.ui.KmiTypography
 import il.kmi.app.ui.StyledExplanationText
 
 @Composable
@@ -108,12 +109,15 @@ fun ExerciseExplanationDialog(
             ) {
                 Text(
                     text = title,
-                    style = MaterialTheme.typography.titleSmall.copy(
-                        fontSize = 18.sp,
-                        lineHeight = 22.sp
+                    style = KmiTypography.sectionTitle.copy(
+                        fontWeight = FontWeight.Black
                     ),
-                    fontWeight = FontWeight.Black,
-                    textAlign = if (isEnglish) TextAlign.Left else TextAlign.Right,
+                    textAlign =
+                        if (isEnglish) {
+                            TextAlign.Left
+                        } else {
+                            TextAlign.Right
+                        },
                     modifier = Modifier.fillMaxWidth(),
                     color = Color(0xFF1F2937),
                     maxLines = 2
@@ -128,19 +132,37 @@ fun ExerciseExplanationDialog(
                 ) {
                     Text(
                         text = beltLabel,
-                        style = MaterialTheme.typography.labelSmall.copy(
-                            fontSize = 13.sp,
-                            lineHeight = 15.sp
+                        style = KmiTypography.secondary.copy(
+                            fontWeight = FontWeight.Black
                         ),
-                        textAlign = if (isEnglish) TextAlign.Left else TextAlign.Right,
+                        textAlign =
+                            if (isEnglish) {
+                                TextAlign.Left
+                            } else {
+                                TextAlign.Right
+                            },
                         modifier = Modifier
                             .weight(1f)
                             .padding(
-                                start = if (isEnglish) 8.dp else 0.dp,
-                                end = if (isEnglish) 0.dp else 8.dp
+                                start =
+                                    if (isEnglish) {
+                                        8.dp
+                                    } else {
+                                        0.dp
+                                    },
+                                end =
+                                    if (isEnglish) {
+                                        0.dp
+                                    } else {
+                                        8.dp
+                                    }
                             ),
-                        color = if (isEnglish) Color(0xFFB08900) else accentColor,
-                        fontWeight = FontWeight.Black,
+                        color =
+                            if (isEnglish) {
+                                Color(0xFFB08900)
+                            } else {
+                                accentColor
+                            },
                         maxLines = 1
                     )
 
@@ -248,11 +270,13 @@ fun ExerciseExplanationDialog(
             ) {
                 StyledExplanationText(
                     raw = explanation,
-                    style = MaterialTheme.typography.bodySmall.copy(
-                        fontSize = 15.sp,
-                        lineHeight = 21.sp
-                    ),
-                    textAlign = if (isEnglish) TextAlign.Left else TextAlign.Right,
+                    style = KmiTypography.body,
+                    textAlign =
+                        if (isEnglish) {
+                            TextAlign.Left
+                        } else {
+                            TextAlign.Right
+                        },
                     modifier = Modifier.fillMaxWidth(),
                     color = Color(0xFF1B1B1B)
                 )
@@ -272,7 +296,7 @@ fun ExerciseExplanationDialog(
                         if (isEnglish) {
                             Text(
                                 text = "Trainee note:",
-                                fontWeight = FontWeight.Bold,
+                                style = KmiTypography.cardTitle,
                                 textAlign = TextAlign.Left,
                                 color = Color(0xFFB08900)
                             )
@@ -326,7 +350,7 @@ fun ExerciseExplanationDialog(
                         } else {
                             Text(
                                 text = "הערה של המתאמן:",
-                                fontWeight = FontWeight.Bold,
+                                style = KmiTypography.cardTitle,
                                 textAlign = TextAlign.Right,
                                 color = accentColor
                             )
@@ -382,11 +406,13 @@ fun ExerciseExplanationDialog(
 
                     Text(
                         text = noteText,
-                        style = MaterialTheme.typography.bodySmall.copy(
-                            fontSize = 14.sp,
-                            lineHeight = 19.sp
-                        ),
-                        textAlign = if (isEnglish) TextAlign.Left else TextAlign.Right,
+                        style = KmiTypography.body,
+                        textAlign =
+                            if (isEnglish) {
+                                TextAlign.Left
+                            } else {
+                                TextAlign.Right
+                            },
                         modifier = Modifier.fillMaxWidth(),
                         color = Color(0xFF1B1B1B)
                     )
@@ -414,12 +440,10 @@ fun ExerciseExplanationDialog(
                 ) {
                     Text(
                         text = if (isEnglish) "Close" else "סגור",
-                        fontWeight = FontWeight.Black,
-                        color = Color(0xFF6D5BA6),
-                        style = MaterialTheme.typography.labelLarge.copy(
-                            fontSize = 14.sp,
-                            lineHeight = 16.sp
-                        )
+                        style = KmiTypography.action.copy(
+                            fontWeight = FontWeight.Black
+                        ),
+                        color = Color(0xFF6D5BA6)
                     )
                 }
             }
@@ -483,30 +507,32 @@ fun ExerciseNoteEditorDialog(
                     verticalArrangement = Arrangement.spacedBy(16.dp)
                 ) {
                     Text(
-                        text = if (isEnglish) "Exercise Note" else "הערה על התרגיל",
+                        text =
+                            if (isEnglish) {
+                                "Exercise Note"
+                            } else {
+                                "הערה על התרגיל"
+                            },
                         modifier = Modifier.fillMaxWidth(),
                         textAlign = TextAlign.Center,
-                        style = MaterialTheme.typography.headlineSmall.copy(
-                            fontSize = 25.sp,
-                            lineHeight = 30.sp
+                        style = KmiTypography.screenTitle.copy(
+                            fontWeight = FontWeight.Black
                         ),
-                        fontWeight = FontWeight.Black,
                         color = Color(0xFF1E2A3D)
                     )
 
                     Text(
-                        text = if (isEnglish) {
-                            "Write a personal note that will stay attached to this exercise"
-                        } else {
-                            "כתוב הערה אישית שתישמר לתרגיל הזה"
-                        },
+                        text =
+                            if (isEnglish) {
+                                "Write a personal note that will stay attached to this exercise"
+                            } else {
+                                "כתוב הערה אישית שתישמר לתרגיל הזה"
+                            },
                         modifier = Modifier.fillMaxWidth(),
                         textAlign = TextAlign.Center,
-                        style = MaterialTheme.typography.bodyMedium.copy(
-                            fontSize = 15.sp,
-                            lineHeight = 20.sp
+                        style = KmiTypography.body.copy(
+                            fontWeight = FontWeight.ExtraBold
                         ),
-                        fontWeight = FontWeight.ExtraBold,
                         color = Color(0xFF64748B)
                     )
 
@@ -529,28 +555,30 @@ fun ExerciseNoteEditorDialog(
                                 .padding(horizontal = 14.dp, vertical = 12.dp),
                             minLines = 5,
                             maxLines = 8,
-                            textStyle = MaterialTheme.typography.titleMedium.copy(
-                                textAlign = if (isEnglish) TextAlign.Left else TextAlign.Right,
+                            textStyle = KmiTypography.body.copy(
+                                textAlign =
+                                    if (isEnglish) {
+                                        TextAlign.Left
+                                    } else {
+                                        TextAlign.Right
+                                    },
                                 fontWeight = FontWeight.ExtraBold,
-                                fontSize = 19.sp,
-                                lineHeight = 25.sp,
                                 color = Color(0xFF1E2A3D)
                             ),
                             placeholder = {
                                 Text(
-                                    text = if (isEnglish) {
-                                        "Write a free note"
-                                    } else {
-                                        "הקלד הערה\nחופשית"
-                                    },
+                                    text =
+                                        if (isEnglish) {
+                                            "Write a free note"
+                                        } else {
+                                            "הקלד הערה\nחופשית"
+                                        },
                                     modifier = Modifier.fillMaxWidth(),
                                     textAlign = TextAlign.Center,
-                                    style = MaterialTheme.typography.titleLarge.copy(
-                                        fontSize = 23.sp,
-                                        lineHeight = 31.sp
+                                    style = KmiTypography.body.copy(
+                                        fontWeight = FontWeight.Black
                                     ),
-                                    color = Color(0xFF94A3B8),
-                                    fontWeight = FontWeight.Black
+                                    color = Color(0xFF94A3B8)
                                 )
                             },
                             shape = RoundedCornerShape(20.dp),
@@ -585,12 +613,10 @@ fun ExerciseNoteEditorDialog(
                             ) {
                                 Text(
                                     text = if (isEnglish) "Cancel" else "בטל",
-                                    fontWeight = FontWeight.Black,
-                                    color = Color(0xFF6D5BA6),
-                                    style = MaterialTheme.typography.titleMedium.copy(
-                                        fontSize = 19.sp,
-                                        lineHeight = 22.sp
-                                    )
+                                    style = KmiTypography.action.copy(
+                                        fontWeight = FontWeight.Black
+                                    ),
+                                    color = Color(0xFF6D5BA6)
                                 )
                             }
                         }
@@ -610,12 +636,10 @@ fun ExerciseNoteEditorDialog(
                             ) {
                                 Text(
                                     text = if (isEnglish) "Save" else "שמור",
-                                    fontWeight = FontWeight.Black,
-                                    color = Color.White,
-                                    style = MaterialTheme.typography.titleMedium.copy(
-                                        fontSize = 19.sp,
-                                        lineHeight = 22.sp
-                                    )
+                                    style = KmiTypography.action.copy(
+                                        fontWeight = FontWeight.Black
+                                    ),
+                                    color = Color.White
                                 )
                             }
                         }

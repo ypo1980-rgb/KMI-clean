@@ -57,6 +57,7 @@ import kotlinx.coroutines.launch
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.WindowInsets
 import il.kmi.app.screens.admin.AdminAccess
+import il.kmi.app.ui.KmiIconSize
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.OpenInNew
 import androidx.compose.foundation.lazy.LazyColumn
@@ -70,6 +71,7 @@ import androidx.compose.material.icons.filled.Language
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.WorkspacePremium
 import il.kmi.shared.localization.AppLanguage
+import il.kmi.app.ui.KmiTypography
 import il.kmi.app.voicecommands.VoiceDrawerDestination
 import kotlinx.coroutines.delay
 import androidx.compose.runtime.rememberCoroutineScope
@@ -139,9 +141,10 @@ fun DrawerMenuCard(
             }
             Text(
                 text = text,
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold,
-                color = textColor
+                style = KmiTypography.cardTitle,
+                color = textColor,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis
             )
             Spacer(Modifier.weight(1f))
             trailing?.invoke()
@@ -318,7 +321,7 @@ fun AppDrawerContent(
                         imageVector = icon,
                         contentDescription = null,
                         tint = Color.White,
-                        modifier = Modifier.size(17.dp)
+                        modifier = Modifier.size(KmiIconSize.small)
                     )
                 }
             }
@@ -349,10 +352,10 @@ fun AppDrawerContent(
             ) {
                 Text(
                     text = label,
+                    style = KmiTypography.caption.copy(
+                        fontWeight = FontWeight.Black
+                    ),
                     color = Color.White,
-                    fontSize = 12.sp,
-                    lineHeight = 13.sp,
-                    fontWeight = FontWeight.Black,
                     textAlign = TextAlign.Center,
                     maxLines = 1
                 )
@@ -621,12 +624,10 @@ fun AppDrawerContent(
                 subtitle: String? = null,
                 onClick: () -> Unit,
                 twoLineTitle: Boolean = false,
-                titleTextStyle: TextStyle = MaterialTheme.typography
-                    .titleMedium.copy(
+                titleTextStyle: TextStyle =
+                    KmiTypography.cardTitle.copy(
                         color = Color.White,
                         fontWeight = FontWeight.ExtraBold,
-                        fontSize = 12.5.sp,
-                        lineHeight = 14.sp,
                         letterSpacing = (-0.12).sp
                     )
             ) {
@@ -677,10 +678,8 @@ fun AppDrawerContent(
                                     maxLines = 2,
                                     softWrap = true,
                                     overflow = TextOverflow.Ellipsis,
-                                    style = MaterialTheme.typography.bodySmall.copy(
+                                    style = KmiTypography.secondary.copy(
                                         color = Color.White.copy(alpha = 0.72f),
-                                        fontSize = 10.sp,
-                                        lineHeight = 11.5.sp,
                                         fontWeight = FontWeight.SemiBold,
                                         letterSpacing = (-0.08).sp
                                     ),
@@ -711,12 +710,10 @@ fun AppDrawerContent(
                 subtitle: String? = null,
                 onClick: () -> Unit,
                 twoLineTitle: Boolean = false,
-                titleTextStyle: TextStyle = MaterialTheme.typography
-                    .titleMedium.copy(
+                titleTextStyle: TextStyle =
+                    KmiTypography.cardTitle.copy(
                         color = Color.White,
                         fontWeight = FontWeight.ExtraBold,
-                        fontSize = 12.5.sp,
-                        lineHeight = 14.sp,
                         letterSpacing = (-0.12).sp
                     )
             ) {
@@ -767,10 +764,8 @@ fun AppDrawerContent(
                                     maxLines = 2,
                                     softWrap = true,
                                     overflow = TextOverflow.Ellipsis,
-                                    style = MaterialTheme.typography.bodySmall.copy(
+                                    style = KmiTypography.secondary.copy(
                                         color = Color.White.copy(alpha = 0.72f),
-                                        fontSize = 10.sp,
-                                        lineHeight = 11.5.sp,
                                         fontWeight = FontWeight.SemiBold,
                                         letterSpacing = (-0.08).sp
                                     ),
@@ -829,11 +824,9 @@ fun AppDrawerContent(
                         ) {
                             Text(
                                 text = title,
-                                style = MaterialTheme.typography.titleMedium.copy(
+                                style = KmiTypography.cardTitle.copy(
                                     color = Color.White,
                                     fontWeight = FontWeight.ExtraBold,
-                                    fontSize = 12.5.sp,
-                                    lineHeight = 14.sp,
                                     letterSpacing = (-0.12).sp
                                 ),
                                 textAlign = TextAlign.Right,
@@ -844,18 +837,18 @@ fun AppDrawerContent(
 
                             if (!subtitle.isNullOrBlank()) {
                                 Spacer(Modifier.height(2.dp))
+
                                 Text(
                                     text = subtitle,
-                                    style = MaterialTheme.typography.bodySmall.copy(
-                                        color = Color.White.copy(alpha = 0.82f),
+                                    style = KmiTypography.secondary.copy(
+                                        color =
+                                            Color.White.copy(alpha = 0.82f),
                                         fontWeight = FontWeight.Medium,
-                                        fontSize = 10.sp,
-                                        lineHeight = 12.sp,
                                         letterSpacing = (-0.08).sp
                                     ),
                                     textAlign = TextAlign.Right,
                                     modifier = Modifier.fillMaxWidth(),
-                                    maxLines = 2,
+                                    maxLines = 3,
                                     softWrap = true,
                                     overflow = TextOverflow.Ellipsis
                                 )
@@ -899,7 +892,7 @@ fun AppDrawerContent(
                             imageVector = icon,
                             contentDescription = null,
                             tint = Color(0xFFFF8AD8),
-                            modifier = Modifier.size(20.dp)
+                            modifier = Modifier.size(KmiIconSize.medium)
                         )
 
                         Spacer(Modifier.width(10.dp))
@@ -911,11 +904,9 @@ fun AppDrawerContent(
                         ) {
                             Text(
                                 text = title,
-                                style = MaterialTheme.typography.titleMedium.copy(
+                                style = KmiTypography.cardTitle.copy(
                                     color = Color.White,
                                     fontWeight = FontWeight.ExtraBold,
-                                    fontSize = 12.5.sp,
-                                    lineHeight = 14.sp,
                                     letterSpacing = (-0.12).sp
                                 ),
                                 textAlign = TextAlign.Start,
@@ -926,18 +917,18 @@ fun AppDrawerContent(
 
                             if (!subtitle.isNullOrBlank()) {
                                 Spacer(Modifier.height(2.dp))
+
                                 Text(
                                     text = subtitle,
-                                    style = MaterialTheme.typography.bodySmall.copy(
-                                        color = Color.White.copy(alpha = 0.82f),
+                                    style = KmiTypography.secondary.copy(
+                                        color =
+                                            Color.White.copy(alpha = 0.82f),
                                         fontWeight = FontWeight.Medium,
-                                        fontSize = 10.sp,
-                                        lineHeight = 12.sp,
                                         letterSpacing = (-0.08).sp
                                     ),
                                     textAlign = TextAlign.Start,
                                     modifier = Modifier.fillMaxWidth(),
-                                    maxLines = 2,
+                                    maxLines = 3,
                                     softWrap = true,
                                     overflow = TextOverflow.Ellipsis
                                 )
@@ -973,10 +964,10 @@ fun AppDrawerContent(
                         ) {
 
                             Text(
-                                tr("תפריט", "Menu"),
-                                style = MaterialTheme.typography.titleLarge,
-                                fontWeight = FontWeight.Bold,
-                                color = Color.White
+                                text = tr("תפריט", "Menu"),
+                                style = KmiTypography.screenTitle,
+                                color = Color.White,
+                                maxLines = 1
                             )
                             IconButton(
                                 onClick = onClose,
@@ -985,7 +976,8 @@ fun AppDrawerContent(
                                 Icon(
                                     imageVector = Icons.Filled.Close,
                                     contentDescription = tr("סגור תפריט", "Close menu"),
-                                    tint = Color.White
+                                    tint = Color.White,
+                                    modifier = Modifier.size(KmiIconSize.medium)
                                 )
                             }
                         }
@@ -1043,14 +1035,27 @@ fun AppDrawerContent(
                                             horizontalAlignment = if (isEnglish) Alignment.Start else Alignment.End
                                         ) {
                                             Text(
-                                                text = tr("אזור מאמן", "Coach area"),
+                                                text = tr(
+                                                    "אזור מאמן",
+                                                    "Coach area"
+                                                ),
+                                                style =
+                                                    KmiTypography.sectionTitle.copy(
+                                                        fontWeight =
+                                                            FontWeight.Black,
+                                                        letterSpacing =
+                                                            (-0.12).sp
+                                                    ),
                                                 color = Color.White,
-                                                fontWeight = FontWeight.Black,
-                                                fontSize = 12.5.sp,
-                                                lineHeight = 14.sp,
-                                                letterSpacing = (-0.12).sp,
-                                                textAlign = if (isEnglish) TextAlign.Start else TextAlign.Right,
-                                                modifier = Modifier.fillMaxWidth()
+                                                textAlign =
+                                                    if (isEnglish) {
+                                                        TextAlign.Start
+                                                    } else {
+                                                        TextAlign.Right
+                                                    },
+                                                maxLines = 1,
+                                                modifier =
+                                                    Modifier.fillMaxWidth()
                                             )
                                         }
                                     }
@@ -1214,14 +1219,27 @@ fun AppDrawerContent(
                                             horizontalAlignment = if (isEnglish) Alignment.Start else Alignment.End
                                         ) {
                                             Text(
-                                                text = tr("אזור מנהל", "Admin area"),
+                                                text = tr(
+                                                    "אזור מנהל",
+                                                    "Admin area"
+                                                ),
+                                                style =
+                                                    KmiTypography.sectionTitle.copy(
+                                                        fontWeight =
+                                                            FontWeight.Black,
+                                                        letterSpacing =
+                                                            (-0.12).sp
+                                                    ),
                                                 color = Color.White,
-                                                fontWeight = FontWeight.Black,
-                                                fontSize = 12.5.sp,
-                                                lineHeight = 14.sp,
-                                                letterSpacing = (-0.12).sp,
-                                                textAlign = if (isEnglish) TextAlign.Start else TextAlign.Right,
-                                                modifier = Modifier.fillMaxWidth()
+                                                textAlign =
+                                                    if (isEnglish) {
+                                                        TextAlign.Start
+                                                    } else {
+                                                        TextAlign.Right
+                                                    },
+                                                maxLines = 1,
+                                                modifier =
+                                                    Modifier.fillMaxWidth()
                                             )
                                         }
                                     }
@@ -1323,14 +1341,27 @@ fun AppDrawerContent(
                                         horizontalAlignment = if (isEnglish) Alignment.Start else Alignment.End
                                     ) {
                                         Text(
-                                            text = tr("אזור מתאמן", "Trainee area"),
+                                            text = tr(
+                                                "אזור מתאמן",
+                                                "Trainee area"
+                                            ),
+                                            style =
+                                                KmiTypography.sectionTitle.copy(
+                                                    fontWeight =
+                                                        FontWeight.Black,
+                                                    letterSpacing =
+                                                        (-0.12).sp
+                                                ),
                                             color = Color.White,
-                                            fontWeight = FontWeight.Black,
-                                            fontSize = 12.5.sp,
-                                            lineHeight = 14.sp,
-                                            letterSpacing = (-0.12).sp,
-                                            textAlign = if (isEnglish) TextAlign.Start else TextAlign.Right,
-                                            modifier = Modifier.fillMaxWidth()
+                                            textAlign =
+                                                if (isEnglish) {
+                                                    TextAlign.Start
+                                                } else {
+                                                    TextAlign.Right
+                                                },
+                                            maxLines = 1,
+                                            modifier =
+                                                Modifier.fillMaxWidth()
                                         )
                                     }
                                 }
@@ -1384,13 +1415,6 @@ fun AppDrawerContent(
                                     DrawerLineItemEn(
                                         title = "About Avi Avisidon",
                                         subtitle = "Head of the method",
-                                        titleTextStyle = MaterialTheme.typography.titleMedium.copy(
-                                            color = Color.White,
-                                            fontSize = 12.5.sp,
-                                            lineHeight = 14.sp,
-                                            fontWeight = FontWeight.ExtraBold,
-                                            letterSpacing = (-0.12).sp
-                                        ),
                                         onClick = {
                                             onClose()
                                             onOpenAboutAvi()
@@ -1400,13 +1424,6 @@ fun AppDrawerContent(
                                     DrawerLineItemHe(
                                         title = "אודות אבי אביסידון",
                                         subtitle = "ראש השיטה",
-                                        titleTextStyle = MaterialTheme.typography.titleMedium.copy(
-                                            color = Color.White,
-                                            fontSize = 12.5.sp,
-                                            lineHeight = 14.sp,
-                                            fontWeight = FontWeight.ExtraBold,
-                                            letterSpacing = (-0.12).sp
-                                        ),
                                         onClick = {
                                             onClose()
                                             onOpenAboutAvi()
@@ -1419,13 +1436,6 @@ fun AppDrawerContent(
                                     DrawerLineItemEn(
                                         title = "About Network Coaches",
                                         subtitle = "Ranks, experience and certifications",
-                                        titleTextStyle = MaterialTheme.typography.titleMedium.copy(
-                                            color = Color.White,
-                                            fontSize = 12.5.sp,
-                                            lineHeight = 14.sp,
-                                            fontWeight = FontWeight.ExtraBold,
-                                            letterSpacing = (-0.12).sp
-                                        ),
                                         onClick = {
                                             onClose()
                                             onOpenAboutNetworkCoaches()
@@ -1435,13 +1445,6 @@ fun AppDrawerContent(
                                     DrawerLineItemHe(
                                         title = "אודות המאמנים ברשת",
                                         subtitle = "דרגות, ותק, הכשרות והסמכות",
-                                        titleTextStyle = MaterialTheme.typography.titleMedium.copy(
-                                            color = Color.White,
-                                            fontSize = 12.5.sp,
-                                            lineHeight = 14.sp,
-                                            fontWeight = FontWeight.ExtraBold,
-                                            letterSpacing = (-0.12).sp
-                                        ),
                                         onClick = {
                                             onClose()
                                             onOpenAboutNetworkCoaches()
@@ -1726,7 +1729,7 @@ fun AppDrawerContent(
                             Spacer(Modifier.height(8.dp))
                             Text(
                                 text = "© KAMI",
-                                style = MaterialTheme.typography.bodySmall,
+                                style = KmiTypography.caption,
                                 color = Color(0xFFB8C4DA),
                                 textAlign = if (isEnglish) TextAlign.Start else TextAlign.End,
                                 modifier = Modifier.fillMaxWidth()
@@ -1746,8 +1749,9 @@ fun AppDrawerContent(
                         title = {
                             Text(
                                 text = tr("טפסים ותשלומים", "Forms & Payments"),
-                                style = MaterialTheme.typography.titleLarge,
-                                fontWeight = FontWeight.ExtraBold,
+                                style = KmiTypography.screenTitle.copy(
+                                    fontWeight = FontWeight.ExtraBold
+                                ),
                                 color = Color.White,
                                 textAlign = if (isEnglish) TextAlign.Start else TextAlign.End,
                                 modifier = Modifier.fillMaxWidth()
@@ -1776,8 +1780,9 @@ fun AppDrawerContent(
                                         Text(
                                             text = tr("טפסים", "Forms"),
                                             color = Color.White,
-                                            fontWeight = FontWeight.ExtraBold,
-                                            style = MaterialTheme.typography.titleMedium
+                                            style = KmiTypography.cardTitle.copy(
+                                                fontWeight = FontWeight.ExtraBold
+                                            )
                                         )
                                         Spacer(Modifier.height(4.dp))
                                         Text(
@@ -1786,7 +1791,7 @@ fun AppDrawerContent(
                                                 "Open the existing association registration form"
                                             ),
                                             color = Color.White.copy(alpha = 0.78f),
-                                            style = MaterialTheme.typography.bodySmall
+                                            style = KmiTypography.secondary
                                         )
                                     }
                                 }
@@ -1810,8 +1815,9 @@ fun AppDrawerContent(
                                         Text(
                                             text = tr("תשלומים", "Payments"),
                                             color = Color.White,
-                                            fontWeight = FontWeight.ExtraBold,
-                                            style = MaterialTheme.typography.titleMedium
+                                            style = KmiTypography.cardTitle.copy(
+                                                fontWeight = FontWeight.ExtraBold
+                                            )
                                         )
                                         Spacer(Modifier.height(4.dp))
                                         Text(
@@ -1820,15 +1826,25 @@ fun AppDrawerContent(
                                                 "Open the membership fee payment form"
                                             ),
                                             color = Color.White.copy(alpha = 0.78f),
-                                            style = MaterialTheme.typography.bodySmall
+                                            style = KmiTypography.secondary
                                         )
                                     }
                                 }
                             }
                         },
                         confirmButton = {
-                            TextButton(onClick = { showFormsPaymentsDialog = false }) {
-                                Text(tr("סגור", "Close"), color = Color.White)
+                            TextButton(
+                                onClick = {
+                                    showFormsPaymentsDialog = false
+                                }
+                            ) {
+                                Text(
+                                    text = tr("סגור", "Close"),
+                                    style = KmiTypography.action.copy(
+                                        fontWeight = FontWeight.Bold
+                                    ),
+                                    color = Color.White
+                                )
                             }
                         },
                         containerColor = Color(0xFF0E1630),
@@ -1875,9 +1891,14 @@ fun AppDrawerContent(
                             ) {
                                 Text(
                                     text = title,
-                                    color = if (enabled) Color.White else Color.White.copy(alpha = 0.72f),
-                                    fontWeight = FontWeight.ExtraBold,
-                                    style = MaterialTheme.typography.titleMedium,
+                                    color = if (enabled) {
+                                        Color.White
+                                    } else {
+                                        Color.White.copy(alpha = 0.72f)
+                                    },
+                                    style = KmiTypography.cardTitle.copy(
+                                        fontWeight = FontWeight.ExtraBold
+                                    ),
                                     textAlign = cardTextAlign,
                                     modifier = Modifier.fillMaxWidth()
                                 )
@@ -1889,7 +1910,7 @@ fun AppDrawerContent(
                                     } else {
                                         Color.White.copy(alpha = 0.55f)
                                     },
-                                    style = MaterialTheme.typography.bodySmall,
+                                    style = KmiTypography.secondary,
                                     textAlign = cardTextAlign,
                                     modifier = Modifier.fillMaxWidth()
                                 )
@@ -1902,8 +1923,9 @@ fun AppDrawerContent(
                         title = {
                             Text(
                                 text = tr("טפסים", "Forms"),
-                                style = MaterialTheme.typography.titleLarge,
-                                fontWeight = FontWeight.ExtraBold,
+                                style = KmiTypography.screenTitle.copy(
+                                    fontWeight = FontWeight.ExtraBold
+                                ),
                                 color = Color.White,
                                 textAlign = if (isEnglish) TextAlign.Start else TextAlign.End,
                                 modifier = Modifier.fillMaxWidth()
@@ -1957,8 +1979,18 @@ fun AppDrawerContent(
                             }
                         },
                         confirmButton = {
-                            TextButton(onClick = { showFormsListDialog = false }) {
-                                Text(tr("סגור", "Close"), color = Color.White)
+                            TextButton(
+                                onClick = {
+                                    showFormsListDialog = false
+                                }
+                            ) {
+                                Text(
+                                    text = tr("סגור", "Close"),
+                                    style = KmiTypography.action.copy(
+                                        fontWeight = FontWeight.Bold
+                                    ),
+                                    color = Color.White
+                                )
                             }
                         },
                         containerColor = Color(0xFF0E1630),
@@ -1981,7 +2013,9 @@ fun AppDrawerContent(
                                     "אישור התנתקות",
                                     "Confirm logout"
                                 ),
-                                fontWeight = FontWeight.ExtraBold
+                                style = KmiTypography.screenTitle.copy(
+                                    fontWeight = FontWeight.ExtraBold
+                                )
                             )
                         },
                         text = {
@@ -1989,7 +2023,8 @@ fun AppDrawerContent(
                                 text = tr(
                                     "האם אתה בטוח שברצונך להתנתק מהחשבון?",
                                     "Are you sure you want to log out?"
-                                )
+                                ),
+                                style = KmiTypography.body
                             )
                         },
                         confirmButton = {
@@ -2005,8 +2040,10 @@ fun AppDrawerContent(
                                         "התנתק",
                                         "Log out"
                                     ),
-                                    color = Color(0xFFDC2626),
-                                    fontWeight = FontWeight.Bold
+                                    style = KmiTypography.action.copy(
+                                        fontWeight = FontWeight.Bold
+                                    ),
+                                    color = Color(0xFFDC2626)
                                 )
                             }
                         },
@@ -2020,6 +2057,9 @@ fun AppDrawerContent(
                                     text = tr(
                                         "ביטול",
                                         "Cancel"
+                                    ),
+                                    style = KmiTypography.action.copy(
+                                        fontWeight = FontWeight.Bold
                                     )
                                 )
                             }
@@ -2052,8 +2092,9 @@ fun AppDrawerContent(
                         title = {
                             Text(
                                 text = tr("תרגילים – הדגמה", "Exercises – Demo"),
-                                style = MaterialTheme.typography.titleLarge,
-                                fontWeight = FontWeight.ExtraBold,
+                                style = KmiTypography.screenTitle.copy(
+                                    fontWeight = FontWeight.ExtraBold
+                                ),
                                 color = Color.White,
                                 textAlign = if (isEnglish) TextAlign.Start else TextAlign.End,
                                 modifier = Modifier.fillMaxWidth()
@@ -2068,7 +2109,18 @@ fun AppDrawerContent(
                                     value = query,
                                     onValueChange = { query = it },
                                     singleLine = true,
-                                    placeholder = { Text(tr("חיפוש…", "Search…")) },
+                                    textStyle = KmiTypography.body.copy(
+                                        color = Color.White
+                                    ),
+                                    placeholder = {
+                                        Text(
+                                            text = tr("חיפוש…", "Search…"),
+                                            style = KmiTypography.secondary,
+                                            color = Color.White.copy(
+                                                alpha = 0.65f
+                                            )
+                                        )
+                                    },
                                     modifier = Modifier.fillMaxWidth()
                                 )
 
@@ -2129,7 +2181,7 @@ fun AppDrawerContent(
                                                     imageVector = Icons.Filled.PlayArrow,
                                                     contentDescription = null,
                                                     tint = Color.White,
-                                                    modifier = Modifier.size(22.dp)
+                                                    modifier = Modifier.size(KmiIconSize.medium)
                                                 )
                                                 Spacer(Modifier.width(10.dp))
 
@@ -2137,17 +2189,27 @@ fun AppDrawerContent(
                                                     Text(
                                                         text = v.titleFor(isEnglish),
                                                         color = Color.White,
-                                                        fontWeight = FontWeight.ExtraBold,
+                                                        style = KmiTypography.cardTitle.copy(
+                                                            fontWeight = FontWeight.ExtraBold
+                                                        ),
                                                         maxLines = 2,
                                                         overflow = TextOverflow.Ellipsis,
-                                                        textAlign = if (isEnglish) TextAlign.Start else TextAlign.End,
+                                                        textAlign = if (isEnglish) {
+                                                            TextAlign.Start
+                                                        } else {
+                                                            TextAlign.End
+                                                        },
                                                         modifier = Modifier.fillMaxWidth()
                                                     )
                                                     Text(
                                                         text = v.source,
                                                         color = Color.White.copy(alpha = 0.75f),
-                                                        style = MaterialTheme.typography.bodySmall,
-                                                        textAlign = if (isEnglish) TextAlign.Start else TextAlign.End,
+                                                        style = KmiTypography.caption,
+                                                        textAlign = if (isEnglish) {
+                                                            TextAlign.Start
+                                                        } else {
+                                                            TextAlign.End
+                                                        },
                                                         modifier = Modifier.fillMaxWidth()
                                                     )
                                                 }
@@ -2156,7 +2218,7 @@ fun AppDrawerContent(
                                                     imageVector = Icons.Filled.OpenInNew,
                                                     contentDescription = null,
                                                     tint = Color.White.copy(alpha = 0.85f),
-                                                    modifier = Modifier.size(18.dp)
+                                                    modifier = Modifier.size(KmiIconSize.small)
                                                 )
                                             }
                                         }
@@ -2165,8 +2227,18 @@ fun AppDrawerContent(
                             }
                         },
                         confirmButton = {
-                            TextButton(onClick = { showDemoVideos = false }) {
-                                Text(tr("סגור", "Close"), color = Color.White)
+                            TextButton(
+                                onClick = {
+                                    showDemoVideos = false
+                                }
+                            ) {
+                                Text(
+                                    text = tr("סגור", "Close"),
+                                    style = KmiTypography.action.copy(
+                                        fontWeight = FontWeight.Bold
+                                    ),
+                                    color = Color.White
+                                )
                             }
                         },
                         containerColor = Color(0xFF0E1630), // מתאים לגרדיאנט שלך
@@ -2244,7 +2316,7 @@ private fun DrawerScrollAffordance(
                     contentDescription = null,
                     tint = Color(0xFF2E3A59).copy(alpha = alpha),
                     modifier = Modifier
-                        .size(36.dp)
+                        .size(KmiIconSize.extraLarge)
                         .offset(y = offsetY.dp)
                         .clickable {
                             scope.launch {
