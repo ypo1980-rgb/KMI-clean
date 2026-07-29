@@ -29,12 +29,15 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import kotlinx.coroutines.delay
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
+import il.kmi.app.ui.KmiIconSize
+import il.kmi.app.ui.scaledIconSize
 import il.kmi.shared.localization.AppLanguage
 import il.kmi.shared.localization.AppLanguageManager
 
@@ -69,6 +72,14 @@ fun VoiceCommandListener(
         mutableStateOf<String?>(null)
     }
 
+    /*
+     * מונע ממצב IDLE ההתחלתי לסגור את המאזין
+     * לפני שהבקר התחיל לעבוד.
+     */
+    var hasListeningStarted by remember {
+        mutableStateOf(false)
+    }
+
     val controller = remember(context) {
         PushToTalkVoiceController(
             context = context,
@@ -77,8 +88,26 @@ fun VoiceCommandListener(
             },
             onStateChanged = { newState ->
                 state = newState
+
+                if (
+                    newState == PushToTalkState.STARTING ||
+                    newState == PushToTalkState.LISTENING ||
+                    newState == PushToTalkState.PROCESSING
+                ) {
+                    hasListeningStarted = true
+                }
             },
             onCommand = { command, spokenText ->
+                /*
+                 * סוגרים תחילה את שכבת ההאזנה כדי לאפשר
+                 * למנוע ההקראה לקבל את מיקוד השמע.
+                 */
+                currentOnDismiss()
+
+                /*
+                 * לאחר תחילת סגירת המאזין מוסרים את הפקודה
+                 * לניווט ולמערכת הפידבק.
+                 */
                 currentOnCommand(
                     command,
                     spokenText
@@ -150,6 +179,39 @@ fun VoiceCommandListener(
         }
     }
 
+    /*
+     * לאחר שהאזנה כבר התחילה, חזרה ל־IDLE פירושה
+     * שהבקר סיים ואין להשאיר את שכבת המיקרופון פתוחה.
+     */
+    LaunchedEffect(state, hasListeningStarted) {
+        if (
+            hasListeningStarted &&
+            state == PushToTalkState.IDLE
+        ) {
+            currentOnDismiss()
+        }
+    }
+
+    /*
+     * רשת ביטחון למקרה שמנוע זיהוי הדיבור אינו מחזיר
+     * תוצאה, שגיאה או מצב סיום במכשיר מסוים.
+     */
+    LaunchedEffect(state) {
+        if (
+            state == PushToTalkState.STARTING ||
+            state == PushToTalkState.LISTENING
+        ) {
+            delay(12_000L)
+
+            if (
+                state == PushToTalkState.STARTING ||
+                state == PushToTalkState.LISTENING
+            ) {
+                currentOnDismiss()
+            }
+        }
+    }
+
     DisposableEffect(controller) {
         onDispose {
             controller.destroy()
@@ -187,7 +249,9 @@ fun VoiceCommandListener(
     ) {
         Surface(
             modifier = Modifier
-                .size(126.dp)
+                .size(
+                    scaledIconSize(126.dp)
+                )
                 .scale(
                     if (listening) {
                         pulseScale
@@ -241,7 +305,9 @@ fun VoiceCommandListener(
                         "מאזין"
                     },
                     tint = Color.White,
-                    modifier = Modifier.size(54.dp)
+                    modifier = Modifier.size(
+                        KmiIconSize.hero
+                    )
                 )
             }
         }

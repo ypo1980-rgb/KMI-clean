@@ -21,11 +21,13 @@ import il.kmi.app.screens.MyProfileScreen
 import il.kmi.app.screens.PhoneAuthGateScreen
 import il.kmi.app.screens.RateUsScreen
 import il.kmi.app.ui.DrawerBridge
+import il.kmi.app.ui.KmiTtsManager
 import android.widget.Toast
 import android.util.Log
 import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.ktx.firestore
 import com.google.firebase.ktx.Firebase
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
 import il.kmi.app.security.PinLockGate
@@ -163,8 +165,12 @@ fun resolveVoiceTopicId(query: String): String? {
                 normalized.contains("kick") ->
             "kicks"
 
-        normalized.contains("אגרופ") ||
+        normalized.contains("עבודת יד") ||
+                normalized.contains("עבודה יד") ||
+                normalized.contains("אגרופ") ||
                 normalized.contains("מכות יד") ||
+                normalized.contains("hand work") ||
+                normalized.contains("hand technique") ||
                 normalized.contains("punch") ||
                 normalized.contains("hand strike") ->
             "hands_strikes"
@@ -213,6 +219,123 @@ fun resolveVoiceTopicId(query: String): String? {
         else -> null
     }
 }
+
+/**
+ * שם הנושא כפי שהוא שמור במאגר התרגילים.
+ *
+ * הערך אינו תלוי בשפת הממשק, משום שהוא משמש
+ * כמפתח לאיתור התרגילים בתוך MaterialsScreen.
+ */
+private fun voiceTopicRouteValue(
+    topicId: String
+): String {
+    return when (topicId) {
+        "kicks" ->
+            "בעיטות"
+
+        "hands_strikes" ->
+            "עבודת ידיים"
+
+        "hands_elbows" ->
+            "מרפקים"
+
+        "releases" ->
+            "שחרורים"
+
+        "knife_defense" ->
+            "הגנות מסכין"
+
+        "gun_threat_defense" ->
+            "הגנות מאקדח"
+
+        "stick_defense" ->
+            "הגנות ממקל"
+
+        "multiple_attackers_defense" ->
+            "הגנות ממספר תוקפים"
+
+        "topic_breakfalls_rolls" ->
+            "נפילות וגלגולים"
+
+        "topic_ready_stance" ->
+            "עמידת מוצא"
+
+        "topic_ground_prep" ->
+            "הכנה לקרקע"
+
+        else ->
+            topicId
+    }
+}
+
+/**
+ * שם ידידותי למשתמש עבור הפידבק הקולי.
+ */
+private fun voiceTopicDisplayName(
+    topicId: String,
+    isEnglish: Boolean
+): String {
+    return when (topicId) {
+        "kicks" ->
+            if (isEnglish) "kicks" else "בעיטות"
+
+        "hands_strikes" ->
+            if (isEnglish) {
+                "hand work"
+            } else {
+                "עבודת ידיים"
+            }
+
+        "hands_elbows" ->
+            if (isEnglish) "elbows" else "מרפקים"
+
+        "releases" ->
+            if (isEnglish) "releases" else "שחרורים"
+
+        "knife_defense" ->
+            if (isEnglish) "knife defense" else "הגנות מסכין"
+
+        "gun_threat_defense" ->
+            if (isEnglish) "gun defense" else "הגנות מאקדח"
+
+        "stick_defense" ->
+            if (isEnglish) "stick defense" else "הגנות ממקל"
+
+        "multiple_attackers_defense" ->
+            if (isEnglish) {
+                "multiple attackers defense"
+            } else {
+                "הגנות ממספר תוקפים"
+            }
+
+        "topic_breakfalls_rolls" ->
+            if (isEnglish) {
+                "breakfalls and rolls"
+            } else {
+                "נפילות וגלגולים"
+            }
+
+        "topic_ready_stance" ->
+            if (isEnglish) {
+                "ready stance"
+            } else {
+                "עמידת מוצא"
+            }
+
+        "topic_ground_prep" ->
+            if (isEnglish) {
+                "ground preparation"
+            } else {
+                "הכנה לקרקע"
+            }
+
+        else ->
+            topicId
+                .replace('_', ' ')
+                .trim()
+    }
+}
+
 
 /**
  * NavHost הראשי של האפליקציה.
@@ -324,6 +447,74 @@ fun MainNavHost(
     val isEnglish =
         langManager.getCurrentLanguage() ==
                 il.kmi.shared.localization.AppLanguage.ENGLISH
+
+    /*
+     * ה־Scope נשאר פעיל גם לאחר סגירת שכבת המיקרופון,
+     * ולכן ההקראה אינה מתבטלת בזמן הניווט.
+     */
+    val voiceFeedbackScope =
+        rememberCoroutineScope()
+
+    LaunchedEffect(ctx) {
+        runCatching {
+            KmiTtsManager.init(
+                ctx.applicationContext
+            )
+        }
+    }
+
+    fun speakVoiceCommandFeedback(
+        hebrewText: String,
+        englishText: String
+    ) {
+        val feedbackText =
+            if (isEnglish) {
+                englishText
+            } else {
+                hebrewText
+            }
+
+        /*
+         * פידבק חזותי מיידי מבטיח שהמשתמש יקבל אישור
+         * גם אם מנוע ההקראה אינו זמין במכשיר.
+         */
+        Toast.makeText(
+            ctx,
+            feedbackText,
+            Toast.LENGTH_SHORT
+        ).show()
+
+        voiceFeedbackScope.launch {
+            /*
+             * מאפשרים ל־SpeechRecognizer לשחרר את המיקרופון
+             * ואת מיקוד השמע לפני תחילת ההקראה.
+             */
+            delay(450L)
+
+            runCatching {
+                KmiTtsManager.init(
+                    ctx.applicationContext
+                )
+
+                KmiTtsManager.stop()
+
+                KmiTtsManager.speak(
+                    feedbackText
+                )
+            }.onFailure { error ->
+                VoiceCommandDiagnosticsLogger.logFailure(
+                    context = ctx,
+                    source = "voice_command_feedback",
+                    reason =
+                        "tts_feedback_failed: " +
+                                error.message.orEmpty(),
+                    screenName = nav.currentBackStackEntry
+                        ?.destination
+                        ?.route
+                )
+            }
+        }
+    }
 
     /*
      * חייב להיות מוגדר לפני חיבור VoiceCommandsBridge,
@@ -1418,7 +1609,7 @@ fun MainNavHost(
                 onDismiss = {
                     showVoiceCommands = false
                 },
-                onCommand = { command, spokenText ->
+                onCommand = commandHandler@ { command, spokenText ->
                     showVoiceCommands = false
 
                     VoiceCommandDiagnosticsLogger.logTrace(
@@ -1432,9 +1623,110 @@ fun MainNavHost(
                             ?.route
                     )
 
+                    /*
+ * טיפול מקדים בפקודה משולבת של נושא וחגורה.
+ *
+ * הבדיקה נעשית ישירות מול המשפט שנאמר, משום שמנוע
+ * הפקודות עלול לסווג משפט כזה כ־OpenBelt בלבד.
+ */
+                    val combinedTopicId =
+                        resolveVoiceTopicId(spokenText)
+
+                    val combinedBelt =
+                        resolveVoiceBelt(spokenText)
+
+                    if (
+                        combinedTopicId != null &&
+                        combinedBelt != null
+                    ) {
+                        vm.setSelectedBelt(combinedBelt)
+
+                        val topicRouteValue =
+                            voiceTopicRouteValue(
+                                topicId = combinedTopicId
+                            )
+
+                        val topicDisplayName =
+                            voiceTopicDisplayName(
+                                topicId = combinedTopicId,
+                                isEnglish = isEnglish
+                            )
+
+                        val beltDisplayName =
+                            if (isEnglish) {
+                                combinedBelt.name
+                                    .lowercase()
+                                    .replace('_', ' ')
+                            } else {
+                                combinedBelt.heb
+                            }
+
+                        val targetRoute =
+                            Route.Materials.makeId(
+                                beltId = combinedBelt.id,
+                                topic = topicRouteValue,
+                                coach = isCoach
+                            )
+
+                        speakVoiceCommandFeedback(
+                            hebrewText =
+                                "פותח נושא $topicDisplayName בחגורה $beltDisplayName",
+                            englishText =
+                                "Opening $topicDisplayName for the $beltDisplayName belt"
+                        )
+
+                        VoiceCommandDiagnosticsLogger.logTrace(
+                            context = ctx,
+                            stage = "combined_topic_navigation_requested",
+                            spokenText = spokenText,
+                            resolvedCommand =
+                                "CombinedTopicAndBelt",
+                            target = targetRoute,
+                            screenName = nav.currentBackStackEntry
+                                ?.destination
+                                ?.route
+                        )
+
+                        runCatching {
+                            nav.navigate(targetRoute) {
+                                launchSingleTop = true
+                                restoreState = false
+                            }
+                        }.onFailure { error ->
+                            VoiceCommandDiagnosticsLogger.logFailure(
+                                context = ctx,
+                                source = "main_navigation",
+                                reason =
+                                    "combined_topic_navigation_failed: " +
+                                            error.message.orEmpty(),
+                                spokenText = spokenText,
+                                screenName = nav.currentBackStackEntry
+                                    ?.destination
+                                    ?.route
+                            )
+
+                            Toast.makeText(
+                                ctx,
+                                if (isEnglish) {
+                                    "Unable to open the requested topic"
+                                } else {
+                                    "לא ניתן לפתוח את הנושא המבוקש"
+                                },
+                                Toast.LENGTH_SHORT
+                            ).show()
+                        }
+
+                        return@commandHandler
+                    }
+
                     when (command) {
 
                         VoiceAppCommand.OpenHome -> {
+                            speakVoiceCommandFeedback(
+                                hebrewText = "מעביר למסך הבית",
+                                englishText = "Opening the home screen"
+                            )
+
                             nav.navigate(Route.Home.route) {
                                 launchSingleTop = true
                                 restoreState = true
@@ -1446,18 +1738,38 @@ fun MainNavHost(
                         }
 
                         VoiceAppCommand.GoBack -> {
+                            speakVoiceCommandFeedback(
+                                hebrewText = "חוזר למסך הקודם",
+                                englishText = "Going back"
+                            )
+
                             nav.popBackStack()
                         }
 
                         VoiceAppCommand.OpenSettings -> {
+                            speakVoiceCommandFeedback(
+                                hebrewText = "פותח את מסך ההגדרות",
+                                englishText = "Opening settings"
+                            )
+
                             DrawerBridge.openSettings()
                         }
 
                         VoiceAppCommand.OpenProgress -> {
+                            speakVoiceCommandFeedback(
+                                hebrewText = "פותח את מסך ההתקדמות",
+                                englishText = "Opening progress"
+                            )
+
                             DrawerBridge.openProgress()
                         }
 
                         VoiceAppCommand.OpenTrainings -> {
+                            speakVoiceCommandFeedback(
+                                hebrewText = "פותח את מסך האימונים",
+                                englishText = "Opening the trainings screen"
+                            )
+
                             VoiceCommandDiagnosticsLogger.logTrace(
                                 context = ctx,
                                 stage = "navigation_requested",
@@ -1528,6 +1840,22 @@ fun MainNavHost(
                             if (belt != null) {
                                 vm.setSelectedBelt(belt)
 
+                                val beltDisplayName =
+                                    if (isEnglish) {
+                                        belt.name
+                                            .lowercase()
+                                            .replace('_', ' ')
+                                    } else {
+                                        belt.heb
+                                    }
+
+                                speakVoiceCommandFeedback(
+                                    hebrewText =
+                                        "פותח את החגורה $beltDisplayName",
+                                    englishText =
+                                        "Opening the $beltDisplayName belt"
+                                )
+
                                 val targetRoute = Route.BeltQ.route
 
                                 VoiceCommandDiagnosticsLogger.logTrace(
@@ -1586,8 +1914,44 @@ fun MainNavHost(
                             if (topicId != null) {
                                 vm.setSelectedBelt(selectedBelt)
 
+                                /*
+                                 * Route.Materials הוא המסלול שרשום בפועל
+                                 * ב־materialsNavGraph ופותח את MaterialsScreen
+                                 * עם החגורה והנושא המבוקשים.
+                                 */
+                                val topicRouteValue =
+                                    voiceTopicRouteValue(
+                                        topicId = topicId
+                                    )
+
                                 val targetRoute =
-                                    "hard_subject/${Uri.encode(topicId)}"
+                                    Route.Materials.makeId(
+                                        beltId = selectedBelt.id,
+                                        topic = topicRouteValue,
+                                        coach = isCoach
+                                    )
+
+                                val topicDisplayName =
+                                    voiceTopicDisplayName(
+                                        topicId = topicId,
+                                        isEnglish = isEnglish
+                                    )
+
+                                val beltDisplayName =
+                                    if (isEnglish) {
+                                        selectedBelt.name
+                                            .lowercase()
+                                            .replace('_', ' ')
+                                    } else {
+                                        selectedBelt.heb
+                                    }
+
+                                speakVoiceCommandFeedback(
+                                    hebrewText =
+                                        "פותח נושא $topicDisplayName בחגורה $beltDisplayName",
+                                    englishText =
+                                        "Opening $topicDisplayName for the $beltDisplayName belt"
+                                )
 
                                 VoiceCommandDiagnosticsLogger.logTrace(
                                     context = ctx,
@@ -1658,6 +2022,13 @@ fun MainNavHost(
                                     screenName = nav.currentBackStackEntry
                                         ?.destination
                                         ?.route
+                                )
+
+                                speakVoiceCommandFeedback(
+                                    hebrewText =
+                                        "לא הצלחתי לזהות את הנושא המבוקש",
+                                    englishText =
+                                        "I could not identify the requested topic"
                                 )
 
                                 Toast.makeText(

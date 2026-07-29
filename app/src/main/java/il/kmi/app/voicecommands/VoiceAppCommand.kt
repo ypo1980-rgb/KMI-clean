@@ -93,12 +93,24 @@ object VoiceAppCommandParser {
             return VoiceAppCommand.OpenDrawerItem(destination)
         }
 
-        extractBeltQuery(normalized)?.let { beltQuery ->
-            return VoiceAppCommand.OpenBelt(beltQuery)
-        }
-
+        /*
+         * בודקים נושא לפני חגורה.
+         *
+         * כך פקודה כמו:
+         * "פתח נושא בעיטות בחגורה כחולה"
+         * תישמר כ־OpenTopic עם כל הביטוי,
+         * ולא תיעצר כ־OpenBelt בגלל המילה "כחולה".
+         */
         extractTopicQuery(normalized)?.let { topicQuery ->
             return VoiceAppCommand.OpenTopic(topicQuery)
+        }
+
+        /*
+         * אם לא נמצא נושא ורק חגורה הוזכרה,
+         * ממשיכים להתנהגות הרגילה של פתיחת החגורה.
+         */
+        extractBeltQuery(normalized)?.let { beltQuery ->
+            return VoiceAppCommand.OpenBelt(beltQuery)
         }
 
         return when {
