@@ -896,25 +896,7 @@ fun ExercisesTabsScreen(
         selectedTab = 0
     }
 
-    fun String.norm() = this
-        .replace("\u200F","").replace("\u200E","").replace("\u00A0"," ")
-        .replace(Regex("[\u0591-\u05C7]"), "")
-        .trim().lowercase()
-
-    // אין יותר searchResults מקומי — החיפוש הגלובלי נמצא ב-KmiTopBar
-
-    // מזהה תרגיל "אחיד" – בלי prefix של נושא וכו'
-    fun normalizeItemId(raw: String): String =
-        raw.substringAfter("::", raw)
-            .substringAfter(":", raw)
-            .trim()
-
-    fun normalizeStatusPart(raw: String): String =
-        raw.replace("\u200F", "")
-            .replace("\u200E", "")
-            .replace("\u00A0", " ")
-            .replace(Regex("\\s+"), " ")
-            .trim()
+// אין יותר searchResults מקומי — החיפוש הגלובלי נמצא ב-KmiTopBar
 
     fun formattedExerciseTitle(raw: String): String {
         val formatted = ExerciseTitleFormatter
@@ -1909,7 +1891,7 @@ fun ExercisesTabsScreen(
                         buildString {
                             append(topicForRawItem(item))
                             append("::")
-                            append(normalizeItemId(item))
+                            append(exerciseIdentityIdFor(item))
                         }
                     }
                 ) { index, item ->

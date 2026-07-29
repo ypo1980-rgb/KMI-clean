@@ -1928,40 +1928,6 @@ fun MaterialsScreen(
                                                     .padding(horizontal = 8.dp, vertical = 2.dp),
                                                 verticalAlignment = Alignment.CenterVertically
                                             ) {
-                                                ItemFloatingActions(
-                                                    isEnglish = isEnglish,
-                                                    excluded = isExcluded,
-                                                    isFav = isFavorite,
-                                                    hasNote = noteText.isNotBlank(),
-                                                    onToggleExclude = {
-                                                        toggleExclude(canonicalId)
-                                                    },
-                                                    onInfo = {
-                                                        pressed = true
-
-                                                        explainTriple = Triple(
-                                                            belt,
-                                                            materialRootTopic,
-                                                            item
-                                                        )
-
-                                                        scope.launch {
-                                                            kotlinx.coroutines.delay(150)
-                                                            pressed = false
-                                                        }
-                                                    },
-                                                    onToggleFavorite = {
-                                                        toggleFavoriteAliases(
-                                                            topicTitle = materialRootTopic,
-                                                            rawItem = item
-                                                        )
-                                                    },
-                                                    onEditNote = {
-                                                        showNoteDialog = true
-                                                    }
-                                                )
-
-                                                Spacer(Modifier.width(8.dp))
 
                                                 Column(
                                                     modifier = Modifier
@@ -1969,7 +1935,10 @@ fun MaterialsScreen(
                                                             weight = 1f,
                                                             fill = true
                                                         )
-                                                        .padding(horizontal = 4.dp),
+                                                        .padding(
+                                                            start = 4.dp,
+                                                            end = 6.dp
+                                                        ),
                                                     horizontalAlignment =
                                                         if (isEnglish) {
                                                             Alignment.Start
@@ -1978,126 +1947,151 @@ fun MaterialsScreen(
                                                         }
                                                 ) {
                                                     CompositionLocalProvider(
-                                                        LocalLayoutDirection provides LayoutDirection.Ltr
+                                                        LocalLayoutDirection provides if (isEnglish) {
+                                                            LayoutDirection.Ltr
+                                                        } else {
+                                                            LayoutDirection.Rtl
+                                                        }
                                                     ) {
                                                         Row(
                                                             modifier = Modifier.fillMaxWidth(),
                                                             verticalAlignment = Alignment.CenterVertically
                                                         ) {
-                                                            if (isEnglish) {
+                                                            ExerciseMetaBadge(
+                                                                text = if (isEnglish) {
+                                                                    "No. ${index + 1}"
+                                                                } else {
+                                                                    "מס׳ ${index + 1}"
+                                                                },
+                                                                containerColor = belt.color.copy(
+                                                                    alpha = 0.14f
+                                                                ),
+                                                                contentColor = Color(0xFF1F2937)
+                                                            )
+
+                                                            Spacer(Modifier.width(6.dp))
+
+                                                            ItemFloatingActions(
+                                                                isEnglish = isEnglish,
+                                                                excluded = isExcluded,
+                                                                isFav = isFavorite,
+                                                                hasNote = noteText.isNotBlank(),
+                                                                onToggleExclude = {
+                                                                    toggleExclude(canonicalId)
+                                                                },
+                                                                onInfo = {
+                                                                    pressed = true
+
+                                                                    explainTriple = Triple(
+                                                                        belt,
+                                                                        materialRootTopic,
+                                                                        item
+                                                                    )
+
+                                                                    scope.launch {
+                                                                        kotlinx.coroutines.delay(150)
+                                                                        pressed = false
+                                                                    }
+                                                                },
+                                                                onToggleFavorite = {
+                                                                    toggleFavoriteAliases(
+                                                                        topicTitle = materialRootTopic,
+                                                                        rawItem = item
+                                                                    )
+                                                                },
+                                                                onEditNote = {
+                                                                    showNoteDialog = true
+                                                                }
+                                                            )
+
+                                                            Spacer(Modifier.width(6.dp))
+
+                                                            if (isFavorite) {
                                                                 ExerciseMetaBadge(
-                                                                    text = "No. ${index + 1}",
-                                                                    containerColor = belt.color.copy(
-                                                                        alpha = 0.14f
-                                                                    ),
-                                                                    contentColor = Color(0xFF1F2937)
+                                                                    text = if (isEnglish) {
+                                                                        "Favorite"
+                                                                    } else {
+                                                                        "מועדף"
+                                                                    },
+                                                                    containerColor = Color(0xFFF9D9B8),
+                                                                    contentColor = Color(0xFF9A5A00)
                                                                 )
 
-                                                                if (isFavorite) {
-                                                                    Spacer(Modifier.width(5.dp))
+                                                                Spacer(Modifier.width(5.dp))
+                                                            }
 
-                                                                    ExerciseMetaBadge(
-                                                                        text = "Favorite",
-                                                                        containerColor = Color(0xFFF9D9B8),
-                                                                        contentColor = Color(0xFF9A5A00)
-                                                                    )
-                                                                }
-
-                                                                if (isExcluded) {
-                                                                    Spacer(Modifier.width(5.dp))
-
-                                                                    ExerciseMetaBadge(
-                                                                        text = "Excluded",
-                                                                        containerColor = Color(0xFFE5E7EB),
-                                                                        contentColor = Color(0xFF6B7280)
-                                                                    )
-                                                                }
-
-                                                                Spacer(Modifier.weight(1f))
-                                                            } else {
-                                                                Spacer(Modifier.weight(1f))
-
-                                                                if (isExcluded) {
-                                                                    ExerciseMetaBadge(
-                                                                        text = "מוחרג",
-                                                                        containerColor = Color(0xFFE5E7EB),
-                                                                        contentColor = Color(0xFF6B7280)
-                                                                    )
-
-                                                                    Spacer(Modifier.width(5.dp))
-                                                                }
-
-                                                                if (isFavorite) {
-                                                                    ExerciseMetaBadge(
-                                                                        text = "מועדף",
-                                                                        containerColor = Color(0xFFF9D9B8),
-                                                                        contentColor = Color(0xFF9A5A00)
-                                                                    )
-
-                                                                    Spacer(Modifier.width(5.dp))
-                                                                }
-
+                                                            if (isExcluded) {
                                                                 ExerciseMetaBadge(
-                                                                    text = "מס׳ ${index + 1}",
-                                                                    containerColor = belt.color.copy(
-                                                                        alpha = 0.14f
-                                                                    ),
-                                                                    contentColor = Color(0xFF1F2937)
+                                                                    text = if (isEnglish) {
+                                                                        "Excluded"
+                                                                    } else {
+                                                                        "מוחרג"
+                                                                    },
+                                                                    containerColor = Color(0xFFE5E7EB),
+                                                                    contentColor = Color(0xFF6B7280)
                                                                 )
                                                             }
+
+                                                            Spacer(Modifier.weight(1f))
                                                         }
                                                     }
 
                                                     Spacer(Modifier.height(2.dp))
 
-                                                    Text(
-                                                        text = displayName,
-                                                        textAlign =
-                                                            if (isEnglish) {
-                                                                TextAlign.Left
-                                                            } else {
-                                                                TextAlign.Right
-                                                            },
-                                                        modifier = Modifier
-                                                            .fillMaxWidth()
-                                                            .clickable {
-                                                                pressed = true
+                                                    CompositionLocalProvider(
+                                                        LocalLayoutDirection provides if (isEnglish) {
+                                                            LayoutDirection.Ltr
+                                                        } else {
+                                                            LayoutDirection.Rtl
+                                                        }
+                                                    ) {
+                                                        Text(
+                                                            text = displayName,
+                                                            textAlign = TextAlign.Start,
+                                                            modifier = Modifier
+                                                                .fillMaxWidth()
+                                                                .clickable {
+                                                                    pressed = true
 
-                                                                explainTriple = Triple(
-                                                                    belt,
-                                                                    materialRootTopic,
-                                                                    item
-                                                                )
+                                                                    explainTriple = Triple(
+                                                                        belt,
+                                                                        materialRootTopic,
+                                                                        item
+                                                                    )
 
-                                                                scope.launch {
-                                                                    kotlinx.coroutines.delay(150)
-                                                                    pressed = false
+                                                                    scope.launch {
+                                                                        kotlinx.coroutines.delay(150)
+                                                                        pressed = false
+                                                                    }
                                                                 }
-                                                            }
-                                                            .padding(vertical = 4.dp),
-                                                        color = when {
-                                                            isExcluded ->
-                                                                Color.Gray
+                                                                .padding(
+                                                                    top = 4.dp,
+                                                                    bottom = 4.dp
+                                                                ),
+                                                            color = when {
+                                                                isExcluded ->
+                                                                    Color.Gray
 
-                                                            isHighlighted ->
-                                                                belt.color.copy(alpha = 0.95f)
+                                                                isHighlighted ->
+                                                                    belt.color.copy(alpha = 0.95f)
 
-                                                            else ->
-                                                                Color(0xFF111827)
-                                                        },
-                                                        style = MaterialTheme.typography.bodySmall.copy(
-                                                            fontSize = 11.sp,
-                                                            lineHeight = 13.sp
-                                                        ),
-                                                        fontWeight =
-                                                            if (isHighlighted) {
-                                                                FontWeight.Bold
-                                                            } else {
-                                                                FontWeight.SemiBold
+                                                                else ->
+                                                                    Color(0xFF111827)
                                                             },
-                                                        maxLines = 3,
-                                                        overflow = TextOverflow.Ellipsis
-                                                    )
+                                                            style = MaterialTheme.typography.bodySmall.copy(
+                                                                fontSize = 11.sp,
+                                                                lineHeight = 13.sp
+                                                            ),
+                                                            fontWeight =
+                                                                if (isHighlighted) {
+                                                                    FontWeight.Bold
+                                                                } else {
+                                                                    FontWeight.SemiBold
+                                                                },
+                                                            maxLines = 3,
+                                                            overflow = TextOverflow.Ellipsis
+                                                        )
+                                                    }
                                                 }
 
                                                 Spacer(Modifier.width(6.dp))
