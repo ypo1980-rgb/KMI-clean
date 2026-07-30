@@ -62,8 +62,12 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ColorFilter
+import androidx.compose.ui.graphics.ColorMatrix
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
+import il.kmi.app.ui.scaledIconSize
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -206,23 +210,81 @@ fun KmiStartupLoadingScreen(
         label = "progressAnimated"
     )
 
-    val accent = Color(0xFF168BFF)
-    val accent2 = Color(0xFF5B35F5)
-    val cardBg = Color.White.copy(alpha = 0.94f)
-    val textPrimary = Color(0xFF172033)
-    val textSecondary = Color(0xFF667085)
+    /*
+     * ערכת הצבעים של MaterialTheme כבר משקפת את הבחירה האחרונה
+     * של המשתמש: מצב בהיר, כהה או בהתאם למערכת.
+     */
+    val colorScheme = MaterialTheme.colorScheme
+    val isDarkTheme = colorScheme.background.luminance() < 0.5f
+
+    val accent = colorScheme.primary
+    val accent2 = colorScheme.secondary
+    val cardBg = colorScheme.surface.copy(
+        alpha = if (isDarkTheme) 0.94f else 0.96f
+    )
+    val textPrimary = colorScheme.onSurface
+    val textSecondary = colorScheme.onSurfaceVariant
+    val progressTextColor = colorScheme.primary
+    val progressTrackColor = colorScheme.surfaceVariant
+    val progressFillColor = Color(0xFF0FA36B)
+    val videoBackgroundColor =
+        if (isDarkTheme) {
+            colorScheme.surfaceContainerHighest
+        } else {
+            Color(0xFF0F1A26)
+        }
+
+    /*
+     * במצב כהה הופכים את בהירות תמונת הרקע:
+     * הלבן הופך לשחור והפרטים השחורים הופכים לבהירים.
+     *
+     * זה אותו מנגנון שבו משתמש מסך הפתיחה.
+     */
+    val darkImageColorFilter =
+        if (isDarkTheme) {
+            ColorFilter.colorMatrix(
+                ColorMatrix(
+                    floatArrayOf(
+                        -0.2126f, -0.7152f, -0.0722f, 0f, 255f,
+                        -0.2126f, -0.7152f, -0.0722f, 0f, 255f,
+                        -0.2126f, -0.7152f, -0.0722f, 0f, 255f,
+                        0f,       0f,       0f,       1f, 0f
+                    )
+                )
+            )
+        } else {
+            null
+        }
 
     BoxWithConstraints(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color.White)
+            .background(colorScheme.background)
     ) {
         Image(
-            painter = painterResource(id = R.drawable.kmi_startup_loading_bg),
+            painter = painterResource(
+                id = R.drawable.kmi_startup_loading_bg
+            ),
             contentDescription = null,
             modifier = Modifier.fillMaxSize(),
-            contentScale = ContentScale.Crop
+            contentScale = ContentScale.Crop,
+            colorFilter = darkImageColorFilter
         )
+
+        /*
+         * שכבה חלשה בלבד מאחדת את התמונה עם רקע האפליקציה,
+         * בלי להעלים את הלוגו, הדמויות והכיתובים.
+         */
+        if (isDarkTheme) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(
+                        colorScheme.background.copy(alpha = 0.08f)
+                    )
+            )
+        }
+
         val isCompactHeight = maxHeight < 760.dp
         val isVeryCompactHeight = maxHeight < 690.dp
 
@@ -257,7 +319,15 @@ fun KmiStartupLoadingScreen(
                     .align(Alignment.TopCenter)
                     .offset(y = videoTopSpace)
                     .fillMaxWidth()
-                    .height(if (isVeryCompactHeight) 84.dp else if (isCompactHeight) 90.dp else 98.dp)
+                    .height(
+                        if (isVeryCompactHeight) {
+                            84.dp
+                        } else if (isCompactHeight) {
+                            90.dp
+                        } else {
+                            98.dp
+                        }
+                    )
             ) {
                 Box(
                     modifier = Modifier
@@ -282,7 +352,7 @@ fun KmiStartupLoadingScreen(
                         .width(videoWidth)
                         .height(videoHeight),
                     shape = RoundedCornerShape(24.dp),
-                    color = Color(0xFF0F1A26),
+                    color = videoBackgroundColor,
                     tonalElevation = 8.dp,
                     shadowElevation = 8.dp
                 ) {
@@ -347,7 +417,9 @@ fun KmiStartupLoadingScreen(
                             imageVector = currentStage.icon,
                             contentDescription = null,
                             tint = accent,
-                            modifier = Modifier.size(24.dp)
+                            modifier = Modifier.size(
+                                scaledIconSize(24.dp)
+                            )
                         )
 
                         Spacer(modifier = Modifier.width(12.dp))
@@ -374,7 +446,7 @@ fun KmiStartupLoadingScreen(
                             text = "${(progressAnimated * 100).toInt()}%",
                             style = MaterialTheme.typography.titleSmall,
                             fontWeight = FontWeight.ExtraBold,
-                            color = Color(0xFF123C7C),
+                            color = progressTextColor,
                             modifier = Modifier.offset(y = (-10).dp)
                         )
                     }
@@ -387,14 +459,16 @@ fun KmiStartupLoadingScreen(
                             .fillMaxWidth()
                             .height(8.dp)
                             .clip(RoundedCornerShape(999.dp))
-                            .background(Color(0xFFE5E7EB))
+                            .background(progressTrackColor)
                     ) {
                         Box(
                             modifier = Modifier
-                                .fillMaxWidth(progressAnimated.coerceIn(0f, 1f))
+                                .fillMaxWidth(
+                                    progressAnimated.coerceIn(0f, 1f)
+                                )
                                 .fillMaxHeight()
                                 .clip(RoundedCornerShape(999.dp))
-                                .background(Color(0xFF0FA36B))
+                                .background(progressFillColor)
                         )
                     }
 
@@ -426,9 +500,12 @@ fun KmiStartupLoadingScreen(
                                     if (isEnglish) Alignment.CenterStart else Alignment.CenterEnd
                                 ),
                             colors = ButtonDefaults.textButtonColors(
-                                contentColor = Color(0xFF123C7C)
+                                contentColor = progressTextColor
                             ),
-                            contentPadding = PaddingValues(horizontal = 0.dp, vertical = 0.dp)
+                            contentPadding = PaddingValues(
+                                horizontal = 0.dp,
+                                vertical = 0.dp
+                            )
                         ) {
                             Text(
                                 text = if (isEnglish) "Skip" else "דלג",
@@ -448,7 +525,7 @@ fun KmiStartupLoadingScreen(
                                 lineHeight = 14.sp
                             ),
                             fontWeight = FontWeight.SemiBold,
-                            color = Color(0xFF123C7C),
+                            color = progressTextColor,
                             textAlign = TextAlign.Center,
                             maxLines = 1,
                             modifier = Modifier
@@ -555,11 +632,18 @@ private fun LoadingChecklist(
                 )
 
                 Icon(
-                    imageVector = if (done) Icons.Filled.CheckCircle else stage.icon,
+                    imageVector =
+                        if (done) {
+                            Icons.Filled.CheckCircle
+                        } else {
+                            stage.icon
+                        },
                     contentDescription = null,
                     tint = iconTint,
                     modifier = Modifier
-                        .size(16.dp)
+                        .size(
+                            scaledIconSize(16.dp)
+                        )
                         .scale(scale)
                 )
 

@@ -442,14 +442,24 @@ fun AppDrawerContent(
         mutableStateOf(false)
     }
 
+    /*
+     * effectiveIsAdmin הוא מפתח של האפקט כדי שה־Bridge
+     * יתחבר מחדש מיד לאחר השלמת בדיקת הרשאת המנהל.
+     *
+     * בלי המפתח הזה ה־handler עלול לשמור את הערך false
+     * שנקלט בזמן הטעינה הראשונית.
+     */
     DisposableEffect(
         isEnglish,
+        effectiveIsAdmin,
         onOpenMyProfile,
         onOpenCoachAttendance,
         onOpenCoachBroadcast,
         onOpenCoachTrainees,
         onOpenCoachPaymentsReport,
         onOpenCoachInternalExam,
+        onOpenAdminUsers,
+        onOpenAdminDiagnostics,
         onOpenAboutAvi,
         onOpenAboutNetworkCoaches,
         onOpenAboutMethod,
@@ -499,6 +509,26 @@ fun AppDrawerContent(
                     true
                 }
 
+                VoiceDrawerDestination.ADMIN_USERS -> {
+                    if (!effectiveIsAdmin) {
+                        false
+                    } else {
+                        onClose()
+                        onOpenAdminUsers()
+                        true
+                    }
+                }
+
+                VoiceDrawerDestination.ADMIN_DIAGNOSTICS -> {
+                    if (!effectiveIsAdmin) {
+                        false
+                    } else {
+                        onClose()
+                        onOpenAdminDiagnostics()
+                        true
+                    }
+                }
+
                 VoiceDrawerDestination.ABOUT_AVI -> {
                     onClose()
                     onOpenAboutAvi()
@@ -540,13 +570,35 @@ fun AppDrawerContent(
                 }
 
                 VoiceDrawerDestination.LANGUAGE -> {
-                    val newLanguage = if (isEnglish) {
-                        AppLanguage.HEBREW
-                    } else {
-                        AppLanguage.ENGLISH
-                    }
+                    val newLanguage =
+                        if (isEnglish) {
+                            AppLanguage.HEBREW
+                        } else {
+                            AppLanguage.ENGLISH
+                        }
 
                     onLanguageChanged(newLanguage)
+                    onClose()
+                    true
+                }
+
+                /*
+                 * פקודה מפורשת לשפה תמיד מגדירה מחדש
+                 * את השפה המבוקשת. לא מסתמכים על isEnglish,
+                 * שעלול עדיין להכיל את הערך שלפני ההחלפה.
+                 */
+                VoiceDrawerDestination.LANGUAGE_HEBREW -> {
+                    onLanguageChanged(
+                        AppLanguage.HEBREW
+                    )
+                    onClose()
+                    true
+                }
+
+                VoiceDrawerDestination.LANGUAGE_ENGLISH -> {
+                    onLanguageChanged(
+                        AppLanguage.ENGLISH
+                    )
                     onClose()
                     true
                 }

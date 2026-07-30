@@ -33,6 +33,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -61,6 +62,73 @@ fun KmiCalendarMonth(
     markers: KmiCalendarMarkers = KmiCalendarMarkers(),
     modifier: Modifier = Modifier
 ) {
+    val colorScheme = MaterialTheme.colorScheme
+    val isDarkTheme =
+        colorScheme.background.luminance() < 0.5f
+
+    val navigationButtonColor =
+        if (isDarkTheme) {
+            Color(0xFF0A234A)
+        } else {
+            colorScheme.primaryContainer
+        }
+
+    val navigationButtonContentColor =
+        if (isDarkTheme) {
+            Color.White
+        } else {
+            colorScheme.onPrimaryContainer
+        }
+
+    val calendarSectionColor =
+        if (isDarkTheme) {
+            Color.White.copy(alpha = 0.08f)
+        } else {
+            colorScheme.surface
+        }
+
+    val calendarSectionBorderColor =
+        if (isDarkTheme) {
+            Color.White.copy(alpha = 0.10f)
+        } else {
+            colorScheme.outline.copy(alpha = 0.20f)
+        }
+
+    val primaryTextColor =
+        if (isDarkTheme) {
+            Color.White
+        } else {
+            colorScheme.onSurface
+        }
+
+    val weekDayTextColor =
+        if (isDarkTheme) {
+            Color(0xFF67E8F9)
+        } else {
+            colorScheme.primary
+        }
+
+    val selectedDayColor =
+        if (isDarkTheme) {
+            Color(0xFF22D3EE)
+        } else {
+            colorScheme.primary
+        }
+
+    val selectedDayTextColor =
+        if (isDarkTheme) {
+            Color(0xFF031226)
+        } else {
+            colorScheme.onPrimary
+        }
+
+    val todayBackgroundColor =
+        if (isDarkTheme) {
+            Color.White.copy(alpha = 0.14f)
+        } else {
+            colorScheme.primaryContainer.copy(alpha = 0.55f)
+        }
+
     val firstDayOfMonth = remember(visibleMonth) {
         visibleMonth.atDay(1)
     }
@@ -131,224 +199,287 @@ fun KmiCalendarMonth(
         modifier = modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically
+        /*
+      * כותרת החודש מוצגת תמיד בסידור פיזי קבוע:
+      *
+      * חץ שמאלה בצד שמאל — חודש קודם.
+      * חץ ימינה בצד ימין — חודש הבא.
+      *
+      * הכפייה ל־LTR משפיעה רק על מיקום החצים,
+      * ולא על שפת הכותרת.
+      */
+        CompositionLocalProvider(
+            LocalLayoutDirection provides
+                    LayoutDirection.Ltr
         ) {
-            Surface(
-                onClick = {
-                    onVisibleMonthChange(
-                        visibleMonth.minusMonths(1)
-                    )
-                },
-                shape = CircleShape,
-                color = Color(0xFF0A234A),
-                modifier = Modifier.size(38.dp)
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement =
+                    Arrangement.spacedBy(
+                        space = 8.dp,
+                        alignment =
+                            Alignment.CenterHorizontally
+                    ),
+                verticalAlignment =
+                    Alignment.CenterVertically
             ) {
-                Box(
-                    contentAlignment = Alignment.Center
+                Surface(
+                    onClick = {
+                        onVisibleMonthChange(
+                            if (isEnglish) {
+                                visibleMonth.minusMonths(1)
+                            } else {
+                                visibleMonth.plusMonths(1)
+                            }
+                        )
+                    },
+                    shape = CircleShape,
+                    color = navigationButtonColor,
+                    tonalElevation = 0.dp,
+                    shadowElevation =
+                        if (isDarkTheme) 0.dp else 2.dp,
+                    modifier = Modifier.size(30.dp)
                 ) {
-                    Text(
-                        text = if (isEnglish) "‹" else "›",
-                        color = Color.White,
-                        fontSize = 24.sp,
-                        fontWeight = FontWeight.Black
-                    )
+                    Box(
+                        contentAlignment =
+                            Alignment.Center
+                    ) {
+                        Text(
+                            text = "‹",
+                            color =
+                                navigationButtonContentColor,
+                            style =
+                                MaterialTheme.typography.titleMedium,
+                            fontWeight =
+                                FontWeight.Black,
+                            textAlign =
+                                TextAlign.Center
+                        )
+                    }
                 }
-            }
 
-            Text(
-                text = monthTitle,
-                color = Color.White,
-                fontWeight = FontWeight.Black,
-                style = MaterialTheme.typography.titleMedium.copy(
-                    fontSize = 21.sp,
-                    lineHeight = 24.sp
-                ),
-                textAlign = TextAlign.Center,
-                modifier = Modifier.weight(1f)
-            )
-
-            Surface(
-                onClick = {
-                    onVisibleMonthChange(
-                        visibleMonth.plusMonths(1)
-                    )
-                },
-                shape = CircleShape,
-                color = Color(0xFF0A234A),
-                modifier = Modifier.size(38.dp)
-            ) {
-                Box(
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text(
-                        text = if (isEnglish) "›" else "‹",
-                        color = Color.White,
-                        fontSize = 24.sp,
-                        fontWeight = FontWeight.Black
-                    )
-                }
-            }
-        }
-
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clip(RoundedCornerShape(20.dp))
-                .background(
-                    Color.White.copy(alpha = 0.08f)
-                )
-                .padding(vertical = 7.dp)
-        ) {
-            weekDays.forEach { dayName ->
                 Text(
-                    text = dayName,
-                    color = Color(0xFF67E8F9),
+                    text = monthTitle,
+                    color = primaryTextColor,
                     fontWeight = FontWeight.Black,
-                    fontSize = 14.sp,
-                    textAlign = TextAlign.Center,
-                    modifier = Modifier.weight(1f)
+                    style =
+                        MaterialTheme.typography.titleLarge,
+                    textAlign = TextAlign.Center
                 )
+
+                Surface(
+                    onClick = {
+                        onVisibleMonthChange(
+                            if (isEnglish) {
+                                visibleMonth.plusMonths(1)
+                            } else {
+                                visibleMonth.minusMonths(1)
+                            }
+                        )
+                    },
+                    shape = CircleShape,
+                    color = navigationButtonColor,
+                    tonalElevation = 0.dp,
+                    shadowElevation =
+                        if (isDarkTheme) 0.dp else 2.dp,
+                    modifier = Modifier.size(30.dp)
+                ) {
+                    Box(
+                        contentAlignment =
+                            Alignment.Center
+                    ) {
+                        Text(
+                            text = "›",
+                            color =
+                                navigationButtonContentColor,
+                            style =
+                                MaterialTheme.typography.titleMedium,
+                            fontWeight =
+                                FontWeight.Black,
+                            textAlign =
+                                TextAlign.Center
+                        )
+                    }
+                }
             }
         }
 
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clip(RoundedCornerShape(24.dp))
-                .background(
-                    Color.White.copy(alpha = 0.08f)
-                )
-                .padding(
-                    horizontal = 8.dp,
-                    vertical = 7.dp
-                ),
-            verticalArrangement = Arrangement.spacedBy(3.dp)
+        Surface(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(20.dp),
+            color = calendarSectionColor,
+            tonalElevation = 0.dp,
+            shadowElevation =
+                if (isDarkTheme) 0.dp else 2.dp,
+            border = BorderStroke(
+                width = 1.dp,
+                color = calendarSectionBorderColor
+            )
         ) {
-            cells.chunked(7).forEach { week ->
-                Row(
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    week.forEach { day ->
-                        val cellDate = day?.let {
-                            visibleMonth.atDay(it)
-                        }
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 7.dp)
+            ) {
+                weekDays.forEach { dayName ->
+                    Text(
+                        text = dayName,
+                        color = weekDayTextColor,
+                        fontWeight = FontWeight.Black,
+                        style =
+                            MaterialTheme.typography.labelLarge,
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+            }
+        }
 
-                        val isSelected =
-                            cellDate != null &&
-                                    cellDate == selectedDate
+        Surface(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(24.dp),
+            color = calendarSectionColor,
+            tonalElevation = 0.dp,
+            shadowElevation =
+                if (isDarkTheme) 0.dp else 3.dp,
+            border = BorderStroke(
+                width = 1.dp,
+                color = calendarSectionBorderColor
+            )
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(
+                        horizontal = 8.dp,
+                        vertical = 7.dp
+                    ),
+                verticalArrangement = Arrangement.spacedBy(3.dp)
+            ) {
+                cells.chunked(7).forEach { week ->
+                    Row(
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        week.forEach { day ->
+                            val cellDate = day?.let {
+                                visibleMonth.atDay(it)
+                            }
 
-                        val isToday =
-                            cellDate != null &&
-                                    cellDate == LocalDate.now()
+                            val isSelected =
+                                cellDate != null &&
+                                        cellDate == selectedDate
 
-                        val hasTraining =
-                            cellDate != null &&
-                                    cellDate in markers.trainingDates
+                            val isToday =
+                                cellDate != null &&
+                                        cellDate == LocalDate.now()
 
-                        val hasHoliday =
-                            cellDate != null &&
-                                    cellDate in markers.holidayDates
+                            val hasTraining =
+                                cellDate != null &&
+                                        cellDate in markers.trainingDates
 
-                        val hasSummary =
-                            cellDate != null &&
-                                    cellDate in markers.summaryDates
+                            val hasHoliday =
+                                cellDate != null &&
+                                        cellDate in markers.holidayDates
 
-                        Box(
-                            modifier = Modifier
-                                .weight(1f)
-                                .height(38.dp),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            if (
-                                day != null &&
-                                cellDate != null
+                            val hasSummary =
+                                cellDate != null &&
+                                        cellDate in markers.summaryDates
+
+                            Box(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .height(38.dp),
+                                contentAlignment = Alignment.Center
                             ) {
-                                Surface(
-                                    modifier = Modifier
-                                        .size(32.dp)
-                                        .clickable {
-                                            onDateSelected(cellDate)
-                                        },
-                                    shape = CircleShape,
-                                    color = when {
-                                        isSelected ->
-                                            Color(0xFF22D3EE)
+                                if (
+                                    day != null &&
+                                    cellDate != null
+                                ) {
+                                    Surface(
+                                        modifier = Modifier
+                                            .size(32.dp)
+                                            .clickable {
+                                                onDateSelected(cellDate)
+                                            },
+                                        shape = CircleShape,
+                                        color = when {
+                                            isSelected ->
+                                                selectedDayColor
 
-                                        isToday ->
-                                            Color.White.copy(
-                                                alpha = 0.14f
+                                            isToday ->
+                                                todayBackgroundColor
+
+                                            else ->
+                                                Color.Transparent
+                                        },
+                                        border = when {
+                                            isSelected -> null
+
+                                            isToday -> BorderStroke(
+                                                width = 1.dp,
+                                                color = selectedDayColor
                                             )
 
-                                        else ->
-                                            Color.Transparent
-                                    },
-                                    border = when {
-                                        isSelected -> null
-
-                                        isToday -> BorderStroke(
-                                            width = 1.dp,
-                                            color = Color(0xFF22D3EE)
-                                        )
-
-                                        else -> null
-                                    }
-                                ) {
-                                    Box(
-                                        modifier = Modifier.fillMaxSize(),
-                                        contentAlignment = Alignment.Center
+                                            else -> null
+                                        }
                                     ) {
-                                        Text(
-                                            text = day.toString(),
-                                            color = if (isSelected) {
-                                                Color(0xFF031226)
-                                            } else {
-                                                Color.White
-                                            },
-                                            fontWeight = FontWeight.Black,
-                                            fontSize = 15.sp,
-                                            textAlign = TextAlign.Center
-                                        )
-
-                                        if (
-                                            hasTraining ||
-                                            hasHoliday ||
-                                            hasSummary
+                                        Box(
+                                            modifier = Modifier.fillMaxSize(),
+                                            contentAlignment = Alignment.Center
                                         ) {
-                                            Row(
-                                                modifier = Modifier
-                                                    .align(
-                                                        Alignment.BottomCenter
-                                                    )
-                                                    .padding(bottom = 2.dp),
-                                                horizontalArrangement =
-                                                    Arrangement.spacedBy(2.dp),
-                                                verticalAlignment =
-                                                    Alignment.CenterVertically
+                                            Text(
+                                                text = day.toString(),
+                                                color =
+                                                    if (isSelected) {
+                                                        selectedDayTextColor
+                                                    } else {
+                                                        primaryTextColor
+                                                    },
+                                                fontWeight = FontWeight.Black,
+                                                style =
+                                                    MaterialTheme.typography.bodyMedium,
+                                                textAlign = TextAlign.Center
+                                            )
+
+                                            if (
+                                                hasTraining ||
+                                                hasHoliday ||
+                                                hasSummary
                                             ) {
-                                                if (hasTraining) {
-                                                    CalendarMarkerDot(
-                                                        color = Color(
-                                                            0xFF3FA7FF
+                                                Row(
+                                                    modifier = Modifier
+                                                        .align(
+                                                            Alignment.BottomCenter
                                                         )
-                                                    )
-                                                }
+                                                        .padding(bottom = 2.dp),
+                                                    horizontalArrangement =
+                                                        Arrangement.spacedBy(2.dp),
+                                                    verticalAlignment =
+                                                        Alignment.CenterVertically
+                                                ) {
+                                                    if (hasTraining) {
+                                                        CalendarMarkerDot(
+                                                            color = Color(
+                                                                0xFF3FA7FF
+                                                            )
+                                                        )
+                                                    }
 
-                                                if (hasHoliday) {
-                                                    CalendarMarkerDot(
-                                                        color = Color(
-                                                            0xFFFF4D6D
+                                                    if (hasHoliday) {
+                                                        CalendarMarkerDot(
+                                                            color = Color(
+                                                                0xFFFF4D6D
+                                                            )
                                                         )
-                                                    )
-                                                }
+                                                    }
 
-                                                if (hasSummary) {
-                                                    CalendarMarkerDot(
-                                                        color = Color(
-                                                            0xFFA78BFA
+                                                    if (hasSummary) {
+                                                        CalendarMarkerDot(
+                                                            color = Color(
+                                                                0xFFA78BFA
+                                                            )
                                                         )
-                                                    )
+                                                    }
                                                 }
                                             }
                                         }

@@ -1439,6 +1439,20 @@ private fun InlineSubTopicsExpansionCard(
             Color(0xFF111827)
         }
 
+    val itemSecondaryColor =
+        if (isDarkMode) {
+            Color.White.copy(alpha = 0.72f)
+        } else {
+            accent
+        }
+
+    val itemArrowColor =
+        if (isDarkMode) {
+            Color.White.copy(alpha = 0.82f)
+        } else {
+            accent
+        }
+
     fun countLabel(n: Int): String =
         if (isEnglish) "exercises $n" else "$n תרגילים"
 
@@ -1510,7 +1524,7 @@ private fun InlineSubTopicsExpansionCard(
                     Icon(
                         imageVector = Icons.Filled.ChevronLeft,
                         contentDescription = null,
-                        tint = accent,
+                        tint = itemArrowColor,
                         modifier = Modifier.size(15.dp)
                     )
 
@@ -1538,11 +1552,13 @@ private fun InlineSubTopicsExpansionCard(
                         Spacer(Modifier.height(1.dp))
 
                         Text(
-                            text = countLabel(countForDisplay(pick)),
+                            text = countLabel(
+                                countForDisplay(pick)
+                            ),
                             style = KmiTypography.caption.copy(
                                 fontWeight = FontWeight.ExtraBold
                             ),
-                            color = accent,
+                            color = itemSecondaryColor,
                             textAlign =
                                 if (isEnglish) {
                                     TextAlign.Start
@@ -1581,19 +1597,74 @@ private fun SubjectRootCardPremium(
     onClick: () -> Unit
 ) {
     val isEnglish = rememberIsEnglish()
-    val accent = remember(subjectId) { subjectAccentColor(subjectId) }
-    val icon = remember(subjectId) { subjectIconFor(subjectId) }
-    val imageRes = remember(subjectId) { subjectImageFor(subjectId) }
-    val bgColors = remember(subjectId) { subjectPremiumBackgroundColors(subjectId) }
+
+    val accent =
+        remember(subjectId) {
+            subjectAccentColor(subjectId)
+        }
+
+    val icon =
+        remember(subjectId) {
+            subjectIconFor(subjectId)
+        }
+
+    val imageRes =
+        remember(subjectId) {
+            subjectImageFor(subjectId)
+        }
+
+    val lightBackgroundColors =
+        remember(subjectId) {
+            subjectPremiumBackgroundColors(subjectId)
+        }
 
     /*
-     * הכרטיסים נשארים בגווני פסטל בהירים גם במצב כהה.
-     * לכן הטקסט בתוכם חייב להישאר כהה ובעל ניגודיות גבוהה
-     * ללא תלות בערכת הצבעים של המסך.
+     * במצב כהה הכרטיס נטמע בתוך המשטח הכהה של רשימת
+     * הנושאים. לכן כל הטקסטים מקבלים צבעים בהירים.
+     *
+     * במצב בהיר נשמרים צבעי הכרטיסים המקוריים.
      */
-    val titleColor = Color(0xFF18212F)
-    val subtitleColor = Color(0xFF4B5968)
-    val countColor = Color(0xFF2F3B4A)
+    val titleColor =
+        if (isDarkMode) {
+            Color.White.copy(alpha = 0.96f)
+        } else {
+            Color(0xFF18212F)
+        }
+
+    val subtitleColor =
+        if (isDarkMode) {
+            Color.White.copy(alpha = 0.78f)
+        } else {
+            Color(0xFF4B5968)
+        }
+
+    val countColor =
+        if (isDarkMode) {
+            Color.White.copy(alpha = 0.70f)
+        } else {
+            Color(0xFF2F3B4A)
+        }
+
+    /*
+     * החצים והפסים הצבעוניים חייבים להישאר גלויים גם
+     * כאשר צבע הנושא המקורי כהה.
+     */
+    val visualAccent =
+        if (isDarkMode) {
+            Color.White.copy(alpha = 0.82f)
+        } else {
+            accent
+        }
+
+    val bgColors =
+        if (isDarkMode) {
+            listOf(
+                MaterialTheme.colorScheme.surfaceContainerHigh,
+                MaterialTheme.colorScheme.surfaceContainer
+            )
+        } else {
+            lightBackgroundColors
+        }
 
     val isTitleLocked = title.endsWith(" 🔒")
     val displayTitle = stripLockSuffix(title)
@@ -1708,11 +1779,16 @@ private fun SubjectRootCardPremium(
                                 if (showExpandArrow) {
                                     Spacer(modifier = Modifier.width(6.dp))
                                     Text(
-                                        text = if (isExpanded) "⌃" else "⌄",
+                                        text =
+                                            if (isExpanded) {
+                                                "⌃"
+                                            } else {
+                                                "⌄"
+                                            },
                                         style = KmiTypography.caption.copy(
                                             fontWeight = FontWeight.ExtraBold
                                         ),
-                                        color = accent
+                                        color = visualAccent
                                     )
                                 }
                             }

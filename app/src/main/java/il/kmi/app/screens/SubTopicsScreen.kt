@@ -3236,6 +3236,26 @@ private fun HardBeltGroupsStickyContent(
     }
 }
 
+/**
+ * צבע חגורה שנשאר קריא על גבי כרטיס כהה.
+ *
+ * צבע החגורה השחורה מוחלף בלבן רק במצב כהה.
+ * בשאר החגורות ובמצב בהיר נשמר הצבע המקורי.
+ */
+private fun readableBeltColor(
+    belt: Belt,
+    isDarkMode: Boolean
+): Color {
+    return if (
+        isDarkMode &&
+        belt == Belt.BLACK
+    ) {
+        Color.White.copy(alpha = 0.94f)
+    } else {
+        belt.color
+    }
+}
+
 @Composable
 private fun HardBeltInlineHeaderForSubTopics(
     belt: Belt,
@@ -3271,6 +3291,19 @@ private fun HardBeltInlineHeaderForSubTopics(
         }
     }
 
+    val beltContentColor =
+        readableBeltColor(
+            belt = belt,
+            isDarkMode = isDarkMode
+        )
+
+    val hintTextColor =
+        if (isDarkMode) {
+            Color.White.copy(alpha = 0.72f)
+        } else {
+            Color(0xFF5B6472)
+        }
+
     Surface(
         modifier = modifier,
         shape = RoundedCornerShape(22.dp),
@@ -3282,7 +3315,10 @@ private fun HardBeltInlineHeaderForSubTopics(
         tonalElevation = if (isDarkMode) 0.dp else 2.dp,
         shadowElevation = if (isDarkMode) 0.dp else 4.dp,
         border = if (isDarkMode) {
-            BorderStroke(1.dp, belt.color.copy(alpha = 0.45f))
+            BorderStroke(
+                width = 1.dp,
+                color = beltContentColor.copy(alpha = 0.45f)
+            )
         } else {
             null
         }
@@ -3313,7 +3349,7 @@ private fun HardBeltInlineHeaderForSubTopics(
                             fontSize = 15.sp,
                             lineHeight = 17.sp
                         ),
-                        color = belt.color,
+                        color = beltContentColor,
                         fontWeight = FontWeight.Bold,
                         textAlign = TextAlign.Start,
                         modifier = Modifier.weight(1f)
@@ -3325,7 +3361,7 @@ private fun HardBeltInlineHeaderForSubTopics(
                             fontSize = 18.sp,
                             lineHeight = 21.sp
                         ),
-                        color = belt.color,
+                        color = beltContentColor,
                         fontWeight = FontWeight.ExtraBold,
                         textAlign = TextAlign.End,
                         modifier = Modifier.weight(1f)
@@ -3341,7 +3377,7 @@ private fun HardBeltInlineHeaderForSubTopics(
                 } else {
                     "→→ הזז לצד כדי לראות עוד נתונים →→"
                 },
-                color = Color(0xFF5B6472),
+                color = hintTextColor,
                 fontSize = 10.sp,
                 lineHeight = 12.sp,
                 fontWeight = FontWeight.SemiBold,
@@ -3426,6 +3462,19 @@ private fun HardBeltStickyHeaderForSubTopics(
         }
     }
 
+    val beltContentColor =
+        readableBeltColor(
+            belt = belt,
+            isDarkMode = isDarkMode
+        )
+
+    val hintTextColor =
+        if (isDarkMode) {
+            Color.White.copy(alpha = 0.72f)
+        } else {
+            Color(0xFF5B6472)
+        }
+
     Surface(
         modifier = modifier,
         shape = RoundedCornerShape(22.dp),
@@ -3437,7 +3486,10 @@ private fun HardBeltStickyHeaderForSubTopics(
         tonalElevation = if (isDarkMode) 0.dp else 2.dp,
         shadowElevation = if (isDarkMode) 0.dp else 6.dp,
         border = if (isDarkMode) {
-            BorderStroke(1.dp, belt.color.copy(alpha = 0.45f))
+            BorderStroke(
+                width = 1.dp,
+                color = beltContentColor.copy(alpha = 0.45f)
+            )
         } else {
             null
         }
@@ -3468,7 +3520,7 @@ private fun HardBeltStickyHeaderForSubTopics(
                             fontSize = 15.sp,
                             lineHeight = 17.sp
                         ),
-                        color = belt.color,
+                        color = beltContentColor,
                         fontWeight = FontWeight.Bold,
                         textAlign = TextAlign.Start,
                         modifier = Modifier.weight(1f)
@@ -3480,7 +3532,7 @@ private fun HardBeltStickyHeaderForSubTopics(
                             fontSize = 18.sp,
                             lineHeight = 21.sp
                         ),
-                        color = belt.color,
+                        color = beltContentColor,
                         fontWeight = FontWeight.ExtraBold,
                         textAlign = TextAlign.End,
                         modifier = Modifier.weight(1f)
@@ -3496,7 +3548,7 @@ private fun HardBeltStickyHeaderForSubTopics(
                 } else {
                     "→→ הזז לצד כדי לראות עוד נתונים →→"
                 },
-                color = Color(0xFF5B6472),
+                color = hintTextColor,
                 fontSize = 10.sp,
                 lineHeight = 12.sp,
                 fontWeight = FontWeight.SemiBold,
@@ -3858,6 +3910,19 @@ private fun HardBeltGroupCard(
         }
     }
 
+    val beltContentColor =
+        readableBeltColor(
+            belt = belt,
+            isDarkMode = isDarkMode
+        )
+
+    val hintTextColor =
+        if (isDarkMode) {
+            Color.White.copy(alpha = 0.72f)
+        } else {
+            Color(0xFF5B6472)
+        }
+
     val displayItems = remember(items, isEnglish) {
         items.map { raw ->
             val original = raw.trim()
@@ -3906,7 +3971,10 @@ private fun HardBeltGroupCard(
         tonalElevation = if (isDarkMode) 0.dp else 2.dp,
         shadowElevation = if (isDarkMode) 0.dp else 3.dp,
         border = if (isDarkMode) {
-            BorderStroke(1.dp, belt.color.copy(alpha = 0.45f))
+            BorderStroke(
+                width = 1.dp,
+                color = beltContentColor.copy(alpha = 0.45f)
+            )
         } else {
             null
         }
@@ -3941,7 +4009,7 @@ private fun HardBeltGroupCard(
                             fontSize = 15.sp,
                             lineHeight = 17.sp
                         ),
-                        color = belt.color,
+                        color = beltContentColor,
                         fontWeight = FontWeight.Bold,
                         textAlign = TextAlign.Start,
                         modifier = Modifier.weight(1f)
@@ -3953,7 +4021,7 @@ private fun HardBeltGroupCard(
                             fontSize = 18.sp,
                             lineHeight = 21.sp
                         ),
-                        color = belt.color,
+                        color = beltContentColor,
                         fontWeight = FontWeight.ExtraBold,
                         textAlign = TextAlign.End,
                         modifier = Modifier.weight(1f)
@@ -3969,7 +4037,7 @@ private fun HardBeltGroupCard(
                 } else {
                     "→→ הזז לצד כדי לראות עוד נתונים →→"
                 },
-                color = Color(0xFF5B6472),
+                color = hintTextColor,
                 fontSize = 10.sp,
                 lineHeight = 12.sp,
                 fontWeight = FontWeight.SemiBold,
@@ -4111,11 +4179,37 @@ private fun HardExerciseLegacyRow(
     }
 
     val rowTextColor = when {
-        excluded && isDarkMode -> Color.White.copy(alpha = 0.45f)
-        excluded -> Color.Gray
-        isDarkMode -> Color(0xFFF8FAFC)
-        else -> Color(0xFF263238)
+        excluded && isDarkMode ->
+            Color.White.copy(alpha = 0.45f)
+
+        excluded ->
+            Color.Gray
+
+        isDarkMode ->
+            Color(0xFFF8FAFC)
+
+        else ->
+            Color(0xFF263238)
     }
+
+    /*
+     * מספר התרגיל חייב להישאר לבן וברור במצב כהה.
+     * אין להשתמש בצבע החגורה השחורה כרקע במצב זה,
+     * משום שהוא נבלע בתוך כרטיס התרגיל הכהה.
+     */
+    val exerciseNumberBackground =
+        if (isDarkMode) {
+            Color.White.copy(alpha = 0.14f)
+        } else {
+            belt.color.copy(alpha = 0.14f)
+        }
+
+    val exerciseNumberTextColor =
+        if (isDarkMode) {
+            Color.White
+        } else {
+            Color(0xFF1F2937)
+        }
 
     Surface(
         modifier = Modifier
@@ -4172,8 +4266,8 @@ private fun HardExerciseLegacyRow(
                         ) {
                             HardLegacyMetaBadge(
                                 text = "No. $exerciseNumber",
-                                containerColor = belt.color.copy(alpha = 0.14f),
-                                contentColor = Color(0xFF1F2937)
+                                containerColor = exerciseNumberBackground,
+                                contentColor = exerciseNumberTextColor
                             )
 
                             if (isFav) {
@@ -4269,8 +4363,8 @@ private fun HardExerciseLegacyRow(
 
                             HardLegacyMetaBadge(
                                 text = "מס׳ $exerciseNumber",
-                                containerColor = belt.color.copy(alpha = 0.14f),
-                                contentColor = Color(0xFF1F2937)
+                                containerColor = exerciseNumberBackground,
+                                contentColor = exerciseNumberTextColor
                             )
                         }
 

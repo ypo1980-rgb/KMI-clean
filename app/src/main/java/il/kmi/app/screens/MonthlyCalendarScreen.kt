@@ -2,6 +2,7 @@
 
 package il.kmi.app.screens
 
+import android.app.Activity
 import android.content.Context
 import android.content.SharedPreferences
 import androidx.compose.animation.AnimatedContent
@@ -16,14 +17,13 @@ import androidx.compose.ui.graphics.Brush
 import il.kmi.shared.localization.AppLanguage
 import il.kmi.shared.localization.AppLanguageManager
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLayoutDirection
@@ -31,13 +31,13 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import il.kmi.app.training.TrainingCatalog
 import il.kmi.app.database.KmiDatabaseProvider
 import il.kmi.app.halacha.HolidayCalendarRepository
+import il.kmi.app.ui.KmiTopBar
 import il.kmi.app.ui.calendar.KmiCalendarMarkers
 import il.kmi.app.ui.calendar.KmiCalendarMonth
 import il.kmi.shared.prefs.KmiPrefs
@@ -68,6 +68,7 @@ private data class CalendarTrainingItem(
 fun MonthlyCalendarScreen(
     kmiPrefs: KmiPrefs,
     onBack: () -> Unit,
+    onHome: () -> Unit,
     onDateClick: (LocalDate) -> Unit
 ) {
     val ctx = LocalContext.current
@@ -78,7 +79,79 @@ fun MonthlyCalendarScreen(
 
     fun tr(he: String, en: String): String = if (isEnglish) en else he
 
-    CompositionLocalProvider(LocalLayoutDirection provides screenLayoutDirection) {
+    val colorScheme = MaterialTheme.colorScheme
+    val isDarkTheme =
+        colorScheme.background.luminance() < 0.5f
+
+    val screenBackgroundBrush =
+        if (isDarkTheme) {
+            Brush.verticalGradient(
+                colors = listOf(
+                    Color(0xFF071126),
+                    Color(0xFF0D1E43),
+                    Color(0xFF183A7A),
+                    Color(0xFF3F78F2)
+                )
+            )
+        } else {
+            Brush.verticalGradient(
+                colors = listOf(
+                    colorScheme.background,
+                    colorScheme.surface,
+                    colorScheme.primaryContainer.copy(alpha = 0.30f),
+                    colorScheme.background
+                )
+            )
+        }
+
+    val secondaryTextColor =
+        if (isDarkTheme) {
+            Color.White.copy(alpha = 0.92f)
+        } else {
+            colorScheme.onSurfaceVariant
+        }
+
+    val informationCardColor =
+        if (isDarkTheme) {
+            Color.White.copy(alpha = 0.10f)
+        } else {
+            colorScheme.surface
+        }
+
+    val informationCardBorder =
+        if (isDarkTheme) {
+            Color.White.copy(alpha = 0.12f)
+        } else {
+            colorScheme.outline.copy(alpha = 0.22f)
+        }
+
+    val selectedDayBrush =
+        if (isDarkTheme) {
+            Brush.verticalGradient(
+                colors = listOf(
+                    Color(0xFF6A8FE8).copy(alpha = 0.78f),
+                    Color(0xFF5D84E4).copy(alpha = 0.72f)
+                )
+            )
+        } else {
+            Brush.verticalGradient(
+                colors = listOf(
+                    colorScheme.primaryContainer,
+                    colorScheme.secondaryContainer
+                )
+            )
+        }
+
+    val selectedDayTextColor =
+        if (isDarkTheme) {
+            Color.White
+        } else {
+            colorScheme.onPrimaryContainer
+        }
+
+    CompositionLocalProvider(
+        LocalLayoutDirection provides screenLayoutDirection
+    ) {
 
         val today = remember { LocalDate.now() }
         var ym by rememberSaveable { mutableStateOf(YearMonth.from(today)) }
@@ -323,88 +396,87 @@ fun MonthlyCalendarScreen(
         }
 
         Scaffold(
-            containerColor = Color(0xFF08142C),
+            containerColor = colorScheme.background,
+            contentWindowInsets = WindowInsets(0),
             topBar = {
-                Surface(
-                    color = Color.Transparent,
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .background(
-                                Brush.verticalGradient(
-                                    colors = listOf(
-                                        Color(0xFF09152F),
-                                        Color(0xFF0D1D40),
-                                        Color(0xFF122856)
-                                    )
-                                )
-                            )
-                            .padding(
-                                start = 12.dp,
-                                end = 12.dp,
-                                top = 12.dp,
-                                bottom = 10.dp
-                            )
-                    ) {
-                        Surface(
-                            shape = RoundedCornerShape(28.dp),
-                            color = Color.White.copy(alpha = 0.08f),
-                            shadowElevation = 14.dp,
-                            border = BorderStroke(
-                                width = 1.dp,
-                                color = Color.White.copy(alpha = 0.10f)
-                            ),
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(
-                                        horizontal = 12.dp,
-                                        vertical = 14.dp
-                                    )
-                            ) {
-                                Text(
-                                    text = tr(
-                                        "לוח אימונים חודשי",
-                                        "Monthly calendar"
-                                    ),
-                                    style =
-                                        MaterialTheme.typography.titleMedium,
-                                    color = Color.White,
-                                    fontWeight = FontWeight.ExtraBold,
-                                    textAlign = TextAlign.Center,
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(horizontal = 38.dp)
-                                )
+                val contextLang =
+                    LocalContext.current
 
-                                Box(
-                                    modifier = Modifier
-                                        .align(Alignment.CenterEnd)
-                                        .size(30.dp)
-                                        .clickable {
-                                            onBack()
-                                        },
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Filled.Close,
-                                        contentDescription = tr(
-                                            "סגור",
-                                            "Close"
-                                        ),
-                                        tint =
-                                            Color.White.copy(alpha = 0.92f),
-                                        modifier = Modifier.size(17.dp)
-                                    )
-                                }
-                            }
-                        }
+                val topBarLanguageManager =
+                    remember(contextLang) {
+                        AppLanguageManager(contextLang)
                     }
-                }
+
+                KmiTopBar(
+                    title = tr(
+                        "לוח אימונים חודשי",
+                        "Monthly calendar"
+                    ),
+
+                    /*
+                     * במסך לוח השנה אין צורך בכפתור X.
+                     * החזרה זמינה דרך מערכת הניווט של המכשיר.
+                     */
+                    onBack = null,
+                    onHome = onHome,
+                    useCloseIcon = false,
+
+                    /*
+                     * תפריט הצד מוצג דרך DrawerBridge או
+                     * דרך DrawerState שמסופק ברמת האפליקציה.
+                     */
+                    showMenu = true,
+
+                    /*
+                     * KmiTopBar קורא את user_role ומציג
+                     * אוטומטית מאמן או מתאמן.
+                     */
+                    showRoleStatus = true,
+                    showRoleBadge = true,
+                    showModePill = true,
+
+                    /*
+                     * מפעיל את סרגל הפעולות הגלובלי,
+                     * ובתוכו גם הפקודות הקוליות.
+                     */
+                    showBottomActions = true,
+                    showBottomHelp = true,
+
+                    centerTitle = true,
+                    showTopHome = false,
+                    showTopShare = false,
+
+                    currentLang =
+                        if (
+                            topBarLanguageManager
+                                .getCurrentLanguage() ==
+                            AppLanguage.ENGLISH
+                        ) {
+                            "en"
+                        } else {
+                            "he"
+                        },
+
+                    onToggleLanguage = {
+                        val newLanguage =
+                            if (
+                                topBarLanguageManager
+                                    .getCurrentLanguage() ==
+                                AppLanguage.HEBREW
+                            ) {
+                                AppLanguage.ENGLISH
+                            } else {
+                                AppLanguage.HEBREW
+                            }
+
+                        topBarLanguageManager.setLanguage(
+                            newLanguage
+                        )
+
+                        (contextLang as? Activity)
+                            ?.recreate()
+                    }
+                )
             }
         ) { padding ->
 
@@ -413,16 +485,7 @@ fun MonthlyCalendarScreen(
                 modifier = Modifier
                     .padding(padding)
                     .fillMaxSize()
-                    .background(
-                        Brush.verticalGradient(
-                            colors = listOf(
-                                Color(0xFF071126),
-                                Color(0xFF0D1E43),
-                                Color(0xFF183A7A),
-                                Color(0xFF3F78F2)
-                            )
-                        )
-                    )
+                    .background(screenBackgroundBrush)
                     .pointerInput(ym) {
                         val threshold = 48f
                         detectHorizontalDragGestures { _, dragAmount ->
@@ -458,10 +521,13 @@ fun MonthlyCalendarScreen(
                         if (missingReason != null) {
                             Surface(
                                 shape = RoundedCornerShape(18.dp),
-                                color = Color.White.copy(alpha = 0.10f),
+                                color = informationCardColor,
+                                tonalElevation = 0.dp,
+                                shadowElevation =
+                                    if (isDarkTheme) 0.dp else 3.dp,
                                 border = BorderStroke(
                                     1.dp,
-                                    Color.White.copy(alpha = 0.12f)
+                                    informationCardBorder
                                 ),
                                 modifier = Modifier
                                     .fillMaxWidth()
@@ -472,7 +538,7 @@ fun MonthlyCalendarScreen(
                                         "לא נמצאו אימונים להצגה עבור האזור, הסניף והקבוצה שנבחרו בפרופיל.",
                                         "No trainings were found for the region, branch, and group selected in your profile."
                                     ),
-                                    color = Color.White,
+                                    color = secondaryTextColor,
                                     style = MaterialTheme.typography.bodyMedium,
                                     fontWeight = FontWeight.SemiBold,
                                     modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
@@ -536,13 +602,18 @@ fun MonthlyCalendarScreen(
                                 Surface(
                                     modifier = Modifier
                                         .fillMaxWidth()
-                                        .padding(horizontal = 2.dp, vertical = 8.dp),
+                                        .padding(
+                                            horizontal = 2.dp,
+                                            vertical = 8.dp
+                                        ),
                                     shape = RoundedCornerShape(26.dp),
-                                    color = Color.White.copy(alpha = 0.10f),
-                                    shadowElevation = 14.dp,
-                                    border = androidx.compose.foundation.BorderStroke(
+                                    color = informationCardColor,
+                                    tonalElevation = 0.dp,
+                                    shadowElevation =
+                                        if (isDarkTheme) 14.dp else 5.dp,
+                                    border = BorderStroke(
                                         1.dp,
-                                        Color.White.copy(alpha = 0.12f)
+                                        informationCardBorder
                                     )
                                 ) {
                                     val infoParts = buildList {
@@ -558,14 +629,7 @@ fun MonthlyCalendarScreen(
                                         modifier = Modifier
                                             .fillMaxWidth()
                                             .heightIn(min = 156.dp)
-                                            .background(
-                                                Brush.verticalGradient(
-                                                    colors = listOf(
-                                                        Color(0xFF6A8FE8).copy(alpha = 0.78f),
-                                                        Color(0xFF5D84E4).copy(alpha = 0.72f)
-                                                    )
-                                                )
-                                            )
+                                            .background(selectedDayBrush)
                                             .padding(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 18.dp)
                                     ) {
                                         Column(
@@ -581,8 +645,13 @@ fun MonthlyCalendarScreen(
                                                 ),
                                                 style = MaterialTheme.typography.titleMedium,
                                                 fontWeight = FontWeight.ExtraBold,
-                                                color = Color.White,
-                                                textAlign = if (isEnglish) TextAlign.Start else TextAlign.Right,
+                                                color = selectedDayTextColor,
+                                                textAlign =
+                                                    if (isEnglish) {
+                                                        TextAlign.Start
+                                                    } else {
+                                                        TextAlign.Right
+                                                    },
                                                 modifier = Modifier.fillMaxWidth()
                                             )
 
@@ -624,11 +693,12 @@ fun MonthlyCalendarScreen(
                                                         infoParts.joinToString(" • ")
                                                     }
                                                 },
-                                                style = MaterialTheme.typography.bodyMedium.copy(
-                                                    fontSize = 13.sp,
-                                                    lineHeight = 18.sp
-                                                ),
-                                                color = Color.White.copy(alpha = 0.92f),
+                                                style =
+                                                    MaterialTheme.typography.bodyMedium,
+                                                color =
+                                                    selectedDayTextColor.copy(
+                                                        alpha = 0.92f
+                                                    ),
                                                 textAlign = if (isEnglish) TextAlign.Start else TextAlign.Right,
                                                 modifier = Modifier.fillMaxWidth()
                                             )
@@ -647,10 +717,13 @@ fun MonthlyCalendarScreen(
                                                 onClick = { onDateClick(sel) },
                                                 shape = RoundedCornerShape(16.dp),
                                                 contentPadding = PaddingValues(horizontal = 18.dp, vertical = 10.dp),
-                                                colors = ButtonDefaults.buttonColors(
-                                                    containerColor = Color(0xFF7C4DFF),
-                                                    contentColor = Color.White
-                                                ),
+                                                colors =
+                                                    ButtonDefaults.buttonColors(
+                                                        containerColor =
+                                                            colorScheme.primary,
+                                                        contentColor =
+                                                            colorScheme.onPrimary
+                                                    ),
                                                 elevation = ButtonDefaults.buttonElevation(
                                                     defaultElevation = 6.dp,
                                                     pressedElevation = 10.dp

@@ -131,6 +131,7 @@ import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.Cancel
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.ui.graphics.luminance
 
 //=================================================================================
 
@@ -5174,41 +5175,95 @@ private fun HomePremiumQuickMenuPanel(
     items: List<Triple<String, ImageVector, () -> Unit>>,
     onClose: () -> Unit
 ) {
-    val panelHeight = 214.dp
+    val panelWidth = 190.dp
+    val panelMinHeight = 214.dp
     val panelShape = RoundedCornerShape(20.dp)
+
+    val colorScheme = MaterialTheme.colorScheme
+    val isDarkMode =
+        colorScheme.background.luminance() < 0.5f
+
+    /*
+     * במצב בהיר התפריט נשאר לבן לחלוטין,
+     * ללא גוון אפור של surfaceVariant.
+     * במצב כהה משתמשים בצבעי ערכת הנושא.
+     */
+    val panelColor =
+        if (isDarkMode) {
+            colorScheme.surface
+        } else {
+            Color.White
+        }
+
+    val panelSecondaryColor =
+        if (isDarkMode) {
+            colorScheme.surfaceVariant
+        } else {
+            Color.White
+        }
+
+    val menuAccent =
+        if (isDarkMode) {
+            Color(0xFF6EE7A0)
+        } else {
+            Color(0xFF16A34A)
+        }
+
+    val borderColor =
+        menuAccent.copy(
+            alpha = if (isDarkMode) 0.52f else 0.34f
+        )
+
+    val dividerColor =
+        if (isDarkMode) {
+            colorScheme.outline.copy(alpha = 0.40f)
+        } else {
+            Color(0xFF0F8A3D).copy(alpha = 0.62f)
+        }
 
     Surface(
         shape = panelShape,
-        color = Color.White.copy(alpha = 0.98f),
+        color = panelColor,
         tonalElevation = 0.dp,
         shadowElevation = 14.dp,
         border = BorderStroke(
             width = 1.dp,
-            color = Color(0xFF16A34A).copy(alpha = 0.58f)
+            color = borderColor
         ),
         modifier = Modifier
-            .width(190.dp)
-            .height(panelHeight)
+            .width(panelWidth)
+            .heightIn(min = panelMinHeight)
     ) {
+        /*
+         * ה־Box מקבל את אותו גובה מינימלי של ה־Surface,
+         * ולכן לא נשארת שכבה לבנה גלויה מאחור.
+         *
+         * הגבול מוגדר רק ב־Surface כדי שלא ייראו
+         * שני קווי מסגרת אחד מעל השני.
+         */
         Box(
             modifier = Modifier
-                .fillMaxSize()
+                .fillMaxWidth()
+                .heightIn(min = panelMinHeight)
                 .clip(panelShape)
                 .background(
                     brush = Brush.verticalGradient(
                         colors = listOf(
-                            Color.White.copy(alpha = 0.98f),
-                            Color(0xFFF9FFFB),
-                            Color(0xFF16A34A).copy(alpha = 0.12f),
-                            Color(0xFFFBFFFC),
-                            Color.White.copy(alpha = 0.98f)
+                            panelColor,
+                            panelSecondaryColor.copy(
+                                alpha = if (isDarkMode) 0.94f else 0.72f
+                            ),
+                            if (isDarkMode) {
+                                menuAccent.copy(alpha = 0.14f)
+                            } else {
+                                Color.White
+                            },
+                            panelSecondaryColor.copy(
+                                alpha = if (isDarkMode) 0.88f else 0.64f
+                            ),
+                            panelColor
                         )
                     )
-                )
-                .border(
-                    width = 1.dp,
-                    color = Color(0xFF16A34A).copy(alpha = 0.34f),
-                    shape = panelShape
                 )
                 .padding(horizontal = 8.dp, vertical = 8.dp)
         ) {
@@ -5223,7 +5278,7 @@ private fun HomePremiumQuickMenuPanel(
                     if (isEnglish) {
                         Text(
                             text = title,
-                            color = Color(0xFF16A34A),
+                            color = menuAccent,
                             fontWeight = FontWeight.ExtraBold,
                             textAlign = TextAlign.Start,
                             maxLines = 1,
@@ -5237,7 +5292,7 @@ private fun HomePremiumQuickMenuPanel(
                         Icon(
                             imageVector = Icons.Filled.Close,
                             contentDescription = "Close",
-                            tint = Color(0xFF16A34A),
+                            tint = menuAccent,
                             modifier = Modifier
                                 .size(18.dp)
                                 .clickable { onClose() }
@@ -5245,7 +5300,7 @@ private fun HomePremiumQuickMenuPanel(
                     } else {
                         Text(
                             text = title,
-                            color = Color(0xFF16A34A),
+                            color = menuAccent,
                             fontWeight = FontWeight.ExtraBold,
                             textAlign = TextAlign.Right,
                             maxLines = 1,
@@ -5262,7 +5317,7 @@ private fun HomePremiumQuickMenuPanel(
                         Icon(
                             imageVector = Icons.Filled.Close,
                             contentDescription = "סגור",
-                            tint = Color(0xFF16A34A),
+                            tint = menuAccent,
                             modifier = Modifier
                                 .size(18.dp)
                                 .clickable { onClose() }
@@ -5284,7 +5339,7 @@ private fun HomePremiumQuickMenuPanel(
                         HorizontalDivider(
                             modifier = Modifier.padding(horizontal = 8.dp),
                             thickness = 1.25.dp,
-                            color = Color(0xFF0F8A3D).copy(alpha = 0.62f)
+                            color = dividerColor
                         )
                     }
                 }
@@ -5302,6 +5357,15 @@ private fun HomePremiumQuickMenuRow(
 ) {
     val isLocked = text.endsWith(" 🔒")
     val cleanText = if (isLocked) text.removeSuffix(" 🔒") else text
+    val isDarkMode =
+        MaterialTheme.colorScheme.background.luminance() < 0.5f
+
+    val menuAccent =
+        if (isDarkMode) {
+            Color(0xFF6EE7A0)
+        } else {
+            Color(0xFF16A34A)
+        }
 
     val lockPulse = rememberInfiniteTransition(label = "homeQuickMenuLockPulse")
 
@@ -5329,7 +5393,7 @@ private fun HomePremiumQuickMenuRow(
 
             Text(
                 text = cleanText,
-                color = Color(0xFF16A34A).copy(alpha = 0.94f),
+                color = menuAccent,
                 fontWeight = FontWeight.SemiBold,
                 textAlign = TextAlign.Start,
                 style = KmiTypography.caption.copy(
@@ -5357,25 +5421,17 @@ private fun HomePremiumQuickMenuRow(
                 )
             }
         } else {
-            if (isLocked) {
-                Icon(
-                    imageVector = Icons.Filled.Lock,
-                    contentDescription = null,
-                    tint = Color(0xFFF59E0B),
-                    modifier = Modifier
-                        .size(13.dp)
-                        .graphicsLayer {
-                            scaleX = lockScale
-                            scaleY = lockScale
-                            alpha = 1f
-                        }
-                )
-                Spacer(Modifier.width(5.dp))
-            }
+            /*
+             * ב־RTL הרכיב הראשון מוצג בצד ימין:
+             * האייקון בצד ימין והמנעול בצד שמאל.
+             */
+            HomePremiumQuickMenuIcon(icon)
+
+            Spacer(Modifier.width(7.dp))
 
             Text(
                 text = cleanText,
-                color = Color(0xFF16A34A).copy(alpha = 0.94f),
+                color = menuAccent,
                 fontWeight = FontWeight.SemiBold,
                 textAlign = TextAlign.Right,
                 style = MaterialTheme.typography.bodySmall.copy(
@@ -5388,8 +5444,22 @@ private fun HomePremiumQuickMenuRow(
                 modifier = Modifier.weight(1f)
             )
 
-            Spacer(Modifier.width(7.dp))
-            HomePremiumQuickMenuIcon(icon)
+            if (isLocked) {
+                Spacer(Modifier.width(5.dp))
+
+                Icon(
+                    imageVector = Icons.Filled.Lock,
+                    contentDescription = null,
+                    tint = Color(0xFFF59E0B),
+                    modifier = Modifier
+                        .size(13.dp)
+                        .graphicsLayer {
+                            scaleX = lockScale
+                            scaleY = lockScale
+                            alpha = 1f
+                        }
+                )
+            }
         }
     }
 }
@@ -5398,13 +5468,30 @@ private fun HomePremiumQuickMenuRow(
 private fun HomePremiumQuickMenuIcon(
     icon: ImageVector
 ) {
+    val isDarkMode =
+        MaterialTheme.colorScheme.background.luminance() < 0.5f
+
+    val menuAccent =
+        if (isDarkMode) {
+            Color(0xFF6EE7A0)
+        } else {
+            Color(0xFF16A34A)
+        }
+
     Box(
         modifier = Modifier
             .size(20.dp)
-            .background(Color(0xFF16A34A).copy(alpha = 0.10f), CircleShape)
+            .background(
+                menuAccent.copy(
+                    alpha = if (isDarkMode) 0.16f else 0.10f
+                ),
+                CircleShape
+            )
             .border(
                 width = 1.dp,
-                color = Color(0xFF16A34A).copy(alpha = 0.24f),
+                color = menuAccent.copy(
+                    alpha = if (isDarkMode) 0.38f else 0.24f
+                ),
                 shape = CircleShape
             ),
         contentAlignment = Alignment.Center
@@ -5412,7 +5499,7 @@ private fun HomePremiumQuickMenuIcon(
         Icon(
             imageVector = icon,
             contentDescription = null,
-            tint = Color(0xFF16A34A),
+            tint = menuAccent,
             modifier = Modifier.size(10.5.dp)
         )
     }

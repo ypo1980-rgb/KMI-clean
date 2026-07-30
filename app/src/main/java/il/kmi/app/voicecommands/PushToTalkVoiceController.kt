@@ -2,6 +2,7 @@ package il.kmi.app.voicecommands
 
 import android.content.Context
 import android.content.Intent
+import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
@@ -75,11 +76,22 @@ class PushToTalkVoiceController(
 
         updateState(PushToTalkState.STARTING)
 
-        val languageTag = if (isEnglish()) {
-            "en-US"
-        } else {
-            "he-IL"
-        }
+        /*
+         * שפת הפקודות הקוליות אינה תלויה בשפת הממשק.
+         *
+         * עברית היא השפה הראשית של הפקודות, ולכן גם
+         * כאשר הממשק באנגלית ניתן לומר "תחזיר לעברית".
+         *
+         * במכשירים שתומכים בהחלפת שפה אוטומטית,
+         * המנוע עדיין יוכל לעבור לאנגלית לפי הדיבור.
+         */
+        val preferredLanguageTag = "he-IL"
+
+        val supportedVoiceLanguages =
+            arrayListOf(
+                "he-IL",
+                "en-US"
+            )
 
         val intent = Intent(
             RecognizerIntent.ACTION_RECOGNIZE_SPEECH
@@ -88,14 +100,51 @@ class PushToTalkVoiceController(
                 RecognizerIntent.EXTRA_LANGUAGE_MODEL,
                 RecognizerIntent.LANGUAGE_MODEL_FREE_FORM
             )
+            /*
+             * עברית משמשת כשפת ההאזנה הראשית ללא קשר
+             * לשפה שבה מוצג הממשק.
+             */
             putExtra(
                 RecognizerIntent.EXTRA_LANGUAGE,
-                languageTag
+                preferredLanguageTag
             )
+
             putExtra(
                 RecognizerIntent.EXTRA_LANGUAGE_PREFERENCE,
-                languageTag
+                preferredLanguageTag
             )
+
+            /*
+             * החל מ־Android 14 מבקשים ממנוע הדיבור לזהות
+             * ולהחליף אוטומטית בין עברית לאנגלית.
+             *
+             * QUICK_RESPONSE מתאים לפקודות קצרות שבהן
+             * חשוב לזהות את השפה כבר בתחילת המשפט.
+             */
+            if (
+                Build.VERSION.SDK_INT >=
+                Build.VERSION_CODES.UPSIDE_DOWN_CAKE
+            ) {
+                putExtra(
+                    RecognizerIntent.EXTRA_ENABLE_LANGUAGE_DETECTION,
+                    true
+                )
+
+                putStringArrayListExtra(
+                    RecognizerIntent.EXTRA_LANGUAGE_DETECTION_ALLOWED_LANGUAGES,
+                    supportedVoiceLanguages
+                )
+
+                putExtra(
+                    RecognizerIntent.EXTRA_ENABLE_LANGUAGE_SWITCH,
+                    RecognizerIntent.LANGUAGE_SWITCH_QUICK_RESPONSE
+                )
+
+                putStringArrayListExtra(
+                    RecognizerIntent.EXTRA_LANGUAGE_SWITCH_ALLOWED_LANGUAGES,
+                    supportedVoiceLanguages
+                )
+            }
 
             /*
              * מבקשים כמה תוצאות כדי שמנוע הפקודות יוכל

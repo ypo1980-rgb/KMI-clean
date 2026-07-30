@@ -15,7 +15,10 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ColorFilter
+import androidx.compose.ui.graphics.ColorMatrix
 import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDirection
 import androidx.compose.ui.unit.dp
@@ -75,15 +78,36 @@ private fun beltColor(belt: Belt): Color = when (belt) {
     Belt.BLACK  -> Color(0xFF111111)
 }
 
-private fun introBeltDrawableRes(belt: Belt): Int {
+/**
+ * מחזיר תמונת חגורה בעלת רקע שקוף.
+ *
+ * אין להשתמש בקובצי intro_belt_* משום שהרקע הלבן
+ * מוטמע בהם ונשאר גלוי במצב כהה.
+ */
+private fun introBeltDrawableRes(
+    belt: Belt
+): Int {
     return when (belt) {
-        Belt.WHITE  -> R.drawable.intro_belt_white
-        Belt.YELLOW -> R.drawable.intro_belt_yellow
-        Belt.ORANGE -> R.drawable.intro_belt_orange
-        Belt.GREEN  -> R.drawable.intro_belt_green
-        Belt.BLUE   -> R.drawable.intro_belt_blue
-        Belt.BROWN  -> R.drawable.intro_belt_brown
-        Belt.BLACK  -> R.drawable.intro_belt_black
+        Belt.WHITE ->
+            R.drawable.belt_white
+
+        Belt.YELLOW ->
+            R.drawable.belt_yellow
+
+        Belt.ORANGE ->
+            R.drawable.belt_orange
+
+        Belt.GREEN ->
+            R.drawable.belt_green
+
+        Belt.BLUE ->
+            R.drawable.belt_blue
+
+        Belt.BROWN ->
+            R.drawable.belt_brown
+
+        Belt.BLACK ->
+            R.drawable.belt_black
     }
 }
 
@@ -500,34 +524,106 @@ private fun IntroWelcomeImageScreen(
     onContinueClick: () -> Unit,
     onRegularClick: () -> Unit
 ) {
+    /*
+     * MaterialTheme כבר מכיל את הבחירה האחרונה של המשתמש:
+     * מצב בהיר, מצב כהה או בהתאם למערכת.
+     */
+    val colorScheme = MaterialTheme.colorScheme
+    val isDarkTheme =
+        colorScheme.background.luminance() < 0.5f
+
+    val cardBackground =
+        if (isDarkTheme) {
+            colorScheme.surface.copy(alpha = 0.94f)
+        } else {
+            Color.White.copy(alpha = 0.88f)
+        }
+
+    val primaryTextColor =
+        if (isDarkTheme) {
+            colorScheme.onSurface
+        } else {
+            Color(0xFF172033)
+        }
+
+    val secondaryTextColor =
+        colorScheme.onSurfaceVariant
+
     BoxWithConstraints(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color.White)
+            .background(colorScheme.background)
     ) {
         val isCompactHeight = maxHeight < 760.dp
         val isVeryCompactHeight = maxHeight < 690.dp
 
-        val horizontalPadding = if (isCompactHeight) 24.dp else 30.dp
+        val horizontalPadding =
+            if (isCompactHeight) 24.dp else 30.dp
 
         // מיקום יחסי של הברכה לפי גובה המסך, כדי שיהיה יציב בין מכשירים
         val greetingTopSpace = maxHeight * 0.185f
 
-        val greetingHeight = if (isCompactHeight) 38.dp else 42.dp
+        val greetingHeight =
+            if (isCompactHeight) 38.dp else 42.dp
 
         // מיקום יחסי של שורת החגורה לפי גובה המסך, כדי שיהיה יציב בין מכשירים
         val beltTopSpace = maxHeight * 0.455f
 
-        val beltRowHeight = if (isCompactHeight) 40.dp else 46.dp
-        val beltImageHeight = if (isCompactHeight) 22.dp else 26.dp
+        val beltRowHeight =
+            if (isCompactHeight) 40.dp else 46.dp
+
+        val beltImageHeight =
+            if (isCompactHeight) 22.dp else 26.dp
+
+        /*
+         * במצב כהה הופכים את בהירות תמונת הרקע:
+         *
+         * לבן הופך לשחור;
+         * שחור הופך ללבן;
+         * שאר פרטי התמונה נשמרים בגווני אפור.
+         *
+         * כך הלוגו, הכותרות והדמויות נשארים גלויים גם
+         * כאשר הרקע הלבן מוטמע בתוך קובץ התמונה עצמו.
+         */
+        val darkImageColorFilter =
+            if (isDarkTheme) {
+                ColorFilter.colorMatrix(
+                    ColorMatrix(
+                        floatArrayOf(
+                            -0.2126f, -0.7152f, -0.0722f, 0f, 255f,
+                            -0.2126f, -0.7152f, -0.0722f, 0f, 255f,
+                            -0.2126f, -0.7152f, -0.0722f, 0f, 255f,
+                            0f,       0f,       0f,       1f, 0f
+                        )
+                    )
+                )
+            } else {
+                null
+            }
 
         Image(
-            painter = painterResource(id = R.drawable.intro_welcome_screen_v2),
+            painter = painterResource(
+                id = R.drawable.intro_welcome_screen_v2
+            ),
             contentDescription = null,
-            modifier = Modifier
-                .matchParentSize(),
-            contentScale = ContentScale.Crop
+            modifier = Modifier.matchParentSize(),
+            contentScale = ContentScale.Crop,
+            colorFilter = darkImageColorFilter
         )
+
+        /*
+         * גוון קל של רקע האפליקציה מאחד את התמונה עם
+         * ערכת הנושא, בלי להעלים שוב את הפרטים הבהירים.
+         */
+        if (isDarkTheme) {
+            Box(
+                modifier = Modifier
+                    .matchParentSize()
+                    .background(
+                        colorScheme.background.copy(alpha = 0.08f)
+                    )
+            )
+        }
 
         Column(
             modifier = Modifier
@@ -549,19 +645,26 @@ private fun IntroWelcomeImageScreen(
                         clip = false
                     )
                     .clip(RoundedCornerShape(10.dp))
-                    .background(Color.White.copy(alpha = 0.88f))
+                    .background(cardBackground)
                     .padding(horizontal = 10.dp),
                 contentAlignment = Alignment.Center
             ) {
                 Text(
                     text = greeting,
                     style = MaterialTheme.typography.headlineMedium.copy(
-                        fontSize = if (isCompactHeight) 22.sp else 26.sp,
-                        lineHeight = if (isCompactHeight) 25.sp else 29.sp,
-                        textDirection = if (isEnglish) TextDirection.Ltr else TextDirection.Rtl
+                        fontSize =
+                            if (isCompactHeight) 22.sp else 26.sp,
+                        lineHeight =
+                            if (isCompactHeight) 25.sp else 29.sp,
+                        textDirection =
+                            if (isEnglish) {
+                                TextDirection.Ltr
+                            } else {
+                                TextDirection.Rtl
+                            }
                     ),
                     fontWeight = FontWeight.ExtraBold,
-                    color = Color(0xFF172033),
+                    color = primaryTextColor,
                     textAlign = TextAlign.Center,
                     maxLines = 1,
                     modifier = Modifier.fillMaxWidth()
@@ -616,7 +719,7 @@ private fun IntroWelcomeImageScreen(
                             clip = false
                         )
                         .clip(RoundedCornerShape(16.dp))
-                        .background(Color.White.copy(alpha = 0.86f))
+                        .background(cardBackground)
                         .padding(horizontal = 12.dp),
                     contentAlignment = Alignment.Center
                 ) {
@@ -627,12 +730,19 @@ private fun IntroWelcomeImageScreen(
                             "עדיין לא עודכנה חגורה"
                         },
                         style = MaterialTheme.typography.titleSmall.copy(
-                            fontSize = if (isCompactHeight) 13.sp else 15.sp,
-                            lineHeight = if (isCompactHeight) 15.sp else 17.sp,
-                            textDirection = if (isEnglish) TextDirection.Ltr else TextDirection.Rtl
+                            fontSize =
+                                if (isCompactHeight) 13.sp else 15.sp,
+                            lineHeight =
+                                if (isCompactHeight) 15.sp else 17.sp,
+                            textDirection =
+                                if (isEnglish) {
+                                    TextDirection.Ltr
+                                } else {
+                                    TextDirection.Rtl
+                                }
                         ),
                         fontWeight = FontWeight.ExtraBold,
-                        color = Color(0xFF172033),
+                        color = primaryTextColor,
                         textAlign = TextAlign.Center,
                         maxLines = 1,
                         modifier = Modifier.fillMaxWidth()
@@ -712,9 +822,11 @@ private fun IntroWelcomeImageScreen(
                 Box(
                     modifier = Modifier
                         .fillMaxWidth(0.90f)
-                        .height(if (isCompactHeight) 32.dp else 36.dp)
+                        .height(
+                            if (isCompactHeight) 32.dp else 36.dp
+                        )
                         .clip(RoundedCornerShape(20.dp))
-                        .background(Color.White.copy(alpha = 0.88f))
+                        .background(cardBackground)
                         .clickable(
                             enabled =
                                 !isGoogleLoading &&
@@ -730,7 +842,7 @@ private fun IntroWelcomeImageScreen(
                         } else {
                             "כניסה / רישום בדרך הרגילה"
                         },
-                        color = Color(0xFF172033),
+                        color = primaryTextColor,
                         fontWeight = FontWeight.Bold,
                         fontSize = if (isCompactHeight) 12.sp else 14.sp,
                         textAlign = TextAlign.Center,

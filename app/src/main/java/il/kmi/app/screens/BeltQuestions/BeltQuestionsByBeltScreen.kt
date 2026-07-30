@@ -348,6 +348,15 @@ private fun beltTopicImageFor(belt: Belt, topicTitle: String): Int? {
                 clean.contains("גלגול") ||
                 clean.contains("בלימה") -> R.drawable.topic_forward_roll
 
+        // מניעת התקרבות התוקף — חגורה צהובה
+        belt == Belt.YELLOW &&
+                (
+                        clean.contains("מניעת התקרבות התוקף") ||
+                                clean.contains("מניעת התקרבות") ||
+                                clean.contains("התקרבות התוקף")
+                        ) ->
+            R.drawable.topic_prevent_attacker_approach
+
         // עמידת מוצא
         clean.contains("עמידת מוצא") -> R.drawable.topic_ready_stance
 
@@ -1159,15 +1168,52 @@ private fun TopicsCardForBelt(
         Color.Transparent
     }
 
-    val titleColor = if (isDarkTheme) Color(0xFFF8FAFC) else Color(0xFF263238)
-    val rowTitleColor = if (isDarkTheme) Color(0xFFF8FAFC) else Color(0xFF1F2937)
+    val titleColor =
+        if (isDarkTheme) {
+            Color(0xFFF8FAFC)
+        } else {
+            Color(0xFF263238)
+        }
 
-    // ✅ צבע הספירה לפי צבע החגורה — יותר ברור, בלי לצבוע את כל שורת הנושא
-    val rowSubColor = when {
-        isDarkTheme -> belt.color.copy(alpha = 1f)
-        belt == Belt.YELLOW -> Color(0xFFC98A00)
-        else -> belt.color.copy(alpha = 1f)
-    }
+    val rowTitleColor =
+        if (isDarkTheme) {
+            Color(0xFFF8FAFC)
+        } else {
+            Color(0xFF1F2937)
+        }
+
+    /*
+     * צבע החגורה הלבנה נשאר לבן על הכרטיס הכהה.
+     * במצב בהיר משתמשים באפור־כחלחל כדי שלא ייעלם
+     * על הרקע הלבן.
+     */
+    /*
+   * בחגורה שחורה, על גבי כרטיס כהה, משתמשים בלבן
+   * עבור ספירות, חצים, מסגרות ופעולות.
+   *
+   * בחגורה לבנה במצב בהיר משתמשים באפור־כחלחל,
+   * כדי שהצבע לא ייעלם על הרקע הבהיר.
+   */
+    val readableBeltAccent =
+        when {
+            belt == Belt.BLACK && isDarkTheme ->
+                Color.White
+
+            belt == Belt.WHITE && isDarkTheme ->
+                Color.White
+
+            belt == Belt.WHITE ->
+                Color(0xFF64748B)
+
+            belt == Belt.YELLOW && !isDarkTheme ->
+                Color(0xFFC98A00)
+
+            else ->
+                belt.color
+        }
+
+    val rowSubColor =
+        readableBeltAccent.copy(alpha = 0.88f)
 
     // ✅ שורת הנושא עצמה נשארת נקייה, בלי ריבועים
     val rowBg = Color.Transparent
@@ -1179,24 +1225,27 @@ private fun TopicsCardForBelt(
         )
     )
 
-    // ✅ כרטיס תתי־הנושאים יקבל צבע חגורה עדין אבל עם נוכחות
-    val subTopicsCardBg = if (isDarkTheme) {
-        belt.color.copy(alpha = 0.16f)
-    } else {
-        belt.color.copy(alpha = 0.13f)
-    }
+    // ✅ כרטיס תתי־הנושאים מקבל גוון קריא של החגורה
+    val subTopicsCardBg =
+        if (isDarkTheme) {
+            readableBeltAccent.copy(alpha = 0.12f)
+        } else {
+            readableBeltAccent.copy(alpha = 0.10f)
+        }
 
-    val subTopicsCardBorder = if (isDarkTheme) {
-        belt.color.copy(alpha = 0.34f)
-    } else {
-        belt.color.copy(alpha = 0.38f)
-    }
+    val subTopicsCardBorder =
+        if (isDarkTheme) {
+            readableBeltAccent.copy(alpha = 0.34f)
+        } else {
+            readableBeltAccent.copy(alpha = 0.38f)
+        }
 
-    val subDividerColor = if (isDarkTheme) {
-        belt.color.copy(alpha = 0.34f)
-    } else {
-        belt.color.copy(alpha = 0.42f)
-    }
+    val subDividerColor =
+        if (isDarkTheme) {
+            readableBeltAccent.copy(alpha = 0.28f)
+        } else {
+            readableBeltAccent.copy(alpha = 0.36f)
+        }
 
     val rawTopicTitles: List<String> = remember(belt) {
         TopicsEngine.topicTitlesFor(belt)
@@ -1402,12 +1451,20 @@ private fun TopicsCardForBelt(
 
                         val floatingTitleColor = rowTitleColor
                         val floatingSubColor = rowSubColor
-                        val floatingAccent = Brush.verticalGradient(
-                            colors = listOf(
-                                belt.color.copy(alpha = 1f),
-                                belt.color.copy(alpha = if (isDarkTheme) 1f else 0.95f)
+                        val floatingAccent =
+                            Brush.verticalGradient(
+                                colors = listOf(
+                                    readableBeltAccent,
+                                    readableBeltAccent.copy(
+                                        alpha =
+                                            if (isDarkTheme) {
+                                                0.90f
+                                            } else {
+                                                0.82f
+                                            }
+                                    )
+                                )
                             )
-                        )
 
                         Surface(
                             modifier = Modifier
@@ -1623,9 +1680,10 @@ private fun TopicsCardForBelt(
                                                     verticalAlignment = Alignment.CenterVertically
                                                 ) {
                                                     Icon(
-                                                        imageVector = Icons.Filled.ChevronLeft,
+                                                        imageVector =
+                                                            Icons.Filled.ChevronLeft,
                                                         contentDescription = null,
-                                                        tint = belt.color.copy(alpha = 1f),
+                                                        tint = readableBeltAccent,
                                                         modifier = Modifier.size(15.dp)
                                                     )
 
@@ -1653,7 +1711,7 @@ private fun TopicsCardForBelt(
                                                                 modifier = Modifier.fillMaxWidth(),
                                                                 textAlign = titleTextAlignByLang,
                                                                 color =
-                                                                    belt.color.copy(alpha = 1f),
+                                                                    readableBeltAccent,
                                                                 style =
                                                                     KmiTypography.caption.copy(
                                                                         fontWeight =
@@ -1706,7 +1764,7 @@ private fun TopicsCardForBelt(
                                                         vertical = 4.dp
                                                     ),
                                                 color =
-                                                    belt.color.copy(alpha = 1f),
+                                                    readableBeltAccent,
                                                 style = KmiTypography.action
                                             )
 

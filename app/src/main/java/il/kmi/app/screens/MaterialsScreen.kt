@@ -103,38 +103,47 @@ private fun BeltPill(
     belt: Belt,
     modifier: Modifier = Modifier
 ) {
-    val bg = MaterialTheme.colorScheme.surface
-    val stroke = MaterialTheme.colorScheme.outline.copy(alpha = 0.25f)
+    fun beltDrawableRes(
+        beltValue: Belt
+    ): Int {
+        return when (beltValue) {
+            Belt.WHITE ->
+                R.drawable.belt_white
 
-    fun beltDrawableRes(b: Belt): Int = when (b) {
-        Belt.WHITE -> R.drawable.belt_white
-        Belt.YELLOW -> R.drawable.belt_yellow
-        Belt.ORANGE -> R.drawable.belt_orange
-        Belt.GREEN -> R.drawable.belt_green
-        Belt.BLUE -> R.drawable.belt_blue
-        Belt.BROWN -> R.drawable.belt_brown
-        Belt.BLACK -> R.drawable.belt_black
+            Belt.YELLOW ->
+                R.drawable.belt_yellow
+
+            Belt.ORANGE ->
+                R.drawable.belt_orange
+
+            Belt.GREEN ->
+                R.drawable.belt_green
+
+            Belt.BLUE ->
+                R.drawable.belt_blue
+
+            Belt.BROWN ->
+                R.drawable.belt_brown
+
+            Belt.BLACK ->
+                R.drawable.belt_black
+        }
     }
 
-    Surface(
+    Box(
         modifier = modifier,
-        shape = RoundedCornerShape(999.dp),
-        color = bg,
-        tonalElevation = 1.dp,
-        shadowElevation = 0.dp,
-        border = BorderStroke(1.dp, stroke)
+        contentAlignment = Alignment.Center
     ) {
-        Row(
-            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Image(
-                painter = painterResource(id = beltDrawableRes(belt)),
-                contentDescription = null,
-                modifier = Modifier.size(KmiIconSize.medium),
-                contentScale = ContentScale.Fit
-            )
-        }
+        Image(
+            painter = painterResource(
+                id = beltDrawableRes(belt)
+            ),
+            contentDescription = null,
+            modifier = Modifier.size(
+                KmiIconSize.medium
+            ),
+            contentScale = ContentScale.Fit
+        )
     }
 }
 

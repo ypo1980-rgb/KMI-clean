@@ -6,6 +6,8 @@ import android.net.Uri
 import androidx.compose.runtime.Composable
 import il.kmi.app.screens.SmsVerifyScreen
 import il.kmi.shared.domain.Belt
+import il.kmi.shared.domain.TopicsEngine
+import il.kmi.app.domain.ContentRepo
 import androidx.compose.runtime.remember
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
@@ -55,6 +57,7 @@ import il.kmi.app.screens.SubTopics.subTopicsByBeltNavGraph
 import il.kmi.app.screens.SubTopics.subTopicsByTopicNavGraph
 import il.kmi.app.screens.admin.PaymentsReportScreen
 import il.kmi.app.screens.admin.AdminDiagnosticsScreen
+import il.kmi.app.screens.admin.AdminAccess
 import il.kmi.app.screens.payments.PaymentScreen
 import il.kmi.app.ui.loading.KmiStartupLoadingScreen
 import il.kmi.app.screens.InitialLanguageScreen
@@ -69,8 +72,12 @@ import il.kmi.app.ui.OnboardingBridge
 import il.kmi.app.ui.VoiceExerciseExplanationBridge
 import il.kmi.app.voicecommands.VoiceCommandListener
 import il.kmi.app.voicecommands.VoiceAppCommand
+import il.kmi.app.voicecommands.VoiceDrawerDestination
 import il.kmi.app.voicecommands.VoiceCommandDiagnosticsLogger
 import il.kmi.app.voicecommands.VoiceCommandsBridge
+import il.kmi.app.subscription.AccessModeResolver
+import il.kmi.app.subscription.KmiAccess
+import il.kmi.app.subscription.LockedContentPolicy
 
 private const val APP_ENTRY_ROUTE = "app_entry"
 private const val GOOGLE_PROFILE_COMPLETION_ROUTE = "google_profile_completion"
@@ -201,9 +208,19 @@ fun resolveVoiceTopicId(query: String): String? {
                 normalized.contains("multiple attackers") ->
             "multiple_attackers_defense"
 
-        normalized.contains("נפילות") ||
+        /*
+         * "נפילות וגלגולים" נשאר ביטוי קולי חוקי,
+         * אבל הוא ממופה לנושא הקיים "בלימות וגלגולים".
+         */
+        normalized.contains("בלימות") ||
+                normalized.contains("בלימה") ||
+                normalized.contains("נפילות") ||
+                normalized.contains("נפילה") ||
                 normalized.contains("גלגולים") ||
+                normalized.contains("גלגול") ||
                 normalized.contains("breakfall") ||
+                normalized.contains("breakfalls") ||
+                normalized.contains("roll") ||
                 normalized.contains("rolls") ->
             "topic_breakfalls_rolls"
 
@@ -255,7 +272,7 @@ private fun voiceTopicRouteValue(
             "הגנות ממספר תוקפים"
 
         "topic_breakfalls_rolls" ->
-            "נפילות וגלגולים"
+            "בלימות וגלגולים"
 
         "topic_ready_stance" ->
             "עמידת מוצא"
@@ -312,7 +329,7 @@ private fun voiceTopicDisplayName(
             if (isEnglish) {
                 "breakfalls and rolls"
             } else {
-                "נפילות וגלגולים"
+                "בלימות וגלגולים"
             }
 
         "topic_ready_stance" ->
@@ -336,6 +353,89 @@ private fun voiceTopicDisplayName(
     }
 }
 
+/**
+ * מנרמל שמות נושאים לצורך השוואה בטוחה בין
+ * פקודה קולית, TopicsEngine ו־ContentRepo.
+ */
+private fun normalizeVoiceTopicTitle(
+    raw: String
+): String {
+    return raw
+        .replace("\u200F", "")
+        .replace("\u200E", "")
+        .replace("\u00A0", " ")
+        .replace("–", "-")
+        .replace("—", "-")
+        .replace("־", "-")
+        .replace(Regex("\\s*-\\s*"), "-")
+        .replace(Regex("\\s+"), " ")
+        .trim()
+        .lowercase()
+}
+
+/**
+ * מחזיר את שם הנושא האמיתי כפי שהוא שמור במאגר.
+ *
+ * אם הנושא אינו קיים בחגורה, מוחזר null ואסור
+ * לפתוח עבורו מסך חומרים.
+ */
+private fun resolveExistingVoiceTopicForBelt(
+    belt: Belt,
+    requestedTopicTitle: String
+): String? {
+    val requestedNormalized =
+        normalizeVoiceTopicTitle(
+            requestedTopicTitle
+        )
+
+    /*
+     * בדיקה ראשונה מול רשימת הנושאים האמיתית
+     * שמוצגת במסך "תרגילים לפי חגורה".
+     */
+    val topicFromEngine =
+        runCatching {
+            TopicsEngine.topicTitlesFor(belt)
+        }
+            .getOrDefault(emptyList())
+            .firstOrNull { existingTitle ->
+                normalizeVoiceTopicTitle(existingTitle) ==
+                        requestedNormalized
+            }
+
+    if (topicFromEngine != null) {
+        return topicFromEngine
+    }
+
+    /*
+     * חלק מהפקודות מפנות לנושא ישיר או לתת־נושא.
+     * לכן מבצעים בדיקה נוספת מול מאגר התוכן.
+     */
+    val directItems =
+        runCatching {
+            ContentRepo.listItemTitles(
+                belt = belt,
+                topicTitle = requestedTopicTitle,
+                subTopicTitle = null
+            )
+        }.getOrDefault(emptyList())
+
+    val subTopics =
+        runCatching {
+            ContentRepo.listSubTopicTitles(
+                belt = belt,
+                topicTitle = requestedTopicTitle
+            )
+        }.getOrDefault(emptyList())
+
+    return if (
+        directItems.isNotEmpty() ||
+        subTopics.isNotEmpty()
+    ) {
+        requestedTopicTitle
+    } else {
+        null
+    }
+}
 
 /**
  * NavHost הראשי של האפליקציה.
@@ -430,7 +530,54 @@ fun MainNavHost(
     }
 
     val userPrefsForEntry = remember(ctx) {
-        ctx.getSharedPreferences("kmi_user", android.content.Context.MODE_PRIVATE)
+        ctx.getSharedPreferences(
+            "kmi_user",
+            android.content.Context.MODE_PRIVATE
+        )
+    }
+
+    /*
+     * אותו SharedPreferences שבו משתמש מסך הנושאים
+     * לצורך בדיקת מצב המנוי.
+     */
+    val voiceSubscriptionPrefs = remember(ctx) {
+        ctx.getSharedPreferences(
+            "kmi_subs",
+            android.content.Context.MODE_PRIVATE
+        )
+    }
+
+    /*
+     * בדיקת הגישה מתבצעת בכל פקודה מחדש, כדי שגם רכישה
+     * או ביטול מנוי בזמן שהאפליקציה פתוחה ייכנסו לתוקף.
+     */
+    fun hasPremiumAccessFromVoice(): Boolean {
+        return KmiAccess.hasFullAccess(
+            userPrefsForEntry
+        ) ||
+                KmiAccess.hasFullAccess(
+                    voiceSubscriptionPrefs
+                )
+    }
+
+    /*
+     * בדיקת הרשאת נושא ספציפי.
+     *
+     * פקודה קולית אינה יכולה לעקוף נושא נעול.
+     */
+    fun canOpenTopicFromVoice(
+        topicTitle: String
+    ): Boolean {
+        val accessMode =
+            AccessModeResolver.resolve(
+                hasManagerAccess =
+                    hasPremiumAccessFromVoice()
+            )
+
+        return LockedContentPolicy.canOpenTopic(
+            accessMode = accessMode,
+            title = topicTitle
+        )
     }
 
     fun isInitialLanguageAlreadySelected(): Boolean {
@@ -486,16 +633,15 @@ fun MainNavHost(
 
         voiceFeedbackScope.launch {
             /*
-             * מאפשרים ל־SpeechRecognizer לשחרר את המיקרופון
-             * ואת מיקוד השמע לפני תחילת ההקראה.
+             * השהיה קצרה בלבד מאפשרת ל־SpeechRecognizer
+             * לשחרר את המיקרופון, בלי לעכב את החיווי הקולי.
+             *
+             * מנוע ההקראה כבר מאותחל ב־LaunchedEffect,
+             * ולכן אין לאתחל אותו מחדש בכל פקודה.
              */
-            delay(450L)
+            delay(120L)
 
             runCatching {
-                KmiTtsManager.init(
-                    ctx.applicationContext
-                )
-
                 KmiTtsManager.stop()
 
                 KmiTtsManager.speak(
@@ -561,12 +707,20 @@ fun MainNavHost(
     }
 
     /*
-     * כל KmiTopBar יכול לבקש לפתוח פקודה קולית,
-     * אך ההאזנה עצמה מנוהלת כאן פעם אחת בלבד.
-     */
+  * כל KmiTopBar יכול להפעיל או לעצור פקודה קולית,
+  * אך ההאזנה עצמה מנוהלת כאן פעם אחת בלבד.
+  *
+  * לחיצה ראשונה:
+  * false הופך ל־true והמאזין נפתח.
+  *
+  * לחיצה שנייה:
+  * true הופך ל־false, ה־VoiceCommandListener יוצא
+  * מה־Composition וה־controller נהרס ב־onDispose.
+  */
     DisposableEffect(nav) {
         VoiceCommandsBridge.bind {
-            showVoiceCommands = true
+            showVoiceCommands =
+                !showVoiceCommands
         }
 
         onDispose {
@@ -660,7 +814,30 @@ fun MainNavHost(
     }
 
     val ownerUid = remember {
-        com.google.firebase.auth.FirebaseAuth.getInstance().currentUser?.uid.orEmpty()
+        com.google.firebase.auth.FirebaseAuth.getInstance()
+            .currentUser
+            ?.uid
+            .orEmpty()
+    }
+
+    /*
+     * הרשאת המנהל נבדקת מול אותו מנגנון שבו משתמש
+     * סרגל הצד. כך פקודה קולית לא יכולה לעקוף
+     * את הרשאות מסכי המנהל.
+     */
+    var isAdmin by remember(ownerUid) {
+        mutableStateOf(false)
+    }
+
+    LaunchedEffect(ownerUid) {
+        isAdmin =
+            if (ownerUid.isBlank()) {
+                false
+            } else {
+                runCatching {
+                    AdminAccess.isCurrentUserAdmin()
+                }.getOrDefault(false)
+            }
     }
 
     val trainingSummaryVm = remember(ownerUid, ownerRole) {
@@ -1361,10 +1538,29 @@ fun MainNavHost(
             composable(route = Route.MonthlyCalendar.route) {
                 il.kmi.app.screens.MonthlyCalendarScreen(
                     kmiPrefs = kmiPrefs,
-                    onBack = { nav.popBackStack() },
+
+                    onBack = {
+                        nav.popBackStack()
+                    },
+
+                    onHome = {
+                        nav.navigate(Route.Home.route) {
+                            popUpTo(
+                                nav.graph.startDestinationId
+                            ) {
+                                inclusive = false
+                            }
+
+                            launchSingleTop = true
+                            restoreState = true
+                        }
+                    },
+
                     onDateClick = { pickedDate ->
                         nav.navigate(
-                            Route.TrainingSummary.make(pickedDate.toString())
+                            Route.TrainingSummary.make(
+                                pickedDate.toString()
+                            )
                         )
                     }
                 )
@@ -1641,7 +1837,7 @@ fun MainNavHost(
                     ) {
                         vm.setSelectedBelt(combinedBelt)
 
-                        val topicRouteValue =
+                        val requestedTopicRouteValue =
                             voiceTopicRouteValue(
                                 topicId = combinedTopicId
                             )
@@ -1652,6 +1848,53 @@ fun MainNavHost(
                                 isEnglish = isEnglish
                             )
 
+                        /*
+                         * אין לבצע ניווט לפני שאימתנו שהנושא
+                         * קיים בפועל בחגורה שנאמרה בפקודה.
+                         */
+                        val topicRouteValue =
+                            resolveExistingVoiceTopicForBelt(
+                                belt = combinedBelt,
+                                requestedTopicTitle =
+                                    requestedTopicRouteValue
+                            )
+
+                        if (topicRouteValue == null) {
+                            speakVoiceCommandFeedback(
+                                hebrewText =
+                                    "לא מצאתי את הנושא $topicDisplayName בחגורה המבוקשת. פותח את רשימת הנושאים בחגורה",
+                                englishText =
+                                    "I could not find $topicDisplayName for the requested belt. Opening the belt topics list"
+                            )
+
+                            VoiceCommandDiagnosticsLogger.logFailure(
+                                context = ctx,
+                                source = "main_navigation",
+                                reason =
+                                    "voice_topic_not_found_for_belt",
+                                spokenText = spokenText,
+                                alternatives = listOf(
+                                    "command=CombinedTopicAndBelt",
+                                    "topicId=$combinedTopicId",
+                                    "requestedTopic=$requestedTopicRouteValue",
+                                    "beltId=${combinedBelt.id}"
+                                ),
+                                screenName =
+                                    nav.currentBackStackEntry
+                                        ?.destination
+                                        ?.route
+                            )
+
+                            vm.setSelectedBelt(combinedBelt)
+
+                            nav.navigate(Route.BeltQ.route) {
+                                launchSingleTop = true
+                                restoreState = false
+                            }
+
+                            return@commandHandler
+                        }
+
                         val beltDisplayName =
                             if (isEnglish) {
                                 combinedBelt.name
@@ -1660,6 +1903,37 @@ fun MainNavHost(
                             } else {
                                 combinedBelt.heb
                             }
+
+                        /*
+                         * חובה לבדוק הרשאת מנוי לפני יצירת הניווט.
+                         * topicRouteValue הוא אותו שם נושא שמועבר למסך
+                         * ולכן מתאים גם ל־LockedContentPolicy.
+                         */
+                        val canOpenRequestedTopic =
+                            canOpenTopicFromVoice(
+                                topicTitle = topicRouteValue
+                            )
+
+                        if (!canOpenRequestedTopic) {
+                            speakVoiceCommandFeedback(
+                                hebrewText =
+                                    "הנושא $topicDisplayName נעול. יש לרכוש מנוי כדי לפתוח אותו",
+                                englishText =
+                                    "$topicDisplayName is locked. A subscription is required to open it"
+                            )
+
+                            VoiceCommandDiagnosticsLogger.logFailure(
+                                context = ctx,
+                                source = "main_navigation",
+                                reason = "voice_topic_blocked_by_subscription",
+                                spokenText = spokenText,
+                                screenName = nav.currentBackStackEntry
+                                    ?.destination
+                                    ?.route
+                            )
+
+                            return@commandHandler
+                        }
 
                         val targetRoute =
                             Route.Materials.makeId(
@@ -1670,7 +1944,7 @@ fun MainNavHost(
 
                         speakVoiceCommandFeedback(
                             hebrewText =
-                                "פותח נושא $topicDisplayName בחגורה $beltDisplayName",
+                                "פותח נושא $topicDisplayName ב$beltDisplayName",
                             englishText =
                                 "Opening $topicDisplayName for the $beltDisplayName belt"
                         )
@@ -1748,7 +2022,7 @@ fun MainNavHost(
 
                         VoiceAppCommand.OpenSettings -> {
                             speakVoiceCommandFeedback(
-                                hebrewText = "פותח את מסך ההגדרות",
+                                hebrewText = "מעביר למסך ההגדרות",
                                 englishText = "Opening settings"
                             )
 
@@ -1757,7 +2031,7 @@ fun MainNavHost(
 
                         VoiceAppCommand.OpenProgress -> {
                             speakVoiceCommandFeedback(
-                                hebrewText = "פותח את מסך ההתקדמות",
+                                hebrewText = "מעביר למסך ההתקדמות",
                                 englishText = "Opening progress"
                             )
 
@@ -1765,9 +2039,48 @@ fun MainNavHost(
                         }
 
                         VoiceAppCommand.OpenTrainings -> {
+                            /*
+                             * לוח האימונים החודשי הוא תוכן פרימיום.
+                             * הפקודה הקולית חייבת לעבור דרך אותה
+                             * בדיקת מנוי כמו הלחיצה על האייקון.
+                             */
+                            if (!hasPremiumAccessFromVoice()) {
+                                speakVoiceCommandFeedback(
+                                    hebrewText =
+                                        "לוח האימונים החודשי זמין למנויים בלבד. יש לרכוש מנוי כדי לפתוח אותו",
+                                    englishText =
+                                        "The monthly training calendar is available to subscribers only. A subscription is required"
+                                )
+
+                                VoiceCommandDiagnosticsLogger.logFailure(
+                                    context = ctx,
+                                    source = "main_navigation",
+                                    reason =
+                                        "voice_monthly_calendar_blocked_by_subscription",
+                                    spokenText = spokenText,
+                                    alternatives = listOf(
+                                        "command=OpenTrainings",
+                                        "target=${Route.MonthlyCalendar.route}"
+                                    ),
+                                    screenName =
+                                        nav.currentBackStackEntry
+                                            ?.destination
+                                            ?.route
+                                )
+
+                                nav.navigate(Route.Subscription.route) {
+                                    launchSingleTop = true
+                                    restoreState = true
+                                }
+
+                                return@commandHandler
+                            }
+
                             speakVoiceCommandFeedback(
-                                hebrewText = "פותח את מסך האימונים",
-                                englishText = "Opening the trainings screen"
+                                hebrewText =
+                                    "מעביר למסך לוח האימונים החודשי",
+                                englishText =
+                                    "Opening the monthly training calendar"
                             )
 
                             VoiceCommandDiagnosticsLogger.logTrace(
@@ -1776,9 +2089,10 @@ fun MainNavHost(
                                 spokenText = spokenText,
                                 resolvedCommand = "OpenTrainings",
                                 target = Route.MonthlyCalendar.route,
-                                screenName = nav.currentBackStackEntry
-                                    ?.destination
-                                    ?.route
+                                screenName =
+                                    nav.currentBackStackEntry
+                                        ?.destination
+                                        ?.route
                             )
 
                             nav.navigate(Route.MonthlyCalendar.route) {
@@ -1851,7 +2165,7 @@ fun MainNavHost(
 
                                 speakVoiceCommandFeedback(
                                     hebrewText =
-                                        "פותח את החגורה $beltDisplayName",
+                                        "פותח את $beltDisplayName",
                                     englishText =
                                         "Opening the $beltDisplayName belt"
                                 )
@@ -1867,6 +2181,19 @@ fun MainNavHost(
                                     screenName = nav.currentBackStackEntry
                                         ?.destination
                                         ?.route
+                                )
+
+                                /*
+                                 * אם מסך החגורות כבר נמצא במחסנית,
+                                 * מסירים את המופע הקיים כדי שלא יישאר
+                                 * עם החגורה שנבחרה לפני הפקודה הקולית.
+                                 *
+                                 * לאחר מכן יוצרים את המסך מחדש והוא
+                                 * קורא את החגורה החדשה מה־ViewModel.
+                                 */
+                                nav.popBackStack(
+                                    route = targetRoute,
+                                    inclusive = true
                                 )
 
                                 nav.navigate(targetRoute) {
@@ -1919,16 +2246,9 @@ fun MainNavHost(
                                  * ב־materialsNavGraph ופותח את MaterialsScreen
                                  * עם החגורה והנושא המבוקשים.
                                  */
-                                val topicRouteValue =
+                                val requestedTopicRouteValue =
                                     voiceTopicRouteValue(
                                         topicId = topicId
-                                    )
-
-                                val targetRoute =
-                                    Route.Materials.makeId(
-                                        beltId = selectedBelt.id,
-                                        topic = topicRouteValue,
-                                        coach = isCoach
                                     )
 
                                 val topicDisplayName =
@@ -1936,6 +2256,54 @@ fun MainNavHost(
                                         topicId = topicId,
                                         isEnglish = isEnglish
                                     )
+
+                                /*
+                                 * מאמתים שהנושא קיים בחגורה לפני
+                                 * בדיקת המנוי ולפני יצירת המסלול.
+                                 */
+                                val topicRouteValue =
+                                    resolveExistingVoiceTopicForBelt(
+                                        belt = selectedBelt,
+                                        requestedTopicTitle =
+                                            requestedTopicRouteValue
+                                    )
+
+                                if (topicRouteValue == null) {
+                                    speakVoiceCommandFeedback(
+                                        hebrewText =
+                                            "לא מצאתי את הנושא $topicDisplayName בחגורה המבוקשת. פותח את רשימת הנושאים בחגורה",
+                                        englishText =
+                                            "I could not find $topicDisplayName for the requested belt. Opening the belt topics list"
+                                    )
+
+                                    VoiceCommandDiagnosticsLogger.logFailure(
+                                        context = ctx,
+                                        source = "main_navigation",
+                                        reason =
+                                            "voice_topic_not_found_for_belt",
+                                        spokenText = spokenText,
+                                        alternatives = listOf(
+                                            "command=OpenTopic",
+                                            "topicQuery=$topicQuery",
+                                            "topicId=$topicId",
+                                            "requestedTopic=$requestedTopicRouteValue",
+                                            "beltId=${selectedBelt.id}"
+                                        ),
+                                        screenName =
+                                            nav.currentBackStackEntry
+                                                ?.destination
+                                                ?.route
+                                    )
+
+                                    vm.setSelectedBelt(selectedBelt)
+
+                                    nav.navigate(Route.BeltQ.route) {
+                                        launchSingleTop = true
+                                        restoreState = false
+                                    }
+
+                                    return@commandHandler
+                                }
 
                                 val beltDisplayName =
                                     if (isEnglish) {
@@ -1946,33 +2314,58 @@ fun MainNavHost(
                                         selectedBelt.heb
                                     }
 
-                                speakVoiceCommandFeedback(
-                                    hebrewText =
-                                        "פותח נושא $topicDisplayName בחגורה $beltDisplayName",
-                                    englishText =
-                                        "Opening $topicDisplayName for the $beltDisplayName belt"
-                                )
+                                val canOpenRequestedTopic =
+                                    canOpenTopicFromVoice(
+                                        topicTitle = topicRouteValue
+                                    )
 
-                                VoiceCommandDiagnosticsLogger.logTrace(
-                                    context = ctx,
-                                    stage = "navigation_requested",
-                                    spokenText = spokenText,
-                                    resolvedCommand = "OpenTopic",
-                                    target = targetRoute,
-                                    screenName = nav.currentBackStackEntry
-                                        ?.destination
-                                        ?.route
-                                )
+                                if (!canOpenRequestedTopic) {
+                                    /*
+                                     * אין לבצע nav.navigate כאשר הנושא נעול.
+                                     * הפידבק מוצג ונאמר בקול באמצעות אותה פונקציה.
+                                     */
+                                    speakVoiceCommandFeedback(
+                                        hebrewText =
+                                            "הנושא $topicDisplayName נעול. יש לרכוש מנוי כדי לפתוח אותו",
+                                        englishText =
+                                            "$topicDisplayName is locked. A subscription is required to open it"
+                                    )
 
-                                runCatching {
-                                    nav.navigate(targetRoute) {
-                                        launchSingleTop = true
-                                        restoreState = false
-                                    }
-                                }.onSuccess {
+                                    VoiceCommandDiagnosticsLogger.logFailure(
+                                        context = ctx,
+                                        source = "main_navigation",
+                                        reason =
+                                            "voice_topic_blocked_by_subscription",
+                                        spokenText = spokenText,
+                                        alternatives = listOf(
+                                            "command=OpenTopic",
+                                            "topicQuery=$topicQuery",
+                                            "topicId=$topicId",
+                                            "beltId=${selectedBelt.id}",
+                                            "topicTitle=$topicRouteValue"
+                                        ),
+                                        screenName = nav.currentBackStackEntry
+                                            ?.destination
+                                            ?.route
+                                    )
+                                } else {
+                                    val targetRoute =
+                                        Route.Materials.makeId(
+                                            beltId = selectedBelt.id,
+                                            topic = topicRouteValue,
+                                            coach = isCoach
+                                        )
+
+                                    speakVoiceCommandFeedback(
+                                        hebrewText =
+                                            "פותח נושא $topicDisplayName ב$beltDisplayName",
+                                        englishText =
+                                            "Opening $topicDisplayName for the $beltDisplayName belt"
+                                    )
+
                                     VoiceCommandDiagnosticsLogger.logTrace(
                                         context = ctx,
-                                        stage = "topic_navigation_succeeded",
+                                        stage = "navigation_requested",
                                         spokenText = spokenText,
                                         resolvedCommand = "OpenTopic",
                                         target = targetRoute,
@@ -1980,34 +2373,52 @@ fun MainNavHost(
                                             ?.destination
                                             ?.route
                                     )
-                                }.onFailure { throwable ->
-                                    VoiceCommandDiagnosticsLogger.logFailure(
-                                        context = ctx,
-                                        source = "main_navigation",
-                                        reason = "topic_navigation_failed",
-                                        spokenText = spokenText,
-                                        alternatives = listOf(
-                                            "command=OpenTopic",
-                                            "topicQuery=$topicQuery",
-                                            "topicId=$topicId",
-                                            "beltId=${selectedBelt.id}",
-                                            "target=$targetRoute",
-                                            "error=${throwable.message.orEmpty()}"
-                                        ),
-                                        screenName = nav.currentBackStackEntry
-                                            ?.destination
-                                            ?.route
-                                    )
 
-                                    Toast.makeText(
-                                        ctx,
-                                        if (isEnglish) {
-                                            "Unable to open the requested topic"
-                                        } else {
-                                            "לא ניתן לפתוח את הנושא המבוקש"
-                                        },
-                                        Toast.LENGTH_SHORT
-                                    ).show()
+                                    runCatching {
+                                        nav.navigate(targetRoute) {
+                                            launchSingleTop = true
+                                            restoreState = false
+                                        }
+                                    }.onSuccess {
+                                        VoiceCommandDiagnosticsLogger.logTrace(
+                                            context = ctx,
+                                            stage = "topic_navigation_succeeded",
+                                            spokenText = spokenText,
+                                            resolvedCommand = "OpenTopic",
+                                            target = targetRoute,
+                                            screenName = nav.currentBackStackEntry
+                                                ?.destination
+                                                ?.route
+                                        )
+                                    }.onFailure { throwable ->
+                                        VoiceCommandDiagnosticsLogger.logFailure(
+                                            context = ctx,
+                                            source = "main_navigation",
+                                            reason = "topic_navigation_failed",
+                                            spokenText = spokenText,
+                                            alternatives = listOf(
+                                                "command=OpenTopic",
+                                                "topicQuery=$topicQuery",
+                                                "topicId=$topicId",
+                                                "beltId=${selectedBelt.id}",
+                                                "target=$targetRoute",
+                                                "error=${throwable.message.orEmpty()}"
+                                            ),
+                                            screenName = nav.currentBackStackEntry
+                                                ?.destination
+                                                ?.route
+                                        )
+
+                                        Toast.makeText(
+                                            ctx,
+                                            if (isEnglish) {
+                                                "Unable to open the requested topic"
+                                            } else {
+                                                "לא ניתן לפתוח את הנושא המבוקש"
+                                            },
+                                            Toast.LENGTH_SHORT
+                                        ).show()
+                                    }
                                 }
                             } else {
                                 VoiceCommandDiagnosticsLogger.logFailure(
@@ -2031,6 +2442,18 @@ fun MainNavHost(
                                         "I could not identify the requested topic"
                                 )
 
+                                /*
+ * גם כאשר שם הנושא כלל לא זוהה,
+ * מציגים למשתמש את הנושאים הקיימים
+ * בחגורה במקום להשאיר אותו במסך הנוכחי.
+ */
+                                vm.setSelectedBelt(selectedBelt)
+
+                                nav.navigate(Route.BeltQ.route) {
+                                    launchSingleTop = true
+                                    restoreState = false
+                                }
+
                                 Toast.makeText(
                                     ctx,
                                     if (isEnglish) {
@@ -2044,8 +2467,11 @@ fun MainNavHost(
                         }
 
                         is VoiceAppCommand.OpenDrawerItem -> {
+                            val destination =
+                                command.destination
+
                             val destinationName =
-                                command.destination.name
+                                destination.name
 
                             VoiceCommandDiagnosticsLogger.logTrace(
                                 context = ctx,
@@ -2053,50 +2479,467 @@ fun MainNavHost(
                                 spokenText = spokenText,
                                 resolvedCommand = "OpenDrawerItem",
                                 target = destinationName,
-                                screenName = nav.currentBackStackEntry
-                                    ?.destination
-                                    ?.route
+                                screenName =
+                                    nav.currentBackStackEntry
+                                        ?.destination
+                                        ?.route
                             )
+
+                            /*
+                             * מסכי נוכחות ודוח תשלומים מיועדים למאמן.
+                             * מתאמן יקבל הודעה קולית ולא יישלח למסך
+                             * שאין לו הרשאה לפתוח.
+                             */
+                            val isProtectedCoachDestination =
+                                destination ==
+                                        VoiceDrawerDestination.COACH_ATTENDANCE ||
+                                        destination ==
+                                        VoiceDrawerDestination.COACH_BROADCAST ||
+                                        destination ==
+                                        VoiceDrawerDestination.COACH_TRAINEES ||
+                                        destination ==
+                                        VoiceDrawerDestination.COACH_PAYMENTS_REPORT ||
+                                        destination ==
+                                        VoiceDrawerDestination.COACH_INTERNAL_EXAM
+
+                            if (
+                                isProtectedCoachDestination &&
+                                !isCoach
+                            ) {
+                                speakVoiceCommandFeedback(
+                                    hebrewText =
+                                        "המסך המבוקש זמין למאמנים מורשים בלבד",
+                                    englishText =
+                                        "The requested screen is available to authorized coaches only"
+                                )
+
+                                VoiceCommandDiagnosticsLogger.logFailure(
+                                    context = ctx,
+                                    source = "main_navigation",
+                                    reason =
+                                        "coach_destination_blocked_for_trainee",
+                                    spokenText = spokenText,
+                                    alternatives = listOf(
+                                        "destination=$destinationName",
+                                        "isCoach=false"
+                                    ),
+                                    screenName =
+                                        nav.currentBackStackEntry
+                                            ?.destination
+                                            ?.route
+                                )
+
+                                return@commandHandler
+                            }
 
                             val performed =
                                 DrawerVoiceActionsBridge.perform(
-                                    command.destination
+                                    destination
                                 )
 
                             if (performed) {
+                                /*
+                                 * החיווי נאמר לאחר שהפעולה התקבלה.
+                                 * ה־Scope של ההקראה נשאר פעיל גם
+                                 * לאחר המעבר למסך החדש.
+                                 */
+                                /*
+      * לכל יעד בסרגל הצד מוגדר חיווי אחיד.
+      * לאחר שהפעולה התקבלה מוצגת הודעה
+      * ונאמר בקול איזה מסך נפתח.
+      */
+                                val destinationFeedback =
+                                    when (destination) {
+                                        VoiceDrawerDestination.MY_PROFILE ->
+                                            "פותח את מסך הפרופיל שלי" to
+                                                    "Opening My Profile"
+
+                                        VoiceDrawerDestination.COACH_ATTENDANCE ->
+                                            "פותח את מסך עדכון הנוכחות" to
+                                                    "Opening the attendance update screen"
+
+                                        VoiceDrawerDestination.COACH_BROADCAST ->
+                                            "פותח את מסך שליחת ההודעה" to
+                                                    "Opening the message broadcast screen"
+
+                                        VoiceDrawerDestination.COACH_TRAINEES ->
+                                            "פותח את מסך רשימת המתאמנים" to
+                                                    "Opening the trainees list"
+
+                                        VoiceDrawerDestination.COACH_PAYMENTS_REPORT ->
+                                            "פותח את מסך דוח התשלומים" to
+                                                    "Opening the payments report"
+
+                                        VoiceDrawerDestination.COACH_INTERNAL_EXAM ->
+                                            "פותח את מסך המבחן הפנימי לחגורה" to
+                                                    "Opening the internal belt exam"
+
+                                        VoiceDrawerDestination.ADMIN_USERS ->
+                                            "פותח את מסך ניהול המשתמשים" to
+                                                    "Opening user management"
+
+                                        VoiceDrawerDestination.ADMIN_DIAGNOSTICS ->
+                                            "פותח את מרכז הבקרה והלוגים" to
+                                                    "Opening the control center and logs"
+
+                                        VoiceDrawerDestination.ABOUT_AVI ->
+                                            "פותח את מסך אודות אבי אביסידון, ראש השיטה" to
+                                                    "Opening the About Avi Avisidon screen"
+
+                                        VoiceDrawerDestination.NETWORK_COACHES ->
+                                            "פותח את מסך המאמנים ברשת" to
+                                                    "Opening the network coaches screen"
+
+                                        VoiceDrawerDestination.ABOUT_METHOD ->
+                                            "פותח את מסך אודות השיטה" to
+                                                    "Opening the About the Method screen"
+
+                                        VoiceDrawerDestination.EXERCISES_DEMO ->
+                                            "פותח את תרגילי ההדגמה" to
+                                                    "Opening the exercise demonstrations"
+
+                                        VoiceDrawerDestination.FORMS_AND_PAYMENTS ->
+                                            "פותח את מסך הטפסים והתשלומים" to
+                                                    "Opening forms and payments"
+
+                                        VoiceDrawerDestination.CONTACT_US ->
+                                            "פותח את מסך צור קשר" to
+                                                    "Opening Contact Us"
+
+                                        VoiceDrawerDestination.BRANCH_FORUM ->
+                                            "פותח את פורום הסניף" to
+                                                    "Opening the branch forum"
+
+                                        VoiceDrawerDestination.LANGUAGE_HEBREW ->
+                                            "שפת האפליקציה הוחלפה לעברית" to
+                                                    "The application language was changed to Hebrew"
+
+                                        VoiceDrawerDestination.LANGUAGE_ENGLISH ->
+                                            "שפת האפליקציה הוחלפה לאנגלית" to
+                                                    "The application language was changed to English"
+
+                                        VoiceDrawerDestination.LANGUAGE -> {
+                                            if (isEnglish) {
+                                                "שפת האפליקציה הוחלפה לעברית" to
+                                                        "The application language was changed to Hebrew"
+                                            } else {
+                                                "שפת האפליקציה הוחלפה לאנגלית" to
+                                                        "The application language was changed to English"
+                                            }
+                                        }
+
+                                        VoiceDrawerDestination.MANAGE_SUBSCRIPTION ->
+                                            "פותח את מסך ניהול המנוי" to
+                                                    "Opening subscription management"
+
+                                        VoiceDrawerDestination.RATE_US ->
+                                            "פותח את מסך דירוג האפליקציה" to
+                                                    "Opening the application rating screen"
+
+                                        VoiceDrawerDestination.LOGOUT ->
+                                            "פותח את אישור ההתנתקות" to
+                                                    "Opening the logout confirmation"
+                                    }
+
+                                speakVoiceCommandFeedback(
+                                    hebrewText =
+                                        destinationFeedback.first,
+                                    englishText =
+                                        destinationFeedback.second
+                                )
+
                                 VoiceCommandDiagnosticsLogger.logTrace(
                                     context = ctx,
                                     stage = "drawer_action_dispatched",
                                     spokenText = spokenText,
                                     resolvedCommand = "OpenDrawerItem",
                                     target = destinationName,
-                                    screenName = nav.currentBackStackEntry
-                                        ?.destination
-                                        ?.route
+                                    screenName =
+                                        nav.currentBackStackEntry
+                                            ?.destination
+                                            ?.route
                                 )
                             } else {
                                 VoiceCommandDiagnosticsLogger.logFailure(
                                     context = ctx,
                                     source = "main_navigation",
-                                    reason = "drawer_action_not_connected",
+                                    reason =
+                                        "drawer_action_not_connected",
                                     spokenText = spokenText,
                                     alternatives = listOf(
                                         "destination=$destinationName"
                                     ),
-                                    screenName = nav.currentBackStackEntry
-                                        ?.destination
-                                        ?.route
+                                    screenName =
+                                        nav.currentBackStackEntry
+                                            ?.destination
+                                            ?.route
                                 )
 
-                                Toast.makeText(
-                                    ctx,
-                                    if (isEnglish) {
+                                /*
+                                 * גם כישלון הפעולה מקבל חיווי חזותי וקולי,
+                                 * במקום Toast בלבד.
+                                 */
+                                speakVoiceCommandFeedback(
+                                    hebrewText =
+                                        "הפעולה הקולית עדיין אינה זמינה",
+                                    englishText =
                                         "This voice action is not available yet"
-                                    } else {
-                                        "הפעולה הקולית עדיין אינה זמינה"
-                                    },
-                                    Toast.LENGTH_SHORT
-                                ).show()
+                                )
+                            }
+                        }
+
+                        VoiceAppCommand.OpenWeakPoints -> {
+                            if (!hasPremiumAccessFromVoice()) {
+                                speakVoiceCommandFeedback(
+                                    hebrewText =
+                                        "מסך נקודות תורפה זמין למנויים בלבד. יש לרכוש מנוי כדי לפתוח אותו",
+                                    englishText =
+                                        "The Weak Points screen is available to subscribers only. A subscription is required"
+                                )
+
+                                VoiceCommandDiagnosticsLogger.logFailure(
+                                    context = ctx,
+                                    source = "main_navigation",
+                                    reason =
+                                        "voice_quick_menu_blocked_by_subscription",
+                                    spokenText = spokenText,
+                                    alternatives = listOf(
+                                        "command=OpenWeakPoints"
+                                    ),
+                                    screenName =
+                                        nav.currentBackStackEntry
+                                            ?.destination
+                                            ?.route
+                                )
+
+                                nav.navigate(Route.Subscription.route) {
+                                    launchSingleTop = true
+                                    restoreState = true
+                                }
+
+                                return@commandHandler
+                            }
+
+                            val selectedBelt =
+                                vm.selectedBelt.value
+                                    ?: Belt.GREEN
+
+                            vm.setSelectedBelt(selectedBelt)
+
+                            speakVoiceCommandFeedback(
+                                hebrewText =
+                                    "פותח את מסך נקודות התורפה",
+                                englishText =
+                                    "Opening the Weak Points screen"
+                            )
+
+                            nav.navigate(Route.WeakPoints.route) {
+                                launchSingleTop = true
+                                restoreState = true
+                            }
+                        }
+
+                        VoiceAppCommand.OpenAllLists -> {
+                            if (!hasPremiumAccessFromVoice()) {
+                                speakVoiceCommandFeedback(
+                                    hebrewText =
+                                        "מסך כל הרשימות זמין למנויים בלבד. יש לרכוש מנוי כדי לפתוח אותו",
+                                    englishText =
+                                        "The All Lists screen is available to subscribers only. A subscription is required"
+                                )
+
+                                VoiceCommandDiagnosticsLogger.logFailure(
+                                    context = ctx,
+                                    source = "main_navigation",
+                                    reason =
+                                        "voice_quick_menu_blocked_by_subscription",
+                                    spokenText = spokenText,
+                                    alternatives = listOf(
+                                        "command=OpenAllLists"
+                                    ),
+                                    screenName =
+                                        nav.currentBackStackEntry
+                                            ?.destination
+                                            ?.route
+                                )
+
+                                nav.navigate(Route.Subscription.route) {
+                                    launchSingleTop = true
+                                    restoreState = true
+                                }
+
+                                return@commandHandler
+                            }
+
+                            val selectedBelt =
+                                vm.selectedBelt.value
+                                    ?: Belt.GREEN
+
+                            vm.setSelectedBelt(selectedBelt)
+
+                            speakVoiceCommandFeedback(
+                                hebrewText =
+                                    "פותח את מסך כל הרשימות",
+                                englishText =
+                                    "Opening the All Lists screen"
+                            )
+
+                            nav.navigate(
+                                "ex_tabs_all/${selectedBelt.id}"
+                            ) {
+                                launchSingleTop = true
+                                restoreState = true
+                            }
+                        }
+
+                        VoiceAppCommand.OpenPractice -> {
+                            if (!hasPremiumAccessFromVoice()) {
+                                speakVoiceCommandFeedback(
+                                    hebrewText =
+                                        "מסך התרגול זמין למנויים בלבד. יש לרכוש מנוי כדי לפתוח אותו",
+                                    englishText =
+                                        "The Practice screen is available to subscribers only. A subscription is required"
+                                )
+
+                                VoiceCommandDiagnosticsLogger.logFailure(
+                                    context = ctx,
+                                    source = "main_navigation",
+                                    reason =
+                                        "voice_quick_menu_blocked_by_subscription",
+                                    spokenText = spokenText,
+                                    alternatives = listOf(
+                                        "command=OpenPractice"
+                                    ),
+                                    screenName =
+                                        nav.currentBackStackEntry
+                                            ?.destination
+                                            ?.route
+                                )
+
+                                nav.navigate(Route.Subscription.route) {
+                                    launchSingleTop = true
+                                    restoreState = true
+                                }
+
+                                return@commandHandler
+                            }
+
+                            val selectedBelt =
+                                vm.selectedBelt.value
+                                    ?: Belt.GREEN
+
+                            vm.setSelectedBelt(selectedBelt)
+
+                            speakVoiceCommandFeedback(
+                                hebrewText =
+                                    "פותח את מסך התרגול",
+                                englishText =
+                                    "Opening the Practice screen"
+                            )
+
+                            nav.navigate(
+                                Route.Practice.make(selectedBelt)
+                            ) {
+                                launchSingleTop = true
+                                restoreState = true
+                            }
+                        }
+
+                        VoiceAppCommand.OpenTrainingSummary -> {
+                            if (!hasPremiumAccessFromVoice()) {
+                                speakVoiceCommandFeedback(
+                                    hebrewText =
+                                        "מסך הסיכום זמין למנויים בלבד. יש לרכוש מנוי כדי לפתוח אותו",
+                                    englishText =
+                                        "The Summary screen is available to subscribers only. A subscription is required"
+                                )
+
+                                VoiceCommandDiagnosticsLogger.logFailure(
+                                    context = ctx,
+                                    source = "main_navigation",
+                                    reason =
+                                        "voice_quick_menu_blocked_by_subscription",
+                                    spokenText = spokenText,
+                                    alternatives = listOf(
+                                        "command=OpenTrainingSummary"
+                                    ),
+                                    screenName =
+                                        nav.currentBackStackEntry
+                                            ?.destination
+                                            ?.route
+                                )
+
+                                nav.navigate(Route.Subscription.route) {
+                                    launchSingleTop = true
+                                    restoreState = true
+                                }
+
+                                return@commandHandler
+                            }
+
+                            val selectedBelt =
+                                vm.selectedBelt.value
+                                    ?: Belt.GREEN
+
+                            vm.setSelectedBelt(selectedBelt)
+
+                            speakVoiceCommandFeedback(
+                                hebrewText =
+                                    "פותח את מסך הסיכום",
+                                englishText =
+                                    "Opening the Summary screen"
+                            )
+
+                            nav.navigate(
+                                Route.Summary.make(selectedBelt)
+                            ) {
+                                launchSingleTop = true
+                                restoreState = true
+                            }
+                        }
+
+                        VoiceAppCommand.OpenVoiceAssistant -> {
+                            if (!hasPremiumAccessFromVoice()) {
+                                speakVoiceCommandFeedback(
+                                    hebrewText =
+                                        "העוזר הקולי זמין למנויים בלבד. יש לרכוש מנוי כדי לפתוח אותו",
+                                    englishText =
+                                        "The Voice Assistant is available to subscribers only. A subscription is required"
+                                )
+
+                                VoiceCommandDiagnosticsLogger.logFailure(
+                                    context = ctx,
+                                    source = "main_navigation",
+                                    reason =
+                                        "voice_quick_menu_blocked_by_subscription",
+                                    spokenText = spokenText,
+                                    alternatives = listOf(
+                                        "command=OpenVoiceAssistant"
+                                    ),
+                                    screenName =
+                                        nav.currentBackStackEntry
+                                            ?.destination
+                                            ?.route
+                                )
+
+                                nav.navigate(Route.Subscription.route) {
+                                    launchSingleTop = true
+                                    restoreState = true
+                                }
+
+                                return@commandHandler
+                            }
+
+                            speakVoiceCommandFeedback(
+                                hebrewText =
+                                    "פותח את העוזר הקולי",
+                                englishText =
+                                    "Opening the Voice Assistant"
+                            )
+
+                            nav.navigate(Route.VoiceAssistant.route) {
+                                launchSingleTop = true
+                                restoreState = true
                             }
                         }
 

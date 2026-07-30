@@ -13,6 +13,9 @@ enum class VoiceDrawerDestination {
     COACH_PAYMENTS_REPORT,
     COACH_INTERNAL_EXAM,
 
+    ADMIN_USERS,
+    ADMIN_DIAGNOSTICS,
+
     ABOUT_AVI,
     NETWORK_COACHES,
     ABOUT_METHOD,
@@ -20,7 +23,11 @@ enum class VoiceDrawerDestination {
     FORMS_AND_PAYMENTS,
     CONTACT_US,
     BRANCH_FORUM,
+
     LANGUAGE,
+    LANGUAGE_HEBREW,
+    LANGUAGE_ENGLISH,
+
     MANAGE_SUBSCRIPTION,
     RATE_US,
     LOGOUT
@@ -45,6 +52,22 @@ sealed interface VoiceAppCommand {
     data object OpenTopics : VoiceAppCommand
 
     data object OpenBelts : VoiceAppCommand
+
+    /*
+     * יעדי התפריט המהיר במסכי התרגילים.
+     *
+     * בדיקת המנוי תתבצע בשכבת הניווט,
+     * כדי שפקודה קולית לא תוכל לעקוף מסך נעול.
+     */
+    data object OpenWeakPoints : VoiceAppCommand
+
+    data object OpenAllLists : VoiceAppCommand
+
+    data object OpenPractice : VoiceAppCommand
+
+    data object OpenTrainingSummary : VoiceAppCommand
+
+    data object OpenVoiceAssistant : VoiceAppCommand
 
     data class OpenBelt(
         val beltQuery: String
@@ -87,6 +110,17 @@ object VoiceAppCommandParser {
 
         if (normalized.isBlank()) {
             return VoiceAppCommand.Unknown(original)
+        }
+
+        /*
+         * יעדי התפריט המהיר נבדקים לפני החיפוש הכללי,
+         * פתיחת נושא או פתיחת חגורה.
+         *
+         * כך למשל "פתח מסך סיכום" לא יטופל בטעות
+         * כחיפוש חופשי לפי המילים "מסך סיכום".
+         */
+        resolveQuickMenuCommand(normalized)?.let { command ->
+            return command
         }
 
         resolveDrawerDestination(normalized)?.let { destination ->
@@ -182,21 +216,117 @@ object VoiceAppCommandParser {
         }
     }
 
+    /**
+     * מזהה פקודות לפתיחת המסכים שמופיעים
+     * בתפריט המהיר של מסכי התרגילים.
+     */
+    private fun resolveQuickMenuCommand(
+        text: String
+    ): VoiceAppCommand? {
+        return when {
+            containsAny(
+                text,
+                "נקודות תורפה",
+                "נקודת תורפה",
+                "החולשות שלי",
+                "התרגילים החלשים שלי",
+                "פתח נקודות תורפה",
+                "פתח את נקודות התורפה",
+                "עבור לנקודות תורפה",
+                "תראה לי נקודות תורפה",
+                "weak points",
+                "my weak points",
+                "open weak points",
+                "weak exercises"
+            ) ->
+                VoiceAppCommand.OpenWeakPoints
+
+            containsAny(
+                text,
+                "כל הרשימות",
+                "הרשימות שלי",
+                "מסך הרשימות",
+                "פתח את כל הרשימות",
+                "פתח כל הרשימות",
+                "פתח רשימות",
+                "תראה לי את כל הרשימות",
+                "עבור לכל הרשימות",
+                "all lists",
+                "my lists",
+                "open all lists",
+                "lists screen"
+            ) ->
+                VoiceAppCommand.OpenAllLists
+
+            containsAny(
+                text,
+                "מסך תרגול",
+                "מצב תרגול",
+                "פתח תרגול",
+                "פתח את התרגול",
+                "עבור לתרגול",
+                "התחל תרגול",
+                "בוא נתרגל",
+                "תרגול תרגילים",
+                "practice screen",
+                "practice mode",
+                "open practice",
+                "start practice"
+            ) ->
+                VoiceAppCommand.OpenPractice
+
+            containsAny(
+                text,
+                "מסך סיכום",
+                "סיכום תרגילים",
+                "סיכום האימון",
+                "סיכום אימון",
+                "פתח מסך סיכום",
+                "פתח את מסך הסיכום",
+                "פתח סיכום",
+                "עבור לסיכום",
+                "תראה לי סיכום",
+                "training summary",
+                "summary screen",
+                "exercise summary",
+                "open summary"
+            ) ->
+                VoiceAppCommand.OpenTrainingSummary
+
+            containsAny(
+                text,
+                "עוזר קולי",
+                "העוזר הקולי",
+                "עוזר אישי",
+                "העוזר האישי",
+                "פתח עוזר קולי",
+                "פתח את העוזר הקולי",
+                "פתח עוזר אישי",
+                "פתח את העוזר האישי",
+                "דבר עם העוזר",
+                "voice assistant",
+                "personal assistant",
+                "open voice assistant",
+                "open assistant"
+            ) ->
+                VoiceAppCommand.OpenVoiceAssistant
+
+            else -> null
+        }
+    }
+
     private fun resolveDrawerDestination(
         text: String
     ): VoiceDrawerDestination? {
         return when {
+            /*
+             * כל משפט שמכיל את המילה "נוכחות"
+             * מפנה למסך עדכון נוכחות.
+             */
             containsAny(
                 text,
-                "עדכון נוכחות",
-                "דוח נוכחות",
-                "דו״ח נוכחות",
-                "רישום נוכחות",
-                "פתח נוכחות",
-                "פתח עדכון נוכחות",
-                "mark attendance",
-                "attendance report",
-                "open attendance"
+                "נוכחות",
+                "attendance"
             ) ->
                 VoiceDrawerDestination.COACH_ATTENDANCE
 
@@ -227,17 +357,32 @@ object VoiceAppCommandParser {
             ) ->
                 VoiceDrawerDestination.COACH_TRAINEES
 
-            containsAny(
-                text,
-                "דוח תשלומים",
-                "דו״ח תשלומים",
-                "דוח התשלומים",
-                "פתח דוח תשלומים",
-                "תשלומי מתאמנים",
-                "payments report",
-                "open payments report",
-                "trainee payments"
-            ) ->
+            /*
+ * כל משפט שמכיל "תשלומים" מפנה לדוח התשלומים,
+ * למעט "טפסים ותשלומים" שמטופל כיעד נפרד.
+ */
+            (
+                    (
+                            text.contains("תשלומים") &&
+                                    !text.contains("טפסים") &&
+                                    !text.contains("מסמכים")
+                            ) ||
+                            (
+                                    text.contains("payments") &&
+                                            !text.contains("forms") &&
+                                            !text.contains("documents") &&
+                                            !text.contains("payment forms")
+                                    ) ||
+                            containsAny(
+                                text,
+                                "דוח תשלום",
+                                "דו״ח תשלום",
+                                "דוח התשלום",
+                                "תשלומי מתאמנים",
+                                "payment report",
+                                "trainee payment"
+                            )
+                    ) ->
                 VoiceDrawerDestination.COACH_PAYMENTS_REPORT
 
             containsAny(
@@ -252,6 +397,62 @@ object VoiceAppCommandParser {
             ) ->
                 VoiceDrawerDestination.COACH_INTERNAL_EXAM
 
+            /*
+             * כל משפט שמבקש ניהול או צפייה במשתמשים
+             * מפנה למסך ניהול המשתמשים.
+             */
+            (
+                    (
+                            text.contains("משתמש") &&
+                                    containsAny(
+                                        text,
+                                        "ניהול",
+                                        "נהל",
+                                        "רשימת",
+                                        "כל ה",
+                                        "מסך",
+                                        "פתח",
+                                        "תפתח",
+                                        "תציג",
+                                        "הצג"
+                                    )
+                            ) ||
+                            containsAny(
+                                text,
+                                "ניהול משתמשים",
+                                "משתמשי האפליקציה",
+                                "manage users",
+                                "user management",
+                                "users list",
+                                "all users",
+                                "users screen",
+                                "open users"
+                            )
+                    ) ->
+                VoiceDrawerDestination.ADMIN_USERS
+
+            /*
+             * מילות המפתח "בקרה", "לוגים" או "אבחון"
+             * מספיקות לזיהוי מסך מרכז הבקרה.
+             */
+            containsAny(
+                text,
+                "מרכז בקרה",
+                "בקרה",
+                "לוגים",
+                "לוג",
+                "אבחון האפליקציה",
+                "נתוני אבחון",
+                "מסך אבחון",
+                "control center",
+                "application logs",
+                "app logs",
+                "logs screen",
+                "app diagnostics",
+                "diagnostics"
+            ) ->
+                VoiceDrawerDestination.ADMIN_DIAGNOSTICS
+
             containsAny(
                 text,
                 "הפרופיל שלי",
@@ -264,14 +465,39 @@ object VoiceAppCommandParser {
             ) ->
                 VoiceDrawerDestination.MY_PROFILE
 
-            containsAny(
-                text,
-                "אודות אבי אביסידון",
-                "אבי אביסידון",
-                "מי זה אבי אביסידון",
-                "about avi avisidon",
-                "avi avisidon"
-            ) ->
+            /*
+             * מנוע זיהוי הדיבור עשוי לתמלל את שם המשפחה
+             * כ"אביסידון" או "אביסדון". לכן מספיק לזהות
+             * את השם אבי בצירוף אחת מצורות שם המשפחה.
+             */
+            /*
+  * מסך אבי אביסידון מזוהה גם לפי שמו
+  * וגם לפי תפקידו כראש השיטה.
+  */
+            (
+                    text.contains("אבי") &&
+                            containsAny(
+                                text,
+                                "אביסידון",
+                                "אביסדון",
+                                "אביסידאן"
+                            )
+                    ) ||
+                    containsAny(
+                        text,
+                        "אודות אבי",
+                        "מי זה אבי",
+                        "ראש השיטה",
+                        "מי ראש השיטה",
+                        "אודות ראש השיטה",
+                        "פתח את ראש השיטה",
+                        "about avi avisidon",
+                        "about avi avisdon",
+                        "avi avisidon",
+                        "avi avisdon",
+                        "head of the method",
+                        "method founder"
+                    ) ->
                 VoiceDrawerDestination.ABOUT_AVI
 
             containsAny(
@@ -347,17 +573,57 @@ object VoiceAppCommandParser {
             ) ->
                 VoiceDrawerDestination.BRANCH_FORUM
 
+            /*
+             * כאשר נאמר שם השפה במפורש, עוברים ישירות
+             * אליה בלי קשר לניסוח המלא של המשפט.
+             */
+            containsAny(
+                text,
+                "עברית",
+                "לעברית",
+                "תחזיר לעברית",
+                "חזור לעברית",
+                "החזר לעברית",
+                "תעביר לעברית",
+                "ממשק עברי",
+                "hebrew",
+                "switch to hebrew",
+                "change to hebrew",
+                "back to hebrew",
+                "hebrew language"
+            ) ->
+                VoiceDrawerDestination.LANGUAGE_HEBREW
+
+            containsAny(
+                text,
+                "אנגלית",
+                "לאנגלית",
+                "תעביר לאנגלית",
+                "החלף לאנגלית",
+                "ממשק אנגלי",
+                "english",
+                "switch to english",
+                "change to english",
+                "back to english",
+                "english language"
+            ) ->
+                VoiceDrawerDestination.LANGUAGE_ENGLISH
+
+            /*
+             * אם המשתמש ביקש רק להחליף שפה בלי לציין
+             * איזו שפה, עוברים לשפה ההפוכה.
+             */
             containsAny(
                 text,
                 "החלף שפה",
+                "החלפת שפה",
                 "שנה שפה",
                 "שינוי שפה",
-                "עברית",
-                "אנגלית",
+                "תעביר שפה",
+                "תעבור שפה",
                 "change language",
                 "switch language",
-                "hebrew language",
-                "english language"
+                "language settings"
             ) ->
                 VoiceDrawerDestination.LANGUAGE
 

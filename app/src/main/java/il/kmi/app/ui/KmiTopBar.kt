@@ -258,35 +258,73 @@ fun KmiTopBar(
     val currentLangResolved = languageManager.getCurrentLanguage().code
     val isEnglish = currentLangResolved == "en"
 
-    // ✅ תמונת חגורה אוטומטית לפי הכותרת.
-    // כך היא תופיע גם במסך נושאים וגם במסך סיכום,
-    // גם אם המסך לא העביר topBeltIconRes ידנית.
-    val resolvedTopBeltIconRes = remember(title, topBeltIconRes) {
-        topBeltIconRes ?: when {
-            title.contains("לבנה") || title.contains("White", ignoreCase = true) ->
-                R.drawable.intro_belt_white
+    /*
+     * תמונת חגורה אוטומטית לפי כותרת המסך.
+     *
+     * משתמשים רק במשאבי belt_* בעלי רקע שקוף.
+     * אין להשתמש במשאבי intro_belt_* משום שהרקע
+     * הלבן מוטמע בתוך קובצי התמונה שלהם.
+     */
+    val resolvedTopBeltIconRes =
+        remember(
+            title,
+            topBeltIconRes
+        ) {
+            topBeltIconRes
+                ?: when {
+                    title.contains("לבנה") ||
+                            title.contains(
+                                "White",
+                                ignoreCase = true
+                            ) ->
+                        R.drawable.belt_white
 
-            title.contains("צהובה") || title.contains("Yellow", ignoreCase = true) ->
-                R.drawable.intro_belt_yellow
+                    title.contains("צהובה") ||
+                            title.contains(
+                                "Yellow",
+                                ignoreCase = true
+                            ) ->
+                        R.drawable.belt_yellow
 
-            title.contains("כתומה") || title.contains("Orange", ignoreCase = true) ->
-                R.drawable.intro_belt_orange
+                    title.contains("כתומה") ||
+                            title.contains(
+                                "Orange",
+                                ignoreCase = true
+                            ) ->
+                        R.drawable.belt_orange
 
-            title.contains("ירוקה") || title.contains("Green", ignoreCase = true) ->
-                R.drawable.intro_belt_green
+                    title.contains("ירוקה") ||
+                            title.contains(
+                                "Green",
+                                ignoreCase = true
+                            ) ->
+                        R.drawable.belt_green
 
-            title.contains("כחולה") || title.contains("Blue", ignoreCase = true) ->
-                R.drawable.intro_belt_blue
+                    title.contains("כחולה") ||
+                            title.contains(
+                                "Blue",
+                                ignoreCase = true
+                            ) ->
+                        R.drawable.belt_blue
 
-            title.contains("חומה") || title.contains("Brown", ignoreCase = true) ->
-                R.drawable.intro_belt_brown
+                    title.contains("חומה") ||
+                            title.contains(
+                                "Brown",
+                                ignoreCase = true
+                            ) ->
+                        R.drawable.belt_brown
 
-            title.contains("שחורה") || title.contains("Black", ignoreCase = true) ->
-                R.drawable.intro_belt_black
+                    title.contains("שחורה") ||
+                            title.contains(
+                                "Black",
+                                ignoreCase = true
+                            ) ->
+                        R.drawable.belt_black
 
-            else -> null
+                    else ->
+                        null
+                }
         }
-    }
 
     val shouldRenderTopBeltIcon =
         showTopBeltIcon || resolvedTopBeltIconRes != null
@@ -769,13 +807,21 @@ fun KmiTopBar(
                     .zIndex(30f)
             ) {
                 Image(
-                    painter = painterResource(id = resolvedTopBeltIconRes),
-                    contentDescription = topBeltIconDescription ?: title,
+                    painter = painterResource(
+                        id = resolvedTopBeltIconRes
+                    ),
+                    contentDescription =
+                        topBeltIconDescription ?: title,
                     modifier = Modifier
                         .width(82.dp)
                         .height(38.dp)
                         .graphicsLayer {
-                            rotationZ = if (isEnglish) 6f else -6f
+                            rotationZ =
+                                if (isEnglish) {
+                                    6f
+                                } else {
+                                    -6f
+                                }
                         }
                 )
             }

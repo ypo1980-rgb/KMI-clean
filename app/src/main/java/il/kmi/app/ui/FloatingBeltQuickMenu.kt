@@ -64,6 +64,8 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.vector.ImageVector
 
+//============================================================================
+
 enum class QuickMenuTriggerMode {
     Fab,
     BottomBar,
@@ -640,97 +642,133 @@ private fun PremiumQuickMenuPanel(
     onLockedItemClick: () -> Unit,
     onClose: () -> Unit
 ) {
-    val panelMinWidth = 220.dp
-    val panelMaxWidth = 280.dp
+    /*
+     * רוחב זהה למסך הבית. הגובה יכול לגדול
+     * כאשר המשתמש בוחר גודל כתב גדול.
+     */
+    val panelWidth = 190.dp
+    val panelMinHeight = 214.dp
     val panelShape = RoundedCornerShape(20.dp)
 
-    // ✅ המלל מקבל את צבע החגורה, אבל בצורה כהה/יוקרתית מספיק לקריאה.
-    val textColor = when {
-        accentColor == Belt.GREEN.color -> Color(0xFF16A34A)
-        accentColor.luminance() > 0.78f -> Color(0xFF9A6A00) // צהוב/לבן
-        accentColor.luminance() > 0.58f -> accentColor.copy(alpha = 0.96f)
-        else -> accentColor.copy(alpha = 0.94f)
+    val colorScheme = MaterialTheme.colorScheme
+    val isDarkMode =
+        colorScheme.background.luminance() < 0.5f
+
+    /*
+     * במצב בהיר התפריט נשאר לבן לחלוטין,
+     * ללא גוון אפור של surfaceVariant.
+     * במצב כהה משתמשים בצבעי ערכת הנושא.
+     */
+    val panelColor =
+        if (isDarkMode) {
+            colorScheme.surface
+        } else {
+            Color.White
+        }
+
+    val panelSecondaryColor =
+        if (isDarkMode) {
+            colorScheme.surfaceVariant
+        } else {
+            Color.White
+        }
+
+    /*
+     * בחגורה כהה משתמשים בצבע הטקסט של ערכת הנושא,
+     * כדי למנוע שחור על רקע שחור.
+     */
+    val readableAccent = when {
+        isDarkMode && accentColor.luminance() < 0.45f ->
+            colorScheme.onSurface
+
+        isDarkMode && accentColor == Belt.GREEN.color ->
+            Color(0xFF6EE7A0)
+
+        !isDarkMode && accentColor == Belt.GREEN.color ->
+            Color(0xFF16A34A)
+
+        !isDarkMode && accentColor.luminance() > 0.78f ->
+            Color(0xFF9A6A00)
+
+        else ->
+            accentColor
     }
 
-    // ✅ צבע חגורה מרוכך — לא רקע מלא וגס
-    val softAccent = if (accentColor.luminance() > 0.65f) {
-        accentColor.copy(alpha = 0.18f)
-    } else {
-        accentColor.copy(alpha = 0.12f)
-    }
+    val textColor = readableAccent
+    val titleAccent = readableAccent
 
-    val borderAccent = if (accentColor.luminance() > 0.65f) {
-        accentColor.copy(alpha = 0.42f)
-    } else {
-        accentColor.copy(alpha = 0.34f)
-    }
+    val softAccent =
+        readableAccent.copy(
+            alpha = if (isDarkMode) 0.14f else 0.12f
+        )
 
-    val titleAccent = when {
-        accentColor == Belt.GREEN.color -> Color(0xFF16A34A)
-        accentColor.luminance() > 0.65f -> Color(0xFF64748B)
-        else -> accentColor.copy(alpha = 0.86f)
-    }
+    val borderAccent =
+        if (
+            isDarkMode &&
+            accentColor.luminance() < 0.45f
+        ) {
+            colorScheme.outline.copy(alpha = 0.55f)
+        } else {
+            readableAccent.copy(
+                alpha = if (isDarkMode) 0.48f else 0.34f
+            )
+        }
+
+    val dividerColor =
+        if (isDarkMode) {
+            colorScheme.outline.copy(alpha = 0.38f)
+        } else {
+            readableAccent.copy(alpha = 0.18f)
+        }
+
+    /*
+     * במצב בהיר משתמשים בלבן מלא בלבד.
+     * כך אין שכבת אפור או גוון של צבע החגורה.
+     */
+    val panelGradientColors =
+        if (isDarkMode) {
+            listOf(
+                panelColor,
+                panelSecondaryColor.copy(alpha = 0.94f),
+                readableAccent.copy(alpha = 0.14f),
+                panelSecondaryColor.copy(alpha = 0.88f),
+                panelColor
+            )
+        } else {
+            listOf(
+                Color.White,
+                Color.White
+            )
+        }
 
     Surface(
         shape = panelShape,
-        color = Color.White.copy(alpha = 0.98f),
+        color = panelColor,
         tonalElevation = 0.dp,
         shadowElevation = 14.dp,
         border = BorderStroke(
             width = 1.dp,
-            color = borderAccent.copy(alpha = 0.58f)
+            color = borderAccent
         ),
         modifier = Modifier
-            .widthIn(
-                min = panelMinWidth,
-                max = panelMaxWidth
-            )
-            .wrapContentHeight()
-            .wrapContentWidth(
-                if (isEnglish) {
-                    Alignment.Start
-                } else {
-                    Alignment.End
-                }
-            )
+            .width(panelWidth)
+            .heightIn(min = panelMinHeight)
     ) {
         Box(
             modifier = Modifier
-                .fillMaxSize()
+                .fillMaxWidth()
+                .heightIn(min = panelMinHeight)
                 .clip(panelShape)
                 .background(
                     brush = Brush.verticalGradient(
-                        colors = listOf(
-                            Color.White.copy(alpha = 0.98f),
-                            Color(0xFFF9FFFB),
-                            softAccent,
-                            Color(0xFFFBFFFC),
-                            Color.White.copy(alpha = 0.98f)
-                        )
+                        colors = panelGradientColors
                     )
                 )
-                .border(
-                    width = 1.dp,
-                    color = borderAccent,
-                    shape = panelShape
+                .padding(
+                    horizontal = 8.dp,
+                    vertical = 8.dp
                 )
-                .padding(horizontal = 8.dp, vertical = 8.dp)
         ) {
-            // ✅ ברק עדין מאוד בחלק העליון — מראה פרימיום
-            Box(
-                modifier = Modifier
-                    .matchParentSize()
-                    .background(
-                        brush = Brush.verticalGradient(
-                            colors = listOf(
-                                Color.White.copy(alpha = 0.42f),
-                                Color.White.copy(alpha = 0.10f),
-                                Color.Transparent
-                            )
-                        )
-                    )
-            )
-
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -823,7 +861,7 @@ private fun PremiumQuickMenuPanel(
                     if (index != items.lastIndex) {
                         HorizontalDivider(
                             thickness = 0.8.dp,
-                            color = accentColor.copy(alpha = 0.16f)
+                            color = dividerColor
                         )
                     }
                 }
@@ -910,21 +948,22 @@ private fun PremiumQuickMenuRow(
                 }
             }
         } else {
+            /*
+             * בתצוגת RTL הרכיב הראשון מוצג בצד ימין.
+             * לכן האייקון מופיע ראשון והמנעול אחרון.
+             */
+            PremiumQuickMenuIcon(
+                icon = icon,
+                accentColor = accentColor
+            )
+
+            Spacer(Modifier.width(7.dp))
+
             Row(
                 modifier = Modifier.weight(1f),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.End
             ) {
-                if (isLocked) {
-                    PremiumAnimatedLockIcon(
-                        accentColor = lockColor,
-                        scale = lockScale,
-                        glowAlpha = lockGlowAlpha
-                    )
-
-                    Spacer(Modifier.width(5.dp))
-                }
-
                 Text(
                     text = text,
                     style = KmiTypography.action.copy(
@@ -937,14 +976,17 @@ private fun PremiumQuickMenuRow(
                     overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.weight(1f)
                 )
+
+                if (isLocked) {
+                    Spacer(Modifier.width(5.dp))
+
+                    PremiumAnimatedLockIcon(
+                        accentColor = lockColor,
+                        scale = lockScale,
+                        glowAlpha = lockGlowAlpha
+                    )
+                }
             }
-
-            Spacer(Modifier.width(7.dp))
-
-            PremiumQuickMenuIcon(
-                icon = icon,
-                accentColor = accentColor
-            )
         }
     }
 }

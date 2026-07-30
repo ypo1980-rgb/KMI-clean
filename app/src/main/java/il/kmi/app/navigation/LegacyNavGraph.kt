@@ -335,10 +335,29 @@ fun NavGraphBuilder.legacyNavGraph(
     composable(route = Route.MonthlyCalendar.route) {
         MonthlyCalendarScreen(
             kmiPrefs = kmiPrefs,
-            onBack = { nav.popBackStack() },
+
+            onBack = {
+                nav.popBackStack()
+            },
+
+            onHome = {
+                nav.navigate(Route.Home.route) {
+                    popUpTo(
+                        nav.graph.startDestinationId
+                    ) {
+                        inclusive = false
+                    }
+
+                    launchSingleTop = true
+                    restoreState = true
+                }
+            },
+
             onDateClick = { pickedDate ->
                 nav.navigate(
-                    Route.TrainingSummary.make(pickedDate.toString())
+                    Route.TrainingSummary.make(
+                        pickedDate.toString()
+                    )
                 )
             }
         )

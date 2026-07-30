@@ -71,13 +71,12 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
-import androidx.compose.ui.unit.sp
 import android.content.Intent
 import android.net.Uri
 import androidx.compose.foundation.layout.heightIn
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.ui.graphics.luminance
 import il.kmi.app.ui.KmiIconSize
 import il.kmi.app.ui.KmiTypography
 import il.kmi.app.ui.scaledIconSize
@@ -421,7 +420,13 @@ fun SubscriptionScreen(
     val layoutDirection =
         if (isEnglish) LayoutDirection.Ltr else LayoutDirection.Rtl
 
-    val isDarkMode = isSystemInDarkTheme()
+    /*
+     * מצב התצוגה נקבע מערכת הנושא הפעילה באפליקציה,
+     * ולא מהגדרת המצב הכהה של מערכת ההפעלה.
+     */
+    val isDarkMode =
+        MaterialTheme.colorScheme.background
+            .luminance() < 0.5f
 
     val screenGradientColors =
         if (isDarkMode) {
