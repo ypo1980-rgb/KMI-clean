@@ -131,6 +131,9 @@ sealed class Route(val route: String) {
         }
     }
 
+    object TrainingManagement :
+        Route("training_management")
+
     // ↓ הוסף לצד שאר המסלולים
     object AboutAvi : Route("about_avi")
 

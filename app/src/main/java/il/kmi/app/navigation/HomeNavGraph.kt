@@ -8,12 +8,14 @@ import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.outlined.StarBorder
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.navigation.NavGraphBuilder
@@ -30,6 +32,11 @@ import il.kmi.app.screens.ExercisesTabsScreen
 import il.kmi.app.screens.FavoritesScreen
 import il.kmi.app.screens.HomeScreen
 import il.kmi.app.screens.PracticeByTopicsSelection
+import il.kmi.app.screens.TrainingManagementNavigationStore
+import il.kmi.app.screens.TrainingManagementRoute
+import il.kmi.app.voicecommands.VoiceCommandsBridge
+import il.kmi.shared.localization.AppLanguage
+import il.kmi.shared.localization.AppLanguageManager
 import il.kmi.app.screens.coach.InternalExamEntryScreen
 import il.kmi.app.training.TrainingCatalog
 import il.kmi.app.ui.BirthdayGate
@@ -226,6 +233,15 @@ fun NavGraphBuilder.homeNavGraph(
                         launchSingleTop = true
                         restoreState = true
                     }
+                },
+
+                onOpenTrainingManagement = {
+                    nav.navigate(
+                        Route.TrainingManagement.route
+                    ) {
+                        launchSingleTop = true
+                        restoreState = false
+                    }
                 }
             )
 
@@ -276,6 +292,60 @@ fun NavGraphBuilder.homeNavGraph(
                     onDismiss = { explainTriple.value = null }
                 )
             }
+        }
+    }
+
+    composable(Route.TrainingManagement.route) {
+        val context = LocalContext.current
+
+        val languageManager = remember(context) {
+            AppLanguageManager(context)
+        }
+
+        val request =
+            TrainingManagementNavigationStore.current
+
+        if (request == null) {
+            LaunchedEffect(Unit) {
+                nav.navigate(Route.Home.route) {
+                    popUpTo(Route.TrainingManagement.route) {
+                        inclusive = true
+                    }
+                    launchSingleTop = true
+                    restoreState = true
+                }
+            }
+        } else {
+            TrainingManagementRoute(
+                request = request,
+                isEnglish =
+                    languageManager.getCurrentLanguage() ==
+                            AppLanguage.ENGLISH,
+                onBack = {
+                    TrainingManagementNavigationStore.clear()
+                    nav.popBackStack()
+                },
+                onHome = {
+                    TrainingManagementNavigationStore.clear()
+
+                    nav.navigate(Route.Home.route) {
+                        popUpTo(Route.Home.route) {
+                            inclusive = false
+                        }
+                        launchSingleTop = true
+                        restoreState = true
+                    }
+                },
+                onOpenDrawer = onOpenDrawer,
+                onOpenVoiceCommands = {
+                    VoiceCommandsBridge.open()
+                },
+                onOpenAi = {
+                    nav.navigate(Route.VoiceAssistant.route) {
+                        launchSingleTop = true
+                    }
+                }
+            )
         }
     }
 

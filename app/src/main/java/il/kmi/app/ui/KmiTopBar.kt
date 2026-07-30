@@ -247,7 +247,9 @@ fun KmiTopBar(
     showTopShare: Boolean = false,
 
     isInsideAssistant: Boolean = false,
-    onOpenAi: (() -> Unit)? = null
+    onOpenAi: (() -> Unit)? = null,
+    onOpenVoiceCommands: (() -> Unit)? = null,
+    attachedHandleHorizontalOffset: Dp = 8.dp
 ) {
     // 🔴 כאן היה רינדור מוקדם של CenterAlignedTopAppBar/TopAppBar – הורדנו אותו
     // כדי שלא תהיה כותרת כפולה. משלב זה והלאה נשאר הכול כמו אצלך.
@@ -889,8 +891,12 @@ fun KmiTopBar(
             Popup(
                 alignment = AbsoluteAlignment.TopRight,
                 offset = IntOffset(
-                    x = with(density) { (8).dp.roundToPx() },
-                    y = with(density) { (topBarHeight - 1.dp).roundToPx() }
+                    x = with(density) {
+                        attachedHandleHorizontalOffset.roundToPx()
+                    },
+                    y = with(density) {
+                        (topBarHeight - 1.dp).roundToPx()
+                    }
                 ),
                 properties = PopupProperties(
                     focusable = false,
@@ -912,8 +918,12 @@ fun KmiTopBar(
             Popup(
                 alignment = AbsoluteAlignment.TopLeft,
                 offset = IntOffset(
-                    x = with(density) { (-8).dp.roundToPx() },
-                    y = with(density) { (topBarHeight - 1.dp).roundToPx() }
+                    x = with(density) {
+                        -attachedHandleHorizontalOffset.roundToPx()
+                    },
+                    y = with(density) {
+                        (topBarHeight - 1.dp).roundToPx()
+                    }
                 ),
                 properties = PopupProperties(
                     focusable = false,
@@ -928,19 +938,23 @@ fun KmiTopBar(
                         quickActionsExpanded = false
                         focusManager.clearFocus(force = true)
 
-                        val opened =
-                            VoiceCommandsBridge.open()
+                        if (onOpenVoiceCommands != null) {
+                            onOpenVoiceCommands()
+                        } else {
+                            val opened =
+                                VoiceCommandsBridge.open()
 
-                        if (!opened) {
-                            android.widget.Toast.makeText(
-                                ctx,
-                                if (isEnglish) {
-                                    "Voice commands are not connected yet"
-                                } else {
-                                    "הפקודות הקוליות עדיין אינן מחוברות"
-                                },
-                                android.widget.Toast.LENGTH_SHORT
-                            ).show()
+                            if (!opened) {
+                                android.widget.Toast.makeText(
+                                    ctx,
+                                    if (isEnglish) {
+                                        "Voice commands are not connected yet"
+                                    } else {
+                                        "הפקודות הקוליות עדיין אינן מחוברות"
+                                    },
+                                    android.widget.Toast.LENGTH_SHORT
+                                ).show()
+                            }
                         }
                     }
                 )
@@ -1116,7 +1130,15 @@ fun KmiTopBar(
                                         onClick = {
                                             if (!isInsideAssistant) {
                                                 quickActionsExpanded = false
-                                                showAiDialog = true
+                                                focusManager.clearFocus(
+                                                    force = true
+                                                )
+
+                                                if (onOpenAi != null) {
+                                                    onOpenAi()
+                                                } else {
+                                                    showAiDialog = true
+                                                }
                                             }
                                         }
                                     )

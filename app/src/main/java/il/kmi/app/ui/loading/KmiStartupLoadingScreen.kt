@@ -48,6 +48,7 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.AbsoluteAlignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.platform.LocalContext
@@ -526,12 +527,21 @@ fun KmiStartupLoadingScreen(
                             ),
                             fontWeight = FontWeight.SemiBold,
                             color = progressTextColor,
-                            textAlign = TextAlign.Center,
+                            textAlign = if (isEnglish) {
+                                TextAlign.Left
+                            } else {
+                                TextAlign.Right
+                            },
                             maxLines = 1,
                             modifier = Modifier
-                                .align(Alignment.Center)
-                                .fillMaxWidth()
-                                .padding(horizontal = 72.dp)
+                                .align(
+                                    if (isEnglish) {
+                                        AbsoluteAlignment.CenterLeft
+                                    } else {
+                                        AbsoluteAlignment.CenterRight
+                                    }
+                                )
+                                .width(120.dp)
                         )
                     }
                 }

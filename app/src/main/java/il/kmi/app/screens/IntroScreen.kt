@@ -79,35 +79,32 @@ private fun beltColor(belt: Belt): Color = when (belt) {
 }
 
 /**
- * מחזיר תמונת חגורה בעלת רקע שקוף.
- *
- * אין להשתמש בקובצי intro_belt_* משום שהרקע הלבן
- * מוטמע בהם ונשאר גלוי במצב כהה.
+ * מחזיר את תמונת החגורה המעוצבת למסך הפתיחה.
  */
 private fun introBeltDrawableRes(
     belt: Belt
 ): Int {
     return when (belt) {
         Belt.WHITE ->
-            R.drawable.belt_white
+            R.drawable.intro_belt_white
 
         Belt.YELLOW ->
-            R.drawable.belt_yellow
+            R.drawable.intro_belt_yellow
 
         Belt.ORANGE ->
-            R.drawable.belt_orange
+            R.drawable.intro_belt_orange
 
         Belt.GREEN ->
-            R.drawable.belt_green
+            R.drawable.intro_belt_green
 
         Belt.BLUE ->
-            R.drawable.belt_blue
+            R.drawable.intro_belt_blue
 
         Belt.BROWN ->
-            R.drawable.belt_brown
+            R.drawable.intro_belt_brown
 
         Belt.BLACK ->
-            R.drawable.belt_black
+            R.drawable.intro_belt_black
     }
 }
 
@@ -570,21 +567,14 @@ private fun IntroWelcomeImageScreen(
         val beltTopSpace = maxHeight * 0.455f
 
         val beltRowHeight =
-            if (isCompactHeight) 40.dp else 46.dp
+            if (isCompactHeight) 72.dp else 82.dp
 
         val beltImageHeight =
-            if (isCompactHeight) 22.dp else 26.dp
+            if (isCompactHeight) 30.dp else 36.dp
 
-        /*
-         * במצב כהה הופכים את בהירות תמונת הרקע:
-         *
-         * לבן הופך לשחור;
-         * שחור הופך ללבן;
-         * שאר פרטי התמונה נשמרים בגווני אפור.
-         *
-         * כך הלוגו, הכותרות והדמויות נשארים גלויים גם
-         * כאשר הרקע הלבן מוטמע בתוך קובץ התמונה עצמו.
-         */
+        val beltVerticalOffset =
+            -(maxHeight * 0.015f)
+
         val darkImageColorFilter =
             if (isDarkTheme) {
                 ColorFilter.colorMatrix(
@@ -674,19 +664,27 @@ private fun IntroWelcomeImageScreen(
             Spacer(Modifier.height(beltTopSpace))
 
             if (rank != null) {
-                Row(
+                Column(
                     modifier = Modifier
                         .fillMaxWidth(0.78f)
-                        .height(beltRowHeight),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.Center
+                        .height(beltRowHeight)
+                        .offset(
+                            y = beltVerticalOffset
+                        ),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.Center
                 ) {
                     Text(
                         text = if (isEnglish) rank.en else rank.he,
                         style = MaterialTheme.typography.titleMedium.copy(
-                            fontSize = if (isCompactHeight) 19.sp else 22.sp,
-                            lineHeight = if (isCompactHeight) 21.sp else 24.sp,
-                            textDirection = if (isEnglish) TextDirection.Ltr else TextDirection.Rtl
+                            fontSize = if (isCompactHeight) 23.sp else 27.sp,
+                            lineHeight = if (isCompactHeight) 26.sp else 30.sp,
+                            textDirection =
+                                if (isEnglish) {
+                                    TextDirection.Ltr
+                                } else {
+                                    TextDirection.Rtl
+                                }
                         ),
                         fontWeight = FontWeight.ExtraBold,
                         color = when (rank.baseBelt) {
@@ -694,16 +692,30 @@ private fun IntroWelcomeImageScreen(
                             else -> rank.color
                         },
                         textAlign = TextAlign.Center,
-                        maxLines = 1
+                        maxLines = 1,
+                        modifier = Modifier.fillMaxWidth()
                     )
 
-                    Spacer(Modifier.width(if (isCompactHeight) 8.dp else 12.dp))
+                    Spacer(
+                        modifier = Modifier.height(
+                            if (isCompactHeight) 3.dp else 5.dp
+                        )
+                    )
 
                     Image(
-                        painter = painterResource(id = introBeltDrawableRes(rank.baseBelt)),
-                        contentDescription = if (isEnglish) rank.en else rank.he,
+                        painter = painterResource(
+                            id = introBeltDrawableRes(rank.baseBelt)
+                        ),
+                        contentDescription =
+                            if (isEnglish) rank.en else rank.he,
                         modifier = Modifier
-                            .width(if (isCompactHeight) 96.dp else 112.dp)
+                            .width(
+                                if (isCompactHeight) {
+                                    130.dp
+                                } else {
+                                    150.dp
+                                }
+                            )
                             .height(beltImageHeight),
                         contentScale = ContentScale.Fit
                     )
