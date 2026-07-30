@@ -2101,6 +2101,120 @@ fun MainNavHost(
                             }
                         }
 
+                        VoiceAppCommand.OpenTrainingArchive -> {
+                            if (!hasPremiumAccessFromVoice()) {
+                                speakVoiceCommandFeedback(
+                                    hebrewText =
+                                        "ארכיון האימונים זמין למנויים בלבד. יש לרכוש מנוי כדי לפתוח אותו",
+                                    englishText =
+                                        "The training archive is available to subscribers only. A subscription is required"
+                                )
+
+                                nav.navigate(Route.Subscription.route) {
+                                    launchSingleTop = true
+                                    restoreState = true
+                                }
+
+                                return@commandHandler
+                            }
+
+                            ctx.getSharedPreferences(
+                                "kmi_voice_home_actions",
+                                Context.MODE_PRIVATE
+                            )
+                                .edit()
+                                .putBoolean(
+                                    "open_training_archive",
+                                    true
+                                )
+                                .apply()
+
+                            speakVoiceCommandFeedback(
+                                hebrewText =
+                                    "פותח את ארכיון האימונים",
+                                englishText =
+                                    "Opening the training archive"
+                            )
+
+                            nav.navigate(Route.Home.route) {
+                                launchSingleTop = true
+                                restoreState = false
+                            }
+                        }
+
+                        VoiceAppCommand.OpenFreeTrainings -> {
+                            if (!hasPremiumAccessFromVoice()) {
+                                speakVoiceCommandFeedback(
+                                    hebrewText =
+                                        "אימונים חופשיים זמינים למנויים בלבד. יש לרכוש מנוי כדי לפתוח אותם",
+                                    englishText =
+                                        "Free trainings are available to subscribers only. A subscription is required"
+                                )
+
+                                nav.navigate(Route.Subscription.route) {
+                                    launchSingleTop = true
+                                    restoreState = true
+                                }
+
+                                return@commandHandler
+                            }
+
+                            ctx.getSharedPreferences(
+                                "kmi_voice_home_actions",
+                                Context.MODE_PRIVATE
+                            )
+                                .edit()
+                                .putBoolean(
+                                    "open_free_trainings",
+                                    true
+                                )
+                                .apply()
+
+                            speakVoiceCommandFeedback(
+                                hebrewText =
+                                    "פותח את מסך האימונים החופשיים",
+                                englishText =
+                                    "Opening the Free Trainings screen"
+                            )
+
+                            nav.navigate(Route.Home.route) {
+                                launchSingleTop = true
+                                restoreState = false
+                            }
+                        }
+
+                        VoiceAppCommand.OpenTrainingSummary -> {
+                            if (!hasPremiumAccessFromVoice()) {
+                                speakVoiceCommandFeedback(
+                                    hebrewText =
+                                        "סיכום אימון זמין למנויים בלבד. יש לרכוש מנוי כדי לפתוח אותו",
+                                    englishText =
+                                        "Training Summary is available to subscribers only. A subscription is required"
+                                )
+
+                                nav.navigate(Route.Subscription.route) {
+                                    launchSingleTop = true
+                                    restoreState = true
+                                }
+
+                                return@commandHandler
+                            }
+
+                            speakVoiceCommandFeedback(
+                                hebrewText =
+                                    "פותח את מסך סיכום האימון",
+                                englishText =
+                                    "Opening the Training Summary screen"
+                            )
+
+                            nav.navigate(
+                                Route.TrainingSummary.make()
+                            ) {
+                                launchSingleTop = true
+                                restoreState = true
+                            }
+                        }
+
                         VoiceAppCommand.OpenTopics -> {
                             VoiceCommandDiagnosticsLogger.logTrace(
                                 context = ctx,
@@ -2845,7 +2959,7 @@ fun MainNavHost(
                             }
                         }
 
-                        VoiceAppCommand.OpenTrainingSummary -> {
+                        VoiceAppCommand.OpenExerciseSummary -> {
                             if (!hasPremiumAccessFromVoice()) {
                                 speakVoiceCommandFeedback(
                                     hebrewText =
@@ -2861,7 +2975,7 @@ fun MainNavHost(
                                         "voice_quick_menu_blocked_by_subscription",
                                     spokenText = spokenText,
                                     alternatives = listOf(
-                                        "command=OpenTrainingSummary"
+                                        "command=OpenExerciseSummary"
                                     ),
                                     screenName =
                                         nav.currentBackStackEntry

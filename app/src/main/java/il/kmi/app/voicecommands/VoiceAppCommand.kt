@@ -47,7 +47,14 @@ sealed interface VoiceAppCommand {
 
     data object OpenProgress : VoiceAppCommand
 
+    // לוח האימונים החודשי
     data object OpenTrainings : VoiceAppCommand
+
+    data object OpenTrainingArchive : VoiceAppCommand
+
+    data object OpenFreeTrainings : VoiceAppCommand
+
+    data object OpenTrainingSummary : VoiceAppCommand
 
     data object OpenTopics : VoiceAppCommand
 
@@ -65,7 +72,11 @@ sealed interface VoiceAppCommand {
 
     data object OpenPractice : VoiceAppCommand
 
-    data object OpenTrainingSummary : VoiceAppCommand
+    /*
+     * מסך הסיכום של חומר החגורה.
+     * אינו מסך "סיכום אימון".
+     */
+    data object OpenExerciseSummary : VoiceAppCommand
 
     data object OpenVoiceAssistant : VoiceAppCommand
 
@@ -110,6 +121,12 @@ object VoiceAppCommandParser {
 
         if (normalized.isBlank()) {
             return VoiceAppCommand.Unknown(original)
+        }
+
+        resolveTrainingScreenCommand(
+            normalized
+        )?.let { command ->
+            return command
         }
 
         /*
@@ -217,6 +234,69 @@ object VoiceAppCommandParser {
     }
 
     /**
+     * מסכי האימונים נבדקים מהביטוי הספציפי ביותר
+     * לפני הפקודה הכללית של לוח האימונים החודשי.
+     */
+    private fun resolveTrainingScreenCommand(
+        text: String
+    ): VoiceAppCommand? {
+        return when {
+            containsAny(
+                text,
+                "ארכיון אימונים",
+                "ארכיון האימונים",
+                "פתח ארכיון אימונים",
+                "פתח את ארכיון האימונים",
+                "training archive",
+                "trainings archive",
+                "open training archive"
+            ) ->
+                VoiceAppCommand.OpenTrainingArchive
+
+            containsAny(
+                text,
+                "אימונים חופשיים",
+                "אימון חופשי",
+                "פתח אימונים חופשיים",
+                "פתח את האימונים החופשיים",
+                "free trainings",
+                "free training",
+                "free sessions",
+                "open free trainings",
+                "open free sessions"
+            ) ->
+                VoiceAppCommand.OpenFreeTrainings
+
+            containsAny(
+                text,
+                "סיכום אימון",
+                "סיכום האימון",
+                "פתח סיכום אימון",
+                "פתח את סיכום האימון",
+                "training summary",
+                "workout summary",
+                "open training summary"
+            ) ->
+                VoiceAppCommand.OpenTrainingSummary
+
+            containsAny(
+                text,
+                "לוח אימונים חודשי",
+                "לוח האימונים החודשי",
+                "לוח אימונים",
+                "יומן אימונים חודשי",
+                "פתח לוח אימונים חודשי",
+                "monthly training calendar",
+                "training calendar",
+                "monthly calendar"
+            ) ->
+                VoiceAppCommand.OpenTrainings
+
+            else -> null
+        }
+    }
+
+    /**
      * מזהה פקודות לפתיחת המסכים שמופיעים
      * בתפריט המהיר של מסכי התרגילים.
      */
@@ -279,19 +359,15 @@ object VoiceAppCommandParser {
                 text,
                 "מסך סיכום",
                 "סיכום תרגילים",
-                "סיכום האימון",
-                "סיכום אימון",
+                "מסך סיכום תרגילים",
                 "פתח מסך סיכום",
                 "פתח את מסך הסיכום",
-                "פתח סיכום",
-                "עבור לסיכום",
-                "תראה לי סיכום",
-                "training summary",
+                "עבור למסך הסיכום",
                 "summary screen",
                 "exercise summary",
-                "open summary"
+                "open summary screen"
             ) ->
-                VoiceAppCommand.OpenTrainingSummary
+                VoiceAppCommand.OpenExerciseSummary
 
             containsAny(
                 text,
@@ -809,23 +885,17 @@ object VoiceAppCommandParser {
             "progress screen"
         )
 
-    private fun isTrainingsCommand(text: String): Boolean =
-        containsAny(
-            text,
-            "אימונים",
-            "יומן אימונים",
-            "לוח אימונים",
-            "האימונים שלי",
-            "אימונים קרובים",
-            "פתח אימונים",
-            "פתח את האימונים",
-            "trainings",
-            "training",
-            "training calendar",
-            "my trainings",
-            "open trainings",
-            "upcoming trainings"
-        )
+    private fun isTrainingsCommand(
+        text: String
+    ): Boolean {
+        return text == "אימונים" ||
+                text == "האימונים שלי" ||
+                text == "פתח אימונים" ||
+                text == "פתח את האימונים" ||
+                text == "trainings" ||
+                text == "my trainings" ||
+                text == "open trainings"
+    }
 
     private fun isBeltsCommand(text: String): Boolean =
         containsAny(

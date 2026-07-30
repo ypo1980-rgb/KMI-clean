@@ -468,6 +468,89 @@ fun HomeScreen(
     }
 
     val ctxRole = LocalContext.current
+
+    /*
+     * פעולות שנשלחו ממנגנון הפקודות הקוליות.
+     * הארכיון הוא דיאלוג פנימי במסך הבית ולכן
+     * אי אפשר לפתוח אותו באמצעות Route רגיל.
+     */
+    val voiceHomeActionsPrefs =
+        remember(ctxRole) {
+            ctxRole.getSharedPreferences(
+                "kmi_voice_home_actions",
+                Context.MODE_PRIVATE
+            )
+        }
+
+    var openArchiveFromVoice by remember {
+        mutableStateOf(
+            voiceHomeActionsPrefs.getBoolean(
+                "open_training_archive",
+                false
+            )
+        )
+    }
+
+    var openFreeTrainingsFromVoice by remember {
+        mutableStateOf(
+            voiceHomeActionsPrefs.getBoolean(
+                "open_free_trainings",
+                false
+            )
+        )
+    }
+
+    DisposableEffect(voiceHomeActionsPrefs) {
+        val listener =
+            SharedPreferences.OnSharedPreferenceChangeListener {
+                    preferences,
+                    key ->
+
+                when (key) {
+                    "open_training_archive" -> {
+                        openArchiveFromVoice =
+                            preferences.getBoolean(
+                                key,
+                                false
+                            )
+                    }
+
+                    "open_free_trainings" -> {
+                        openFreeTrainingsFromVoice =
+                            preferences.getBoolean(
+                                key,
+                                false
+                            )
+                    }
+                }
+            }
+
+        voiceHomeActionsPrefs
+            .registerOnSharedPreferenceChangeListener(
+                listener
+            )
+
+        onDispose {
+            voiceHomeActionsPrefs
+                .unregisterOnSharedPreferenceChangeListener(
+                    listener
+                )
+        }
+    }
+
+    LaunchedEffect(openArchiveFromVoice) {
+        if (openArchiveFromVoice) {
+            voiceHomeActionsPrefs.edit()
+                .putBoolean(
+                    "open_training_archive",
+                    false
+                )
+                .apply()
+
+            openArchiveFromVoice = false
+            showTrainingArchive = true
+        }
+    }
     val contextLang = LocalContext.current
     val langManager = remember { AppLanguageManager(contextLang) }
     val isEnglish = langManager.getCurrentLanguage() == AppLanguage.ENGLISH
@@ -1772,11 +1855,53 @@ fun HomeScreen(
                         ?: ""
                 }.orEmpty()
 
-                LaunchedEffect(branchesEffective, groupsEffective, currentUid, freeName) {
-                    freeBranchUi = branchesEffective.firstOrNull().orEmpty()
-                    freeGroupKeyUi = groupsEffective.firstOrNull().orEmpty()
-                    freeUidUi = currentUid.orEmpty()
-                    freeNameUi = freeName
+                LaunchedEffect(
+                    branchesEffective,
+                    groupsEffective,
+                    currentUid,
+                    freeName
+                ) {
+                    freeBranchUi =
+                        branchesEffective
+                            .firstOrNull()
+                            .orEmpty()
+
+                    freeGroupKeyUi =
+                        groupsEffective
+                            .firstOrNull()
+                            .orEmpty()
+
+                    freeUidUi =
+                        currentUid.orEmpty()
+
+                    freeNameUi =
+                        freeName
+                }
+
+                LaunchedEffect(
+                    openFreeTrainingsFromVoice,
+                    freeBranchUi,
+                    freeGroupKeyUi,
+                    freeUidUi,
+                    freeNameUi
+                ) {
+                    if (openFreeTrainingsFromVoice) {
+                        voiceHomeActionsPrefs.edit()
+                            .putBoolean(
+                                "open_free_trainings",
+                                false
+                            )
+                            .apply()
+
+                        openFreeTrainingsFromVoice = false
+
+                        onOpenFreeSessions(
+                            freeBranchUi,
+                            freeGroupKeyUi,
+                            freeUidUi,
+                            freeNameUi
+                        )
+                    }
                 }
 
                 data class SlotLike(
