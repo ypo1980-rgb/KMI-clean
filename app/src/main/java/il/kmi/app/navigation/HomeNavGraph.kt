@@ -27,7 +27,7 @@ import il.kmi.app.KmiViewModel
 import il.kmi.app.Route
 import il.kmi.app.favorites.FavoritesStore
 import il.kmi.app.free_sessions.ui.navigation.FreeSessionsRoute
-import il.kmi.app.screens.BeltQuestions.BeltQuestionsByTopicScreen
+import il.kmi.app.screens.BeltQuestions.ByTopic.BeltQuestionsByTopicScreen
 import il.kmi.app.screens.ExercisesTabsScreen
 import il.kmi.app.screens.FavoritesScreen
 import il.kmi.app.screens.HomeScreen
@@ -45,6 +45,8 @@ import il.kmi.shared.questions.model.util.ExerciseTitleFormatter
 import androidx.compose.ui.graphics.Color
 import il.kmi.app.subscription.KmiAccess
 import il.kmi.app.domain.ExerciseExplanationResolver
+import il.kmi.app.domain.SubjectTopic
+import il.kmi.app.screens.BeltQuestions.ByTopic.SubTopicsByTopicRoute
 import java.net.URLDecoder
 
 //-----------------------------------------------------------------------------------
@@ -447,7 +449,7 @@ fun NavGraphBuilder.homeNavGraph(
         ) {
             vm.setSelectedBelt(belt)
 
-            val route = il.kmi.app.screens.SubTopics.SubTopicsByTopicRoute.build(
+            val route = SubTopicsByTopicRoute.build(
                 belt = belt,
                 topic = topic
             )
@@ -503,7 +505,7 @@ fun NavGraphBuilder.homeNavGraph(
                 }
             },
 
-            onOpenSubject = { belt: Belt, subject: il.kmi.app.domain.SubjectTopic ->
+            onOpenSubject = { belt: Belt, subject: SubjectTopic ->
                 if (shouldBlockPremiumTopic(subject.titleHeb) || shouldBlockPremiumTopic(subject.id)) {
                     nav.navigate(Route.Subscription.route) {
                         launchSingleTop = true
@@ -573,6 +575,21 @@ fun NavGraphBuilder.homeNavGraph(
                         topic = kind,
                         subTopic = pick
                     )
+                }
+            },
+
+            onOpenByBelt = {
+                val returnedToBeltScreen =
+                    nav.popBackStack(
+                        route = Route.BeltQ.route,
+                        inclusive = false
+                    )
+
+                if (!returnedToBeltScreen) {
+                    nav.navigate(Route.BeltQ.route) {
+                        launchSingleTop = true
+                        restoreState = true
+                    }
                 }
             }
         )

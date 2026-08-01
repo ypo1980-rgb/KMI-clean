@@ -13,7 +13,7 @@ import il.kmi.app.search.AppSearchHit
 import il.kmi.app.search.KmiSearchBridge
 import kotlinx.coroutines.flow.asStateFlow
 import il.kmi.app.data.training.TrainingSummaryLocalRepo
-import il.kmi.shared.domain.catalog.CatalogRepo
+import il.kmi.app.screens.BeltQuestions.ByTopic.SubjectTopicsUiLogic
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
@@ -471,7 +471,7 @@ class KmiViewModel(
                         ?.takeUnless { it == Belt.WHITE }
                         ?: Belt.GREEN
 
-                il.kmi.app.screens.BeltQuestions.SubjectTopicsUiLogic
+                SubjectTopicsUiLogic
                     .ensureTopicsUiCountsPreloaded(
                         subjects = subjects,
                         handsBase = handsBase,

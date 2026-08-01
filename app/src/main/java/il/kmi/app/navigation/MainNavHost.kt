@@ -2,7 +2,6 @@ package il.kmi.app.navigation
 
 import android.content.Context
 import android.content.SharedPreferences
-import android.net.Uri
 import androidx.compose.runtime.Composable
 import il.kmi.app.screens.SmsVerifyScreen
 import il.kmi.shared.domain.Belt
@@ -53,8 +52,8 @@ import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.windowInsetsPadding
 import il.kmi.app.screens.ContactUsScreen
 import il.kmi.app.screens.AboutNetworkCoachesScreen
-import il.kmi.app.screens.SubTopics.subTopicsByBeltNavGraph
-import il.kmi.app.screens.SubTopics.subTopicsByTopicNavGraph
+import il.kmi.app.screens.BeltQuestions.ByBelt.subTopicsByBeltNavGraph
+import il.kmi.app.screens.BeltQuestions.ByTopic.subTopicsByTopicNavGraph
 import il.kmi.app.screens.admin.PaymentsReportScreen
 import il.kmi.app.screens.admin.AdminDiagnosticsScreen
 import il.kmi.app.screens.admin.AdminAccess
@@ -1518,11 +1517,14 @@ fun MainNavHost(
             // --- NEW: SubTopics graphs ---
             subTopicsByBeltNavGraph(
                 nav = nav,
-                vm = vm
+                vm = vm,
+                isCoach = isCoach
             )
+
             subTopicsByTopicNavGraph(
                 nav = nav,
-                vm = vm
+                vm = vm,
+                isCoach = isCoach
             )
 
             // --- NEW: Materials graph ---

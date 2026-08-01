@@ -10,7 +10,7 @@ import androidx.navigation.compose.composable
 import androidx.navigation.navArgument
 import il.kmi.app.KmiViewModel
 import il.kmi.app.Route
-import il.kmi.app.screens.MaterialsScreen
+import il.kmi.app.screens.BeltQuestions.Materials.MaterialsScreen
 import il.kmi.shared.domain.Belt
 
 @Suppress("UNUSED_PARAMETER")

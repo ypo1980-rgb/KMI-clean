@@ -1,9 +1,11 @@
-package il.kmi.app.screens.BeltQuestions
+package il.kmi.app.screens.BeltQuestions.ByTopic
 
 import android.content.Context
 import android.content.Intent
 import android.content.SharedPreferences
+import android.graphics.Canvas
 import android.graphics.Paint
+import android.graphics.Path
 import android.graphics.Typeface
 import android.graphics.pdf.PdfDocument
 import androidx.core.content.FileProvider
@@ -26,6 +28,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.KeyboardDoubleArrowDown
 import androidx.compose.material3.*
+import androidx.compose.material3.TabRowDefaults.tabIndicatorOffset
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
@@ -83,6 +86,11 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
+import il.kmi.app.domain.DefenseKind
+import il.kmi.app.domain.TopicsBySubjectRegistry
+import il.kmi.app.ui.KmiTopBar
+import kotlinx.coroutines.yield
+import kotlin.math.ceil
 
 
 //==================================================================
@@ -234,7 +242,7 @@ private fun isPremiumRootSubject(subjectId: String): Boolean {
     }
 }
 
-private fun defenseCombinedSectionIdFor(kind: il.kmi.app.domain.DefenseKind): String? {
+private fun defenseCombinedSectionIdFor(kind: DefenseKind): String? {
     val clean = kind.name.lowercase()
 
     return when {
@@ -524,7 +532,7 @@ private fun createSubjectTopicsPdf(
     )
 
     fun drawRoundRect(
-        canvas: android.graphics.Canvas,
+        canvas: Canvas,
         left: Float,
         top: Float,
         right: Float,
@@ -552,7 +560,7 @@ private fun createSubjectTopicsPdf(
     }
 
     fun drawKmiLogo(
-        canvas: android.graphics.Canvas,
+        canvas: Canvas,
         cx: Float,
         cy: Float,
         radius: Float
@@ -583,14 +591,14 @@ private fun createSubjectTopicsPdf(
         )
     }
 
-    fun drawHeader(canvas: android.graphics.Canvas) {
+    fun drawHeader(canvas: Canvas) {
         canvas.drawColor(android.graphics.Color.WHITE)
 
         val headerBottom = 122f
         val headerTextRight = 435f
 
         canvas.drawPath(
-            android.graphics.Path().apply {
+            Path().apply {
                 moveTo(pageWidth.toFloat(), 0f)
                 lineTo(pageWidth.toFloat(), headerBottom)
                 lineTo(178f, headerBottom)
@@ -603,7 +611,7 @@ private fun createSubjectTopicsPdf(
         )
 
         canvas.drawPath(
-            android.graphics.Path().apply {
+            Path().apply {
                 moveTo(208f, headerBottom)
                 lineTo(224f, headerBottom)
                 lineTo(284f, 0f)
@@ -616,7 +624,7 @@ private fun createSubjectTopicsPdf(
         )
 
         canvas.drawPath(
-            android.graphics.Path().apply {
+            Path().apply {
                 moveTo(230f, headerBottom)
                 lineTo(238f, headerBottom)
                 lineTo(298f, 0f)
@@ -679,7 +687,7 @@ private fun createSubjectTopicsPdf(
     }
 
     fun drawFooter(
-        canvas: android.graphics.Canvas,
+        canvas: Canvas,
         pageNumber: Int,
         totalPages: Int
     ) {
@@ -739,7 +747,7 @@ private fun createSubjectTopicsPdf(
     }
 
     fun drawSummary(
-        canvas: android.graphics.Canvas,
+        canvas: Canvas,
         top: Float
     ): Float {
         val totalExercises =
@@ -795,7 +803,7 @@ private fun createSubjectTopicsPdf(
     }
 
     fun drawTopicCard(
-        canvas: android.graphics.Canvas,
+        canvas: Canvas,
         item: SubjectTopicsPdfItem,
         top: Float,
         index: Int
@@ -884,7 +892,7 @@ private fun createSubjectTopicsPdf(
         if (items.size <= firstPageCapacity) {
             1
         } else {
-            1 + kotlin.math.ceil(
+            1 + ceil(
                 (items.size - firstPageCapacity) /
                         nextPageCapacity.toDouble()
             ).toInt()
@@ -982,6 +990,7 @@ private fun createSubjectTopicsPdf(
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun BeltQuestionsByTopicScreen(
+    onOpenByBelt: () -> Unit,
     onOpenSubject: (Belt, SubjectTopic) -> Unit,
     onOpenTopic: (Belt, String) -> Unit = { _, _ -> },
     onOpenTopicWithSub: (belt: Belt, topic: String, subTopic: String) -> Unit = { _, _, _ -> },
@@ -1092,7 +1101,7 @@ fun BeltQuestionsByTopicScreen(
         )
 
         LaunchedEffect(pendingSubjectId) {
-            kotlinx.coroutines.yield()
+            yield()
             localHardSectionId = null
             localHardSubjectId = pendingSubjectId
             pendingHardSubjectId = null
@@ -1102,7 +1111,7 @@ fun BeltQuestionsByTopicScreen(
     }
 
     localHardSubjectId?.let { subjectId ->
-        il.kmi.app.screens.UnifiedSubjectExercisesScreen(
+        UnifiedSubjectExercisesScreen(
             subjectId = subjectId,
             sectionId = localHardSectionId,
             onOpenSection = { nextSubjectId, nextSectionId ->
@@ -1153,7 +1162,7 @@ fun BeltQuestionsByTopicScreen(
     Scaffold(
         modifier = Modifier.fillMaxSize(),
         topBar = {
-            il.kmi.app.ui.KmiTopBar(
+            KmiTopBar(
                 title = if (isEnglish) "Exercises by Topic" else "תרגילים לפי נושא",
                 onHome = { },
                 lockHome = false,
@@ -1198,9 +1207,18 @@ fun BeltQuestionsByTopicScreen(
                 modifier = Modifier
                     .fillMaxWidth()
                     .fillMaxHeight()
-                    .padding(horizontal = 8.dp, vertical = 8.dp),
+                    .padding(
+                        horizontal = 8.dp,
+                        vertical = 8.dp
+                    ),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
+                TopicQuestionsModeSwitcher(
+                    onOpenByBelt = onOpenByBelt
+                )
+
+                Spacer(Modifier.height(4.dp))
+
                 TopicsBySubjectCard(
                     currentBelt = effectiveBelt,
                     accessMode = accessMode,
@@ -1280,6 +1298,122 @@ fun BeltQuestionsByTopicScreen(
         // אין כאן יותר דיאלוג חיפוש/הסבר מקומי.
         // כל החיפוש, ההסבר, המועדפים והערות המשתמש מטופלים דרך KmiTopBar.
     }
+}
+
+@Composable
+private fun TopicQuestionsModeSwitcher(
+    onOpenByBelt: () -> Unit
+) {
+    val tabs = listOf(
+        TopicQuestionsMode.BY_TOPIC,
+        TopicQuestionsMode.BY_BELT
+    )
+
+    val selectedIndex = tabs.indexOf(
+        TopicQuestionsMode.BY_TOPIC
+    )
+
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth(0.88f)
+            .padding(bottom = 6.dp),
+        color = Color(0xFF062B4A).copy(alpha = 0.78f),
+        shadowElevation = 8.dp,
+        tonalElevation = 0.dp,
+        border = BorderStroke(
+            width = 1.dp,
+            color = Color.White.copy(alpha = 0.34f)
+        ),
+        shape = RoundedCornerShape(18.dp)
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(48.dp)
+        ) {
+            Box(
+                modifier = Modifier
+                    .align(Alignment.Center)
+                    .offset(y = (-4).dp)
+                    .width(1.dp)
+                    .height(24.dp)
+                    .background(
+                        Color.White.copy(alpha = 0.65f)
+                    )
+            )
+
+            CompositionLocalProvider(
+                LocalLayoutDirection provides
+                        LayoutDirection.Ltr
+            ) {
+                TabRow(
+                    selectedTabIndex = selectedIndex,
+                    containerColor = Color.Transparent,
+                    contentColor = Color.White,
+                    divider = {},
+                    indicator = { positions ->
+                        TabRowDefaults.Indicator(
+                            modifier = Modifier.tabIndicatorOffset(
+                                positions[selectedIndex]
+                            ),
+                            height = 3.dp,
+                            color = Color.White
+                        )
+                    },
+                    modifier = Modifier.matchParentSize()
+                ) {
+                    tabs.forEach { mode ->
+                        val label =
+                            when (mode) {
+                                TopicQuestionsMode.BY_TOPIC ->
+                                    if (rememberIsEnglish()) {
+                                        "By Topic"
+                                    } else {
+                                        "לפי נושא"
+                                    }
+
+                                TopicQuestionsMode.BY_BELT ->
+                                    if (rememberIsEnglish()) {
+                                        "By Belt"
+                                    } else {
+                                        "לפי חגורה"
+                                    }
+                            }
+
+                        Tab(
+                            selected =
+                                mode == TopicQuestionsMode.BY_TOPIC,
+                            onClick = {
+                                if (
+                                    mode ==
+                                    TopicQuestionsMode.BY_BELT
+                                ) {
+                                    onOpenByBelt()
+                                }
+                            },
+                            text = {
+                                Text(
+                                    text = label,
+                                    style = KmiTypography.action,
+                                    textAlign = TextAlign.Center,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                            },
+                            selectedContentColor = Color.White,
+                            unselectedContentColor =
+                                Color.White.copy(alpha = 0.82f)
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+private enum class TopicQuestionsMode {
+    BY_TOPIC,
+    BY_BELT
 }
 
 private fun subjectAccentColor(subjectId: String): Color =
@@ -1951,7 +2085,7 @@ internal fun TopicsBySubjectCard(
     // בודקים את ה-Theme של האפליקציה בפועל, לא את מצב המכשיר.
     val isDarkMode = MaterialTheme.colorScheme.surface.luminance() < 0.5f
 
-    val subjects = il.kmi.app.domain.TopicsBySubjectRegistry.allSubjects()
+    val subjects = TopicsBySubjectRegistry.allSubjects()
 
 // ✅ DEFENSE counts – source of truth מ-ExerciseCountsRegistry
     val defenseDialogCountsMap = remember {
@@ -1982,7 +2116,7 @@ internal fun TopicsBySubjectCard(
     }
 
     var askDefense by rememberSaveable { mutableStateOf(false) }
-    var askKind by rememberSaveable { mutableStateOf<il.kmi.app.domain.DefenseKind?>(null) }
+    var askKind by rememberSaveable { mutableStateOf<DefenseKind?>(null) }
 
     fun applyPayload(payload: SubjectTopicsUiLogic.TopicsUiCountsPayload) {
         subjectCounts = payload.subjectCounts

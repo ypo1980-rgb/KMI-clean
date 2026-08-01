@@ -1,4 +1,4 @@
-package il.kmi.app.screens.SubTopics
+package il.kmi.app.screens.BeltQuestions.ByBelt
 
 import android.net.Uri
 import androidx.navigation.NavGraphBuilder
@@ -8,7 +8,7 @@ import androidx.navigation.compose.composable
 import androidx.navigation.navArgument
 import il.kmi.app.KmiViewModel
 import il.kmi.app.Route
-import il.kmi.app.screens.SubTopicsScreen
+import il.kmi.app.screens.BeltQuestions.SubTopics.SubTopicsScreen
 import il.kmi.shared.domain.Belt
 
 private fun buildMaterialsSubRouteByBelt(
@@ -52,7 +52,8 @@ private fun buildMaterialsSubRouteByBelt(
 
 fun NavGraphBuilder.subTopicsByBeltNavGraph(
     nav: NavHostController,
-    vm: KmiViewModel
+    vm: KmiViewModel,
+    isCoach: Boolean = false
 ) {
     composable(
         route = SubTopicsByBeltRoute.route,

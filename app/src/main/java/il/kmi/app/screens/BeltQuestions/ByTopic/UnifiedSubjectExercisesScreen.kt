@@ -1,14 +1,16 @@
 @file:OptIn(ExperimentalMaterial3Api::class)
 
-package il.kmi.app.screens
+package il.kmi.app.screens.BeltQuestions.ByTopic
 
 import android.app.Activity
 import android.content.Context
 import android.content.Intent
+import android.graphics.Canvas
 import android.graphics.Paint
 import android.graphics.Path
 import android.graphics.Typeface
 import android.graphics.pdf.PdfDocument
+import android.widget.Toast
 import androidx.core.content.FileProvider
 import java.io.File
 import java.io.FileOutputStream
@@ -51,6 +53,7 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -60,6 +63,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.derivedStateOf
@@ -74,15 +78,18 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
+import androidx.lifecycle.viewmodel.compose.viewModel
 import il.kmi.app.KmiViewModel
 import il.kmi.shared.domain.Explanations
 import il.kmi.app.domain.color
 import il.kmi.app.favorites.FavoritesStore
+import il.kmi.app.ui.KmiTopBar
 import il.kmi.app.ui.KmiTypography
 import il.kmi.shared.domain.Belt
 import il.kmi.shared.domain.content.ExerciseIdentityRegistry
@@ -115,14 +122,14 @@ private fun shareUnifiedSubjectExercisesPdf(
         .filter { it.items.isNotEmpty() }
 
     if (nonEmptyGroups.isEmpty()) {
-        android.widget.Toast.makeText(
+        Toast.makeText(
             context,
             if (isEnglish) {
                 "No exercises to export"
             } else {
                 "אין תרגילים לייצוא"
             },
-            android.widget.Toast.LENGTH_SHORT
+            Toast.LENGTH_SHORT
         ).show()
 
         return
@@ -219,7 +226,7 @@ private fun createUnifiedSubjectExercisesPdf(
     }
 
     fun drawKmiLogo(
-        canvas: android.graphics.Canvas,
+        canvas: Canvas,
         cx: Float,
         cy: Float,
         radius: Float
@@ -282,7 +289,7 @@ private fun createUnifiedSubjectExercisesPdf(
         return "${shortened.trimEnd()}…"
     }
 
-    fun drawHeader(canvas: android.graphics.Canvas) {
+    fun drawHeader(canvas: Canvas) {
         canvas.drawColor(android.graphics.Color.WHITE)
 
         val headerBottom = 122f
@@ -387,7 +394,7 @@ private fun createUnifiedSubjectExercisesPdf(
     }
 
     fun drawFooter(
-        canvas: android.graphics.Canvas,
+        canvas: Canvas,
         pageNumber: Int,
         totalPages: Int
     ) {
@@ -752,7 +759,7 @@ fun UnifiedSubjectExercisesScreen(
     sectionId: String? = null,
     onOpenSection: (subjectId: String, sectionId: String?) -> Unit,
     onBack: () -> Unit,
-    vm: KmiViewModel = androidx.lifecycle.viewmodel.compose.viewModel()
+    vm: KmiViewModel = viewModel()
 ) {
     val isEnglish = LocalizationRuntime.currentLanguage == AppLanguage.ENGLISH
     val resolverSubjectId = remember(subjectId) {
@@ -812,7 +819,7 @@ fun UnifiedSubjectExercisesScreen(
 
     Scaffold(
         topBar = {
-            il.kmi.app.ui.KmiTopBar(
+            KmiTopBar(
                 title = pdfTitle,
                 onBack = onBack,
                 onHome = null,
@@ -1292,7 +1299,7 @@ private fun BeltGroupsContent(
 ) {
     val context = LocalContext.current
     val prefs = remember(context) {
-        context.getSharedPreferences("kmi_settings", android.content.Context.MODE_PRIVATE)
+        context.getSharedPreferences("kmi_settings", Context.MODE_PRIVATE)
     }
 
     val marksVersion by vm.marksVersion.collectAsState()
@@ -1678,6 +1685,24 @@ private fun BeltGroupsContent(
                             rawItem = rawItem,
                             displayItem = displayItem
                         )
+                    }
+                )
+
+                HardExerciseRowCard(
+                    exerciseNumber = rowIndex + 1,
+                    belt = belt,
+                    item = displayItem,
+                    mastered = mastered,
+                    isFavorite = isFavorite,
+                    isEnglish = isEnglish,
+                    onStatusClick = {
+                        // הקוד הקיים
+                    },
+                    onToggleFavorite = {
+                        // הקוד הקיים
+                    },
+                    onInfoClick = {
+                        // הקוד הקיים
                     }
                 )
             }
@@ -2087,12 +2112,27 @@ private fun BeltSectionCard(
                         onToggleFavorite(group.belt, title, rawItem)
                     },
                     onInfoClick = {
-                        onInfoClick(group.belt, title, rawItem, displayItem)
+                        onInfoClick(
+                            group.belt,
+                            title,
+                            rawItem,
+                            displayItem
+                        )
                     }
                 )
 
                 if (index != rawItems.lastIndex) {
-                    Spacer(Modifier.height(6.dp))
+                    HorizontalDivider(
+                        modifier = Modifier.padding(
+                            start = 18.dp,
+                            end = 18.dp,
+                            top = 3.dp,
+                            bottom = 3.dp
+                        ),
+                        thickness = 1.dp,
+                        color = MaterialTheme.colorScheme.outlineVariant
+                            .copy(alpha = 0.72f)
+                    )
                 }
             }
         }
@@ -2120,136 +2160,175 @@ private fun HardExerciseRowCard(
         tonalElevation = 0.dp,
         shadowElevation = 4.dp,
         border = BorderStroke(
-            1.dp,
-            belt.color.copy(alpha = 0.22f)
+            width = 1.dp,
+            color = belt.color.copy(alpha = 0.22f)
         )
     ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .heightIn(min = 50.dp)
-                .padding(horizontal = 8.dp, vertical = 5.dp),
-            verticalAlignment = Alignment.CenterVertically
+        /*
+         * הפריסה החיצונית נשארת LTR באופן פיזי:
+         * עיגול הסטטוס משמאל ופס החגורה מימין.
+         *
+         * כיוון הטקסט בתוך העמודה נקבע בנפרד לפי השפה.
+         */
+        CompositionLocalProvider(
+            LocalLayoutDirection provides
+                    LayoutDirection.Ltr
         ) {
-            HardMasterToggle(
-                mastered = mastered,
-                onClick = onStatusClick
-            )
-
-            Spacer(Modifier.width(8.dp))
-
-            Column(
+            Row(
                 modifier = Modifier
-                    .weight(1f)
-                    .clickable { onInfoClick() },
-                horizontalAlignment = if (isEnglish) Alignment.Start else Alignment.End
+                    .fillMaxWidth()
+                    .heightIn(min = 54.dp)
+                    .padding(
+                        horizontal = 8.dp,
+                        vertical = 5.dp
+                    ),
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically
+                HardMasterToggle(
+                    mastered = mastered,
+                    onClick = onStatusClick
+                )
+
+                Spacer(Modifier.width(8.dp))
+
+                CompositionLocalProvider(
+                    LocalLayoutDirection provides
+                            if (isEnglish) {
+                                LayoutDirection.Ltr
+                            } else {
+                                LayoutDirection.Rtl
+                            }
                 ) {
-                    if (isEnglish) {
-                        HardExerciseMetaBadge(
-                            text = "No. $exerciseNumber",
-                            containerColor = belt.color.copy(alpha = 0.14f),
-                            contentColor = Color(0xFF1F2937)
-                        )
-
-                        if (isFavorite) {
-                            Spacer(Modifier.width(5.dp))
+                    Column(
+                        modifier = Modifier
+                            .weight(1f)
+                            .clickable {
+                                onInfoClick()
+                            },
+                        horizontalAlignment =
+                            if (isEnglish) {
+                                Alignment.Start
+                            } else {
+                                Alignment.End
+                            }
+                    ) {
+                        /*
+                         * מספר התרגיל ואייקון המידע נמצאים
+                         * עכשיו באותה שורה ובאותו צד.
+                         */
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
                             HardExerciseMetaBadge(
-                                text = "Favorite",
-                                containerColor = Color(0xFFF9D9B8),
-                                contentColor = Color(0xFF9A5A00)
+                                text =
+                                    if (isEnglish) {
+                                        "No. $exerciseNumber"
+                                    } else {
+                                        "מס׳ $exerciseNumber"
+                                    },
+                                containerColor =
+                                    belt.color.copy(alpha = 0.14f),
+                                contentColor = Color(0xFF1F2937)
                             )
+
+                            Spacer(Modifier.width(3.dp))
+
+                            IconButton(
+                                onClick = onInfoClick,
+                                modifier = Modifier.size(26.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Filled.Info,
+                                    contentDescription =
+                                        if (isEnglish) {
+                                            "Exercise information"
+                                        } else {
+                                            "מידע על התרגיל"
+                                        },
+                                    tint = Color(0xFF607D8B),
+                                    modifier = Modifier.size(19.dp)
+                                )
+                            }
+
+                            Spacer(Modifier.width(2.dp))
+
+                            IconButton(
+                                onClick = onToggleFavorite,
+                                modifier = Modifier.size(26.dp)
+                            ) {
+                                Icon(
+                                    imageVector =
+                                        if (isFavorite) {
+                                            Icons.Filled.Star
+                                        } else {
+                                            Icons.Outlined.StarBorder
+                                        },
+                                    contentDescription =
+                                        if (isFavorite) {
+                                            if (isEnglish) {
+                                                "Remove from favorites"
+                                            } else {
+                                                "הסר ממועדפים"
+                                            }
+                                        } else {
+                                            if (isEnglish) {
+                                                "Add to favorites"
+                                            } else {
+                                                "הוסף למועדפים"
+                                            }
+                                        },
+                                    tint =
+                                        if (isFavorite) {
+                                            Color(0xFFFFC107)
+                                        } else {
+                                            Color(0xFF9CA3AF)
+                                        },
+                                    modifier = Modifier.size(19.dp)
+                                )
+                            }
+
+                            Spacer(Modifier.weight(1f))
                         }
 
-                        Spacer(Modifier.weight(1f))
-                    } else {
-                        Spacer(Modifier.weight(1f))
+                        Spacer(Modifier.height(1.dp))
 
-                        if (isFavorite) {
-                            HardExerciseMetaBadge(
-                                text = "מועדף",
-                                containerColor = Color(0xFFF9D9B8),
-                                contentColor = Color(0xFF9A5A00)
-                            )
-                            Spacer(Modifier.width(5.dp))
-                        }
-
-                        HardExerciseMetaBadge(
-                            text = "מס׳ $exerciseNumber",
-                            containerColor = belt.color.copy(alpha = 0.14f),
-                            contentColor = Color(0xFF1F2937)
+                        /*
+                         * אין יותר אייקונים חיצוניים שתופסים מקום
+                         * בצד של הטקסט, ולכן שם התרגיל מתחיל
+                         * מתחילת השורה ומקבל את כל רוחב העמודה.
+                         */
+                        Text(
+                            text = item,
+                            style = KmiTypography.body.copy(
+                                fontWeight = FontWeight.ExtraBold
+                            ),
+                            color = Color(0xFF263238),
+                            textAlign =
+                                if (isEnglish) {
+                                    TextAlign.Left
+                                } else {
+                                    TextAlign.Right
+                                },
+                            maxLines = 3,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.fillMaxWidth()
                         )
                     }
                 }
 
-                Spacer(Modifier.height(2.dp))
+                Spacer(Modifier.width(6.dp))
 
-                Text(
-                    text = item,
-                    style = KmiTypography.body.copy(
-                        fontWeight = FontWeight.ExtraBold
-                    ),
-                    color = Color(0xFF263238),
-                    textAlign =
-                        if (isEnglish) {
-                            TextAlign.Left
-                        } else {
-                            TextAlign.Right
-                        },
-                    maxLines = 3,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.fillMaxWidth()
+                Box(
+                    modifier = Modifier
+                        .width(4.dp)
+                        .heightIn(min = 40.dp)
+                        .clip(RoundedCornerShape(999.dp))
+                        .background(
+                            belt.color.copy(alpha = 1f)
+                        )
                 )
             }
-
-            Spacer(Modifier.width(6.dp))
-
-            IconButton(
-                onClick = onInfoClick,
-                modifier = Modifier.size(30.dp)
-            ) {
-                Icon(
-                    imageVector = Icons.Filled.Info,
-                    contentDescription = if (isEnglish) "Exercise information" else "מידע על התרגיל",
-                    tint = Color(0xFF607D8B),
-                    modifier = Modifier.size(20.dp)
-                )
-            }
-
-            Spacer(Modifier.width(3.dp))
-
-            IconButton(
-                onClick = onToggleFavorite,
-                modifier = Modifier.size(30.dp)
-            ) {
-                Icon(
-                    imageVector = if (isFavorite) Icons.Filled.Star else Icons.Outlined.StarBorder,
-                    contentDescription = if (isFavorite) {
-                        if (isEnglish) "Remove from favorites" else "הסר ממועדפים"
-                    } else {
-                        if (isEnglish) "Add to favorites" else "הוסף למועדפים"
-                    },
-                    tint = if (isFavorite) {
-                        Color(0xFFFFC107)
-                    } else {
-                        Color(0xFF9CA3AF)
-                    },
-                    modifier = Modifier.size(20.dp)
-                )
-            }
-
-            Spacer(Modifier.width(3.dp))
-
-            Box(
-                modifier = Modifier
-                    .width(4.dp)
-                    .heightIn(min = 38.dp)
-                    .clip(RoundedCornerShape(999.dp))
-                    .background(belt.color.copy(alpha = 1f))
-            )
         }
     }
 }

@@ -10,7 +10,6 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Insights
-import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.*
 import androidx.compose.foundation.BorderStroke
@@ -1204,6 +1203,35 @@ fun SummaryScreen(
     val isEnglish = languageManager.getCurrentLanguage() == AppLanguage.ENGLISH
     fun tr(he: String, en: String): String = if (isEnglish) en else he
 
+    /*
+  * מסך הסיכום מקבל את כל צבעיו מ-AppTheme.
+  * כך אין ערכת צבעים מקומית נוספת ואין צורך לבדוק
+  * כאן בנפרד אם המצב כהה או בהיר.
+  */
+    val summaryColors = MaterialTheme.colorScheme
+
+    val summaryBackgroundColors = listOf(
+        summaryColors.background,
+        summaryColors.surfaceVariant,
+        summaryColors.primary.copy(alpha = 0.16f),
+        summaryColors.background
+    )
+
+    val summaryCardColor =
+        summaryColors.surface
+
+    val summaryCardGradient = listOf(
+        summaryColors.surface,
+        belt.color.copy(alpha = 0.10f),
+        summaryColors.surface
+    )
+
+    val summaryPrimaryText =
+        summaryColors.onSurface
+
+    val summarySecondaryText =
+        summaryColors.onSurfaceVariant
+
     val scroll = rememberScrollState()
     val focusManager = LocalFocusManager.current
 
@@ -2027,20 +2055,14 @@ fun SummaryScreen(
                     .padding(innerPadding)
                     .background(
                         Brush.verticalGradient(
-                            colors = listOf(
-                                Color(0xFFF8FBFF),
-                                Color(0xFFEAF4FF),
-                                Color(0xFFB7DDF7),
-                                Color(0xFF1F78B4),
-                                Color(0xFF062B4A)
-                            )
+                            colors = summaryBackgroundColors
                         )
                     ),
                 contentAlignment = Alignment.Center
             ) {
                 Surface(
                     shape = RoundedCornerShape(26.dp),
-                    color = Color.White.copy(alpha = 0.95f),
+                    color = summaryCardColor,
                     tonalElevation = 8.dp,
                     shadowElevation = 12.dp
                 ) {
@@ -2060,7 +2082,7 @@ fun SummaryScreen(
                                 "Loading all exercise marks..."
                             ),
                             style = KmiTypography.sectionTitle,
-                            color = Color(0xFF172033),
+                            color = summaryPrimaryText,
                             textAlign = TextAlign.Center,
                             maxLines = 2
                         )
@@ -2071,7 +2093,7 @@ fun SummaryScreen(
                                 "The summary will appear when all data is ready"
                             ),
                             style = KmiTypography.secondary,
-                            color = Color(0xFF667085),
+                            color = summarySecondaryText,
                             textAlign = TextAlign.Center
                         )
                     }
@@ -2208,17 +2230,11 @@ fun SummaryScreen(
                 .padding(innerPadding)
                 .background(
                     Brush.verticalGradient(
-                        colors = listOf(
-                            Color(0xFFF8FBFF),
-                            Color(0xFFEAF4FF),
-                            Color(0xFFB7DDF7),
-                            Color(0xFF1F78B4),
-                            Color(0xFF062B4A)
-                        )
+                        colors = summaryBackgroundColors
                     )
                 ),
             color = Color.Transparent,
-            contentColor = Color(0xFF1B1B1B)
+            contentColor = summaryPrimaryText
         ) {
             Column(
                 modifier = Modifier
@@ -2346,7 +2362,7 @@ fun SummaryScreen(
                             .align(Alignment.CenterHorizontally),
                         shape = RoundedCornerShape(24.dp),
                         colors = CardDefaults.cardColors(
-                            containerColor = Color.White.copy(alpha = 0.92f)
+                            containerColor = summaryCardColor
                         ),
                         border = BorderStroke(
                             width = 1.dp,
@@ -2359,11 +2375,7 @@ fun SummaryScreen(
                                 .fillMaxWidth()
                                 .background(
                                     brush = Brush.verticalGradient(
-                                        colors = listOf(
-                                            Color.White.copy(alpha = 0.98f),
-                                            belt.color.copy(alpha = 0.10f),
-                                            Color.White.copy(alpha = 0.96f)
-                                        )
+                                        colors = summaryCardGradient
                                     )
                                 )
                                 .padding(horizontal = 16.dp, vertical = 14.dp),
@@ -2391,7 +2403,7 @@ fun SummaryScreen(
                                     Icon(
                                         imageVector = Icons.Filled.Close,
                                         contentDescription = tr("סגור מד התקדמות", "Close progress meter"),
-                                        tint = Color(0xFF475467)
+                                        tint = summarySecondaryText
                                     )
                                 }
 
@@ -2411,7 +2423,7 @@ fun SummaryScreen(
                                             "Progress meter"
                                         ),
                                         style = KmiTypography.sectionTitle,
-                                        color = Color(0xFF172033),
+                                        color = summaryPrimaryText,
                                         textAlign =
                                             if (isEnglish) {
                                                 TextAlign.Left
@@ -2528,7 +2540,7 @@ fun SummaryScreen(
                                             style = KmiTypography.caption.copy(
                                                 fontWeight = FontWeight.ExtraBold
                                             ),
-                                            color = Color(0xFF667085),
+                                            color = summarySecondaryText,
                                             textAlign = TextAlign.Center,
                                             maxLines = 1
                                         )
@@ -2564,16 +2576,18 @@ fun SummaryScreen(
                                     .fillMaxWidth()
                                     .background(
                                         brush = Brush.verticalGradient(
-                                            colors = listOf(
-                                                Color.White.copy(alpha = 0.98f),
-                                                belt.color.copy(alpha = 0.06f),
-                                                Color.White.copy(alpha = 0.95f)
-                                            )
+                                            colors = summaryCardGradient
                                         ),
                                         shape = RoundedCornerShape(18.dp)
                                     )
                                     .padding(16.dp),
-                                textAlign = if (isEnglish) TextAlign.Left else TextAlign.Right
+                                color = summaryPrimaryText,
+                                textAlign =
+                                    if (isEnglish) {
+                                        TextAlign.Left
+                                    } else {
+                                        TextAlign.Right
+                                    }
                             )
                         }
                     } else {
@@ -2592,7 +2606,7 @@ fun SummaryScreen(
                             Card(
                                 modifier = Modifier.fillMaxWidth(),
                                 colors = CardDefaults.cardColors(
-                                    containerColor = Color.White.copy(alpha = 0.94f)
+                                    containerColor = summaryCardColor
                                 ),
                                 elevation = CardDefaults.cardElevation(defaultElevation = 4.dp),
                                 shape = RoundedCornerShape(18.dp)
@@ -2602,11 +2616,7 @@ fun SummaryScreen(
                                         .fillMaxWidth()
                                         .background(
                                             brush = Brush.verticalGradient(
-                                                colors = listOf(
-                                                    Color.White.copy(alpha = 0.98f),
-                                                    belt.color.copy(alpha = 0.055f),
-                                                    Color.White.copy(alpha = 0.98f)
-                                                )
+                                                colors = summaryCardGradient
                                             ),
                                             shape = RoundedCornerShape(18.dp)
                                         )
@@ -2633,7 +2643,7 @@ fun SummaryScreen(
                                                 },
                                             maxLines = 2,
                                             modifier = Modifier.weight(1f),
-                                            color = Color(0xFF263238)
+                                            color = summaryPrimaryText
                                         )
                                     }
 
@@ -2706,7 +2716,7 @@ fun SummaryScreen(
                                                                 "${subTopicDisplayName(subTopicTitleRaw, topicTitle, false)} – $subPct%"
                                                             },
                                                         style = KmiTypography.cardTitle,
-                                                        color = Color(0xFF455A64),
+                                                        color = summaryPrimaryText,
                                                         textAlign =
                                                             if (isEnglish) {
                                                                 TextAlign.Left
@@ -2820,9 +2830,17 @@ fun SummaryScreen(
                                                                 }
                                                             }
 
-                                                        val cleanFavId = cleanItem(row.sourceTopicTitle, canonicalId)
-                                                        val isFav = favorites.contains(cleanFavId)
-                                                        val itemHasNote = hasNote(row.sourceTopicTitle, cleanFavId)
+                                                        val cleanFavId =
+                                                            cleanItem(
+                                                                row.sourceTopicTitle,
+                                                                canonicalId
+                                                            )
+
+                                                        val itemHasNote =
+                                                            hasNote(
+                                                                row.sourceTopicTitle,
+                                                                cleanFavId
+                                                            )
 
                                                         Row(
                                                             modifier = Modifier
@@ -2852,17 +2870,83 @@ fun SummaryScreen(
                                                                         },
                                                                     shape = RoundedCornerShape(14.dp)
                                                                 )
-                                                                .padding(vertical = 6.dp, horizontal = 8.dp),
-                                                            verticalAlignment = Alignment.CenterVertically,
-                                                            horizontalArrangement = Arrangement.End
+                                                                .padding(
+                                                                    horizontal = 8.dp,
+                                                                    vertical = 6.dp
+                                                                ),
+                                                            verticalAlignment = Alignment.CenterVertically
                                                         ) {
+                                                            /*
+                                                             * הטקסט מופיע ראשון בתוך Row:
+                                                             *
+                                                             * בעברית, בגלל RTL, הוא מוצמד לקצה הימני
+                                                             * ואייקון הסטטוס עובר לקצה השמאלי.
+                                                             *
+                                                             * באנגלית, בגלל LTR, הטקסט מתחיל משמאל
+                                                             * ואייקון הסטטוס עובר לקצה הימני.
+                                                             */
+                                                            Column(
+                                                                modifier = Modifier.weight(1f),
+                                                                horizontalAlignment =
+                                                                    if (isEnglish) {
+                                                                        Alignment.Start
+                                                                    } else {
+                                                                        Alignment.End
+                                                                    }
+                                                            ) {
+                                                                Text(
+                                                                    text =
+                                                                        exerciseDisplayNameForUi(
+                                                                            row.sourceTopicTitle,
+                                                                            itemRaw,
+                                                                            isEnglish
+                                                                        ),
+                                                                    style = KmiTypography.body,
+                                                                    color = summaryPrimaryText,
+                                                                    textAlign =
+                                                                        if (isEnglish) {
+                                                                            TextAlign.Left
+                                                                        } else {
+                                                                            TextAlign.Right
+                                                                        },
+                                                                    maxLines = 3,
+                                                                    overflow =
+                                                                        androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                                                                    modifier = Modifier.fillMaxWidth()
+                                                                )
+
+                                                                if (itemHasNote) {
+                                                                    Text(
+                                                                        text = tr(
+                                                                            "יש הערה שמורה",
+                                                                            "Saved note exists"
+                                                                        ),
+                                                                        style = KmiTypography.caption,
+                                                                        color =
+                                                                            MaterialTheme.colorScheme.primary,
+                                                                        textAlign =
+                                                                            if (isEnglish) {
+                                                                                TextAlign.Left
+                                                                            } else {
+                                                                                TextAlign.Right
+                                                                            },
+                                                                        maxLines = 1,
+                                                                        overflow =
+                                                                            androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                                                                        modifier = Modifier.fillMaxWidth()
+                                                                    )
+                                                                }
+                                                            }
+
+                                                            Spacer(Modifier.width(6.dp))
+
                                                             Column(
                                                                 modifier = Modifier.widthIn(
                                                                     min =
                                                                         if (isCoach) {
-                                                                            66.dp
+                                                                            58.dp
                                                                         } else {
-                                                                            54.dp
+                                                                            48.dp
                                                                         }
                                                                 ),
                                                                 horizontalAlignment =
@@ -2870,7 +2954,11 @@ fun SummaryScreen(
                                                             ) {
                                                                 Surface(
                                                                     modifier = Modifier.size(
-                                                                        if (isCoach) 36.dp else 28.dp
+                                                                        if (isCoach) {
+                                                                            36.dp
+                                                                        } else {
+                                                                            28.dp
+                                                                        }
                                                                     ),
                                                                     shape = CircleShape,
                                                                     color = statusBackgroundColor,
@@ -2890,21 +2978,26 @@ fun SummaryScreen(
                                                                                     .size(9.dp)
                                                                                     .border(
                                                                                         width = 1.7.dp,
-                                                                                        color = statusForegroundColor,
+                                                                                        color =
+                                                                                            statusForegroundColor,
                                                                                         shape = CircleShape
                                                                                     )
                                                                             )
                                                                         } else {
                                                                             Text(
                                                                                 text = statusMark,
-                                                                                color = statusForegroundColor,
-                                                                                fontWeight = FontWeight.ExtraBold,
-                                                                                textAlign = TextAlign.Center,
-                                                                                fontSize = if (isCoach) {
-                                                                                    18.sp
-                                                                                } else {
-                                                                                    14.sp
-                                                                                }
+                                                                                color =
+                                                                                    statusForegroundColor,
+                                                                                fontWeight =
+                                                                                    FontWeight.ExtraBold,
+                                                                                textAlign =
+                                                                                    TextAlign.Center,
+                                                                                fontSize =
+                                                                                    if (isCoach) {
+                                                                                        18.sp
+                                                                                    } else {
+                                                                                        14.sp
+                                                                                    }
                                                                             )
                                                                         }
                                                                     }
@@ -2919,194 +3012,12 @@ fun SummaryScreen(
                                                                             fontWeight =
                                                                                 FontWeight.ExtraBold
                                                                         ),
-                                                                    color =
-                                                                        statusBackgroundColor,
-                                                                    textAlign =
-                                                                        TextAlign.Center,
+                                                                    color = statusBackgroundColor,
+                                                                    textAlign = TextAlign.Center,
                                                                     maxLines = 2,
                                                                     overflow =
                                                                         androidx.compose.ui.text.style.TextOverflow.Ellipsis
                                                                 )
-                                                            }
-
-                                                            Spacer(Modifier.width(8.dp))
-
-                                                            Column(
-                                                                modifier = Modifier.weight(1f),
-                                                                horizontalAlignment = if (isEnglish) Alignment.Start else Alignment.End
-                                                            ) {
-                                                                Text(
-                                                                    text =
-                                                                        exerciseDisplayNameForUi(
-                                                                            row.sourceTopicTitle,
-                                                                            itemRaw,
-                                                                            isEnglish
-                                                                        ),
-                                                                    style =
-                                                                        KmiTypography.body,
-                                                                    textAlign =
-                                                                        if (isEnglish) {
-                                                                            TextAlign.Left
-                                                                        } else {
-                                                                            TextAlign.Right
-                                                                        },
-                                                                    maxLines = 3,
-                                                                    overflow =
-                                                                        androidx.compose.ui.text.style.TextOverflow.Ellipsis,
-                                                                    modifier =
-                                                                        Modifier.fillMaxWidth(),
-                                                                    color =
-                                                                        Color(0xFF1B1B1B)
-                                                                )
-
-                                                                if (itemHasNote) {
-                                                                    Text(
-                                                                        text = tr(
-                                                                            "יש הערה שמורה",
-                                                                            "Saved note exists"
-                                                                        ),
-                                                                        style =
-                                                                            KmiTypography.caption,
-                                                                        color =
-                                                                            MaterialTheme.colorScheme.primary,
-                                                                        textAlign =
-                                                                            if (isEnglish) {
-                                                                                TextAlign.Left
-                                                                            } else {
-                                                                                TextAlign.Right
-                                                                            },
-                                                                        modifier =
-                                                                            Modifier.fillMaxWidth()
-                                                                    )
-                                                                }
-                                                            }
-
-                                                            Spacer(Modifier.width(8.dp))
-
-                                                            var menuExpanded by remember { mutableStateOf(false) }
-                                                            val infoScale by animateFloatAsState(
-                                                                targetValue = if (menuExpanded) 1.08f else 1f,
-                                                                animationSpec = tween(180),
-                                                                label = "summaryInfoScale"
-                                                            )
-                                                            val infoRotation by animateFloatAsState(
-                                                                targetValue = if (menuExpanded) 12f else 0f,
-                                                                animationSpec = tween(180),
-                                                                label = "summaryInfoRotation"
-                                                            )
-
-                                                            Box {
-                                                                Surface(
-                                                                    onClick = { menuExpanded = true },
-                                                                    shape = CircleShape,
-                                                                    color = Color.White.copy(alpha = 0.94f),
-                                                                    shadowElevation = 5.dp,
-                                                                    border = BorderStroke(
-                                                                        1.dp,
-                                                                        belt.color.copy(alpha = 0.14f)
-                                                                    ),
-                                                                    modifier = Modifier
-                                                                        .size(34.dp)      // ↓ כ-10% קטן יותר
-                                                                        .graphicsLayer {
-                                                                            scaleX = infoScale
-                                                                            scaleY = infoScale
-                                                                        }
-                                                                ) {
-                                                                    Box(
-                                                                        modifier = Modifier
-                                                                            .fillMaxSize()
-                                                                            .background(
-                                                                                brush = Brush.verticalGradient(
-                                                                                    colors = listOf(
-                                                                                        Color.White.copy(alpha = 0.98f),
-                                                                                        belt.color.copy(alpha = 0.05f),
-                                                                                        Color.White.copy(alpha = 0.94f)
-                                                                                    )
-                                                                                ),
-                                                                                shape = CircleShape
-                                                                            ),
-                                                                        contentAlignment = Alignment.Center
-                                                                    ) {
-                                                                        Icon(
-                                                                            imageVector = Icons.Filled.Info,
-                                                                            contentDescription = tr("אפשרויות", "Options"),
-                                                                            tint = Color(0xFF455A64),
-                                                                            modifier = Modifier
-                                                                                .size(18.dp)
-                                                                                .graphicsLayer {
-                                                                                    rotationZ = infoRotation
-                                                                                }
-                                                                        )
-                                                                    }
-                                                                }
-
-                                                                DropdownMenu(
-                                                                    expanded = menuExpanded,
-                                                                    onDismissRequest = { menuExpanded = false },
-                                                                    modifier = Modifier
-                                                                        .background(
-                                                                            brush = Brush.verticalGradient(
-                                                                                colors = listOf(
-                                                                                    Color.White.copy(alpha = 0.99f),
-                                                                                    belt.color.copy(alpha = 0.05f),
-                                                                                    Color.White.copy(alpha = 0.97f)
-                                                                                )
-                                                                            ),
-                                                                            shape = RoundedCornerShape(18.dp)
-                                                                        )
-                                                                        .border(
-                                                                            1.dp,
-                                                                            belt.color.copy(alpha = 0.12f),
-                                                                            RoundedCornerShape(18.dp)
-                                                                        )
-                                                                ) {
-                                                                    DropdownMenuItem(
-                                                                        text = {
-                                                                            Text(
-                                                                                tr("מידע", "Info"),
-                                                                                textAlign = if (isEnglish) TextAlign.Left else TextAlign.Right,
-                                                                                modifier = Modifier.fillMaxWidth()
-                                                                            )
-                                                                        },
-                                                                        onClick = {
-                                                                            menuExpanded = false
-                                                                            explainFromSearch = Triple(belt, row.sourceTopicTitle, itemRaw)
-                                                                        }
-                                                                    )
-
-                                                                    DropdownMenuItem(
-                                                                        text = {
-                                                                            Text(
-                                                                                if (isFav)
-                                                                                    tr("הסר ממועדפים", "Remove from favorites")
-                                                                                else
-                                                                                    tr("הוסף למועדפים", "Add to favorites"),
-                                                                                textAlign = if (isEnglish) TextAlign.Left else TextAlign.Right,
-                                                                                modifier = Modifier.fillMaxWidth()
-                                                                            )
-                                                                        },
-                                                                        onClick = {
-                                                                            menuExpanded = false
-                                                                            FavoritesStore.toggle(cleanFavId)
-                                                                        }
-                                                                    )
-
-                                                                    DropdownMenuItem(
-                                                                        text = {
-                                                                            Text(
-                                                                                tr("הוסף הערה למתרגל", "Add note for trainee"),
-                                                                                textAlign = if (isEnglish) TextAlign.Left else TextAlign.Right,
-                                                                                modifier = Modifier.fillMaxWidth()
-                                                                            )
-                                                                        },
-                                                                        onClick = {
-                                                                            menuExpanded = false
-                                                                            noteEditorTopic = row.sourceTopicTitle
-                                                                            noteEditorFor = cleanFavId
-                                                                            noteDraft = loadNote(row.sourceTopicTitle, cleanFavId)
-                                                                        }
-                                                                    )
-                                                                }
                                                             }
                                                         }
                                                     }

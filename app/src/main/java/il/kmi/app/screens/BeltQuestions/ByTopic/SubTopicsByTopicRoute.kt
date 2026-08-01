@@ -1,4 +1,4 @@
-package il.kmi.app.screens.SubTopics
+package il.kmi.app.screens.BeltQuestions.ByTopic
 
 import android.net.Uri
 import il.kmi.shared.domain.Belt

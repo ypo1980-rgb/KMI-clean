@@ -24,14 +24,13 @@ import il.kmi.app.KmiViewModel
 import il.kmi.app.Route
 import il.kmi.app.attendance.ui.AttendanceScreen
 import il.kmi.app.attendance.ui.AttendanceViewModel
-import il.kmi.app.navigation.settingsNavGraph
 import il.kmi.app.screens.ExercisesTabsScreen
 import il.kmi.app.screens.IntroScreen
-import il.kmi.app.screens.MaterialsScreen
+import il.kmi.app.screens.BeltQuestions.Materials.MaterialsScreen
 import il.kmi.app.screens.MonthlyCalendarScreen
 import il.kmi.app.screens.MyProfileScreen
-import il.kmi.app.screens.SubTopics.subTopicsByBeltNavGraph
-import il.kmi.app.screens.SubTopics.subTopicsByTopicNavGraph
+import il.kmi.app.screens.BeltQuestions.ByBelt.subTopicsByBeltNavGraph
+import il.kmi.app.screens.BeltQuestions.ByTopic.subTopicsByTopicNavGraph
 import il.kmi.app.screens.registration.RegistrationNavHost
 import il.kmi.app.ui.DrawerBridge
 import il.kmi.shared.domain.Belt

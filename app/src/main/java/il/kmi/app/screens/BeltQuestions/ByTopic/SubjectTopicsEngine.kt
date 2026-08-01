@@ -1,4 +1,4 @@
-package il.kmi.app.screens.BeltQuestions
+package il.kmi.app.screens.BeltQuestions.ByTopic
 
 import il.kmi.app.domain.SubjectTopic
 import il.kmi.shared.domain.Belt

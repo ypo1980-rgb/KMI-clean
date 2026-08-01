@@ -1,4 +1,4 @@
-package il.kmi.app.screens.BeltQuestions
+package il.kmi.app.screens.BeltQuestions.ByTopic
 
 import android.util.Log
 import androidx.compose.foundation.BorderStroke
@@ -54,8 +54,12 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material3.IconButton
 import androidx.compose.ui.graphics.luminance
+import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import il.kmi.app.domain.ContentRepo
+import il.kmi.app.domain.DefenseKind
+import il.kmi.app.localization.rememberIsEnglish
+import il.kmi.shared.domain.content.HardSectionsCatalog
 import il.kmi.shared.questions.model.util.ExerciseTitleFormatter
 
 // -------------------------------------------------------------
@@ -88,28 +92,28 @@ internal data class UiExercise(
 )
 
 internal typealias ItemsByBelt =
-        Map<il.kmi.shared.domain.Belt, List<UiExercise>>
+        Map<Belt, List<UiExercise>>
 
 @Composable
 internal fun DefensePickModeDialogModern(
-    kind: il.kmi.app.domain.DefenseKind,
+    kind: DefenseKind,
     counts: Map<String, Int> = emptyMap(),
     hasAccess: Boolean,
     onDismiss: () -> Unit,
     onPick: (String) -> Unit
 ) {
-    val isEnglish = il.kmi.app.localization.rememberIsEnglish()
+    val isEnglish = rememberIsEnglish()
     fun tr(he: String, en: String) = if (isEnglish) en else he
 
     val title =
-        if (kind == il.kmi.app.domain.DefenseKind.INTERNAL) {
+        if (kind == DefenseKind.INTERNAL) {
             tr("הגנות פנימיות", "Internal Defenses")
         } else {
             tr("הגנות חיצוניות", "External Defenses")
         }
 
     val accent =
-        if (kind == il.kmi.app.domain.DefenseKind.INTERNAL) Color(0xFF4CAF50)
+        if (kind == DefenseKind.INTERNAL) Color(0xFF4CAF50)
         else Color(0xFF2196F3)
 
     val keyPunch = "${kind.name}:אגרופים"
@@ -181,7 +185,7 @@ internal fun HandsPickModeDialogModern(
     onDismiss: () -> Unit,
     onPick: (String) -> Unit
 ) {
-    val isEnglish = il.kmi.app.localization.rememberIsEnglish()
+    val isEnglish = rememberIsEnglish()
     val accent = Color(0xFF8E24AA)
 
     val isDarkMode = MaterialTheme.colorScheme.surface.luminance() < 0.5f
@@ -215,7 +219,7 @@ internal fun HandsPickModeDialogModern(
         }
     }
 
-    androidx.compose.ui.window.Dialog(
+    Dialog(
         onDismissRequest = onDismiss,
         properties = DialogProperties(usePlatformDefaultWidth = false)
     ) {
@@ -349,7 +353,7 @@ internal fun SubTopicsPickModeDialogModern(
     onDismiss: () -> Unit,
     onPick: (String) -> Unit
 ) {
-    val isEnglish = il.kmi.app.localization.rememberIsEnglish()
+    val isEnglish = rememberIsEnglish()
     val accent = Color(0xFF5E35B1)
 
     val isDarkMode = MaterialTheme.colorScheme.surface.luminance() < 0.5f
@@ -390,7 +394,7 @@ internal fun SubTopicsPickModeDialogModern(
         }
     }
 
-    androidx.compose.ui.window.Dialog(
+    Dialog(
         onDismissRequest = onDismiss,
         properties = DialogProperties(usePlatformDefaultWidth = false)
     ) {
@@ -725,7 +729,7 @@ internal fun DefenseCategoryPickDialogModern(
     onDismiss: () -> Unit,
     onPick: (String) -> Unit
 ) {
-    val isEnglish = il.kmi.app.localization.rememberIsEnglish()
+    val isEnglish = rememberIsEnglish()
 
     val isDarkMode = MaterialTheme.colorScheme.surface.luminance() < 0.5f
     val dialogBg = if (isDarkMode) Color(0xFF111827) else Color(0xFFF7F4FB)
@@ -737,7 +741,7 @@ internal fun DefenseCategoryPickDialogModern(
     fun tr(he: String, en: String) = if (isEnglish) en else he
     fun countLabel(n: Int) = if (isEnglish) "exercises $n" else "$n תרגילים"
 
-    androidx.compose.ui.window.Dialog(
+    Dialog(
         onDismissRequest = onDismiss,
         properties = DialogProperties(usePlatformDefaultWidth = false)
     ) {
@@ -990,7 +994,7 @@ internal fun BaseTopicCard(
             .clip(RoundedCornerShape(24.dp))
             .clickable { onClick() }
     ) {
-        val isEnglish = il.kmi.app.localization.rememberIsEnglish()
+        val isEnglish = rememberIsEnglish()
 
         CompositionLocalProvider(
             LocalLayoutDirection provides if (isEnglish) LayoutDirection.Ltr else LayoutDirection.Rtl
@@ -1434,13 +1438,13 @@ internal object SubjectTopicsUiLogic {
         sectionId: String,
         currentBelt: Belt
     ): Int {
-        val section = il.kmi.shared.domain.content.HardSectionsCatalog.findSectionById(
+        val section = HardSectionsCatalog.findSectionById(
             subjectId = "releases",
             sectionId = sectionId
         ) ?: return 0
 
         fun countDeepForCurrentBelt(
-            s: il.kmi.shared.domain.content.HardSectionsCatalog.Section
+            s: HardSectionsCatalog.Section
         ): Int {
             return if (s.subSections.isNotEmpty()) {
                 s.subSections.sumOf { child -> countDeepForCurrentBelt(child) }
@@ -1456,7 +1460,7 @@ internal object SubjectTopicsUiLogic {
         }
 
         fun countDeepAllBelts(
-            s: il.kmi.shared.domain.content.HardSectionsCatalog.Section
+            s: HardSectionsCatalog.Section
         ): Int {
             return if (s.subSections.isNotEmpty()) {
                 s.subSections.sumOf { child ->
@@ -2100,7 +2104,7 @@ internal object SubjectTopicsUiLogic {
 
     sealed interface DefenseDialogDecision {
         data class AskKind(
-            val kind: il.kmi.app.domain.DefenseKind
+            val kind: DefenseKind
         ) : DefenseDialogDecision
 
         data class OpenHardSubject(
@@ -2167,13 +2171,13 @@ internal object SubjectTopicsUiLogic {
     }
 
     fun resolveDefenseKindPick(
-        kind: il.kmi.app.domain.DefenseKind,
+        kind: DefenseKind,
         picked: String
     ): DefenseKindPickDecision {
 
         val kindKey = when (kind) {
-            il.kmi.app.domain.DefenseKind.INTERNAL -> "internal"
-            il.kmi.app.domain.DefenseKind.EXTERNAL -> "external"
+            DefenseKind.INTERNAL -> "internal"
+            DefenseKind.EXTERNAL -> "external"
             else -> "all"
         }
 

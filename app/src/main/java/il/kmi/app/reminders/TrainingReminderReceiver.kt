@@ -83,7 +83,23 @@ class TrainingReminderReceiver : BroadcastReceiver() {
          * ההתראה הנוכחית חסומה על ידי המנוע.
          */
         try {
-            if (trainingStatus.shouldNotify) {
+            val reminderIdentity =
+                buildReminderIdentity(
+                    branch = branch,
+                    group = group,
+                    place = place,
+                    startMillis = startMillis
+                )
+
+            val maySendReminder =
+                trainingStatus.shouldNotify &&
+                        claimReminderDelivery(
+                            context = context,
+                            reminderIdentity =
+                                reminderIdentity
+                        )
+
+            if (maySendReminder) {
                 val isEnglish =
                     AppLanguageManager(context)
                         .getCurrentLanguage() ==
@@ -97,7 +113,9 @@ class TrainingReminderReceiver : BroadcastReceiver() {
                     coach = coach,
                     startMillis = startMillis,
                     endMillis = endMillis,
-                    isEnglish = isEnglish
+                    isEnglish = isEnglish,
+                    reminderIdentity =
+                        reminderIdentity
                 )
             }
         } finally {
@@ -124,7 +142,8 @@ class TrainingReminderReceiver : BroadcastReceiver() {
         coach: String,
         startMillis: Long,
         endMillis: Long?,
-        isEnglish: Boolean
+        isEnglish: Boolean,
+        reminderIdentity: String
     ) {
         createChannelIfNeeded(context)
 
@@ -232,16 +251,12 @@ class TrainingReminderReceiver : BroadcastReceiver() {
         }
 
         /*
-         * מזהה יציב מונע יצירת התראות כפולות לאותו אימון.
+         * אותו אימון מקבל תמיד אותו מזהה, גם אם שני
+         * מקורות יצרו אותו עם הבדל בשניות/אלפיות שנייה
+         * או בנוסח מעט שונה של שם הסניף.
          */
         val requestCode =
-            listOf(
-                branch,
-                group,
-                startMillis.toString()
-            )
-                .joinToString("|")
-                .hashCode() and Int.MAX_VALUE
+            reminderIdentity.hashCode() and Int.MAX_VALUE
 
         val pendingIntent = PendingIntent.getActivity(
             context,
@@ -266,6 +281,98 @@ class TrainingReminderReceiver : BroadcastReceiver() {
         } catch (_: Exception) {
         }
     }
+
+    private fun buildReminderIdentity(
+        branch: String,
+        group: String,
+        place: String,
+        startMillis: Long
+    ): String {
+        fun normalizePart(value: String): String {
+            return value
+                .trim()
+                .lowercase()
+                .replace("–", "-")
+                .replace("—", "-")
+                .replace(Regex("\\s+"), " ")
+        }
+
+        /*
+         * עיגול לדקה מונע הבדל מלאכותי שנובע
+         * משניות או מאלפיות שנייה שונות.
+         */
+        val startMinute =
+            startMillis / 60_000L
+
+        val placeIdentity =
+            place.ifBlank { branch }
+
+        return buildString {
+            append(startMinute)
+            append("|")
+            append(normalizePart(placeIdentity))
+            append("|")
+            append(normalizePart(group))
+        }
+    }
+
+    private fun claimReminderDelivery(
+        context: Context,
+        reminderIdentity: String
+    ): Boolean {
+        /*
+         * שני BroadcastReceivers יכולים להגיע כמעט יחד.
+         * הסנכרון מבטיח שרק הראשון יסמן את ההתראה כנשלחה.
+         */
+        synchronized(TrainingReminderReceiver::class.java) {
+            val preferences =
+                context.getSharedPreferences(
+                    DELIVERY_PREFS_NAME,
+                    Context.MODE_PRIVATE
+                )
+
+            val now = System.currentTimeMillis()
+
+            val lastIdentity =
+                preferences.getString(
+                    KEY_LAST_REMINDER_IDENTITY,
+                    null
+                )
+
+            val lastDeliveryTime =
+                preferences.getLong(
+                    KEY_LAST_REMINDER_DELIVERY_TIME,
+                    0L
+                )
+
+            val isRecentDuplicate =
+                lastIdentity == reminderIdentity &&
+                        now - lastDeliveryTime in
+                        0L until DUPLICATE_GUARD_WINDOW_MILLIS
+
+            if (isRecentDuplicate) {
+                return false
+            }
+
+            /*
+             * commit סינכרוני נדרש כאן כדי שמקלט נוסף
+             * שמגיע מיד אחריו יראה את הערך החדש.
+             */
+            return preferences
+                .edit()
+                .putString(
+                    KEY_LAST_REMINDER_IDENTITY,
+                    reminderIdentity
+                )
+                .putLong(
+                    KEY_LAST_REMINDER_DELIVERY_TIME,
+                    now
+                )
+                .commit()
+        }
+    }
+
+
 
     private fun createChannelIfNeeded(context: Context) {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) {
@@ -310,5 +417,17 @@ class TrainingReminderReceiver : BroadcastReceiver() {
 
         private const val CHANNEL_ID =
             "kmi_training_reminders_channel"
+
+        private const val DELIVERY_PREFS_NAME =
+            "kmi_training_reminder_delivery"
+
+        private const val KEY_LAST_REMINDER_IDENTITY =
+            "last_training_reminder_identity"
+
+        private const val KEY_LAST_REMINDER_DELIVERY_TIME =
+            "last_training_reminder_delivery_time"
+
+        private const val DUPLICATE_GUARD_WINDOW_MILLIS =
+            15L * 60L * 1000L
     }
 }

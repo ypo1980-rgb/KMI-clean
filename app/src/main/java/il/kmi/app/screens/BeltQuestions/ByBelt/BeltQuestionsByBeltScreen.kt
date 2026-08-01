@@ -1,4 +1,4 @@
-package il.kmi.app.screens.BeltQuestions
+package il.kmi.app.screens.BeltQuestions.ByBelt
 
 import android.content.SharedPreferences
 import androidx.compose.animation.core.Animatable
@@ -20,8 +20,8 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
-import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.material3.TabRowDefaults.tabIndicatorOffset
+import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
@@ -40,9 +40,6 @@ import androidx.compose.ui.zIndex
 import il.kmi.app.KmiViewModel
 import il.kmi.shared.domain.Belt
 import il.kmi.shared.domain.ContentRepo as SharedContentRepo
-import il.kmi.app.domain.SubjectTopic
-import il.kmi.shared.domain.SubjectTopic as SharedSubjectTopic
-import il.kmi.shared.domain.content.SubjectItemsResolver
 import il.kmi.app.screens.PracticeByTopicsSelection
 import il.kmi.app.screens.PracticeMenuDialog
 import il.kmi.app.ui.ext.color
@@ -76,7 +73,6 @@ import il.kmi.shared.domain.content.ExerciseTitlesEn
 import androidx.compose.ui.platform.LocalContext
 import android.app.Activity
 import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.unit.sp
 import il.kmi.shared.localization.AppLanguage
 import il.kmi.shared.localization.AppLanguageManager
 import il.kmi.app.ui.QuickMenuTriggerMode
@@ -86,7 +82,31 @@ import il.kmi.app.subscription.AccessModeResolver
 import il.kmi.app.subscription.LockedContentPolicy
 import il.kmi.app.subscription.KmiAccess
 import il.kmi.app.domain.ExerciseExplanationResolver
-
+import android.content.Context
+import android.content.Intent
+import android.graphics.Canvas
+import android.graphics.Paint
+import android.graphics.Typeface
+import android.graphics.pdf.PdfDocument
+import android.widget.Toast
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.unit.LayoutDirection
+import androidx.core.content.FileProvider
+import il.kmi.app.screens.BeltQuestions.ByTopic.TopicDetails
+import il.kmi.app.ui.KmiTopBar
+import java.io.File
+import java.io.FileOutputStream
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
+import kotlin.math.abs
+import kotlin.math.min
 
 /* ------------------------------ Helpers מקומיים למסך ------------------------------ */
 
@@ -292,13 +312,682 @@ private fun subTopicStatsLineForUi(
     subTopic: SharedContentRepo.SubTopic,
     lang: AppLanguage
 ): String {
-    val exercisesCount = subTopic.totalExercisesCountDeep()
+    val exercisesCount =
+        subTopic.totalExercisesCountDeep()
 
     return if (lang == AppLanguage.ENGLISH) {
-        if (exercisesCount == 1) "1 exercise" else "$exercisesCount exercises"
+        if (exercisesCount == 1) {
+            "1 exercise"
+        } else {
+            "$exercisesCount exercises"
+        }
     } else {
-        if (exercisesCount == 1) "תרגיל 1" else "$exercisesCount תרגילים"
+        if (exercisesCount == 1) {
+            "תרגיל 1"
+        } else {
+            "$exercisesCount תרגילים"
+        }
     }
+}
+
+private data class BeltTopicsPdfSubTopic(
+    val title: String,
+    val exercisesCount: Int,
+    val depth: Int
+)
+
+private data class BeltTopicsPdfTopic(
+    val title: String,
+    val exercisesCount: Int,
+    val subTopics: List<BeltTopicsPdfSubTopic>
+)
+
+private fun SharedContentRepo.SubTopic.toPdfSubTopicRows(
+    lang: AppLanguage,
+    depth: Int = 0
+): List<BeltTopicsPdfSubTopic> {
+    val currentRow = BeltTopicsPdfSubTopic(
+        title = topicTitleForUi(title.trim(), lang),
+        exercisesCount = totalExercisesCountDeep(),
+        depth = depth
+    )
+
+    return buildList {
+        add(currentRow)
+
+        subTopics.forEach { nestedSubTopic ->
+            addAll(
+                nestedSubTopic.toPdfSubTopicRows(
+                    lang = lang,
+                    depth = depth + 1
+                )
+            )
+        }
+    }
+}
+
+private fun buildBeltTopicsPdfData(
+    belt: Belt,
+    lang: AppLanguage
+): List<BeltTopicsPdfTopic> {
+    return TopicsEngine.topicTitlesFor(belt)
+        .asSequence()
+        .map { it.trim() }
+        .filter { it.isNotBlank() }
+        .distinct()
+        .map { topicTitle ->
+            val repositorySubTopics =
+                SharedContentRepo.getSubTopicsFor(
+                    belt = belt,
+                    topicTitle = topicTitle
+                )
+
+            val subTopicRows = repositorySubTopics
+                .asSequence()
+                .filter { it.title.trim().isNotBlank() }
+                .filter { it.title.trim() != topicTitle }
+                .flatMap { subTopic ->
+                    subTopic
+                        .toPdfSubTopicRows(lang)
+                        .asSequence()
+                }
+                .distinctBy { row ->
+                    "${row.depth}:${row.title.trim()}"
+                }
+                .toList()
+
+            BeltTopicsPdfTopic(
+                title = topicTitleForUi(topicTitle, lang),
+                exercisesCount = repositorySubTopics.sumOf {
+                    it.totalExercisesCountDeep()
+                },
+                subTopics = subTopicRows
+            )
+        }
+        .toList()
+}
+
+private fun shareBeltTopicsPdf(
+    context: Context,
+    belt: Belt,
+    lang: AppLanguage
+) {
+    val isEnglish = lang == AppLanguage.ENGLISH
+
+    try {
+        val pdfFile = createBeltTopicsPdf(
+            context = context,
+            belt = belt,
+            lang = lang
+        )
+
+        val uri = FileProvider.getUriForFile(
+            context,
+            "${context.packageName}.fileprovider",
+            pdfFile
+        )
+
+        val shareIntent = Intent(Intent.ACTION_SEND).apply {
+            type = "application/pdf"
+
+            putExtra(
+                Intent.EXTRA_SUBJECT,
+                if (isEnglish) {
+                    "${beltTitleForUi(belt, lang)} topics"
+                } else {
+                    "נושאים ותתי־נושאים – ${beltTitleForUi(belt, lang)}"
+                }
+            )
+
+            putExtra(Intent.EXTRA_STREAM, uri)
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        }
+
+        context.startActivity(
+            Intent.createChooser(
+                shareIntent,
+                if (isEnglish) {
+                    "Share belt topics PDF"
+                } else {
+                    "שיתוף נושאי החגורה"
+                }
+            )
+        )
+    } catch (_: Exception) {
+        Toast.makeText(
+            context,
+            if (isEnglish) {
+                "The PDF could not be created"
+            } else {
+                "לא ניתן היה ליצור את קובץ ה־PDF"
+            },
+            Toast.LENGTH_LONG
+        ).show()
+    }
+}
+
+private fun createBeltTopicsPdf(
+    context: Context,
+    belt: Belt,
+    lang: AppLanguage
+): File {
+    val isEnglish = lang == AppLanguage.ENGLISH
+    val topics = buildBeltTopicsPdfData(belt, lang)
+
+    val pageWidth = 595
+    val pageHeight = 842
+    val horizontalMargin = 30f
+    val contentBottom = 790f
+
+    val navy = android.graphics.Color.rgb(6, 43, 74)
+    val blue = android.graphics.Color.rgb(31, 120, 180)
+    val lightBlue = android.graphics.Color.rgb(234, 244, 255)
+    val softBlue = android.graphics.Color.rgb(247, 251, 255)
+    val borderBlue = android.graphics.Color.rgb(190, 215, 235)
+    val textDark = android.graphics.Color.rgb(31, 41, 55)
+    val textMuted = android.graphics.Color.rgb(92, 110, 128)
+    val white = android.graphics.Color.WHITE
+
+    val beltAccent = belt.color.toArgb()
+
+    val regularTypeface =
+        Typeface.create(Typeface.SANS_SERIF, Typeface.NORMAL)
+
+    val boldTypeface =
+        Typeface.create(Typeface.SANS_SERIF, Typeface.BOLD)
+
+    fun translated(hebrew: String, english: String): String =
+        if (isEnglish) english else hebrew
+
+    fun textPaint(
+        size: Float,
+        color: Int = textDark,
+        bold: Boolean = false,
+        alignment: Paint.Align =
+            if (isEnglish) Paint.Align.LEFT else Paint.Align.RIGHT
+    ): Paint {
+        return Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            textSize = size
+            this.color = color
+            typeface =
+                if (bold) {
+                    boldTypeface
+                } else {
+                    regularTypeface
+                }
+            textAlign = alignment
+        }
+    }
+
+    val document = PdfDocument()
+
+    var currentPage: PdfDocument.Page? = null
+    var canvas: Canvas? = null
+    var pageNumber = 0
+    var currentY = 0f
+
+    fun finishCurrentPage() {
+        currentPage?.let { page ->
+            val currentCanvas = page.canvas
+
+            val footerPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                color = navy
+                strokeWidth = 1.5f
+            }
+
+            currentCanvas.drawLine(
+                horizontalMargin,
+                805f,
+                pageWidth - horizontalMargin,
+                805f,
+                footerPaint
+            )
+
+            currentCanvas.drawText(
+                "K.A.M.I",
+                horizontalMargin,
+                827f,
+                textPaint(
+                    size = 10f,
+                    color = navy,
+                    bold = true,
+                    alignment = Paint.Align.LEFT
+                )
+            )
+
+            currentCanvas.drawText(
+                translated(
+                    "עמוד $pageNumber",
+                    "Page $pageNumber"
+                ),
+                pageWidth / 2f,
+                827f,
+                textPaint(
+                    size = 9f,
+                    color = textMuted,
+                    alignment = Paint.Align.CENTER
+                )
+            )
+
+            currentCanvas.drawText(
+                "Krav Maga Israel",
+                pageWidth - horizontalMargin,
+                827f,
+                textPaint(
+                    size = 9f,
+                    color = textMuted,
+                    alignment = Paint.Align.RIGHT
+                )
+            )
+
+            document.finishPage(page)
+        }
+
+        currentPage = null
+        canvas = null
+    }
+
+    fun startPage() {
+        finishCurrentPage()
+
+        pageNumber++
+
+        val page = document.startPage(
+            PdfDocument.PageInfo
+                .Builder(
+                    pageWidth,
+                    pageHeight,
+                    pageNumber
+                )
+                .create()
+        )
+
+        currentPage = page
+        canvas = page.canvas
+
+        val currentCanvas = page.canvas
+        currentCanvas.drawColor(white)
+
+        val headerPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = navy
+            style = Paint.Style.FILL
+        }
+
+        currentCanvas.drawRoundRect(
+            0f,
+            0f,
+            pageWidth.toFloat(),
+            116f,
+            0f,
+            0f,
+            headerPaint
+        )
+
+        val accentPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = beltAccent
+            style = Paint.Style.FILL
+        }
+
+        currentCanvas.drawRoundRect(
+            horizontalMargin,
+            101f,
+            pageWidth - horizontalMargin,
+            111f,
+            5f,
+            5f,
+            accentPaint
+        )
+
+        val titleAlignment =
+            if (isEnglish) {
+                Paint.Align.LEFT
+            } else {
+                Paint.Align.RIGHT
+            }
+
+        val titleX =
+            if (isEnglish) {
+                horizontalMargin
+            } else {
+                pageWidth - horizontalMargin
+            }
+
+        currentCanvas.drawText(
+            translated(
+                "נושאים בחגורה",
+                "Belt Topics"
+            ),
+            titleX,
+            43f,
+            textPaint(
+                size = 27f,
+                color = white,
+                bold = true,
+                alignment = titleAlignment
+            )
+        )
+
+        currentCanvas.drawText(
+            beltTitleForUi(belt, lang),
+            titleX,
+            76f,
+            textPaint(
+                size = 18f,
+                color = white,
+                bold = true,
+                alignment = titleAlignment
+            )
+        )
+
+        val generatedDate = SimpleDateFormat(
+            "dd/MM/yyyy",
+            Locale.getDefault()
+        ).format(Date())
+
+        currentCanvas.drawText(
+            translated(
+                "הופק בתאריך $generatedDate",
+                "Generated on $generatedDate"
+            ),
+            titleX,
+            96f,
+            textPaint(
+                size = 9f,
+                color = android.graphics.Color.rgb(
+                    210,
+                    230,
+                    245
+                ),
+                alignment = titleAlignment
+            )
+        )
+
+        currentY = 138f
+    }
+
+    fun ensureSpace(requiredHeight: Float) {
+        if (
+            currentPage == null ||
+            currentY + requiredHeight > contentBottom
+        ) {
+            startPage()
+        }
+    }
+
+    fun drawTopicHeader(
+        topic: BeltTopicsPdfTopic,
+        continued: Boolean
+    ) {
+        val currentCanvas = canvas ?: return
+
+        val cardTop = currentY
+        val cardBottom = currentY + 54f
+
+        val backgroundPaint =
+            Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                color = lightBlue
+                style = Paint.Style.FILL
+            }
+
+        val borderPaint =
+            Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                color = borderBlue
+                style = Paint.Style.STROKE
+                strokeWidth = 1.2f
+            }
+
+        currentCanvas.drawRoundRect(
+            horizontalMargin,
+            cardTop,
+            pageWidth - horizontalMargin,
+            cardBottom,
+            13f,
+            13f,
+            backgroundPaint
+        )
+
+        currentCanvas.drawRoundRect(
+            horizontalMargin,
+            cardTop,
+            pageWidth - horizontalMargin,
+            cardBottom,
+            13f,
+            13f,
+            borderPaint
+        )
+
+        val accentPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = beltAccent
+            style = Paint.Style.FILL
+        }
+
+        val accentLeft =
+            if (isEnglish) {
+                horizontalMargin
+            } else {
+                pageWidth - horizontalMargin - 6f
+            }
+
+        currentCanvas.drawRoundRect(
+            accentLeft,
+            cardTop,
+            accentLeft + 6f,
+            cardBottom,
+            6f,
+            6f,
+            accentPaint
+        )
+
+        val textX =
+            if (isEnglish) {
+                horizontalMargin + 20f
+            } else {
+                pageWidth - horizontalMargin - 20f
+            }
+
+        val alignment =
+            if (isEnglish) {
+                Paint.Align.LEFT
+            } else {
+                Paint.Align.RIGHT
+            }
+
+        val displayedTitle =
+            if (continued) {
+                translated(
+                    "${topic.title} – המשך",
+                    "${topic.title} – continued"
+                )
+            } else {
+                topic.title
+            }
+
+        currentCanvas.drawText(
+            displayedTitle,
+            textX,
+            cardTop + 23f,
+            textPaint(
+                size = 16f,
+                color = navy,
+                bold = true,
+                alignment = alignment
+            )
+        )
+
+        currentCanvas.drawText(
+            formatCount(topic.exercisesCount, lang),
+            textX,
+            cardTop + 43f,
+            textPaint(
+                size = 10.5f,
+                color = beltAccent,
+                bold = true,
+                alignment = alignment
+            )
+        )
+
+        currentY = cardBottom + 5f
+    }
+
+    fun drawSubTopicRow(
+        subTopic: BeltTopicsPdfSubTopic,
+        rowIndex: Int
+    ) {
+        val currentCanvas = canvas ?: return
+
+        val rowTop = currentY
+        val rowBottom = currentY + 26f
+
+        if (rowIndex % 2 == 0) {
+            currentCanvas.drawRoundRect(
+                horizontalMargin + 9f,
+                rowTop,
+                pageWidth - horizontalMargin - 9f,
+                rowBottom,
+                7f,
+                7f,
+                Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                    color = softBlue
+                }
+            )
+        }
+
+        val depthOffset = subTopic.depth * 13f
+
+        val titleX =
+            if (isEnglish) {
+                horizontalMargin + 22f + depthOffset
+            } else {
+                pageWidth - horizontalMargin - 22f - depthOffset
+            }
+
+        val countX =
+            if (isEnglish) {
+                pageWidth - horizontalMargin - 22f
+            } else {
+                horizontalMargin + 22f
+            }
+
+        currentCanvas.drawText(
+            subTopic.title,
+            titleX,
+            rowTop + 17f,
+            textPaint(
+                size = 11.5f,
+                color = textDark,
+                bold = subTopic.depth == 0,
+                alignment =
+                    if (isEnglish) {
+                        Paint.Align.LEFT
+                    } else {
+                        Paint.Align.RIGHT
+                    }
+            )
+        )
+
+        currentCanvas.drawText(
+            formatCount(
+                subTopic.exercisesCount,
+                lang
+            ),
+            countX,
+            rowTop + 17f,
+            textPaint(
+                size = 9.5f,
+                color = textMuted,
+                bold = true,
+                alignment =
+                    if (isEnglish) {
+                        Paint.Align.RIGHT
+                    } else {
+                        Paint.Align.LEFT
+                    }
+            )
+        )
+
+        currentY = rowBottom
+    }
+
+    startPage()
+
+    if (topics.isEmpty()) {
+        ensureSpace(100f)
+
+        canvas?.drawText(
+            translated(
+                "לא נמצאו נושאים להצגה",
+                "No topics were found"
+            ),
+            pageWidth / 2f,
+            currentY + 42f,
+            textPaint(
+                size = 17f,
+                color = textMuted,
+                bold = true,
+                alignment = Paint.Align.CENTER
+            )
+        )
+    } else {
+        topics.forEachIndexed { topicIndex, topic ->
+            ensureSpace(65f)
+            drawTopicHeader(
+                topic = topic,
+                continued = false
+            )
+
+            if (topic.subTopics.isEmpty()) {
+                currentY += 8f
+            } else {
+                topic.subTopics.forEachIndexed { subIndex, subTopic ->
+                    if (currentY + 31f > contentBottom) {
+                        startPage()
+
+                        drawTopicHeader(
+                            topic = topic,
+                            continued = true
+                        )
+                    }
+
+                    drawSubTopicRow(
+                        subTopic = subTopic,
+                        rowIndex = subIndex
+                    )
+                }
+            }
+
+            currentY +=
+                if (topicIndex == topics.lastIndex) {
+                    2f
+                } else {
+                    13f
+                }
+        }
+    }
+
+    finishCurrentPage()
+
+    val outputDirectory =
+        File(context.cacheDir, "shared_pdfs").apply {
+            mkdirs()
+        }
+
+    val safeBeltId = belt.id.replace(
+        Regex("[^a-zA-Z0-9_-]"),
+        "_"
+    )
+
+    val outputFile = File(
+        outputDirectory,
+        "kmi_${safeBeltId}_topics.pdf"
+    )
+
+    FileOutputStream(outputFile).use { output ->
+        document.writeTo(output)
+    }
+
+    document.close()
+
+    return outputFile
 }
 
 internal fun beltTitleForUi(belt: Belt, lang: AppLanguage): String =
@@ -386,15 +1075,12 @@ private fun beltTopicImageFor(belt: Belt, topicTitle: String): Int? {
 fun BeltQuestionsByBeltScreen(
     vm: KmiViewModel,
     kmiPrefs: KmiPrefs,
-    isCoach: Boolean,
     onNext: () -> Unit,
     onBackHome: () -> Unit,
+    onOpenByTopic: () -> Unit,
     onOpenSubscription: () -> Unit,
-    onOpenExercise: (String) -> Unit,
     onOpenTopic: (Belt, String) -> Unit,
     onOpenDefenseMenu: (Belt, String) -> Unit,
-    onOpenSubject: (SubjectTopic) -> Unit,
-    onOpenHardSubjectRoute: (Belt, String) -> Unit = { _, _ -> },
     onOpenSubTopic: (Belt, String, String) -> Unit = { _, _, _ -> },
     onOpenWeakPoints: (Belt) -> Unit = {},
     onOpenAllLists: (Belt) -> Unit = {},
@@ -409,15 +1095,12 @@ fun BeltQuestionsByBeltScreen(
     BeltPangoLayout(
         vm = vm,
         kmiPrefs = kmiPrefs,
-        isCoach = isCoach,
         onNext = onNext,
         onBackHome = onBackHome,
+        onOpenByTopic = onOpenByTopic,
         onOpenSubscription = onOpenSubscription,
-        onOpenExercise = onOpenExercise,
         onOpenTopic = onOpenTopic,
         onOpenDefenseMenu = onOpenDefenseMenu,
-        onOpenSubject = onOpenSubject,
-        onOpenHardSubjectRoute = onOpenHardSubjectRoute,
         onOpenSubTopic = onOpenSubTopic,
         onOpenWeakPoints = onOpenWeakPoints,
         onOpenAllLists = onOpenAllLists,
@@ -437,15 +1120,12 @@ fun BeltQuestionsByBeltScreen(
 internal fun BeltPangoLayout(
     vm: KmiViewModel,
     kmiPrefs: KmiPrefs,
-    isCoach: Boolean,
     onNext: () -> Unit,
     onBackHome: () -> Unit,
+    onOpenByTopic: () -> Unit,
     onOpenSubscription: () -> Unit,
     onOpenTopic: (Belt, String) -> Unit,
     onOpenDefenseMenu: (Belt, String) -> Unit,
-    onOpenExercise: (String) -> Unit,
-    onOpenSubject: (SubjectTopic) -> Unit,
-    onOpenHardSubjectRoute: (Belt, String) -> Unit,
     onOpenSubTopic: (Belt, String, String) -> Unit,
     onOpenWeakPoints: (Belt) -> Unit,
     onOpenAllLists: (Belt) -> Unit,
@@ -464,11 +1144,11 @@ internal fun BeltPangoLayout(
     val clickSound = rememberClickSound()
     // הערות תרגילים מנוהלות עכשיו בדיאלוג הגלובלי החדש דרך KmiTopBar
     val userSp = remember(ctx) {
-        ctx.getSharedPreferences("kmi_user", android.content.Context.MODE_PRIVATE)
+        ctx.getSharedPreferences("kmi_user", Context.MODE_PRIVATE)
     }
 
     val subsSp = remember(ctx) {
-        ctx.getSharedPreferences("kmi_subs", android.content.Context.MODE_PRIVATE)
+        ctx.getSharedPreferences("kmi_subs", Context.MODE_PRIVATE)
     }
 
     var accessRefreshTick by remember { mutableIntStateOf(0) }
@@ -477,7 +1157,7 @@ internal fun BeltPangoLayout(
     // אין צורך בלולאת רענון קבועה בזמן שהמסך פתוח.
 
     DisposableEffect(userSp, subsSp) {
-        val listener = SharedPreferences.OnSharedPreferenceChangeListener { changedSp, key ->
+        val listener = SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
             if (
                 key == "has_full_access" ||
                 key == "full_access" ||
@@ -513,25 +1193,15 @@ internal fun BeltPangoLayout(
 
     val hasUnlockedAccess = accessMode == AccessMode.OPEN
 
-    fun normalizeFavoriteId(raw: String): String =
-        raw.substringAfter("::", raw)
-            .substringAfter(":", raw)
-            .trim()
-
-    val coachMode = remember { isCoach }
     // החיפוש והסברי התרגילים עוברים דרך KmiTopBar + ExercisePremiumSearchDialog
 
     var showPracticeMenu by rememberSaveable { mutableStateOf(false) }
 
-    // ✅ state לתפריט הצף (נשלט מהמסך)
+    // state לתפריט הצף במסך לפי חגורה
     var quickMenuExpanded by rememberSaveable { mutableStateOf(false) }
 
     val belts = remember {
         Belt.order.filter { it != Belt.WHITE }
-    }
-
-    var topicsViewMode by rememberSaveable {
-        mutableStateOf(TopicsViewMode.BY_BELT)
     }
 
     /*
@@ -621,36 +1291,6 @@ internal fun BeltPangoLayout(
         }
     }
 
-    // ✅ shared-only: app SubjectTopic -> shared SubjectTopic
-    fun SubjectTopic.toSharedSubject(): SharedSubjectTopic =
-        SharedSubjectTopic(
-            id = this.id,
-            titleHeb = this.titleHeb,
-            topicsByBelt = this.topicsByBelt,
-            subTopicHint = this.subTopicHint,
-            includeItemKeywords = this.includeItemKeywords.orEmpty(),
-            requireAllItemKeywords = this.requireAllItemKeywords.orEmpty(),
-            excludeItemKeywords = this.excludeItemKeywords.orEmpty()
-        )
-
-    // ✅ shared-only: items for subject via resolver (stable & cross-platform)
-    fun itemsForSubject(belt: Belt, subject: SubjectTopic): List<String> =
-        SubjectItemsResolver
-            .resolveBySubject(belt = belt, subject = subject.toSharedSubject())
-            .asSequence()
-            .flatMap { it.items.asSequence() }
-            .map { it.rawItem } // או it.canonicalId אם אתה רוצה מזהה יציב
-            .toList()
-
-    fun bestBeltForSubject(subject: SubjectTopic): Belt {
-        // 1) קודם ננסה את החגורה הנוכחית במסך
-        if (itemsForSubject(currentBelt, subject).isNotEmpty()) return currentBelt
-
-        // 2) fallback: החגורה הראשונה של ה-subject שמחזירה items
-        val fallback = subject.belts.firstOrNull { b -> itemsForSubject(b, subject).isNotEmpty() }
-        return fallback ?: currentBelt
-    }
-
     val backgroundBrush = remember {
         Brush.verticalGradient(
             colors = listOf(
@@ -662,8 +1302,6 @@ internal fun BeltPangoLayout(
             )
         )
     }
-
-    var centerProgress by remember { mutableStateOf(currentIndex.toFloat()) }
 
     if (showPracticeMenu) {
         PracticeMenuDialog(
@@ -692,42 +1330,58 @@ internal fun BeltPangoLayout(
     Scaffold(
         topBar = {
             val contextLang = LocalContext.current
-            val langManager = remember { AppLanguageManager(contextLang) }
+            val topBarLanguageManager = remember {
+                AppLanguageManager(contextLang)
+            }
 
-            il.kmi.app.ui.KmiTopBar(
-                title = if (topicsViewMode == TopicsViewMode.BY_TOPIC) {
-                    if (langManager.getCurrentLanguage() == AppLanguage.ENGLISH) {
-                        "Exercises by Topic"
-                    } else {
-                        "תרגילים לפי נושא"
-                    }
-                } else {
-                    beltTitleForUi(currentBelt, langManager.getCurrentLanguage())
-                },
+            KmiTopBar(
+                title = beltTitleForUi(
+                    belt = currentBelt,
+                    lang = topBarLanguageManager.getCurrentLanguage()
+                ),
                 onHome = onBackHome,
-                // החיפוש הגלובלי נפתח ומטופל פנימית בתוך KmiTopBar
                 lockSearch = false,
                 showBottomActions = true,
                 centerTitle = true,
                 showTopHome = false,
-                showTopBeltIcon = topicsViewMode == TopicsViewMode.BY_BELT,
-                topBeltIconRes = if (topicsViewMode == TopicsViewMode.BY_TOPIC) null else null,
-                currentLang = if (langManager.getCurrentLanguage() == AppLanguage.ENGLISH) "en" else "he",
+                showTopBeltIcon = true,
+                topBeltIconRes = null,
+                currentLang =
+                    if (
+                        topBarLanguageManager.getCurrentLanguage() ==
+                        AppLanguage.ENGLISH
+                    ) {
+                        "en"
+                    } else {
+                        "he"
+                    },
+                onShare = {
+                    clickSound()
+                    haptic(true)
+
+                    shareBeltTopicsPdf(
+                        context = contextLang,
+                        belt = currentBelt,
+                        lang = topBarLanguageManager.getCurrentLanguage()
+                    )
+                },
                 onToggleLanguage = {
                     val newLang =
-                        if (langManager.getCurrentLanguage() == AppLanguage.HEBREW) {
+                        if (
+                            topBarLanguageManager.getCurrentLanguage() ==
+                            AppLanguage.HEBREW
+                        ) {
                             AppLanguage.ENGLISH
                         } else {
                             AppLanguage.HEBREW
                         }
 
-                    langManager.setLanguage(newLang)
+                    topBarLanguageManager.setLanguage(newLang)
                     (contextLang as? Activity)?.recreate()
                 }
             )
         }
     ) { padding ->
-
         Box(
             modifier = Modifier
                 .fillMaxSize()
@@ -735,297 +1389,152 @@ internal fun BeltPangoLayout(
                 .background(backgroundBrush)
                 .statusBarsPadding()
         ) {
-            // ✅ NEW: הגלילה רק לתוכן שמתחת לטאבים (בעיקר במצב BY_TOPIC)
-            val contentScroll = rememberScrollState()
-
             Column(
                 modifier = Modifier
                     .align(Alignment.TopCenter)
                     .fillMaxWidth()
-                    .padding(horizontal = 14.dp, vertical = 8.dp),
-                horizontalAlignment = Alignment.CenterHorizontally
+                    .padding(
+                        horizontal = 14.dp,
+                        vertical = 8.dp
+                    ),
+                horizontalAlignment =
+                    Alignment.CenterHorizontally
             ) {
-                TopicsViewModeToggle(
-                    mode = topicsViewMode,
-                    isCoach = coachMode,
-                    onModeChange = {
-                        topicsViewMode = it
+                BeltQuestionsModeSwitcher(
+                    selectedMode = BeltQuestionsDisplayMode.BY_BELT,
+                    onOpenByBelt = {},
+                    onOpenByTopic = {
                         clickSound()
                         haptic(true)
+                        onOpenByTopic()
                     }
                 )
 
                 Spacer(Modifier.height(4.dp))
 
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .let { base ->
-                            if (topicsViewMode == TopicsViewMode.BY_TOPIC) {
-                                base.verticalScroll(contentScroll)
-                            } else base
-                        }
-                ) {
-                    Column(
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        when (topicsViewMode) {
-                            TopicsViewMode.BY_BELT -> {
-                                TopicsCardForBelt(
-                                    belt = currentBelt,
-                                    lang = langManager.getCurrentLanguage(),
-                                    accessMode = accessMode,
-                                    onOpenSubscription = onOpenSubscription,
-
-                                    // ✅ חובה: זה פותח את כל הנושא (במסך החדש/הנכון שלך)
-                                    onOpenTopic = onOpenTopic,
-
-                                    onOpenSubTopic = onOpenSubTopic,
-                                    onOpenDefenseMenu = onOpenDefenseMenu,
-                                    haptic = haptic,
-                                    clickSound = clickSound
-                                )
-                            }
-
-                            TopicsViewMode.BY_TOPIC -> {
-                                TopicsBySubjectCard(
-                                    currentBelt = currentBelt,
-                                    hasAccess = hasUnlockedAccess,
-                                    onOpenSubscription = {
-                                        clickSound()
-                                        haptic(true)
-                                        onOpenSubscription()
-                                    },
-
-                                    onSubjectClick = { belt, subject ->
-                                        val best =
-                                            if (itemsForSubject(belt, subject).isNotEmpty()) belt
-                                            else bestBeltForSubject(subject)
-
-                                        vm.setSelectedBelt(best)
-                                        onOpenSubject(subject)
-                                    },
-
-                                    onOpenDefenseList = { belt, kind, pick ->
-                                        vm.setSelectedBelt(belt)
-
-                                        val cleanKind = kind.trim()
-                                        val cleanPick = pick.trim()
-
-                                        when {
-                                            cleanKind.contains("knife", ignoreCase = true) ||
-                                                    cleanPick.contains("סכין") ||
-                                                    cleanPick.contains("knife", ignoreCase = true) -> {
-                                                onOpenHardSubjectRoute(belt, "knife_defense")
-                                            }
-
-                                            cleanPick.contains("אקדח") ||
-                                                    cleanPick.contains("gun", ignoreCase = true) -> {
-                                                onOpenHardSubjectRoute(belt, "gun_threat_defense")
-                                            }
-
-                                            cleanPick.contains("מקל") ||
-                                                    cleanPick.contains("stick", ignoreCase = true) -> {
-                                                onOpenHardSubjectRoute(belt, "stick_defense")
-                                            }
-
-                                            cleanPick.contains("בעיטה") ||
-                                                    cleanPick.contains("kick", ignoreCase = true) -> {
-                                                onOpenHardSubjectRoute(belt, "kicks")
-                                            }
-
-                                            else -> {
-                                                onOpenDefenseMenu(belt, "$cleanKind:$cleanPick")
-                                            }
-                                        }
-                                    },
-
-                                    onOpenHardSubjectRoute = { belt, subjectId ->
-                                        vm.setSelectedBelt(belt)
-                                        onOpenHardSubjectRoute(belt, subjectId)
-                                    },
-
-                                    onOpenKicksHardLocal = {
-                                        android.util.Log.d(
-                                            "KMI_TOPIC_CLICK",
-                                            "OPEN_KICKS_HARD_FROM_BY_TOPIC | currentBelt=${currentBelt.id} | route=kicks_hard | accessMode=$accessMode | hasUnlockedAccess=$hasUnlockedAccess"
-                                        )
-
-                                        vm.setSelectedBelt(currentBelt)
-                                        onOpenHardSubjectRoute(currentBelt, "kicks_hard")
-                                    },
-
-                                    accessMode = accessMode
-                                )
-
-                                // ✅ אין יותר כפתור תחתון של "מבט מהיר".
-                                // התפריט המהיר נפתח עכשיו מהמלבן הצדדי כמו במצב "לפי חגורה".
-                                Spacer(Modifier.height(24.dp))
-                            }
-                        }
-                    }
-                }
-            }
-
-            // ✅ הקרוסלה רק במצב "לפי חגורה"
-            if (topicsViewMode == TopicsViewMode.BY_BELT) {
-                Box(
-                    modifier = Modifier
-                        .align(Alignment.BottomCenter)
-                        .navigationBarsPadding()
-                        .offset(y = 34.dp)
-                        .padding(bottom = 0.dp)
-                ) {
-                    BeltArcPicker(
-                        belts = belts,
-                        currentIndex = currentIndex,
-                        onIndexChange = { currentIndex = it },
-                        onCenterTap = onNext,
-                        onCenterProgress = { centerProgress = it },
-                        haptic = haptic,
-                        clickSound = clickSound,
-                        inputEnabled = false,
-
-                        // ✅ לא משתמשים יותר בהיפוך לפי שפה.
-                        // הכיוון ייקבע רק מתוך הגרירה עצמה בתוך BeltArcPicker.
-                        reverseSwipeDirection = true
-                    )
-                }
-            }
-
-            if (topicsViewMode == TopicsViewMode.BY_BELT) {
-                FloatingQuickMenu(
+                TopicsCardForBelt(
                     belt = currentBelt,
-                    modifier = Modifier
-                        // ✅ מלבן צדדי בצד שמאל של המסך
-                        .align(Alignment.CenterStart)
-                        .zIndex(999f),
-                    expanded = quickMenuExpanded,
-                    onExpandedChange = { quickMenuExpanded = it },
-
-                    // ✅ במקום הכפתור הצף העגול/מרובע הישן
-                    triggerMode = QuickMenuTriggerMode.SideRail,
-
-                    includePractice = true,
-                    hasFullAccess = hasUnlockedAccess,
-                    onLockedItemClick = {
-                        clickSound(); haptic(true)
-                        onOpenSubscription()
-                    },
-                    onWeakPoints = {
-                        clickSound(); haptic(true)
-                        onOpenWeakPoints(currentBelt)
-                    },
-                    onAllLists = {
-                        clickSound(); haptic(true)
-                        onOpenAllLists(currentBelt)
-                    },
-                    onPractice = {
-                        clickSound(); haptic(true)
-                        showPracticeMenu = true
-                    },
-                    onSummary = {
-                        clickSound(); haptic(true)
-                        onOpenSummaryScreen(currentBelt)
-                    },
-                    onVoice = {
-                        clickSound(); haptic(true)
-                        onOpenVoiceAssistant(currentBelt)
-                    },
-                    onPdf = {
-                        clickSound(); haptic(true)
-                        onOpenPdfMaterials(currentBelt)
-                    }
+                    lang = langManager.getCurrentLanguage(),
+                    accessMode = accessMode,
+                    onOpenSubscription = onOpenSubscription,
+                    onOpenTopic = onOpenTopic,
+                    onOpenSubTopic = onOpenSubTopic,
+                    onOpenDefenseMenu = onOpenDefenseMenu,
+                    haptic = haptic,
+                    clickSound = clickSound
                 )
             }
 
-            if (topicsViewMode == TopicsViewMode.BY_TOPIC) {
-                FloatingQuickMenu(
-                    belt = currentBelt,
-                    modifier = Modifier
-                        // ✅ אותו אייקון צדדי כמו במצב "לפי חגורה"
-                        .align(Alignment.CenterStart)
-                        .zIndex(999f),
-                    expanded = quickMenuExpanded,
-                    onExpandedChange = { quickMenuExpanded = it },
-                    triggerMode = QuickMenuTriggerMode.SideRail,
-                    includePractice = true,
-                    includeAllLists = false,
-                    includeSummary = false,
-                    hasFullAccess = hasUnlockedAccess,
-                    onLockedItemClick = {
-                        clickSound(); haptic(true)
-                        onOpenSubscription()
+            Box(
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .navigationBarsPadding()
+                    .offset(y = 34.dp)
+            ) {
+                BeltArcPicker(
+                    belts = belts,
+                    currentIndex = currentIndex,
+                    onIndexChange = { selectedIndex ->
+                        currentIndex = selectedIndex
                     },
-                    onWeakPoints = {
-                        clickSound(); haptic(true)
-                        onOpenWeakPoints(currentBelt)
-                    },
-                    onAllLists = {
-                        clickSound(); haptic(true)
-                        onOpenAllLists(currentBelt)
-                    },
-                    onPractice = {
-                        clickSound(); haptic(true)
-                        showPracticeMenu = true
-                    },
-                    onSummary = {
-                        clickSound(); haptic(true)
-                        onOpenSummaryScreen(currentBelt)
-                    },
-                    onVoice = {
-                        clickSound(); haptic(true)
-                        onOpenVoiceAssistant(currentBelt)
-                    },
-                    onPdf = {
-                        clickSound(); haptic(true)
-                        onOpenPdfMaterials(currentBelt)
-                    }
+                    onCenterTap = onNext,
+                    haptic = haptic,
+                    clickSound = clickSound,
+                    inputEnabled = false,
+                    reverseSwipeDirection = true
                 )
             }
-            // אין כאן יותר דיאלוג חיפוש/הסבר מקומי.
-            // כל החיפוש, ההסבר, המועדפים והערות המשתמש מטופלים דרך KmiTopBar.
+
+            FloatingQuickMenu(
+                belt = currentBelt,
+                modifier = Modifier
+                    .align(Alignment.CenterStart)
+                    .zIndex(999f),
+                expanded = quickMenuExpanded,
+                onExpandedChange = { expanded ->
+                    quickMenuExpanded = expanded
+                },
+                triggerMode = QuickMenuTriggerMode.SideRail,
+                includePractice = true,
+                hasFullAccess = hasUnlockedAccess,
+                onLockedItemClick = {
+                    clickSound()
+                    haptic(true)
+                    onOpenSubscription()
+                },
+                onWeakPoints = {
+                    clickSound()
+                    haptic(true)
+                    onOpenWeakPoints(currentBelt)
+                },
+                onAllLists = {
+                    clickSound()
+                    haptic(true)
+                    onOpenAllLists(currentBelt)
+                },
+                onPractice = {
+                    clickSound()
+                    haptic(true)
+                    showPracticeMenu = true
+                },
+                onSummary = {
+                    clickSound()
+                    haptic(true)
+                    onOpenSummaryScreen(currentBelt)
+                },
+                onVoice = {
+                    clickSound()
+                    haptic(true)
+                    onOpenVoiceAssistant(currentBelt)
+                },
+                onPdf = {
+                    clickSound()
+                    haptic(true)
+                    onOpenPdfMaterials(currentBelt)
+                }
+            )
         }
     }
 }
 
-/* ----------------------------- מתג "לפי חגורה / לפי נושא" ----------------------------- */
-
-
+private enum class BeltQuestionsDisplayMode {
+    BY_BELT,
+    BY_TOPIC
+}
 
 @Composable
-internal fun TopicsViewModeToggle(
-    mode: TopicsViewMode,
-    isCoach: Boolean,
-    onModeChange: (TopicsViewMode) -> Unit
+private fun BeltQuestionsModeSwitcher(
+    selectedMode: BeltQuestionsDisplayMode,
+    onOpenByBelt: () -> Unit,
+    onOpenByTopic: () -> Unit
 ) {
-    val ctx = LocalContext.current
-    val langManager = remember { AppLanguageManager(ctx) }
-    val isEnglish = langManager.getCurrentLanguage() == AppLanguage.ENGLISH
+    val context = LocalContext.current
+    val languageManager = remember(context) {
+        AppLanguageManager(context)
+    }
 
-    // ✅ סדר טאבים לפי שפה:
-    // עברית: שמאל = לפי נושא, ימין = לפי חגורה
-    // אנגלית: שמאל = By Topic, ימין = By Belt
-    //
-    // שים לב:
-    // ה-TabRow עצמו נשאר LTR כדי שהצדדים הפיזיים לא יתהפכו.
-    // לכן הפריט הראשון ברשימה = שמאל, הפריט השני = ימין.
+    val isEnglish =
+        languageManager.getCurrentLanguage() ==
+                AppLanguage.ENGLISH
+
     val tabs = remember(isEnglish) {
         if (isEnglish) {
             listOf(
-                TopicsViewMode.BY_TOPIC to "By Topic",
-                TopicsViewMode.BY_BELT to "By Belt"
+                BeltQuestionsDisplayMode.BY_TOPIC to "By Topic",
+                BeltQuestionsDisplayMode.BY_BELT to "By Belt"
             )
         } else {
             listOf(
-                TopicsViewMode.BY_TOPIC to "לפי נושא",
-                TopicsViewMode.BY_BELT to "לפי חגורה"
+                BeltQuestionsDisplayMode.BY_TOPIC to "לפי נושא",
+                BeltQuestionsDisplayMode.BY_BELT to "לפי חגורה"
             )
         }
     }
 
     val selectedIndex = tabs
-        .indexOfFirst { it.first == mode }
+        .indexOfFirst { (mode, _) ->
+            mode == selectedMode
+        }
         .coerceAtLeast(0)
 
     Surface(
@@ -1052,15 +1561,14 @@ internal fun TopicsViewModeToggle(
                     .offset(y = (-4).dp)
                     .width(1.dp)
                     .height(24.dp)
-                    .background(Color.White.copy(alpha = 0.65f))
+                    .background(
+                        Color.White.copy(alpha = 0.65f)
+                    )
             )
 
-            // ✅ חשוב:
-            // מכריחים LTR רק לסידור הפיזי של שני הטאבים,
-            // כדי שצד שמאל וצד ימין יהיו קבועים ולא יתהפכו בגלל RTL.
             CompositionLocalProvider(
-                androidx.compose.ui.platform.LocalLayoutDirection provides
-                        androidx.compose.ui.unit.LayoutDirection.Ltr
+                LocalLayoutDirection provides
+                        LayoutDirection.Ltr
             ) {
                 TabRow(
                     selectedTabIndex = selectedIndex,
@@ -1069,19 +1577,25 @@ internal fun TopicsViewModeToggle(
                     divider = {},
                     indicator = { positions ->
                         TabRowDefaults.Indicator(
-                            modifier = Modifier.tabIndicatorOffset(positions[selectedIndex]),
+                            modifier = Modifier.tabIndicatorOffset(
+                                positions[selectedIndex]
+                            ),
                             height = 3.dp,
                             color = Color.White
                         )
                     },
                     modifier = Modifier.matchParentSize()
                 ) {
-                    tabs.forEach { (tabMode, label) ->
+                    tabs.forEach { (mode, label) ->
                         Tab(
-                            selected = (mode == tabMode),
+                            selected = mode == selectedMode,
                             onClick = {
-                                if (mode != tabMode) {
-                                    onModeChange(tabMode)
+                                when (mode) {
+                                    BeltQuestionsDisplayMode.BY_BELT ->
+                                        onOpenByBelt()
+
+                                    BeltQuestionsDisplayMode.BY_TOPIC ->
+                                        onOpenByTopic()
                                 }
                             },
                             text = {
@@ -1094,7 +1608,8 @@ internal fun TopicsViewModeToggle(
                                 )
                             },
                             selectedContentColor = Color.White,
-                            unselectedContentColor = Color.White.copy(alpha = 0.82f)
+                            unselectedContentColor =
+                                Color.White.copy(alpha = 0.82f)
                         )
                     }
                 }
@@ -1117,7 +1632,7 @@ private fun PremiumPulsingLockBadge(
         targetValue = 1.00f,
         animationSpec = infiniteRepeatable(
             animation = tween(durationMillis = 900, easing = LinearEasing),
-            repeatMode = androidx.compose.animation.core.RepeatMode.Reverse
+            repeatMode = RepeatMode.Reverse
         ),
         label = "topicLockScale"
     )
@@ -1140,7 +1655,7 @@ private fun PremiumPulsingLockBadge(
 private fun TopicsCardForBelt(
     belt: Belt,
     lang: AppLanguage,
-    accessMode: il.kmi.app.subscription.AccessMode,
+    accessMode: AccessMode,
     onOpenSubscription: () -> Unit,
     onOpenTopic: (Belt, String) -> Unit,
     onOpenSubTopic: (Belt, String, String) -> Unit,
@@ -1157,8 +1672,8 @@ private fun TopicsCardForBelt(
     val titleTextAlignByLang = if (isEnglish) TextAlign.Left else TextAlign.Right
     val horizontalByLang = if (isEnglish) Alignment.Start else Alignment.End
     val layoutByLang =
-        if (isEnglish) androidx.compose.ui.unit.LayoutDirection.Ltr
-        else androidx.compose.ui.unit.LayoutDirection.Rtl
+        if (isEnglish) LayoutDirection.Ltr
+        else LayoutDirection.Rtl
 
     val cardBg = if (isDarkTheme) Color(0xFF101827) else Color.White
 
@@ -1508,7 +2023,7 @@ private fun TopicsCardForBelt(
                                 val topicImageRes = beltTopicImageFor(belt, title)
 
                                 CompositionLocalProvider(
-                                    androidx.compose.ui.platform.LocalLayoutDirection provides layoutByLang
+                                    LocalLayoutDirection provides layoutByLang
                                 ) {
                                     Row(
                                         modifier = Modifier.fillMaxWidth(),
@@ -1642,12 +2157,22 @@ private fun TopicsCardForBelt(
 
                                                 val subTopicStatsLine =
                                                     remember(belt, title, sub, lang) {
-                                                        SharedContentRepo.getSubTopicsFor(
-                                                            belt = belt,
-                                                            topicTitle = title
-                                                        )
-                                                            .firstOrNull { it.title.trim() == sub.trim() }
-                                                            ?.let { subTopicStatsLineForUi(it, lang) }
+                                                        val matchedSubTopic: SharedContentRepo.SubTopic? =
+                                                            SharedContentRepo.getSubTopicsFor(
+                                                                belt = belt,
+                                                                topicTitle = title
+                                                            )
+                                                                .firstOrNull { candidate ->
+                                                                    candidate.title.trim() == sub.trim()
+                                                                }
+
+                                                        matchedSubTopic
+                                                            ?.let { resolvedSubTopic: SharedContentRepo.SubTopic ->
+                                                                subTopicStatsLineForUi(
+                                                                    subTopic = resolvedSubTopic,
+                                                                    lang = lang
+                                                                )
+                                                            }
                                                             .orEmpty()
                                                     }
 
@@ -1854,7 +2379,7 @@ private fun BeltArcPicker(
     val arcDepth = 84.dp
     val pickerHeight = small + arcDepth
 
-    val density = androidx.compose.ui.platform.LocalDensity.current
+    val density = LocalDensity.current
     val stepPx = with(density) { step.toPx() }
 
     val center = remember { Animatable(currentIndex.toFloat()) }
@@ -1878,12 +2403,12 @@ private fun BeltArcPicker(
     ) {
         belts.forEachIndexed { index, belt ->
             val rel = index - center.value
-            val dist = kotlin.math.abs(rel)
+            val dist = abs(rel)
             val hide = dist > 2.6f
-            val t = kotlin.math.min(1f, dist / 2f)
+            val t = min(1f, dist / 2f)
 
             val drop = arcDepth * (1f - cos(t * (PI / 2)).toFloat())
-            val grow = (1f - kotlin.math.min(1f, dist)).coerceIn(0f, 1f)
+            val grow = (1f - min(1f, dist)).coerceIn(0f, 1f)
             val targetSize = small + (big - small) * grow
             val size by animateDpAsState(targetValue = targetSize, label = "belt-size")
 
@@ -1896,7 +2421,7 @@ private fun BeltArcPicker(
             val circleColor = belt.color.copy(alpha = 0.96f)
 
             val sideBoost = small
-            val boostFactor = kotlin.math.min(1f, dist)
+            val boostFactor = min(1f, dist)
             val yDrop = drop + sideBoost * boostFactor
 
             val isCenter = dist < 0.25f
@@ -2070,8 +2595,8 @@ private fun RotatingOrbitRing(
             startAngle = 0f,
             sweepAngle = 360f,
             useCenter = false,
-            topLeft = androidx.compose.ui.geometry.Offset(inset, inset),
-            size = androidx.compose.ui.geometry.Size(
+            topLeft = Offset(inset, inset),
+            size = Size(
                 size.width - inset * 2,
                 size.height - inset * 2
             ),
@@ -2085,12 +2610,12 @@ private fun RotatingOrbitRing(
                 startAngle = 0f,
                 sweepAngle = 360f,
                 useCenter = false,
-                topLeft = androidx.compose.ui.geometry.Offset(inset, inset),
-                size = androidx.compose.ui.geometry.Size(
+                topLeft = Offset(inset, inset),
+                size = Size(
                     size.width - inset * 2,
                     size.height - inset * 2
                 ),
-                style = Stroke(width = strokePx, cap = androidx.compose.ui.graphics.StrokeCap.Round)
+                style = Stroke(width = strokePx, cap = StrokeCap.Round)
             )
         }
     }

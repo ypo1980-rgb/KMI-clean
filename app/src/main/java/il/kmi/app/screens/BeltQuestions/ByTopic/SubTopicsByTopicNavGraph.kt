@@ -1,4 +1,4 @@
-package il.kmi.app.screens.SubTopics
+package il.kmi.app.screens.BeltQuestions.ByTopic
 
 import android.net.Uri
 import androidx.navigation.NavGraphBuilder
@@ -8,8 +8,10 @@ import androidx.navigation.compose.composable
 import androidx.navigation.navArgument
 import il.kmi.app.KmiViewModel
 import il.kmi.app.Route
-import il.kmi.app.screens.SubTopicsScreen
+import il.kmi.app.screens.BeltQuestions.SubTopics.SubTopicsScreen
+import il.kmi.app.screens.BeltQuestions.SubTopics.SubTopicsSourceMode
 import il.kmi.shared.domain.Belt
+import il.kmi.shared.domain.content.HardSectionsCatalog
 
 private fun buildMaterialsSubRouteByTopic(
     belt: Belt,
@@ -38,8 +40,8 @@ private fun buildMaterialsSubRouteByTopic(
     }
 
     val isHardTopic =
-        il.kmi.shared.domain.content.HardSectionsCatalog.supportsSubject(topic) ||
-                il.kmi.shared.domain.content.HardSectionsCatalog.findAnySectionById(topic) != null
+        HardSectionsCatalog.supportsSubject(topic) ||
+                HardSectionsCatalog.findAnySectionById(topic) != null
 
     if (isHardTopic) {
         return SubTopicsByTopicRoute.build(
@@ -81,7 +83,8 @@ private fun buildMaterialsSubRouteByTopic(
 
 fun NavGraphBuilder.subTopicsByTopicNavGraph(
     nav: NavHostController,
-    vm: KmiViewModel
+    vm: KmiViewModel,
+    isCoach: Boolean = false
 ) {
     composable(
         route = SubTopicsByTopicRoute.route,
@@ -143,7 +146,10 @@ fun NavGraphBuilder.subTopicsByTopicNavGraph(
                     restoreState = false
                 }
             },
-            vm = vm
+            vm = vm,
+            sourceMode =
+                SubTopicsSourceMode.BY_TOPIC,
+            isCoach = isCoach
         )
     }
 }

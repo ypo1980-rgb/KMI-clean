@@ -11,9 +11,13 @@ import androidx.navigation.compose.composable
 import androidx.navigation.navArgument
 import il.kmi.app.KmiViewModel
 import il.kmi.app.Route
-import il.kmi.app.screens.BeltQuestions.BeltQuestionsByBeltScreen
-import il.kmi.app.screens.BeltQuestions.BeltQuestionsByTopicScreen
+import il.kmi.app.screens.BeltQuestions.ByBelt.BeltQuestionsByBeltScreen
+import il.kmi.app.screens.BeltQuestions.Materials.MaterialsScreen
+import il.kmi.app.screens.BeltQuestions.ByBelt.SubTopicsByBeltRoute
+import il.kmi.app.screens.BeltQuestions.ByTopic.BeltQuestionsByTopicScreen
 import il.kmi.app.screens.PracticeByTopicsSelection
+import il.kmi.app.screens.BeltQuestions.ByTopic.SubTopicsByTopicRoute
+import il.kmi.app.screens.BeltQuestions.ByTopic.UnifiedSubjectExercisesScreen
 import il.kmi.app.subscription.KmiAccess
 import il.kmi.shared.domain.Belt
 
@@ -117,7 +121,7 @@ fun NavGraphBuilder.trainingNavGraph(
         ) {
             vm.setSelectedBelt(belt)
 
-            val route = il.kmi.app.screens.SubTopics.SubTopicsByBeltRoute.build(
+            val route = SubTopicsByBeltRoute.build(
                 belt = belt,
                 topic = topic
             )
@@ -151,7 +155,7 @@ fun NavGraphBuilder.trainingNavGraph(
                     }
 
                     if (mappedId != null) {
-                        il.kmi.app.screens.SubTopics.SubTopicsByTopicRoute.build(
+                        SubTopicsByTopicRoute.build(
                             belt = belt,
                             topic = mappedId
                         )
@@ -183,7 +187,6 @@ fun NavGraphBuilder.trainingNavGraph(
         BeltQuestionsByBeltScreen(
             vm = vm,
             kmiPrefs = kmiPrefs,
-            isCoach = isCoach,
 
             onNext = {
                 nav.navigate(Route.Topics.route) {
@@ -196,6 +199,13 @@ fun NavGraphBuilder.trainingNavGraph(
                 nav.navigate(Route.Home.route) {
                     popUpTo(Route.Home.route) { inclusive = true }
                     launchSingleTop = true
+                }
+            },
+
+            onOpenByTopic = {
+                nav.navigate(Route.BeltQByTopic.route) {
+                    launchSingleTop = true
+                    restoreState = true
                 }
             },
 
@@ -279,65 +289,6 @@ fun NavGraphBuilder.trainingNavGraph(
                         subTopic = subTopic
                     )
                 }
-                             },
-
-            onOpenHardSubjectRoute = { belt, subjectId ->
-                vm.setSelectedBelt(belt)
-
-                val hasAccessNow = hasPremiumAccessNow()
-                val cleanSubjectId = subjectId.trim()
-
-                if (
-                    !hasAccessNow &&
-                    (
-                            shouldBlockPremiumTopic(cleanSubjectId) ||
-                                    isLockedPremiumDefenseRoute(cleanSubjectId)
-                            )
-                ) {
-                    nav.navigate(Route.Subscription.route) {
-                        launchSingleTop = true
-                        restoreState = true
-                    }
-                } else if (cleanSubjectId == "kicks_hard") {
-                    nav.navigate(
-                        "hard_subject_direct/${belt.id}/${Uri.encode("kicks_hard")}/${Uri.encode("_")}"
-                    ) {
-                        launchSingleTop = true
-                        restoreState = true
-                    }
-                } else {
-                    val route = il.kmi.app.screens.SubTopics.SubTopicsByTopicRoute.build(
-                        belt = belt,
-                        topic = cleanSubjectId
-                    )
-
-                    nav.navigate(route) {
-                        launchSingleTop = true
-                        restoreState = true
-                    }
-                }
-            },
-
-            onOpenSubject = { subject ->
-                val selectedBelt = runCatching {
-                    vm.selectedBelt.value?.id?.let { Belt.fromId(it) }
-                }.getOrNull() ?: Belt.GREEN
-
-                if (shouldBlockPremiumTopic(subject.titleHeb)) {
-                    nav.navigate(Route.Subscription.route) {
-                        launchSingleTop = true
-                        restoreState = true
-                    }
-                } else {
-                    openSubTopics(
-                        belt = selectedBelt,
-                        topic = subject.titleHeb
-                    )
-                }
-            },
-
-            onOpenExercise = { _ ->
-                // נשאר כמו שהיה אצלך
             },
 
             onOpenWeakPoints = { _ ->
@@ -415,6 +366,21 @@ fun NavGraphBuilder.trainingNavGraph(
         }
 
         BeltQuestionsByTopicScreen(
+            onOpenByBelt = {
+                val returnedToBeltScreen =
+                    nav.popBackStack(
+                        route = Route.BeltQ.route,
+                        inclusive = false
+                    )
+
+                if (!returnedToBeltScreen) {
+                    nav.navigate(Route.BeltQ.route) {
+                        launchSingleTop = true
+                        restoreState = true
+                    }
+                }
+            },
+
             onOpenSubscription = {
                 nav.navigate(Route.Subscription.route) {
                     launchSingleTop = true
@@ -432,7 +398,7 @@ fun NavGraphBuilder.trainingNavGraph(
                     }
                 } else {
                     nav.navigate(
-                        il.kmi.app.screens.SubTopics.SubTopicsByTopicRoute.build(
+                        SubTopicsByTopicRoute.build(
                             belt = belt,
                             topic = subject.id
                         )
@@ -508,7 +474,7 @@ fun NavGraphBuilder.trainingNavGraph(
 
                 if (hardSubjectId != null) {
                     nav.navigate(
-                        il.kmi.app.screens.SubTopics.SubTopicsByTopicRoute.build(
+                        SubTopicsByTopicRoute.build(
                             belt = belt,
                             topic = hardSubjectId
                         )
@@ -540,7 +506,7 @@ fun NavGraphBuilder.trainingNavGraph(
                     }
                 } else {
                     nav.navigate(
-                        il.kmi.app.screens.SubTopics.SubTopicsByTopicRoute.build(
+                        SubTopicsByTopicRoute.build(
                             belt = belt,
                             topic = subjectId
                         )
@@ -606,7 +572,7 @@ fun NavGraphBuilder.trainingNavGraph(
 
         vm.setSelectedBelt(belt)
 
-        il.kmi.app.screens.UnifiedSubjectExercisesScreen(
+        UnifiedSubjectExercisesScreen(
             subjectId = subjectId,
             sectionId = sectionId,
             vm = vm,
@@ -645,13 +611,17 @@ fun NavGraphBuilder.trainingNavGraph(
 
         vm.setSelectedBelt(belt)
 
-        il.kmi.app.screens.UnifiedSubjectExercisesScreen(
+        UnifiedSubjectExercisesScreen(
             subjectId = subjectId,
             sectionId = sectionId,
             vm = vm,
             onOpenSection = { nextSubjectId, nextSectionId ->
                 nav.navigate(
-                    "hard_subject_direct/${belt.id}/${Uri.encode(nextSubjectId)}/${Uri.encode(nextSectionId ?: "_")}"
+                    "hard_subject_direct/${belt.id}/${Uri.encode(nextSubjectId)}/${
+                        Uri.encode(
+                            nextSectionId ?: "_"
+                        )
+                    }"
                 ) {
                     launchSingleTop = true
                     restoreState = true
@@ -684,7 +654,7 @@ fun NavGraphBuilder.trainingNavGraph(
 
         vm.setSelectedBelt(belt)
 
-        il.kmi.app.screens.MaterialsScreen(
+        MaterialsScreen(
             vm = vm,
             belt = belt,
             topic = topic,

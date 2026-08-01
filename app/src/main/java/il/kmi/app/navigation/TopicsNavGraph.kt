@@ -10,7 +10,9 @@ import androidx.navigation.NavHostController
 import androidx.navigation.compose.composable
 import il.kmi.app.KmiViewModel
 import il.kmi.app.Route
-import il.kmi.app.screens.BeltQuestions.BeltQuestionsByTopicScreen
+import il.kmi.app.screens.BeltQuestions.ByTopic.BeltQuestionsByTopicScreen
+import il.kmi.app.screens.BeltQuestions.ByTopic.SubTopicsByTopicRoute
+import il.kmi.app.screens.BeltQuestions.ByTopic.UnifiedSubjectExercisesScreen
 import il.kmi.shared.domain.Belt
 import il.kmi.app.subscription.KmiAccess
 
@@ -56,7 +58,7 @@ fun NavGraphBuilder.topicsNavGraph(
             ?.let { Uri.decode(it) }
             .orEmpty()
 
-        il.kmi.app.screens.UnifiedSubjectExercisesScreen(
+        UnifiedSubjectExercisesScreen(
             subjectId = subjectId,
             sectionId = null,
             onOpenSection = { nextSubjectId, sectionId ->
@@ -92,7 +94,7 @@ fun NavGraphBuilder.topicsNavGraph(
             ?.getString("sectionId")
             ?.let { Uri.decode(it) }
 
-        il.kmi.app.screens.UnifiedSubjectExercisesScreen(
+        UnifiedSubjectExercisesScreen(
             subjectId = subjectId,
             sectionId = sectionId,
             onOpenSection = { nextSubjectId, nextSectionId ->
@@ -158,7 +160,7 @@ fun NavGraphBuilder.topicsNavGraph(
         fun openSubTopics(belt: Belt, topic: String) {
             vm.setSelectedBelt(belt)
 
-            val route = il.kmi.app.screens.SubTopics.SubTopicsByTopicRoute.build(
+            val route = SubTopicsByTopicRoute.build(
                 belt = belt,
                 topic = topic
             )
@@ -191,6 +193,21 @@ fun NavGraphBuilder.topicsNavGraph(
         }
 
         BeltQuestionsByTopicScreen(
+            onOpenByBelt = {
+                val returnedToBeltScreen =
+                    nav.popBackStack(
+                        route = Route.BeltQ.route,
+                        inclusive = false
+                    )
+
+                if (!returnedToBeltScreen) {
+                    nav.navigate(Route.BeltQ.route) {
+                        launchSingleTop = true
+                        restoreState = true
+                    }
+                }
+            },
+
             onOpenSubscription = {
                 nav.navigate(Route.Subscription.route) {
                     launchSingleTop = true

@@ -34,7 +34,6 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.DrawerValue
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -45,10 +44,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLayoutDirection
-import androidx.compose.ui.window.DialogProperties
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -71,7 +68,6 @@ import il.kmi.app.ui.rememberClickSound
 import il.kmi.app.ui.assistant.ui.AiAssistantDialog
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
-import com.google.firebase.firestore.Query
 import il.kmi.shared.questions.model.util.ExerciseTitleFormatter
 import il.kmi.app.ui.dialogs.ExerciseExplanationDialog
 import il.kmi.app.ui.dialogs.ExerciseNoteEditorDialog
@@ -666,8 +662,43 @@ fun HomeScreen(
             // =========================
             // ⭐ הודעות מהמאמן – state ברמת Box כדי שגם הכרטיס וגם הדיאלוג יכירו אותו
             // =========================
-            val currentUid = remember {
-                FirebaseAuth.getInstance().currentUser?.uid
+            /*
+             * Firebase עשוי לשחזר את המשתמש רק לאחר שהמסך כבר הורכב.
+             * לכן לא שומרים את ה-UID באמצעות remember קבוע, אלא מאזינים
+             * לשינויי ההתחברות ומעדכנים את ה-State.
+             */
+            var currentUid by remember {
+                mutableStateOf(
+                    FirebaseAuth.getInstance()
+                        .currentUser
+                        ?.uid
+                )
+            }
+
+            DisposableEffect(Unit) {
+                val auth =
+                    FirebaseAuth.getInstance()
+
+                val authListener =
+                    FirebaseAuth.AuthStateListener { changedAuth ->
+                        currentUid =
+                            changedAuth.currentUser
+                                ?.uid
+                    }
+
+                auth.addAuthStateListener(authListener)
+
+                /*
+                 * עדכון מיידי, בנוסף ל-listener, למקרה שהמשתמש
+                 * כבר היה מחובר לפני פתיחת המסך.
+                 */
+                currentUid =
+                    auth.currentUser
+                        ?.uid
+
+                onDispose {
+                    auth.removeAuthStateListener(authListener)
+                }
             }
 
             var recentCoachMessages by remember {
@@ -1436,16 +1467,44 @@ fun HomeScreen(
                         val branchMatches =
                             docBranches.isNotEmpty() &&
                                     currentBranches.any { current ->
-                                        docBranches.any { it == current }
+                                        docBranches.any { target ->
+                                            target == current
+                                        }
                                     }
 
                         val groupMatches =
                             docGroups.isNotEmpty() &&
                                     currentGroups.any { current ->
-                                        docGroups.any { it == current }
+                                        docGroups.any { target ->
+                                            target == current
+                                        }
                                     }
 
-                        return branchMatches && groupMatches
+                        /*
+                         * הודעות חדשות עשויות להכיל גם סניף וגם קבוצה,
+                         * אבל הודעות ישנות עשויות להכיל רק אחד מהם.
+                         *
+                         * אם קיימים שניהם – דורשים התאמה של שניהם.
+                         * אם קיים רק אחד – מספיקה ההתאמה שלו.
+                         */
+                        return when {
+                            docBranches.isNotEmpty() &&
+                                    docGroups.isNotEmpty() -> {
+                                branchMatches && groupMatches
+                            }
+
+                            docBranches.isNotEmpty() -> {
+                                branchMatches
+                            }
+
+                            docGroups.isNotEmpty() -> {
+                                groupMatches
+                            }
+
+                            else -> {
+                                false
+                            }
+                        }
                     }
 
                     if (
@@ -1459,79 +1518,180 @@ fun HomeScreen(
                         recentCoachMessages = emptyList()
                         onDispose { }
                     } else {
-                        val db = FirebaseFirestore.getInstance()
+                        val db =
+                            FirebaseFirestore.getInstance()
 
-                        val query = db.collection("coachBroadcasts")
-                            .orderBy("createdAt", Query.Direction.DESCENDING)
-                            .limit(40)
+                        val broadcastsCollection =
+                            db.collection("coachBroadcasts")
 
-                        val reg = query.addSnapshotListener { snap, e ->
-                            if (e != null) {
-                                return@addSnapshotListener
-                            }
+                        /*
+                         * מאחדים תוצאות משתי שאילתות מאובטחות:
+                         *
+                         * 1. הודעות שהמשתמש נמצא ב-targetUids שלהן.
+                         * 2. הודעות שהמשתמש הנוכחי הוא המאמן ששלח אותן.
+                         *
+                         * אותו מסמך עשוי להופיע בשתי השאילתות ולכן
+                         * האיחוד מתבצע לפי מזהה המסמך.
+                         */
+                        val recipientDocuments =
+                            mutableMapOf<String, DocumentSnapshot>()
 
-                            recentCoachMessages = snap
-                                ?.documents
-                                .orEmpty()
-                                .filter { doc ->
-                                    val docBroadcastId = (
-                                            doc.getString("broadcastId")
-                                                ?: doc.getString("broadcast_id")
-                                                ?: doc.id
-                                            ).trim()
+                        val authoredDocuments =
+                            mutableMapOf<String, DocumentSnapshot>()
 
-                                    docTargetsCurrentUser(doc) ||
-                                            pushBroadcastId.isNotBlank() &&
-                                            docBroadcastId == pushBroadcastId
+                        fun publishRecentMessages() {
+                            val mergedDocuments =
+                                buildMap<String, DocumentSnapshot> {
+                                    putAll(recipientDocuments)
+                                    putAll(authoredDocuments)
                                 }
-                                .mapNotNull { doc ->
-                                    val text = (
-                                            doc.getString("text")
-                                                ?: doc.getString("message")
-                                                ?: doc.getString("body")
-                                                ?: doc.getString("content")
-                                            )
-                                        ?.trim()
-                                        .orEmpty()
+                                    .values
+                                    .toList()
 
-                                    if (text.isBlank()) {
-                                        null
-                                    } else {
-                                        CoachHomeMessage(
-                                            text = text,
-                                            coachName = (
-                                                    doc.getString("coachName")
-                                                        ?: doc.getString("coach_name")
-                                                        ?: doc.getString("senderName")
-                                                        ?: doc.getString("fromName")
-                                                        ?: "המאמן"
-                                                    ).trim(),
-                                            sentAt = doc.getTimestamp("createdAt")?.toDate()
-                                                ?: doc.getTimestamp("sentAt")?.toDate()
-                                                ?: doc.getTimestamp("timestamp")?.toDate(),
-                                            branch = firstStringFromDoc(
-                                                doc,
-                                                "branch",
-                                                "branchName",
-                                                "branch_name",
-                                                "targetBranch",
-                                                "selectedBranch"
-                                            ),
-                                            group = firstStringFromDoc(
-                                                doc,
-                                                "group",
-                                                "groupKey",
-                                                "group_key",
-                                                "targetGroup",
-                                                "selectedGroup"
-                                            )
-                                        )
+                            recentCoachMessages =
+                                mergedDocuments
+                                    .filter { doc ->
+                                        val docBroadcastId = (
+                                                doc.getString("broadcastId")
+                                                    ?: doc.getString("broadcast_id")
+                                                    ?: doc.id
+                                                ).trim()
+
+                                        docTargetsCurrentUser(doc) ||
+                                                (
+                                                        pushBroadcastId.isNotBlank() &&
+                                                                docBroadcastId ==
+                                                                pushBroadcastId
+                                                        )
                                     }
-                                }
-                                .take(5)
+                                    .mapNotNull { doc ->
+                                        val text = (
+                                                doc.getString("text")
+                                                    ?: doc.getString("message")
+                                                    ?: doc.getString("body")
+                                                    ?: doc.getString("content")
+                                                )
+                                            ?.trim()
+                                            .orEmpty()
+
+                                        if (text.isBlank()) {
+                                            null
+                                        } else {
+                                            val sentAt =
+                                                doc.getTimestamp("createdAt")
+                                                    ?.toDate()
+                                                    ?: doc.getTimestamp("sentAt")
+                                                        ?.toDate()
+                                                    ?: doc.getTimestamp("timestamp")
+                                                        ?.toDate()
+                                                    ?: doc.getLong("createdAtMillis")
+                                                        ?.takeIf { it > 0L }
+                                                        ?.let { Date(it) }
+                                                    ?: doc.getLong("sentAtMillis")
+                                                        ?.takeIf { it > 0L }
+                                                        ?.let { Date(it) }
+
+                                            CoachHomeMessage(
+                                                text = text,
+                                                coachName = (
+                                                        doc.getString("coachName")
+                                                            ?: doc.getString("coach_name")
+                                                            ?: doc.getString("senderName")
+                                                            ?: doc.getString("fromName")
+                                                            ?: "המאמן"
+                                                        ).trim(),
+                                                sentAt = sentAt,
+                                                branch = firstStringFromDoc(
+                                                    doc,
+                                                    "branch",
+                                                    "branchName",
+                                                    "branch_name",
+                                                    "targetBranch",
+                                                    "selectedBranch"
+                                                ),
+                                                group = firstStringFromDoc(
+                                                    doc,
+                                                    "group",
+                                                    "groups",
+                                                    "groupKey",
+                                                    "group_key",
+                                                    "targetGroup",
+                                                    "targetGroups",
+                                                    "selectedGroup",
+                                                    "selectedGroups"
+                                                )
+                                            )
+                                        }
+                                    }
+                                    .distinctBy { message ->
+                                        listOf(
+                                            message.sentAt?.time ?: 0L,
+                                            message.coachName.trim(),
+                                            message.text.trim(),
+                                            message.branch.trim(),
+                                            message.group.trim()
+                                        ).joinToString("|")
+                                    }
+                                    .sortedByDescending { message ->
+                                        message.sentAt?.time ?: 0L
+                                    }
+                                    .take(5)
                         }
 
-                        onDispose { reg.remove() }
+                        val recipientRegistration =
+                            broadcastsCollection
+                                .whereArrayContains(
+                                    "targetUids",
+                                    uid
+                                )
+                                .limit(50)
+                                .addSnapshotListener { snapshot, error ->
+                                    if (error != null) {
+                                        return@addSnapshotListener
+                                    }
+
+                                    recipientDocuments.clear()
+
+                                    snapshot
+                                        ?.documents
+                                        .orEmpty()
+                                        .forEach { document ->
+                                            recipientDocuments[document.id] =
+                                                document
+                                        }
+
+                                    publishRecentMessages()
+                                }
+
+                        val authoredRegistration =
+                            broadcastsCollection
+                                .whereEqualTo(
+                                    "authorUid",
+                                    uid
+                                )
+                                .limit(50)
+                                .addSnapshotListener { snapshot, error ->
+                                    if (error != null) {
+                                        return@addSnapshotListener
+                                    }
+
+                                    authoredDocuments.clear()
+
+                                    snapshot
+                                        ?.documents
+                                        .orEmpty()
+                                        .forEach { document ->
+                                            authoredDocuments[document.id] =
+                                                document
+                                        }
+
+                                    publishRecentMessages()
+                                }
+
+                        onDispose {
+                            recipientRegistration.remove()
+                            authoredRegistration.remove()
+                        }
                     }
                 }
 
@@ -1607,11 +1767,15 @@ fun HomeScreen(
                 // אם ה־SharedPreferences המקומי לא מכיל את כל הסניפים/קבוצות,
                 // נטען את הפרופיל מ־Firestore ונעדכן את kmi_user.
                 LaunchedEffect(currentUid) {
-                    if (currentUid.isNullOrBlank()) return@LaunchedEffect
+                    val uidForProfile =
+                        currentUid
+                            ?.trim()
+                            ?.takeIf { it.isNotBlank() }
+                            ?: return@LaunchedEffect
 
                     FirebaseFirestore.getInstance()
                         .collection("users")
-                        .document(currentUid)
+                        .document(uidForProfile)
                         .get()
                         .addOnSuccessListener { doc ->
 
@@ -2306,35 +2470,58 @@ fun HomeScreen(
                             }
                         }
 
+                        /*
+                         * מנרמלים חלקי טקסט לצורך זיהוי אותו אימון,
+                         * גם כאשר קיימים הבדלים קטנים ברווחים,
+                         * מקפים או אותיות גדולות/קטנות.
+                         */
+                        fun normalizeTrainingIdentityPart(
+                            value: String
+                        ): String {
+                            return value
+                                .trim()
+                                .lowercase()
+                                .replace("–", "-")
+                                .replace("—", "-")
+                                .replace(Regex("\\s+"), " ")
+                        }
+
                         val result =
                             all.distinctBy { candidate ->
+                                /*
+                                 * מעגלים את חותמת הזמן לדקה.
+                                 *
+                                 * TrainingData.nextWeekly עשוי להחזיר
+                                 * שניות או אלפיות שנייה שונות בשתי
+                                 * יצירות של אותו אימון, אף שהתאריך
+                                 * והשעה המוצגים זהים.
+                                 */
+                                val startMinute =
+                                    candidate.training
+                                        .cal
+                                        .timeInMillis / 60_000L
+
+                                val placeIdentity =
+                                    candidate.training
+                                        .place
+                                        .orEmpty()
+                                        .ifBlank {
+                                            candidate.branch
+                                        }
+
                                 buildString {
-                                    append(
-                                        candidate.training
-                                            .cal
-                                            .timeInMillis
-                                    )
-                                    append("|")
-                                    append(candidate.branch)
-                                    append("|")
-                                    append(candidate.group)
+                                    append(startMinute)
                                     append("|")
                                     append(
-                                        candidate.training
-                                            .place
-                                            .orEmpty()
+                                        normalizeTrainingIdentityPart(
+                                            placeIdentity
+                                        )
                                     )
                                     append("|")
                                     append(
-                                        candidate.training
-                                            .address
-                                            .orEmpty()
-                                    )
-                                    append("|")
-                                    append(
-                                        candidate.training
-                                            .coach
-                                            .orEmpty()
+                                        normalizeTrainingIdentityPart(
+                                            candidate.group
+                                        )
                                     )
                                 }
                             }

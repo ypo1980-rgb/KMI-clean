@@ -1,4 +1,4 @@
-package il.kmi.app.screens
+package il.kmi.app.screens.BeltQuestions.Materials
 
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -16,7 +16,6 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.launch
 import il.kmi.app.KmiViewModel
 import il.kmi.shared.domain.Belt
@@ -51,15 +50,23 @@ import il.kmi.app.highlightItem
 import android.app.Activity
 import android.content.Context
 import android.content.Intent
+import android.graphics.Canvas
 import android.graphics.Paint
+import android.graphics.Path
+import android.graphics.RectF
 import android.graphics.Typeface
 import android.graphics.pdf.PdfDocument
+import android.widget.Toast
+import androidx.activity.compose.BackHandler
 import androidx.core.content.FileProvider
 import java.io.File
 import java.io.FileOutputStream
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.border
+import androidx.compose.foundation.relocation.BringIntoViewRequester
 import androidx.compose.ui.unit.Dp
+import il.kmi.app.domain.ContentRepo
+import il.kmi.app.screens.MasterToggle
 import il.kmi.app.ui.color
 import il.kmi.app.ui.KmiIconSize
 import il.kmi.app.ui.KmiTypography
@@ -71,10 +78,17 @@ import il.kmi.shared.localization.AppLanguageManager
 import il.kmi.shared.domain.content.ExerciseTitlesEn
 import il.kmi.shared.domain.content.ExerciseIdentityRegistry
 import il.kmi.app.subscription.KmiAccess
+import il.kmi.app.ui.KmiTopBar
+import kotlinx.coroutines.delay
+import java.net.URLDecoder
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
+import kotlin.math.ceil
 
 //=================================================================================
 
-private enum class CoachMaterialStatus(
+internal enum class CoachMaterialStatus(
     val storageValue: String
 ) {
     NOT_TAUGHT("not_taught"),
@@ -91,7 +105,7 @@ private enum class CoachMaterialStatus(
     }
 }
 
-private data class CoachMaterialProgress(
+internal data class CoachMaterialProgress(
     val status: CoachMaterialStatus,
     val updatedAt: Long
 )
@@ -281,7 +295,7 @@ fun MaterialsScreen(
     val sp = remember {
         context.getSharedPreferences(
             "kmi_settings",
-            android.content.Context.MODE_PRIVATE
+            Context.MODE_PRIVATE
         )
     }
 
@@ -291,7 +305,7 @@ fun MaterialsScreen(
         .favoritesFlow
         .collectAsState(initial = emptySet())
     val accessSp = remember(context) {
-        context.getSharedPreferences("kmi_user", android.content.Context.MODE_PRIVATE)
+        context.getSharedPreferences("kmi_user", Context.MODE_PRIVATE)
     }
 
     val hasFullAccess = remember(accessSp, marksVersion) {
@@ -337,7 +351,7 @@ fun MaterialsScreen(
 
     fun decodeMaterialParam(value: String): String {
         return try {
-            java.net.URLDecoder.decode(value, "UTF-8")
+            URLDecoder.decode(value, "UTF-8")
         } catch (_: Exception) {
             value
         }.trim()
@@ -423,7 +437,7 @@ fun MaterialsScreen(
         openedNestedSubTopic ?: materialParentSubTopic
     }
 
-    androidx.activity.compose.BackHandler(
+    BackHandler(
         enabled = openedNestedSubTopic != null
     ) {
         openedNestedSubTopic = null
@@ -486,12 +500,12 @@ fun MaterialsScreen(
 
     val handlePickFromTopBar: (String) -> Unit = { key ->
         fun dec(s: String) = try {
-            java.net.URLDecoder.decode(s, "UTF-8")
+            URLDecoder.decode(s, "UTF-8")
         } catch (_: Exception) {
             s
         }
 
-        val r = runCatching { il.kmi.app.domain.ContentRepo.resolveItemKey(key) }.getOrNull()
+        val r = runCatching { ContentRepo.resolveItemKey(key) }.getOrNull()
         if (r != null) {
             explainTriple = Triple(r.belt, r.topicTitle, r.itemTitle)
         } else {
@@ -1292,7 +1306,7 @@ fun MaterialsScreen(
             val contextLang = LocalContext.current
             val langManager = remember { AppLanguageManager(contextLang) }
 
-            il.kmi.app.ui.KmiTopBar(
+            KmiTopBar(
                 title = headerTitle,
                 onHome = onOpenHome,
                 // לא רוצים אייקון בית עליון כי הוא כבר קיים
@@ -2020,10 +2034,10 @@ fun MaterialsScreen(
                                             highlight != null && canonicalId == highlight
 
                                         val bringer =
-                                            remember { androidx.compose.foundation.relocation.BringIntoViewRequester() }
+                                            remember { BringIntoViewRequester() }
                                         LaunchedEffect(isHighlighted) {
                                             if (isHighlighted) {
-                                                kotlinx.coroutines.delay(120)
+                                                delay(120)
                                                 bringer.bringIntoView()
                                             }
                                         }
@@ -2119,7 +2133,7 @@ fun MaterialsScreen(
                                                                     )
 
                                                                     scope.launch {
-                                                                        kotlinx.coroutines.delay(150)
+                                                                        delay(150)
                                                                         pressed = false
                                                                     }
                                                                 },
@@ -2204,7 +2218,7 @@ fun MaterialsScreen(
                                                                         )
 
                                                                     scope.launch {
-                                                                        kotlinx.coroutines.delay(
+                                                                        delay(
                                                                             150
                                                                         )
                                                                         pressed =
@@ -2297,17 +2311,25 @@ fun MaterialsScreen(
                                                                 when (newVal) {
                                                                     true -> {
                                                                         nextMasteredSet.add(statusId)
-                                                                        nextUnknownSet.remove(statusId)
+                                                                        nextUnknownSet.remove(
+                                                                            statusId
+                                                                        )
                                                                     }
 
                                                                     false -> {
                                                                         nextUnknownSet.add(statusId)
-                                                                        nextMasteredSet.remove(statusId)
+                                                                        nextMasteredSet.remove(
+                                                                            statusId
+                                                                        )
                                                                     }
 
                                                                     null -> {
-                                                                        nextMasteredSet.remove(statusId)
-                                                                        nextUnknownSet.remove(statusId)
+                                                                        nextMasteredSet.remove(
+                                                                            statusId
+                                                                        )
+                                                                        nextUnknownSet.remove(
+                                                                            statusId
+                                                                        )
                                                                     }
                                                                 }
 
@@ -2369,18 +2391,30 @@ fun MaterialsScreen(
 
                                                                         when (newVal) {
                                                                             true -> {
-                                                                                savedMastered.add(statusId)
-                                                                                savedUnknown.remove(statusId)
+                                                                                savedMastered.add(
+                                                                                    statusId
+                                                                                )
+                                                                                savedUnknown.remove(
+                                                                                    statusId
+                                                                                )
                                                                             }
 
                                                                             false -> {
-                                                                                savedUnknown.add(statusId)
-                                                                                savedMastered.remove(statusId)
+                                                                                savedUnknown.add(
+                                                                                    statusId
+                                                                                )
+                                                                                savedMastered.remove(
+                                                                                    statusId
+                                                                                )
                                                                             }
 
                                                                             null -> {
-                                                                                savedMastered.remove(statusId)
-                                                                                savedUnknown.remove(statusId)
+                                                                                savedMastered.remove(
+                                                                                    statusId
+                                                                                )
+                                                                                savedUnknown.remove(
+                                                                                    statusId
+                                                                                )
                                                                             }
                                                                         }
 
@@ -2399,11 +2433,16 @@ fun MaterialsScreen(
 
                                                                     withContext(Dispatchers.Main.immediate) {
                                                                         if (
-                                                                            pendingItemStates.containsKey(statusId) &&
+                                                                            pendingItemStates.containsKey(
+                                                                                statusId
+                                                                            ) &&
                                                                             pendingItemStates[statusId] == newVal
                                                                         ) {
-                                                                            pendingItemStates.remove(statusId)
-                                                                            itemStates[statusId] = newVal
+                                                                            pendingItemStates.remove(
+                                                                                statusId
+                                                                            )
+                                                                            itemStates[statusId] =
+                                                                                newVal
                                                                         }
                                                                     }
                                                                 }
@@ -2411,6 +2450,30 @@ fun MaterialsScreen(
                                                         )
                                                     }
                                                 }
+                                            }
+
+                                            // קו מפריד בין התרגיל הנוכחי לתרגיל הבא.
+                                            // הקו לא מוצג אחרי התרגיל האחרון ברשימה.
+                                            if (index < filtered.lastIndex) {
+                                                Box(
+                                                    modifier = Modifier
+                                                        .fillMaxWidth()
+                                                        .padding(
+                                                            horizontal = 14.dp
+                                                        )
+                                                        .height(1.dp)
+                                                        .background(
+                                                            color =
+                                                                if (isDarkSurface) {
+                                                                    MaterialTheme.colorScheme
+                                                                        .onSurface
+                                                                        .copy(alpha = 0.26f)
+                                                                } else {
+                                                                    Color(0xFF607D8B)
+                                                                        .copy(alpha = 0.42f)
+                                                                }
+                                                        )
+                                                )
                                             }
 
                                             // דיאלוג הערה
@@ -2552,7 +2615,7 @@ private fun createMaterialsPdf(
     val smallPaint = paint(9f, textMuted, regular)
 
     fun drawRoundRect(
-        canvas: android.graphics.Canvas,
+        canvas: Canvas,
         left: Float,
         top: Float,
         right: Float,
@@ -2570,7 +2633,7 @@ private fun createMaterialsPdf(
         canvas.drawRoundRect(left, top, right, bottom, radius, radius, p)
     }
 
-    fun drawKmiLogo(canvas: android.graphics.Canvas, cx: Float, cy: Float, radius: Float) {
+    fun drawKmiLogo(canvas: Canvas, cx: Float, cy: Float, radius: Float) {
         val outer = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = navy }
         val inner = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = android.graphics.Color.WHITE }
         val text = Paint(Paint.ANTI_ALIAS_FLAG).apply {
@@ -2585,10 +2648,10 @@ private fun createMaterialsPdf(
         canvas.drawText("KAMI", cx, cy + radius * 0.22f, text)
     }
 
-    fun drawHeader(canvas: android.graphics.Canvas) {
+    fun drawHeader(canvas: Canvas) {
         canvas.drawColor(android.graphics.Color.WHITE)
 
-        canvas.drawPath(android.graphics.Path().apply {
+        canvas.drawPath(Path().apply {
             moveTo(pageWidth.toFloat(), 0f)
             lineTo(pageWidth.toFloat(), 122f)
             lineTo(178f, 122f)
@@ -2596,7 +2659,7 @@ private fun createMaterialsPdf(
             close()
         }, Paint(Paint.ANTI_ALIAS_FLAG).apply { color = navy })
 
-        canvas.drawPath(android.graphics.Path().apply {
+        canvas.drawPath(Path().apply {
             moveTo(208f, 122f)
             lineTo(224f, 122f)
             lineTo(284f, 0f)
@@ -2606,7 +2669,7 @@ private fun createMaterialsPdf(
             color = android.graphics.Color.rgb(36, 103, 158)
         })
 
-        canvas.drawPath(android.graphics.Path().apply {
+        canvas.drawPath(Path().apply {
             moveTo(230f, 122f)
             lineTo(238f, 122f)
             lineTo(298f, 0f)
@@ -2649,17 +2712,17 @@ private fun createMaterialsPdf(
         smallPaint.textAlign = Paint.Align.RIGHT
         canvas.drawText(
             tr("תאריך הפקה:", "Generated:") + " " +
-                    java.text.SimpleDateFormat(
+                    SimpleDateFormat(
                         "dd/MM/yyyy",
-                        java.util.Locale.getDefault()
-                    ).format(java.util.Date()),
+                        Locale.getDefault()
+                    ).format(Date()),
             pageWidth - 34f,
             142f,
             smallPaint
         )
     }
 
-    fun drawFooter(canvas: android.graphics.Canvas, pageNumber: Int, totalPages: Int) {
+    fun drawFooter(canvas: Canvas, pageNumber: Int, totalPages: Int) {
         val footerY = 804f
 
         canvas.drawLine(
@@ -2690,7 +2753,7 @@ private fun createMaterialsPdf(
         canvas.drawText("www.kmi.org.il", pageWidth - 66f, footerY + 31f, smallPaint)
     }
 
-    fun drawSummary(canvas: android.graphics.Canvas, top: Float): Float {
+    fun drawSummary(canvas: Canvas, top: Float): Float {
         val total = items.size
         val known = items.count { it.status == tr("יודע", "Known") }
         val unknown = items.count { it.status == tr("לא יודע", "Unknown") }
@@ -2764,7 +2827,7 @@ private fun createMaterialsPdf(
     }
 
     fun drawItemCard(
-        canvas: android.graphics.Canvas,
+        canvas: Canvas,
         item: MaterialPdfItem,
         top: Float,
         index: Int
@@ -2790,7 +2853,7 @@ private fun createMaterialsPdf(
             else -> textMuted
         }
 
-        val numberRect = android.graphics.RectF(right - 54f, top + 18f, right - 22f, top + 50f)
+        val numberRect = RectF(right - 54f, top + 18f, right - 22f, top + 50f)
         canvas.drawRoundRect(numberRect, 999f, 999f, Paint(Paint.ANTI_ALIAS_FLAG).apply {
             color = blue
             style = Paint.Style.FILL
@@ -2847,7 +2910,7 @@ private fun createMaterialsPdf(
     val totalPages = if (items.size <= firstPageCapacity) {
         1
     } else {
-        1 + kotlin.math.ceil((items.size - firstPageCapacity) / nextPageCapacity.toDouble()).toInt()
+        1 + ceil((items.size - firstPageCapacity) / nextPageCapacity.toDouble()).toInt()
     }
 
     var pageNumber = 1
@@ -2950,7 +3013,7 @@ fun AnimatedButton(
             pressed = true
             onClick()
             scope.launch {
-                kotlinx.coroutines.delay(140)
+                delay(140)
                 pressed = false
             }
         },
@@ -3030,7 +3093,7 @@ private fun MaterialsTopStatChip(
 }
 
 @Composable
-private fun CoachMaterialStatusSelector(
+internal fun CoachMaterialStatusSelector(
     progress: CoachMaterialProgress,
     isEnglish: Boolean,
     onSelect: (CoachMaterialStatus) -> Unit
@@ -3082,11 +3145,11 @@ private fun CoachMaterialStatusSelector(
                 "טרם עודכן"
             }
         } else {
-            java.text.SimpleDateFormat(
+            SimpleDateFormat(
                 "dd/MM/yyyy",
-                java.util.Locale.getDefault()
+                Locale.getDefault()
             ).format(
-                java.util.Date(progress.updatedAt)
+                Date(progress.updatedAt)
             )
         }
     }
@@ -3343,7 +3406,7 @@ private fun ItemFloatingActions(
     val sp = remember {
         context.getSharedPreferences(
             "kmi_settings",
-            android.content.Context.MODE_PRIVATE
+            Context.MODE_PRIVATE
         )
     }
     var expanded by remember { mutableStateOf(false) }
@@ -3496,7 +3559,7 @@ private fun ItemFloatingActions(
                 onClick = {
                     expanded = false
                     onToggleFavorite()
-                    android.widget.Toast
+                    Toast
                         .makeText(
                             context,
                             when {
@@ -3505,7 +3568,7 @@ private fun ItemFloatingActions(
                                 isFav -> "הוסר מהמועדפים."
                                 else -> "נוסף למועדפים."
                             },
-                            android.widget.Toast.LENGTH_SHORT
+                            Toast.LENGTH_SHORT
                         )
                         .show()
                 }
@@ -3544,7 +3607,7 @@ private fun ItemFloatingActions(
                 onClick = {
                     expanded = false
                     onToggleExclude()
-                    android.widget.Toast
+                    Toast
                         .makeText(
                             context,
                             when {
@@ -3553,7 +3616,7 @@ private fun ItemFloatingActions(
                                 excluded -> "בוטלה ההחרגה."
                                 else -> "התרגיל הוחרג."
                             },
-                            android.widget.Toast.LENGTH_SHORT
+                            Toast.LENGTH_SHORT
                         )
                         .show()
                 }

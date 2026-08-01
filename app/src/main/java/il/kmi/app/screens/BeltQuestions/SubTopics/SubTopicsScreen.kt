@@ -1,6 +1,16 @@
-package il.kmi.app.screens
+package il.kmi.app.screens.BeltQuestions.SubTopics
 
+import android.content.Context
+import android.content.Intent
+import android.content.SharedPreferences
+import android.graphics.Canvas
+import android.graphics.Paint
+import android.graphics.Path
+import android.graphics.Typeface
+import android.graphics.pdf.PdfDocument
 import android.net.Uri
+import android.util.Log
+import android.widget.Toast
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
@@ -46,7 +56,6 @@ import il.kmi.app.ui.ext.color
 import il.kmi.app.ui.ext.lightColor
 import il.kmi.app.domain.ExerciseExplanationResolver
 import il.kmi.app.domain.ExerciseCountProvider
-import il.kmi.app.subscription.KmiAccess
 import il.kmi.shared.domain.content.HardSectionsCatalog.itemsFor
 import il.kmi.shared.domain.content.HardSectionsCatalog.totalItemsCount
 import il.kmi.app.KmiViewModel
@@ -56,8 +65,23 @@ import il.kmi.shared.domain.content.ExerciseTitlesEn
 import il.kmi.shared.localization.AppLanguageManager
 import il.kmi.shared.localization.AppLanguage
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.unit.LayoutDirection
+import androidx.core.content.FileProvider
+import il.kmi.app.favorites.FavoritesStore
+import il.kmi.app.screens.BeltQuestions.Materials.CoachMaterialProgress
+import il.kmi.app.screens.BeltQuestions.Materials.CoachMaterialStatus
+import il.kmi.app.screens.BeltQuestions.Materials.CoachMaterialStatusSelector
+import il.kmi.app.ui.FloatingQuickMenu
+import il.kmi.app.ui.KmiTopBar
+import il.kmi.app.ui.QuickMenuTriggerMode
 import il.kmi.app.ui.dialogs.ExerciseExplanationDialog
 import il.kmi.app.ui.dialogs.ExerciseNoteEditorDialog
+import java.io.File
+import java.io.FileOutputStream
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 //===========================================================================
 
@@ -783,6 +807,11 @@ private val catalogScreenGradientBottom = Color(0xFF062B4A)
  * כל כפתור = תת־נושא. למטה כתוב כמה תרגילים יש בו.
  */
 
+enum class SubTopicsSourceMode {
+    BY_BELT,
+    BY_TOPIC
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SubTopicsScreen(
@@ -793,7 +822,10 @@ fun SubTopicsScreen(
     onOpenSubTopic: (String) -> Unit,
     onOpenExercise: (String) -> Unit,
     onOpenPdfMaterials: (Belt, String) -> Unit,
-    vm: KmiViewModel
+    vm: KmiViewModel,
+    sourceMode: SubTopicsSourceMode =
+        SubTopicsSourceMode.BY_BELT,
+    isCoach: Boolean = false
 ) {
 
     val context = LocalContext.current
@@ -1197,7 +1229,7 @@ fun SubTopicsScreen(
 
     Scaffold(
         topBar = {
-            il.kmi.app.ui.KmiTopBar(
+            KmiTopBar(
                 title = if (isEnglish) ExerciseTitlesEn.getOrSame(hardTitle) else hardTitle,
                 onHome = onHome,
                 showTopHome = false,
@@ -1209,14 +1241,14 @@ fun SubTopicsScreen(
                 onShare = {
                     runCatching {
                         if (pdfExercises.isEmpty()) {
-                            android.widget.Toast.makeText(
+                            Toast.makeText(
                                 context,
                                 if (isEnglish) {
                                     "No exercises are displayed on this screen."
                                 } else {
                                     "לא נמצאו תרגילים להצגה בקובץ."
                                 },
-                                android.widget.Toast.LENGTH_LONG
+                                Toast.LENGTH_LONG
                             ).show()
 
                             return@runCatching
@@ -1230,38 +1262,43 @@ fun SubTopicsScreen(
                             isEnglish = isEnglish
                         )
 
-                        val pdfUri = androidx.core.content.FileProvider.getUriForFile(
+                        val pdfUri = FileProvider.getUriForFile(
                             context,
                             "${context.packageName}.fileprovider",
                             pdfFile
                         )
 
-                        val shareIntent = android.content.Intent(
-                            android.content.Intent.ACTION_SEND
+                        val shareIntent = Intent(
+                            Intent.ACTION_SEND
                         ).apply {
                             type = "application/pdf"
 
                             putExtra(
-                                android.content.Intent.EXTRA_SUBJECT,
+                                Intent.EXTRA_SUBJECT,
                                 if (isEnglish) {
-                                    "Exercises by subject - ${exerciseTitleForUi(topicDecoded, true)}"
+                                    "Exercises by subject - ${
+                                        exerciseTitleForUi(
+                                            topicDecoded,
+                                            true
+                                        )
+                                    }"
                                 } else {
                                     "תרגילים לפי נושא - $topicDecoded"
                                 }
                             )
 
                             putExtra(
-                                android.content.Intent.EXTRA_STREAM,
+                                Intent.EXTRA_STREAM,
                                 pdfUri
                             )
 
                             addFlags(
-                                android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION
+                                Intent.FLAG_GRANT_READ_URI_PERMISSION
                             )
                         }
 
                         context.startActivity(
-                            android.content.Intent.createChooser(
+                            Intent.createChooser(
                                 shareIntent,
                                 if (isEnglish) {
                                     "Share PDF"
@@ -1271,14 +1308,14 @@ fun SubTopicsScreen(
                             )
                         )
                     }.onFailure {
-                        android.widget.Toast.makeText(
+                        Toast.makeText(
                             context,
                             if (isEnglish) {
                                 "Failed to create the PDF file."
                             } else {
                                 "יצירת קובץ ה־PDF נכשלה."
                             },
-                            android.widget.Toast.LENGTH_LONG
+                            Toast.LENGTH_LONG
                         ).show()
                     }
                 },
@@ -1308,8 +1345,14 @@ fun SubTopicsScreen(
                             items = group.items
                         )
                     },
-                    topicKey = hardTitle.ifBlank { topicDecoded },
+                    topicKey = hardTitle.ifBlank {
+                        topicDecoded
+                    },
                     isDarkMode = isDarkMode,
+                    isCoach = isCoach,
+                    showExerciseDividers =
+                        sourceMode ==
+                                SubTopicsSourceMode.BY_BELT,
                     vm = vm,
                     onPdfExercisesChanged = { exercises ->
                         hardPdfExercises = exercises
@@ -1649,7 +1692,7 @@ fun SubTopicsScreen(
             }
 
             // ===== QUICK MENU (FLOATING אמיתי) =====
-            il.kmi.app.ui.FloatingQuickMenu(
+            FloatingQuickMenu(
                 belt = belt,
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
@@ -1657,7 +1700,7 @@ fun SubTopicsScreen(
                     .padding(start = 12.dp, end = 12.dp, bottom = 84.dp),
                 expanded = quickMenuExpanded,
                 onExpandedChange = { quickMenuExpanded = it },
-                triggerMode = il.kmi.app.ui.QuickMenuTriggerMode.BottomBar,
+                triggerMode = QuickMenuTriggerMode.BottomBar,
                 includePractice = true,
                 hasFullAccess = hasAccess,
                 onLockedItemClick = {
@@ -1668,7 +1711,7 @@ fun SubTopicsScreen(
                 onSummary = { },
                 onVoice = { },
                 onPdf = {
-                    android.util.Log.d("PDF_TEST", "onPdf clicked")
+                    Log.d("PDF_TEST", "onPdf clicked")
 
                     quickMenuExpanded = false
 
@@ -1733,7 +1776,7 @@ fun SubTopicsScreen(
 
 
 /* ========= עזר: לפרק מפתח חיפוש "belt|topic|item" ========= */
-private fun parseSearchKeyLocal(key: String): Triple<il.kmi.shared.domain.Belt, String, String> {
+private fun parseSearchKeyLocal(key: String): Triple<Belt, String, String> {
     val parts = when {
         "|" in key -> key.split("|", limit = 3)
         "::" in key -> key.split("::", limit = 3)
@@ -1741,7 +1784,7 @@ private fun parseSearchKeyLocal(key: String): Triple<il.kmi.shared.domain.Belt, 
         else -> listOf("", "", "")
     }.let { (it + listOf("", "", "")).take(3) }
 
-    val belt = il.kmi.shared.domain.Belt.fromId(parts[0]) ?: il.kmi.shared.domain.Belt.WHITE
+    val belt = Belt.fromId(parts[0]) ?: Belt.WHITE
     val topic = parts[1]
     val item = parts[2]
     return Triple(belt, topic, item)
@@ -1749,7 +1792,7 @@ private fun parseSearchKeyLocal(key: String): Triple<il.kmi.shared.domain.Belt, 
 
 /* ========= עזר: למצוא הסבר אמיתי מתוך Explanations ========= */
 private fun findExplanationForHitLocal(
-    belt: il.kmi.shared.domain.Belt,
+    belt: Belt,
     rawItem: String,
     topic: String,
     isEnglish: Boolean
@@ -1784,7 +1827,7 @@ private fun findExplanationForHitLocal(
 }
 
 private fun saveSubTopicExerciseNote(
-    prefs: android.content.SharedPreferences,
+    prefs: SharedPreferences,
     noteKey: String,
     text: String
 ) {
@@ -1800,12 +1843,12 @@ private fun saveSubTopicExerciseNote(
 }
 
 private fun createSubjectExercisesPdf(
-    context: android.content.Context,
+    context: Context,
     belt: Belt,
     topic: String,
     exercises: List<SubjectPdfExercise>,
     isEnglish: Boolean
-): java.io.File {
+): File {
     val pageWidth = 595
     val pageHeight = 842
     val horizontalMargin = 36f
@@ -1813,7 +1856,7 @@ private fun createSubjectExercisesPdf(
     val contentLeft = horizontalMargin
     val bottomLimit = pageHeight - 58f
 
-    val document = android.graphics.pdf.PdfDocument()
+    val document = PdfDocument()
 
     val knownCount = exercises.count { exercise ->
         exercise.status == true
@@ -1835,117 +1878,117 @@ private fun createSubjectExercisesPdf(
     val mutedText = android.graphics.Color.rgb(100, 116, 139)
     val white = android.graphics.Color.WHITE
 
-    val regularTypeface = android.graphics.Typeface.create(
-        android.graphics.Typeface.SANS_SERIF,
-        android.graphics.Typeface.NORMAL
+    val regularTypeface = Typeface.create(
+        Typeface.SANS_SERIF,
+        Typeface.NORMAL
     )
 
-    val boldTypeface = android.graphics.Typeface.create(
-        android.graphics.Typeface.SANS_SERIF,
-        android.graphics.Typeface.BOLD
+    val boldTypeface = Typeface.create(
+        Typeface.SANS_SERIF,
+        Typeface.BOLD
     )
 
-    val titlePaint = android.graphics.Paint(
-        android.graphics.Paint.ANTI_ALIAS_FLAG
+    val titlePaint = Paint(
+        Paint.ANTI_ALIAS_FLAG
     ).apply {
         typeface = boldTypeface
         textSize = 26f
         color = white
         textAlign = if (isEnglish) {
-            android.graphics.Paint.Align.LEFT
+            Paint.Align.LEFT
         } else {
-            android.graphics.Paint.Align.RIGHT
+            Paint.Align.RIGHT
         }
     }
 
-    val subtitlePaint = android.graphics.Paint(
-        android.graphics.Paint.ANTI_ALIAS_FLAG
+    val subtitlePaint = Paint(
+        Paint.ANTI_ALIAS_FLAG
     ).apply {
         typeface = regularTypeface
         textSize = 13f
         color = white
         textAlign = if (isEnglish) {
-            android.graphics.Paint.Align.LEFT
+            Paint.Align.LEFT
         } else {
-            android.graphics.Paint.Align.RIGHT
+            Paint.Align.RIGHT
         }
     }
 
-    val sectionPaint = android.graphics.Paint(
-        android.graphics.Paint.ANTI_ALIAS_FLAG
+    val sectionPaint = Paint(
+        Paint.ANTI_ALIAS_FLAG
     ).apply {
         typeface = boldTypeface
         textSize = 16f
         color = darkText
         textAlign = if (isEnglish) {
-            android.graphics.Paint.Align.LEFT
+            Paint.Align.LEFT
         } else {
-            android.graphics.Paint.Align.RIGHT
+            Paint.Align.RIGHT
         }
     }
 
-    val itemPaint = android.graphics.Paint(
-        android.graphics.Paint.ANTI_ALIAS_FLAG
+    val itemPaint = Paint(
+        Paint.ANTI_ALIAS_FLAG
     ).apply {
         typeface = boldTypeface
         textSize = 11.5f
         color = darkText
         textAlign = if (isEnglish) {
-            android.graphics.Paint.Align.LEFT
+            Paint.Align.LEFT
         } else {
-            android.graphics.Paint.Align.RIGHT
+            Paint.Align.RIGHT
         }
     }
 
-    val numberPaint = android.graphics.Paint(
-        android.graphics.Paint.ANTI_ALIAS_FLAG
+    val numberPaint = Paint(
+        Paint.ANTI_ALIAS_FLAG
     ).apply {
         typeface = boldTypeface
         textSize = 10.5f
         color = white
-        textAlign = android.graphics.Paint.Align.CENTER
+        textAlign = Paint.Align.CENTER
     }
 
-    val smallPaint = android.graphics.Paint(
-        android.graphics.Paint.ANTI_ALIAS_FLAG
+    val smallPaint = Paint(
+        Paint.ANTI_ALIAS_FLAG
     ).apply {
         typeface = regularTypeface
         textSize = 9.5f
         color = mutedText
     }
 
-    val rowBackgroundPaint = android.graphics.Paint(
-        android.graphics.Paint.ANTI_ALIAS_FLAG
+    val rowBackgroundPaint = Paint(
+        Paint.ANTI_ALIAS_FLAG
     ).apply {
         color = lightBlue
-        style = android.graphics.Paint.Style.FILL
+        style = Paint.Style.FILL
     }
 
-    val rowBorderPaint = android.graphics.Paint(
-        android.graphics.Paint.ANTI_ALIAS_FLAG
+    val rowBorderPaint = Paint(
+        Paint.ANTI_ALIAS_FLAG
     ).apply {
         color = borderBlue
-        style = android.graphics.Paint.Style.STROKE
+        style = Paint.Style.STROKE
         strokeWidth = 1.2f
     }
 
-    val numberBackgroundPaint = android.graphics.Paint(
-        android.graphics.Paint.ANTI_ALIAS_FLAG
+    val numberBackgroundPaint = Paint(
+        Paint.ANTI_ALIAS_FLAG
     ).apply {
         color = mediumBlue
-        style = android.graphics.Paint.Style.FILL
+        style = Paint.Style.FILL
     }
 
-    val headerBackgroundPaint = android.graphics.Paint(
-        android.graphics.Paint.ANTI_ALIAS_FLAG
+    val headerBackgroundPaint = Paint(
+        Paint.ANTI_ALIAS_FLAG
     ).apply {
         color = navy
-        style = android.graphics.Paint.Style.FILL
+        style = Paint.Style.FILL
     }
 
     var pageNumber = 0
-    lateinit var page: android.graphics.pdf.PdfDocument.Page
-    lateinit var canvas: android.graphics.Canvas
+    lateinit var page: PdfDocument.Page
+    lateinit var canvas: Canvas
     var y = 0f
 
     fun textX(): Float {
@@ -1961,32 +2004,32 @@ private fun createSubjectExercisesPdf(
     }
 
     fun drawKmiLogo(
-        targetCanvas: android.graphics.Canvas,
+        targetCanvas: Canvas,
         centerX: Float,
         centerY: Float,
         radius: Float
     ) {
-        val outerPaint = android.graphics.Paint(
-            android.graphics.Paint.ANTI_ALIAS_FLAG
+        val outerPaint = Paint(
+            Paint.ANTI_ALIAS_FLAG
         ).apply {
             color = navy
-            style = android.graphics.Paint.Style.FILL
+            style = Paint.Style.FILL
         }
 
-        val innerPaint = android.graphics.Paint(
-            android.graphics.Paint.ANTI_ALIAS_FLAG
+        val innerPaint = Paint(
+            Paint.ANTI_ALIAS_FLAG
         ).apply {
             color = android.graphics.Color.WHITE
-            style = android.graphics.Paint.Style.FILL
+            style = Paint.Style.FILL
         }
 
-        val logoTextPaint = android.graphics.Paint(
-            android.graphics.Paint.ANTI_ALIAS_FLAG
+        val logoTextPaint = Paint(
+            Paint.ANTI_ALIAS_FLAG
         ).apply {
             color = navy
             typeface = boldTypeface
             textSize = radius * 0.62f
-            textAlign = android.graphics.Paint.Align.CENTER
+            textAlign = Paint.Align.CENTER
         }
 
         targetCanvas.drawCircle(
@@ -2017,29 +2060,29 @@ private fun createSubjectExercisesPdf(
         val headerBottom = 122f
         val headerTextRight = pageWidth - 34f
 
-        val navyHeaderPaint = android.graphics.Paint(
-            android.graphics.Paint.ANTI_ALIAS_FLAG
+        val navyHeaderPaint = Paint(
+            Paint.ANTI_ALIAS_FLAG
         ).apply {
             color = navy
-            style = android.graphics.Paint.Style.FILL
+            style = Paint.Style.FILL
         }
 
-        val mediumStripePaint = android.graphics.Paint(
-            android.graphics.Paint.ANTI_ALIAS_FLAG
+        val mediumStripePaint = Paint(
+            Paint.ANTI_ALIAS_FLAG
         ).apply {
             color = mediumBlue
-            style = android.graphics.Paint.Style.FILL
+            style = Paint.Style.FILL
         }
 
-        val lightStripePaint = android.graphics.Paint(
-            android.graphics.Paint.ANTI_ALIAS_FLAG
+        val lightStripePaint = Paint(
+            Paint.ANTI_ALIAS_FLAG
         ).apply {
             color = android.graphics.Color.rgb(128, 183, 220)
-            style = android.graphics.Paint.Style.FILL
+            style = Paint.Style.FILL
         }
 
         canvas.drawPath(
-            android.graphics.Path().apply {
+            Path().apply {
                 moveTo(pageWidth.toFloat(), 0f)
                 lineTo(pageWidth.toFloat(), headerBottom)
                 lineTo(178f, headerBottom)
@@ -2050,7 +2093,7 @@ private fun createSubjectExercisesPdf(
         )
 
         canvas.drawPath(
-            android.graphics.Path().apply {
+            Path().apply {
                 moveTo(208f, headerBottom)
                 lineTo(224f, headerBottom)
                 lineTo(284f, 0f)
@@ -2061,7 +2104,7 @@ private fun createSubjectExercisesPdf(
         )
 
         canvas.drawPath(
-            android.graphics.Path().apply {
+            Path().apply {
                 moveTo(230f, headerBottom)
                 lineTo(238f, headerBottom)
                 lineTo(298f, 0f)
@@ -2079,15 +2122,15 @@ private fun createSubjectExercisesPdf(
         )
 
         titlePaint.textAlign = if (isEnglish) {
-            android.graphics.Paint.Align.LEFT
+            Paint.Align.LEFT
         } else {
-            android.graphics.Paint.Align.RIGHT
+            Paint.Align.RIGHT
         }
 
         subtitlePaint.textAlign = if (isEnglish) {
-            android.graphics.Paint.Align.LEFT
+            Paint.Align.LEFT
         } else {
-            android.graphics.Paint.Align.RIGHT
+            Paint.Align.RIGHT
         }
 
         val headerTextX = if (isEnglish) {
@@ -2115,12 +2158,12 @@ private fun createSubjectExercisesPdf(
         )
 
         smallPaint.color = mutedText
-        smallPaint.textAlign = android.graphics.Paint.Align.RIGHT
+        smallPaint.textAlign = Paint.Align.RIGHT
 
-        val generatedDate = java.text.SimpleDateFormat(
+        val generatedDate = SimpleDateFormat(
             "dd/MM/yyyy",
-            java.util.Locale.getDefault()
-        ).format(java.util.Date())
+            Locale.getDefault()
+        ).format(Date())
 
         canvas.drawText(
             if (isEnglish) {
@@ -2137,8 +2180,8 @@ private fun createSubjectExercisesPdf(
     }
 
     fun drawFooter() {
-        val linePaint = android.graphics.Paint(
-            android.graphics.Paint.ANTI_ALIAS_FLAG
+        val linePaint = Paint(
+            Paint.ANTI_ALIAS_FLAG
         ).apply {
             color = borderBlue
             strokeWidth = 1f
@@ -2152,7 +2195,7 @@ private fun createSubjectExercisesPdf(
             linePaint
         )
 
-        smallPaint.textAlign = android.graphics.Paint.Align.CENTER
+        smallPaint.textAlign = Paint.Align.CENTER
 
         canvas.drawText(
             if (isEnglish) {
@@ -2175,7 +2218,7 @@ private fun createSubjectExercisesPdf(
         pageNumber++
 
         page = document.startPage(
-            android.graphics.pdf.PdfDocument.PageInfo.Builder(
+            PdfDocument.PageInfo.Builder(
                 pageWidth,
                 pageHeight,
                 pageNumber
@@ -2235,13 +2278,13 @@ private fun createSubjectExercisesPdf(
             null -> if (isEnglish) "Unmarked" else "לא סומן"
         }
 
-        val statusPaint = android.graphics.Paint(
-            android.graphics.Paint.ANTI_ALIAS_FLAG
+        val statusPaint = Paint(
+            Paint.ANTI_ALIAS_FLAG
         ).apply {
             color = statusColor
             typeface = boldTypeface
             textSize = 9.5f
-            textAlign = android.graphics.Paint.Align.CENTER
+            textAlign = Paint.Align.CENTER
         }
 
         val numberCenterX = if (isEnglish) {
@@ -2276,8 +2319,8 @@ private fun createSubjectExercisesPdf(
             statusCenterX,
             rowTop + 18f,
             6f,
-            android.graphics.Paint(
-                android.graphics.Paint.ANTI_ALIAS_FLAG
+            Paint(
+                Paint.ANTI_ALIAS_FLAG
             ).apply {
                 color = statusColor
             }
@@ -2317,9 +2360,9 @@ private fun createSubjectExercisesPdf(
         )
 
         smallPaint.textAlign = if (isEnglish) {
-            android.graphics.Paint.Align.LEFT
+            Paint.Align.LEFT
         } else {
-            android.graphics.Paint.Align.RIGHT
+            Paint.Align.RIGHT
         }
 
         canvas.drawText(
@@ -2374,7 +2417,7 @@ private fun createSubjectExercisesPdf(
     drawFooter()
     document.finishPage(page)
 
-    val dir = java.io.File(
+    val dir = File(
         context.cacheDir,
         "pdfs"
     ).apply {
@@ -2385,13 +2428,13 @@ private fun createSubjectExercisesPdf(
         .lowercase()
         .replace(Regex("[^a-z0-9_-]"), "_")
 
-    val file = java.io.File(
+    val file = File(
         dir,
         "subject_${safeBeltId}_${System.currentTimeMillis()}.pdf"
     )
 
     try {
-        java.io.FileOutputStream(file).use { output ->
+        FileOutputStream(file).use { output ->
             document.writeTo(output)
         }
     } finally {
@@ -2416,7 +2459,7 @@ private fun ModernExerciseInfoDialog(
     val isEnglish = langManager.getCurrentLanguage() == AppLanguage.ENGLISH
 
     val notePrefs = remember(context) {
-        context.getSharedPreferences("kmi_exercise_notes", android.content.Context.MODE_PRIVATE)
+        context.getSharedPreferences("kmi_exercise_notes", Context.MODE_PRIVATE)
     }
 
     val favoriteId = remember(title) {
@@ -2440,7 +2483,7 @@ private fun ModernExerciseInfoDialog(
     }
 
     var localFavorite by remember(favoriteId) {
-        mutableStateOf(il.kmi.app.favorites.FavoritesStore.isFavorite(favoriteId))
+        mutableStateOf(FavoritesStore.isFavorite(favoriteId))
     }
 
     val effectiveFavorite = isFav ?: localFavorite
@@ -2486,7 +2529,7 @@ private fun ModernExerciseInfoDialog(
             if (onToggleFav != null) {
                 onToggleFav()
             } else {
-                il.kmi.app.favorites.FavoritesStore.toggle(favoriteId)
+                FavoritesStore.toggle(favoriteId)
                 localFavorite = !localFavorite
             }
         }
@@ -2547,8 +2590,8 @@ private fun HardSubTopicCategoryCard(
     val textAlignByLang = if (isEnglish) TextAlign.Left else TextAlign.Right
     val horizontalByLang = if (isEnglish) Alignment.Start else Alignment.End
     val layoutByLang =
-        if (isEnglish) androidx.compose.ui.unit.LayoutDirection.Ltr
-        else androidx.compose.ui.unit.LayoutDirection.Rtl
+        if (isEnglish) LayoutDirection.Ltr
+        else LayoutDirection.Rtl
 
     val iconTint = belt.color
     val borderColor = belt.color.copy(alpha = 0.42f)
@@ -2564,11 +2607,11 @@ private fun HardSubTopicCategoryCard(
         color = MaterialTheme.colorScheme.surface.copy(alpha = 0.92f),
         tonalElevation = 1.dp,
         shadowElevation = 2.dp,
-        border = androidx.compose.foundation.BorderStroke(1.dp, borderColor)
+        border = BorderStroke(1.dp, borderColor)
     ) {
         CompositionLocalProvider(
-            androidx.compose.ui.platform.LocalLayoutDirection provides
-                    androidx.compose.ui.unit.LayoutDirection.Ltr
+            LocalLayoutDirection provides
+                    LayoutDirection.Ltr
         ) {
             Row(
                 modifier = Modifier
@@ -2596,7 +2639,7 @@ private fun HardSubTopicCategoryCard(
                 Spacer(Modifier.width(12.dp))
 
                 CompositionLocalProvider(
-                    androidx.compose.ui.platform.LocalLayoutDirection provides layoutByLang
+                    LocalLayoutDirection provides layoutByLang
                 ) {
                     Column(
                         modifier = Modifier.weight(1f),
@@ -2732,9 +2775,15 @@ private fun HardBeltGroupsStickyContent(
     groups: List<HardStickyBeltGroup>,
     topicKey: String,
     isDarkMode: Boolean,
+    isCoach: Boolean,
+    showExerciseDividers: Boolean,
     vm: KmiViewModel,
-    onPdfExercisesChanged: (List<SubjectPdfExercise>) -> Unit,
-    onOpenExercise: (item: String, belt: Belt) -> Unit,
+    onPdfExercisesChanged:
+        (List<SubjectPdfExercise>) -> Unit,
+    onOpenExercise: (
+        item: String,
+        belt: Belt
+    ) -> Unit,
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
@@ -2742,7 +2791,102 @@ private fun HardBeltGroupsStickyContent(
     val isEnglish = langManager.getCurrentLanguage() == AppLanguage.ENGLISH
 
     val prefs = remember(context) {
-        context.getSharedPreferences("kmi_settings", android.content.Context.MODE_PRIVATE)
+        context.getSharedPreferences(
+            "kmi_settings",
+            Context.MODE_PRIVATE
+        )
+    }
+
+    val coachProgressStates =
+        remember(topicKey, groups) {
+            mutableStateMapOf<
+                    String,
+                    CoachMaterialProgress
+                    >()
+        }
+
+    fun coachMapKey(
+        belt: Belt,
+        statusId: String
+    ): String {
+        return "${belt.id}|$statusId"
+    }
+
+    fun coachProgressKey(
+        belt: Belt,
+        statusId: String
+    ): String {
+        /*
+         * MaterialsScreen משתמש במזהה הקאנוני,
+         * ללא תוספת ה־fallback המקומית.
+         */
+        val canonicalStatusId =
+            statusId.substringBefore("__")
+
+        return buildString {
+            append("coach_material_progress_")
+            append(belt.id)
+            append("_")
+            append(topicKey)
+            append("_")
+            append(canonicalStatusId)
+        }
+    }
+
+    fun loadCoachProgress(
+        belt: Belt,
+        statusId: String
+    ): CoachMaterialProgress {
+        val key = coachProgressKey(
+            belt = belt,
+            statusId = statusId
+        )
+
+        return CoachMaterialProgress(
+            status =
+                CoachMaterialStatus.fromStorage(
+                    prefs.getString(
+                        "${key}_status",
+                        null
+                    )
+                ),
+            updatedAt =
+                prefs.getLong(
+                    "${key}_updated_at",
+                    0L
+                )
+        )
+    }
+
+    fun saveCoachProgress(
+        belt: Belt,
+        statusId: String,
+        status: CoachMaterialStatus
+    ) {
+        val updatedAt = System.currentTimeMillis()
+
+        coachProgressStates[
+            coachMapKey(belt, statusId)
+        ] = CoachMaterialProgress(
+            status = status,
+            updatedAt = updatedAt
+        )
+
+        val key = coachProgressKey(
+            belt = belt,
+            statusId = statusId
+        )
+
+        prefs.edit()
+            .putString(
+                "${key}_status",
+                status.storageValue
+            )
+            .putLong(
+                "${key}_updated_at",
+                updatedAt
+            )
+            .apply()
     }
 
     val actionKeyPart = remember(topicKey) {
@@ -2893,6 +3037,7 @@ private fun HardBeltGroupsStickyContent(
         groups.flatMap { group: HardStickyBeltGroup ->
             group.items.mapIndexed { index: Int, raw: String ->
                 val original = raw.trim()
+
                 HardStickyExerciseRow(
                     belt = group.belt,
                     indexInBelt = index,
@@ -2904,7 +3049,42 @@ private fun HardBeltGroupsStickyContent(
                 )
             }
         }.filter { row ->
-            row.rawItem.isNotBlank() && row.displayItem.isNotBlank()
+            row.rawItem.isNotBlank() &&
+                    row.displayItem.isNotBlank()
+        }
+    }
+
+    LaunchedEffect(
+        isCoach,
+        flatRows,
+        topicKey
+    ) {
+        if (isCoach) {
+            val loaded:
+                    Map<String, CoachMaterialProgress> =
+                buildMap<String, CoachMaterialProgress> {
+                    flatRows.forEach { row ->
+                    val statusId =
+                        statusIdFor(
+                            row.belt,
+                            row.rawItem
+                        )
+
+                        put(
+                            coachMapKey(
+                                row.belt,
+                                statusId
+                            ),
+                            loadCoachProgress(
+                                row.belt,
+                                statusId
+                            )
+                        )
+                    }
+                }
+
+            coachProgressStates.clear()
+            coachProgressStates.putAll(loaded)
         }
     }
 
@@ -3175,6 +3355,26 @@ private fun HardBeltGroupsStickyContent(
                     itemName = row.rawItem,
                     displayName = row.displayItem,
                     mastered = mastered,
+                    isCoach = isCoach,
+                    coachProgress =
+                        coachProgressStates[
+                            coachMapKey(
+                                row.belt,
+                                statusId
+                            )
+                        ] ?: CoachMaterialProgress(
+                            status =
+                                CoachMaterialStatus.NOT_TAUGHT,
+                            updatedAt = 0L
+                        ),
+                    onCoachStatusSelect = {
+                            selectedStatus ->
+                        saveCoachProgress(
+                            belt = row.belt,
+                            statusId = statusId,
+                            status = selectedStatus
+                        )
+                    },
                     isDarkMode = isDarkMode,
                     excluded = excludedSet.contains(statusId),
                     isFav = favSet.contains(statusId),
@@ -3202,7 +3402,10 @@ private fun HardBeltGroupsStickyContent(
                     onEditNote = {
                         noteEditorFor = statusId
                         noteEditorBeltId = row.belt.id
-                        noteDraft = loadNoteFor(row.belt, statusId)
+                        noteDraft = loadNoteFor(
+                            row.belt,
+                            statusId
+                        )
                     }
                 )
             }
@@ -3336,8 +3539,8 @@ private fun HardBeltInlineHeaderForSubTopics(
             }
 
             CompositionLocalProvider(
-                androidx.compose.ui.platform.LocalLayoutDirection provides
-                        androidx.compose.ui.unit.LayoutDirection.Ltr
+                LocalLayoutDirection provides
+                        LayoutDirection.Ltr
             ) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -3507,8 +3710,8 @@ private fun HardBeltStickyHeaderForSubTopics(
             }
 
             CompositionLocalProvider(
-                androidx.compose.ui.platform.LocalLayoutDirection provides
-                        androidx.compose.ui.unit.LayoutDirection.Ltr
+                LocalLayoutDirection provides
+                        LayoutDirection.Ltr
             ) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -3612,7 +3815,7 @@ private fun HardBeltGroupCard(
     val isEnglish = langManager.getCurrentLanguage() == AppLanguage.ENGLISH
 
     val prefs = remember(context) {
-        context.getSharedPreferences("kmi_settings", android.content.Context.MODE_PRIVATE)
+        context.getSharedPreferences("kmi_settings", Context.MODE_PRIVATE)
     }
 
     val actionKeyPart = remember(belt.id, topicKey) {
@@ -3996,8 +4199,8 @@ private fun HardBeltGroupCard(
             }
 
             CompositionLocalProvider(
-                androidx.compose.ui.platform.LocalLayoutDirection provides
-                        androidx.compose.ui.unit.LayoutDirection.Ltr
+                LocalLayoutDirection provides
+                        LayoutDirection.Ltr
             ) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -4158,6 +4361,14 @@ private fun HardExerciseLegacyRow(
     itemName: String,
     displayName: String = itemName,
     mastered: Boolean?,
+    isCoach: Boolean = false,
+    coachProgress: CoachMaterialProgress =
+        CoachMaterialProgress(
+            status = CoachMaterialStatus.NOT_TAUGHT,
+            updatedAt = 0L
+        ),
+    onCoachStatusSelect:
+        (CoachMaterialStatus) -> Unit = {},
     isDarkMode: Boolean = false,
     excluded: Boolean,
     isFav: Boolean,
@@ -4169,14 +4380,20 @@ private fun HardExerciseLegacyRow(
     onEditNote: () -> Unit
 ) {
     val context = LocalContext.current
-    val langManager = remember(context) { AppLanguageManager(context) }
-    val isEnglish = langManager.getCurrentLanguage() == AppLanguage.ENGLISH
-
-    val rowBgColor = if (isDarkMode) {
-        Color(0xFF1E293B)
-    } else {
-        Color.White
+    val langManager = remember(context) {
+        AppLanguageManager(context)
     }
+
+    val isEnglish =
+        langManager.getCurrentLanguage() ==
+                AppLanguage.ENGLISH
+
+    val rowBgColor =
+        if (isDarkMode) {
+            Color(0xFF1E293B)
+        } else {
+            Color.White
+        }
 
     val rowTextColor = when {
         excluded && isDarkMode ->
@@ -4192,11 +4409,6 @@ private fun HardExerciseLegacyRow(
             Color(0xFF263238)
     }
 
-    /*
-     * מספר התרגיל חייב להישאר לבן וברור במצב כהה.
-     * אין להשתמש בצבע החגורה השחורה כרקע במצב זה,
-     * משום שהוא נבלע בתוך כרטיס התרגיל הכהה.
-     */
     val exerciseNumberBackground =
         if (isDarkMode) {
             Color.White.copy(alpha = 0.14f)
@@ -4216,16 +4428,35 @@ private fun HardExerciseLegacyRow(
             .fillMaxWidth()
             .clip(RoundedCornerShape(16.dp)),
         color = rowBgColor,
-        tonalElevation = if (isDarkMode) 0.dp else 1.dp,
-        shadowElevation = if (isDarkMode) 0.dp else 1.dp,
+        tonalElevation =
+            if (isDarkMode) {
+                0.dp
+            } else {
+                1.dp
+            },
+        shadowElevation =
+            if (isDarkMode) {
+                0.dp
+            } else {
+                1.dp
+            },
         border = BorderStroke(
-            1.dp,
-            if (isDarkMode) belt.color.copy(alpha = 0.55f) else Color.Transparent
+            width = 1.dp,
+            color =
+                if (isDarkMode) {
+                    belt.color.copy(alpha = 0.55f)
+                } else {
+                    Color.Transparent
+                }
         )
     ) {
+        /*
+         * הפריסה הפיזית נשארת LTR:
+         * עיגול הסטטוס משמאל ופס החגורה מימין.
+         */
         CompositionLocalProvider(
-            androidx.compose.ui.platform.LocalLayoutDirection provides
-                    androidx.compose.ui.unit.LayoutDirection.Ltr
+            LocalLayoutDirection provides
+                    LayoutDirection.Ltr
         ) {
             Row(
                 modifier = Modifier
@@ -4240,24 +4471,16 @@ private fun HardExerciseLegacyRow(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 if (isEnglish) {
-                    SubTopicItemFloatingActions(
-                        isEnglish = true,
-                        excluded = excluded,
-                        isFav = isFav,
-                        hasNote = hasNote,
-                        onInfo = onInfoClick,
-                        onToggleFavorite = onToggleFavorite,
-                        onToggleExclude = onToggleExclude,
-                        onEditNote = onEditNote
-                    )
-
-                    Spacer(Modifier.width(6.dp))
-
                     Column(
                         modifier = Modifier
                             .weight(1f)
-                            .clickable { onInfoClick() }
-                            .padding(start = 2.dp, end = 4.dp),
+                            .clickable {
+                                onInfoClick()
+                            }
+                            .padding(
+                                start = 2.dp,
+                                end = 4.dp
+                            ),
                         horizontalAlignment = Alignment.Start
                     ) {
                         Row(
@@ -4266,37 +4489,63 @@ private fun HardExerciseLegacyRow(
                         ) {
                             HardLegacyMetaBadge(
                                 text = "No. $exerciseNumber",
-                                containerColor = exerciseNumberBackground,
-                                contentColor = exerciseNumberTextColor
+                                containerColor =
+                                    exerciseNumberBackground,
+                                contentColor =
+                                    exerciseNumberTextColor
+                            )
+
+                            Spacer(Modifier.width(3.dp))
+
+                            SubTopicItemFloatingActions(
+                                isEnglish = true,
+                                excluded = excluded,
+                                isFav = isFav,
+                                hasNote = hasNote,
+                                onInfo = onInfoClick,
+                                onToggleFavorite =
+                                    onToggleFavorite,
+                                onToggleExclude =
+                                    onToggleExclude,
+                                onEditNote = onEditNote
                             )
 
                             if (isFav) {
                                 Spacer(Modifier.width(5.dp))
+
                                 HardLegacyMetaBadge(
                                     text = "Favorite",
-                                    containerColor = Color(0xFFF9D9B8),
-                                    contentColor = Color(0xFF9A5A00)
+                                    containerColor =
+                                        Color(0xFFF9D9B8),
+                                    contentColor =
+                                        Color(0xFF9A5A00)
                                 )
                             }
 
                             if (excluded) {
                                 Spacer(Modifier.width(5.dp))
+
                                 HardLegacyMetaBadge(
                                     text = "Excluded",
-                                    containerColor = Color(0xFFE5E7EB),
-                                    contentColor = Color(0xFF6B7280)
+                                    containerColor =
+                                        Color(0xFFE5E7EB),
+                                    contentColor =
+                                        Color(0xFF6B7280)
                                 )
                             }
+
+                            Spacer(Modifier.weight(1f))
                         }
 
                         Spacer(Modifier.height(2.dp))
 
                         Text(
                             text = displayName.trim(),
-                            style = MaterialTheme.typography.bodySmall.copy(
-                                fontSize = 11.sp,
-                                lineHeight = 13.sp
-                            ),
+                            style =
+                                MaterialTheme.typography.bodySmall.copy(
+                                    fontSize = 11.sp,
+                                    lineHeight = 13.sp
+                                ),
                             fontWeight = FontWeight.ExtraBold,
                             color = rowTextColor,
                             textAlign = TextAlign.Left,
@@ -4308,10 +4557,18 @@ private fun HardExerciseLegacyRow(
 
                     Spacer(Modifier.width(6.dp))
 
-                    HardMasterToggle(
-                        mastered = mastered,
-                        onClick = onStatusClick
-                    )
+                    if (isCoach) {
+                        CoachMaterialStatusSelector(
+                            progress = coachProgress,
+                            isEnglish = isEnglish,
+                            onSelect = onCoachStatusSelect
+                        )
+                    } else {
+                        HardMasterToggle(
+                            mastered = mastered,
+                            onClick = onStatusClick
+                        )
+                    }
 
                     Spacer(Modifier.width(6.dp))
 
@@ -4319,24 +4576,46 @@ private fun HardExerciseLegacyRow(
                         modifier = Modifier
                             .width(3.dp)
                             .height(34.dp)
-                            .clip(RoundedCornerShape(topStart = 8.dp, bottomStart = 8.dp))
+                            .clip(
+                                RoundedCornerShape(
+                                    topStart = 8.dp,
+                                    bottomStart = 8.dp
+                                )
+                            )
                             .background(belt.color)
                     )
                 } else {
-                    HardMasterToggle(
-                        mastered = mastered,
-                        onClick = onStatusClick
-                    )
+                    if (isCoach) {
+                        CoachMaterialStatusSelector(
+                            progress = coachProgress,
+                            isEnglish = isEnglish,
+                            onSelect = onCoachStatusSelect
+                        )
+                    } else {
+                        HardMasterToggle(
+                            mastered = mastered,
+                            onClick = onStatusClick
+                        )
+                    }
 
                     Spacer(Modifier.width(6.dp))
 
                     Column(
                         modifier = Modifier
                             .weight(1f)
-                            .clickable { onInfoClick() }
-                            .padding(start = 2.dp, end = 2.dp),
+                            .clickable {
+                                onInfoClick()
+                            }
+                            .padding(
+                                start = 2.dp,
+                                end = 2.dp
+                            ),
                         horizontalAlignment = Alignment.End
                     ) {
+                        /*
+                         * השורה נשארת LTR פיזית:
+                         * המספר מימין והאייקון מיד אחריו משמאל.
+                         */
                         Row(
                             modifier = Modifier.fillMaxWidth(),
                             verticalAlignment = Alignment.CenterVertically
@@ -4346,36 +4625,69 @@ private fun HardExerciseLegacyRow(
                             if (excluded) {
                                 HardLegacyMetaBadge(
                                     text = "מוחרג",
-                                    containerColor = Color(0xFFE5E7EB),
-                                    contentColor = Color(0xFF6B7280)
+                                    containerColor =
+                                        Color(0xFFE5E7EB),
+                                    contentColor =
+                                        Color(0xFF6B7280)
                                 )
+
                                 Spacer(Modifier.width(5.dp))
                             }
 
                             if (isFav) {
                                 HardLegacyMetaBadge(
                                     text = "מועדף",
-                                    containerColor = Color(0xFFF9D9B8),
-                                    contentColor = Color(0xFF9A5A00)
+                                    containerColor =
+                                        Color(0xFFF9D9B8),
+                                    contentColor =
+                                        Color(0xFF9A5A00)
                                 )
+
                                 Spacer(Modifier.width(5.dp))
                             }
 
+                            /*
+                             * האייקון מופיע פיזית משמאל למספר,
+                             * כלומר אחריו בכיוון הקריאה בעברית.
+                             */
+                            SubTopicItemFloatingActions(
+                                isEnglish = false,
+                                excluded = excluded,
+                                isFav = isFav,
+                                hasNote = hasNote,
+                                onInfo = onInfoClick,
+                                onToggleFavorite =
+                                    onToggleFavorite,
+                                onToggleExclude =
+                                    onToggleExclude,
+                                onEditNote = onEditNote
+                            )
+
+                            Spacer(Modifier.width(3.dp))
+
                             HardLegacyMetaBadge(
                                 text = "מס׳ $exerciseNumber",
-                                containerColor = exerciseNumberBackground,
-                                contentColor = exerciseNumberTextColor
+                                containerColor =
+                                    exerciseNumberBackground,
+                                contentColor =
+                                    exerciseNumberTextColor
                             )
                         }
 
                         Spacer(Modifier.height(2.dp))
 
+                        /*
+                         * אייקון המידע אינו נמצא יותר מחוץ לעמודה,
+                         * ולכן שם התרגיל מקבל את כל רוחב השורה.
+                         */
                         Text(
-                            text = "\u200F${displayName.trim()}\u200F",
-                            style = MaterialTheme.typography.bodySmall.copy(
-                                fontSize = 11.sp,
-                                lineHeight = 13.sp
-                            ),
+                            text =
+                                "\u200F${displayName.trim()}\u200F",
+                            style =
+                                MaterialTheme.typography.bodySmall.copy(
+                                    fontSize = 11.sp,
+                                    lineHeight = 13.sp
+                                ),
                             fontWeight = FontWeight.ExtraBold,
                             color = rowTextColor,
                             textAlign = TextAlign.Right,
@@ -4385,26 +4697,18 @@ private fun HardExerciseLegacyRow(
                         )
                     }
 
-                    Spacer(Modifier.width(2.dp))
-
-                    SubTopicItemFloatingActions(
-                        isEnglish = false,
-                        excluded = excluded,
-                        isFav = isFav,
-                        hasNote = hasNote,
-                        onInfo = onInfoClick,
-                        onToggleFavorite = onToggleFavorite,
-                        onToggleExclude = onToggleExclude,
-                        onEditNote = onEditNote
-                    )
-
                     Spacer(Modifier.width(4.dp))
 
                     Box(
                         modifier = Modifier
                             .width(3.dp)
                             .height(34.dp)
-                            .clip(RoundedCornerShape(topStart = 8.dp, bottomStart = 8.dp))
+                            .clip(
+                                RoundedCornerShape(
+                                    topStart = 8.dp,
+                                    bottomStart = 8.dp
+                                )
+                            )
                             .background(belt.color)
                     )
                 }
@@ -4412,6 +4716,7 @@ private fun HardExerciseLegacyRow(
         }
     }
 }
+
 
 @Composable
 private fun SubTopicItemFloatingActions(
@@ -4473,11 +4778,11 @@ private fun SubTopicItemFloatingActions(
         }
 
         CompositionLocalProvider(
-            androidx.compose.ui.platform.LocalLayoutDirection provides
+            LocalLayoutDirection provides
                     if (isEnglish) {
-                        androidx.compose.ui.unit.LayoutDirection.Ltr
+                        LayoutDirection.Ltr
                     } else {
-                        androidx.compose.ui.unit.LayoutDirection.Rtl
+                        LayoutDirection.Rtl
                     }
         ) {
             DropdownMenu(
@@ -4527,7 +4832,7 @@ private fun SubTopicItemFloatingActions(
                         expanded = false
                         onToggleFavorite()
 
-                        android.widget.Toast
+                        Toast
                             .makeText(
                                 context,
                                 when {
@@ -4536,7 +4841,7 @@ private fun SubTopicItemFloatingActions(
                                     isFav -> "הוסר מהמועדפים."
                                     else -> "נוסף למועדפים."
                                 },
-                                android.widget.Toast.LENGTH_SHORT
+                                Toast.LENGTH_SHORT
                             )
                             .show()
                     }
@@ -4560,7 +4865,7 @@ private fun SubTopicItemFloatingActions(
                         expanded = false
                         onToggleExclude()
 
-                        android.widget.Toast
+                        Toast
                             .makeText(
                                 context,
                                 when {
@@ -4569,7 +4874,7 @@ private fun SubTopicItemFloatingActions(
                                     excluded -> "בוטלה ההחרגה."
                                     else -> "התרגיל הוחרג מהתרגול."
                                 },
-                                android.widget.Toast.LENGTH_SHORT
+                                Toast.LENGTH_SHORT
                             )
                             .show()
                     }
@@ -4703,8 +5008,8 @@ private fun ExerciseRowWithInfo(
         )
     ) {
         CompositionLocalProvider(
-            androidx.compose.ui.platform.LocalLayoutDirection provides
-                    androidx.compose.ui.unit.LayoutDirection.Ltr
+            LocalLayoutDirection provides
+                    LayoutDirection.Ltr
         ) {
             Row(
                 modifier = Modifier
@@ -4728,11 +5033,11 @@ private fun ExerciseRowWithInfo(
                 Spacer(Modifier.width(16.dp))
 
                 CompositionLocalProvider(
-                    androidx.compose.ui.platform.LocalLayoutDirection provides
+                    LocalLayoutDirection provides
                             if (isEnglish) {
-                                androidx.compose.ui.unit.LayoutDirection.Ltr
+                                LayoutDirection.Ltr
                             } else {
-                                androidx.compose.ui.unit.LayoutDirection.Rtl
+                                LayoutDirection.Rtl
                             }
                 ) {
                     Text(
