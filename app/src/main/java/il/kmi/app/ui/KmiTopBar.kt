@@ -9,6 +9,7 @@ import android.app.Activity
 import android.content.ContextWrapper
 import android.view.inputmethod.InputMethodManager
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.LocalOnBackPressedDispatcherOwner
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.Spring
@@ -1266,24 +1267,73 @@ fun KmiTopBar(
 
     // === חיפוש גלובאלי מתפריט האייקונים הצדדי ===
     if (showGlobalSearch) {
+
+        val globalSearchSheetState =
+            rememberModalBottomSheetState(
+                skipPartiallyExpanded = true
+            )
+
+        val isGlobalSearchKeyboardVisible =
+            WindowInsets.ime
+                .getBottom(density) > 0
+
+        fun closeGlobalSearch() {
+            hideGlobalSearchKeyboard()
+            showGlobalSearch = false
+            globalSearchQuery = ""
+        }
+
+        /*
+         * כאשר המקלדת פתוחה:
+         * Back סוגר רק את המקלדת ומשאיר את החיפוש פתוח.
+         *
+         * כאשר המקלדת כבר סגורה:
+         * Back סוגר את חלון החיפוש.
+         */
+        BackHandler(enabled = showGlobalSearch) {
+            if (isGlobalSearchKeyboardVisible) {
+                finishGlobalSearchTyping()
+            } else {
+                closeGlobalSearch()
+            }
+        }
+
         ModalBottomSheet(
             onDismissRequest = {
-                hideGlobalSearchKeyboard()
-                showGlobalSearch = false
-                globalSearchQuery = ""
+                closeGlobalSearch()
             },
-            sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
-            shape = RoundedCornerShape(topStart = 34.dp, topEnd = 34.dp),
+            sheetState = globalSearchSheetState,
+
+            /*
+             * מונע מ־ModalBottomSheet לסגור את עצמו ישירות
+             * בעת לחיצה על Back. הטיפול מתבצע ב־BackHandler.
+             */
+            properties = ModalBottomSheetProperties(
+                shouldDismissOnBackPress = false
+            ),
+
+            shape = RoundedCornerShape(
+                topStart = 34.dp,
+                topEnd = 34.dp
+            ),
             containerColor = Color.Transparent,
             tonalElevation = 0.dp,
             dragHandle = {
                 Box(
                     modifier = Modifier
-                        .padding(top = 10.dp, bottom = 4.dp)
+                        .padding(
+                            top = 10.dp,
+                            bottom = 4.dp
+                        )
                         .width(42.dp)
                         .height(5.dp)
-                        .clip(RoundedCornerShape(999.dp))
-                        .background(Color(0xFF111827).copy(alpha = 0.42f))
+                        .clip(
+                            RoundedCornerShape(999.dp)
+                        )
+                        .background(
+                            Color(0xFF111827)
+                                .copy(alpha = 0.42f)
+                        )
                 )
             }
         ) {

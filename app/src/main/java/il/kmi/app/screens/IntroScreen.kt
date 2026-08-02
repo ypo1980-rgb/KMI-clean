@@ -86,25 +86,25 @@ private fun introBeltDrawableRes(
 ): Int {
     return when (belt) {
         Belt.WHITE ->
-            R.drawable.intro_belt_white
+            R.drawable.belt_white
 
         Belt.YELLOW ->
-            R.drawable.intro_belt_yellow
+            R.drawable.belt_yellow
 
         Belt.ORANGE ->
-            R.drawable.intro_belt_orange
+            R.drawable.belt_orange
 
         Belt.GREEN ->
-            R.drawable.intro_belt_green
+            R.drawable.belt_green
 
         Belt.BLUE ->
-            R.drawable.intro_belt_blue
+            R.drawable.belt_blue
 
         Belt.BROWN ->
-            R.drawable.intro_belt_brown
+            R.drawable.belt_brown
 
         Belt.BLACK ->
-            R.drawable.intro_belt_black
+            R.drawable.belt_black
     }
 }
 

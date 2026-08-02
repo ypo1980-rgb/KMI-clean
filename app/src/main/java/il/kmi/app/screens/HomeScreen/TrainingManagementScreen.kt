@@ -350,7 +350,9 @@ fun TrainingManagementScreen(
         mutableStateOf("")
     }
 
-    var changedStartTime by rememberSaveable {
+    var changedStartTime by rememberSaveable(
+        training.startTime
+    ) {
         mutableStateOf(
             extractManagementTime(
                 training.startTime
@@ -358,12 +360,74 @@ fun TrainingManagementScreen(
         )
     }
 
-    var changedEndTime by rememberSaveable {
+    var changedEndTime by rememberSaveable(
+        training.endTime
+    ) {
         mutableStateOf(
             extractManagementTime(
                 training.endTime
             )
         )
+    }
+
+    LaunchedEffect(
+        training.startTime,
+        training.endTime
+    ) {
+        val start =
+            parseManagementTime(
+                training.startTime
+            )
+
+        val end =
+            parseManagementTime(
+                training.endTime
+            )
+
+        if (
+            start != null &&
+            end != null
+        ) {
+            val startMinutes =
+                start.first * 60 +
+                        start.second
+
+            val endMinutes =
+                end.first * 60 +
+                        end.second
+
+            /*
+             * מתקנים רק נתונים שנשלחו הפוך למסך.
+             *
+             * לא הופכים אימון אמיתי שחוצה חצות,
+             * למשל 23:00–01:00.
+             */
+            val probablyReversed =
+                startMinutes > endMinutes &&
+                        startMinutes - endMinutes < 12 * 60
+
+            if (probablyReversed) {
+                changedStartTime =
+                    extractManagementTime(
+                        training.endTime
+                    )
+
+                changedEndTime =
+                    extractManagementTime(
+                        training.startTime
+                    )
+            } else {
+                changedStartTime =
+                    extractManagementTime(
+                        training.startTime
+                    )
+
+                changedEndTime =
+                    extractManagementTime(
+                        training.endTime
+                    )
+            }
+        }
     }
 
     var showStartTimePicker by rememberSaveable {
@@ -824,16 +888,121 @@ private fun TrainingDetailsCard(
                 color = colorScheme.outline.copy(alpha = 0.18f)
             )
 
-            Text(
-                text =
-                    "${training.dateText} • " +
-                            "${training.startTime}–${training.endTime}",
-                style = KmiTypography.cardTitle,
-                color = accent,
-                textAlign =
-                    if (isEnglish) TextAlign.Left else TextAlign.Right,
-                modifier = Modifier.fillMaxWidth()
-            )
+            val displayedDates =
+                Regex("""\d{2}/\d{2}/\d{4}""")
+                    .findAll(training.dateText)
+                    .map { match ->
+                        match.value
+                    }
+                    .distinct()
+                    .toList()
+
+            val cleanDate =
+                when {
+                    displayedDates.isNotEmpty() ->
+                        displayedDates.joinToString(" • ")
+
+                    else ->
+                        training.dateText
+                            .trim()
+                            .trim('•', '·', '-', '–')
+                            .trim()
+                }
+
+            val rawStartTime =
+                extractManagementTime(
+                    training.startTime
+                )
+
+            val rawEndTime =
+                extractManagementTime(
+                    training.endTime
+                )
+
+            val parsedStartTime =
+                parseManagementTime(
+                    rawStartTime
+                )
+
+            val parsedEndTime =
+                parseManagementTime(
+                    rawEndTime
+                )
+
+            val shouldSwapTimes =
+                if (
+                    parsedStartTime != null &&
+                    parsedEndTime != null
+                ) {
+                    val startMinutes =
+                        parsedStartTime.first * 60 +
+                                parsedStartTime.second
+
+                    val endMinutes =
+                        parsedEndTime.first * 60 +
+                                parsedEndTime.second
+
+                    startMinutes > endMinutes &&
+                            startMinutes - endMinutes < 12 * 60
+                } else {
+                    false
+                }
+
+            val displayedStartTime =
+                if (shouldSwapTimes) {
+                    rawEndTime
+                } else {
+                    rawStartTime
+                }
+
+            val displayedEndTime =
+                if (shouldSwapTimes) {
+                    rawStartTime
+                } else {
+                    rawEndTime
+                }
+
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalAlignment =
+                    if (isEnglish) {
+                        Alignment.Start
+                    } else {
+                        Alignment.End
+                    }
+            ) {
+
+                Text(
+                    text = cleanDate,
+                    style = KmiTypography.cardTitle,
+                    color = accent,
+                    textAlign =
+                        if (isEnglish) {
+                            TextAlign.Left
+                        } else {
+                            TextAlign.Right
+                        },
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+                Spacer(
+                    modifier = Modifier.height(2.dp)
+                )
+
+                Text(
+                    text =
+                        "$displayedStartTime–$displayedEndTime",
+                    style = KmiTypography.cardTitle,
+                    color = accent,
+                    textAlign =
+                        if (isEnglish) {
+                            TextAlign.Left
+                        } else {
+                            TextAlign.Right
+                        },
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
         }
     }
 }
@@ -1088,12 +1257,6 @@ private fun TrainingManagementBottomActions(
                 Row(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Icon(
-                        imageVector = Icons.Filled.Close,
-                        contentDescription = null,
-                        tint = accent,
-                        modifier = Modifier.size(18.dp)
-                    )
 
                     Spacer(Modifier.width(5.dp))
 

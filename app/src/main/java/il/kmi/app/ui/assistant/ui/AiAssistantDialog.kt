@@ -836,7 +836,108 @@ private fun normalizeExerciseQuery(text: String): String {
         .replace(".", " ")
         .replace("־", "-")
         .replace("–", "-")
+        .replace("—", "-")
+        .replace(
+            Regex("""\s*-\s*"""),
+            " - "
+        )
         .replace("\\s+".toRegex(), " ")
+        .trim()
+}
+
+/*
+ * נרמול לצורך השוואת זהות בין שמות תרגילים.
+ *
+ * המקפים השונים, סימני הפיסוק והרווחים אינם חלק
+ * מזהות התרגיל. כך:
+ *
+ * "קוואלר - מרפק"
+ * "קוואלר–מרפק"
+ * "קוואלר מרפק"
+ *
+ * נחשבים לאותו שם, בלי לאפשר התאמה לתרגיל אחר.
+ */
+private fun normalizeExerciseIdentity(
+    text: String
+): String {
+    return normalizeExerciseQuery(text)
+        .replace("־", " ")
+        .replace("–", " ")
+        .replace("—", " ")
+        .replace("-", " ")
+        .replace("/", " ")
+        .replace("\\", " ")
+        .replace(":", " ")
+        .replace(";", " ")
+        .replace(
+            Regex("""[()\[\]{}"'׳״]"""),
+            " "
+        )
+        .replace(
+            Regex("""\s+"""),
+            " "
+        )
+        .trim()
+}
+
+/*
+ * תיקון טעויות נפוצות של מנוע זיהוי הדיבור
+ * במילה "קוואלר".
+ *
+ * התיקון מופעל רק כאשר המשפט מכיל מאפיין ברור
+ * של אחד מתרגילי הקוואלר, כדי שלא להחליף בטעות
+ * את המילה "קבלה" במשפטים אחרים.
+ */
+private fun normalizeRecognizedExerciseSpeech(
+    raw: String
+): String {
+    val clean =
+        raw
+            .trim()
+            .replace(
+                Regex("""\s+"""),
+                " "
+            )
+
+    if (clean.isBlank()) {
+        return clean
+    }
+
+    val normalized =
+        normalizeExerciseIdentity(
+            clean
+        )
+
+    val looksLikeKavalerExercise =
+        listOf(
+            "אגודלים",
+            "מרפק",
+            "הליכה לאחור",
+            "הליכה לפנים",
+            "נגד התנגדות",
+            "נגד ההתנגדות"
+        ).any { marker ->
+            marker in normalized
+        }
+
+    if (!looksLikeKavalerExercise) {
+        return clean
+    }
+
+    return clean
+        .replace(
+            Regex(
+                pattern =
+                    """(?<![\p{L}])(?:קבלה|קבלר|קוואל|קוואלר|קוואלרר|קאוולר|קוואולר)(?![\p{L}])""",
+                option =
+                    RegexOption.IGNORE_CASE
+            ),
+            "קוואלר"
+        )
+        .replace(
+            Regex("""\s+"""),
+            " "
+        )
         .trim()
 }
 
@@ -903,13 +1004,30 @@ private fun resolveExerciseAlias(raw: String): String {
         "knee" to "מכת ברך"
     )
 
-    aliases[q]?.let { return it }
-
-    val containsMatch = aliases.entries.firstOrNull { (alias, _) ->
-        q == alias || q.contains(alias)
+    /*
+   * ממירים רק כינוי שזהה לכל השאלה.
+   *
+   * אסור להשתמש ב־contains, משום ששם מלא כמו
+   * "קוואלר מרפק" מכיל את המילה "מרפק",
+   * אך אינו התרגיל הכללי "מכת מרפק".
+   */
+    aliases[q]?.let { exactAlias ->
+        return exactAlias
     }
 
-    return containsMatch?.value ?: raw.trim()
+    return raw
+        .trim()
+        .replace("־", "-")
+        .replace("–", "-")
+        .replace("—", "-")
+        .replace(
+            Regex("""\s*-\s*"""),
+            " - "
+        )
+        .replace(
+            Regex("""\s+"""),
+            " "
+        )
 }
 
 private fun getExerciseAnswerWithFallback(
@@ -917,109 +1035,134 @@ private fun getExerciseAnswerWithFallback(
     preferredBelt: Belt?,
     isEnglish: Boolean
 ): String {
-    val engineAnswer = ExerciseAssistantEngine.answer(
-        question = question,
-        preferredBelt = preferredBelt,
-        isEnglish = isEnglish
-    ).trim()
 
-    val normalizedEngineAnswer = engineAnswer.lowercase()
-
-    val looksLikeNotFound =
-        "לא מצא" in engineAnswer ||
-                "לא נמצא" in engineAnswer ||
-                "אין כרגע" in engineAnswer ||
-                "couldn't find" in normalizedEngineAnswer ||
-                "not found" in normalizedEngineAnswer ||
-                "no exercise" in normalizedEngineAnswer
-
-    if (!looksLikeNotFound) return engineAnswer
-
-    val rawExercise = extractExerciseNameFromQuestion(question)?.trim()
-        ?.takeIf { it.isNotBlank() }
-        ?: question.trim()
-
-    il.kmi.app.domain.ExplanationSearchIndex.findBest(
-        query = rawExercise,
-        preferredBelt = preferredBelt
-    )?.let { match ->
-        return match.explanation
-    }
-
-    val partialQuery = when (resolveExerciseAlias(rawExercise)) {
-        "הגנה נגד דקירה" -> "דקירה"
-        else -> rawExercise
-    }
-
-    val partialMatches = findPartialExerciseCandidates(
-        query = partialQuery,
-        isEnglish = isEnglish
-    )
-
-    if (partialMatches.size > 1) {
-        val cleanExerciseLabel = resolveExerciseAlias(rawExercise)
-            .replace("\"", "")
-            .trim()
-
-        val intro = if (isEnglish) {
-            "I found several exercises for $cleanExerciseLabel:"
-        } else {
-            "מצאתי מספר תרגילים עבור $cleanExerciseLabel:"
-        }
-
-        val outro = if (isEnglish) {
-            "Please write the exact exercise name you want and I will explain it."
-        } else {
-            "כתוב לי את השם המדויק של התרגיל שאתה רוצה ואני אסביר אותו."
-        }
-
-        return buildString {
-            append(intro)
-            append("\n\n")
-            partialMatches.forEachIndexed { index, item ->
-                append("${index + 1}. $item")
-                append("\n")
+    val rawExercise =
+        extractExerciseNameFromQuestion(
+            question
+        )
+            ?.trim()
+            ?.takeIf {
+                it.isNotBlank()
             }
-            append("\n")
-            append(outro)
-        }.trim()
+            ?: question.trim()
+
+    /*
+     * חיפוש יחיד ומרכזי מול ExplanationSearchIndex.
+     *
+     * האינדקס נבנה אוטומטית מתוך
+     * ExerciseIdentityRegistry, ולכן אין כאן
+     * שום רשימת תרגילים ידנית.
+     */
+    val verifiedMatch =
+        il.kmi.app.domain.ExplanationSearchIndex
+            .findBest(
+                query = rawExercise,
+                preferredBelt = preferredBelt,
+                minScore = 180
+            )
+
+    if (verifiedMatch != null) {
+        val verifiedExplanation =
+            verifiedMatch.explanation
+                .trim()
+
+        val isRealExplanation =
+            verifiedExplanation.isNotBlank() &&
+                    !verifiedExplanation.startsWith(
+                        "הסבר מפורט על:"
+                    ) &&
+                    !verifiedExplanation.startsWith(
+                        "אין כרגע"
+                    ) &&
+                    !verifiedExplanation.startsWith(
+                        "Detailed explanation for:"
+                    ) &&
+                    !verifiedExplanation.startsWith(
+                        "There is currently no explanation"
+                    )
+
+        if (isRealExplanation) {
+            return verifiedExplanation
+        }
     }
 
-    preferredBelt?.let { belt ->
-        val local =
+    /*
+     * ניסיון נוסף רק כאשר קיימת חגורה מועדפת.
+     *
+     * גם כאן לא מייצרים הסבר חדש, אלא פונים
+     * ל־Resolver הקיים שמחזיר רק תוכן מהמאגר.
+     */
+    if (preferredBelt != null) {
+        val localExplanation =
             findExplanationForHit(
-                belt = belt,
+                belt = preferredBelt,
                 rawItem = rawExercise,
                 topic = "",
                 isEnglish = isEnglish
             )
                 .trim()
 
-        val isFallback =
+        val isLocalFallback =
             if (isEnglish) {
-                local.isBlank() ||
-                        local.startsWith(
+                localExplanation.isBlank() ||
+                        localExplanation.startsWith(
                             "There is currently no"
                         ) ||
-                        local.startsWith(
+                        localExplanation.startsWith(
                             "Detailed explanation for:"
                         )
             } else {
-                local.isBlank() ||
-                        local.startsWith(
+                localExplanation.isBlank() ||
+                        localExplanation.startsWith(
                             "אין כרגע"
                         ) ||
-                        local.startsWith(
+                        localExplanation.startsWith(
                             "הסבר מפורט על"
                         )
             }
 
-        if (!isFallback) {
-            return local
+        if (!isLocalFallback) {
+            return localExplanation
         }
     }
 
-    return engineAnswer
+    /*
+     * אין להעביר את הבקשה ל־ExerciseAssistantEngine,
+     * משום שהוא עשוי לנסח תשובה כללית שאינה קיימת
+     * במאגר ההסברים.
+     */
+    return if (isEnglish) {
+        "I could not find a verified explanation for this exact exercise in the database. Try specifying the full exercise name and belt."
+    } else {
+        "לא נמצא במאגר הסבר מאומת לתרגיל המדויק הזה. נסה לציין את השם המלא ואת החגורה."
+    }
+}
+
+private fun hasVerifiedExerciseMatch(
+    rawQuestion: String,
+    preferredBelt: Belt? = null
+): Boolean {
+
+    val exerciseQuery =
+        extractExerciseNameFromQuestion(
+            rawQuestion
+        )
+            ?.trim()
+            ?.takeIf {
+                it.isNotBlank()
+            }
+            ?: rawQuestion.trim()
+
+    if (exerciseQuery.isBlank()) {
+        return false
+    }
+
+    return il.kmi.app.domain.ExplanationSearchIndex
+        .findBest(
+            query = exerciseQuery,
+            preferredBelt = preferredBelt,
+            minScore = 180
+        ) != null
 }
 
 private fun hebrewDayName(dayIndex: Int): String {
@@ -1973,8 +2116,13 @@ fun AiAssistantDialog(
             candidate: String,
             confidence: Float
         ): Float {
-            val text = candidate.trim()
-            val normalized = text.lowercase()
+            val text =
+                normalizeRecognizedExerciseSpeech(
+                    candidate
+                )
+
+            val normalized =
+                text.lowercase()
 
             var score = when {
                 confidence in 0f..1f -> confidence * 100f
@@ -1986,14 +2134,10 @@ fun AiAssistantDialog(
 
             when (assistantMode) {
                 AssistantMode.EXERCISE -> {
-                    val exerciseQuery =
-                        extractExerciseNameFromQuestion(text).orEmpty()
-
                     if (
-                        findPartialExerciseCandidates(
-                            query = exerciseQuery,
-                            isEnglish = isEnglish
-                        ).isNotEmpty()
+                        hasVerifiedExerciseMatch(
+                            rawQuestion = text
+                        )
                     ) {
                         score += 90f
                     }
@@ -2291,13 +2435,9 @@ fun AiAssistantDialog(
 
                 val bestHasRelevantMatch = when (assistantMode) {
                     AssistantMode.EXERCISE -> {
-                        val query = extractExerciseNameFromQuestion(best.text)
-                            .orEmpty()
-
-                        findPartialExerciseCandidates(
-                            query = query,
-                            isEnglish = isEnglish
-                        ).isNotEmpty()
+                        hasVerifiedExerciseMatch(
+                            rawQuestion = best.text
+                        )
                     }
 
                     AssistantMode.TRAININGS -> {
@@ -2346,7 +2486,20 @@ fun AiAssistantDialog(
                 speechCanRetry = false
                 speechStatusMessage = null
 
-                val spoken = best.text.trim()
+                val rawSpoken =
+                    best.text.trim()
+
+                val spoken =
+                    if (
+                        assistantMode ==
+                        AssistantMode.EXERCISE
+                    ) {
+                        normalizeRecognizedExerciseSpeech(
+                            rawSpoken
+                        )
+                    } else {
+                        rawSpoken
+                    }
 
                 if (spoken.isBlank()) {
                     speechCanRetry = true
@@ -2359,19 +2512,23 @@ fun AiAssistantDialog(
                     return
                 }
 
-                val navCommand = parseVoiceNavCommand(spoken)
+                val navCommand =
+                    parseVoiceNavCommand(
+                        spoken
+                    )
 
                 if (navCommand != null) {
                     pendingNavAfterSpeak = null
                     input = ""
-                    onVoiceCommand?.invoke(navCommand)
+                    onVoiceCommand?.invoke(
+                        navCommand
+                    )
                     return
                 }
 
                 /*
-                 * העדכון של input מציג למשתמש מה זוהה.
-                 * pendingSendFromStt מפעיל את sendQuestion
-                 * דרך ה-LaunchedEffect שכבר קיים בקובץ.
+                 * מציגים ושולחים את הטקסט לאחר תיקון
+                 * טעויות זיהוי הדיבור במונחים מקצועיים.
                  */
                 input = spoken
                 pendingSendFromStt = spoken
@@ -5336,62 +5493,6 @@ private fun extractExerciseNameFromQuestion(question: String): String? {
         .removeSuffix("?")
         .trim()
         .takeIf { it.length > 1 }
-}
-
-private fun findPartialExerciseCandidates(query: String, isEnglish: Boolean): List<String> {
-    val q = query.trim()
-        .replace("?", "")
-        .replace("הסבר על", "")
-        .replace("תן הסבר על", "")
-        .replace("תסביר לי", "")
-        .replace("תסביר", "")
-        .trim()
-
-    if (q.isBlank()) return emptyList()
-
-    val knownExercises = listOf(
-        "בעיטת מגל אופקית",
-        "בעיטת מגל אלכסונית",
-        "בעיטת מגל בהטעיה",
-        "בעיטת מגל נמוכה",
-        "בעיטת מגל לאחור בשיכול אחורי",
-        "בעיטת מגל לאחור בסיבוב",
-        "בעיטת מגל בניתור",
-        "בעיטת מגל כפולה בניתור",
-        "הגנה נגד בעיטת מגל לפנים – בעיטה לצד",
-        "הגנה נגד בעיטת מגל נמוכה",
-        "הגנה נגד בעיטת מגל לאחור - בעיטה בימין",
-        "הגנה נגד בעיטת מגל לאחור - בעיטה שמאל",
-        "הגנה נגד בעיטת מגל לאחור - אגרוף שמאל",
-        "הגנה נגד בעיטת מגל לאחור בסיבוב – בעיטה",
-        "הגנה פנימית נגד בעיטת מגל לפנים - בעיטה לצד",
-        "הגנה פנימית נגד בעיטת מגל לפנים - בעיטה לאחור",
-        "הגנה חיצונית נגד בעיטת מגל לפנים - בעיטה בימין",
-        "הגנה חיצונית נגד בעיטת מגל לפנים - בעיטה בשמאל",
-        "הגנה חיצונית נגד בעיטת מגל לפנים - אגרוף בימין",
-        "בעיטת סטירה חיצונית",
-        "בעיטת סטירה פנימית",
-        "בעיטת סטירה חיצונית בסיבוב",
-        "הגנה נגד בעיטת סטירה חיצונית",
-        "הגנה נגד בעיטת סטירה פנימית",
-        "Outside Slap Kick",
-        "Inside Slap Kick",
-        "Spinning Outside Slap Kick",
-        "הגנה נגד דקירה",
-        "הגנה נגד דקירה מזרחית",
-        "הגנה נגד דקירה מערבית",
-        "הגנה נגד דקירה מלפנים",
-        "הגנה נגד דקירה מלמטה",
-        "הגנה נגד דקירה נמוכה"
-    )
-
-    return knownExercises
-        .filter { title ->
-            title.contains(q, ignoreCase = true) ||
-                    q.contains(title, ignoreCase = true)
-        }
-        .distinct()
-        .sorted()
 }
 
 private fun detectIntent(question: String): String {
