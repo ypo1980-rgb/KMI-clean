@@ -288,16 +288,99 @@ fun MaterialsScreen(
 ) {
 
     val context = LocalContext.current
-    val langManager = remember { AppLanguageManager(context) }
-    val currentLang = langManager.getCurrentLanguage()
-    val isEnglish = currentLang == AppLanguage.ENGLISH
+    val langManager = remember {
+        AppLanguageManager(context)
+    }
 
-    val sp = remember {
+    val currentLang =
+        langManager.getCurrentLanguage()
+
+    val isEnglish =
+        currentLang == AppLanguage.ENGLISH
+
+    val sp = remember(context) {
         context.getSharedPreferences(
             "kmi_settings",
             Context.MODE_PRIVATE
         )
     }
+
+    /*
+     * מקור האמת לתפקיד הפעיל הוא kmi_user,
+     * בדיוק כמו תג התפקיד הגלובלי.
+     *
+     * הפרמטר isCoach נשאר רק כ־fallback למקרה
+     * שבו טרם נשמר user_role.
+     */
+    val rolePrefs = remember(context) {
+        context.getSharedPreferences(
+            "kmi_user",
+            Context.MODE_PRIVATE
+        )
+    }
+
+    fun readActiveMaterialsRole(): String? {
+        return rolePrefs
+            .getString("user_role", null)
+            ?.trim()
+            ?.takeIf { it.isNotBlank() }
+            ?: rolePrefs
+                .getString("role", null)
+                ?.trim()
+                ?.takeIf { it.isNotBlank() }
+    }
+
+    var activeMaterialsRole by remember {
+        mutableStateOf(
+            readActiveMaterialsRole()
+        )
+    }
+
+    DisposableEffect(rolePrefs) {
+        val roleListener =
+            android.content.SharedPreferences
+                .OnSharedPreferenceChangeListener {
+                        _,
+                        key ->
+
+                    if (
+                        key == "user_role" ||
+                        key == "role"
+                    ) {
+                        activeMaterialsRole =
+                            readActiveMaterialsRole()
+                    }
+                }
+
+        rolePrefs
+            .registerOnSharedPreferenceChangeListener(
+                roleListener
+            )
+
+        onDispose {
+            rolePrefs
+                .unregisterOnSharedPreferenceChangeListener(
+                    roleListener
+                )
+        }
+    }
+
+    val effectiveIsCoach =
+        when (
+            activeMaterialsRole
+                ?.trim()
+                ?.lowercase()
+        ) {
+            "coach",
+            "trainer",
+            "מאמן" -> true
+
+            "trainee",
+            "student",
+            "מתאמן" -> false
+
+            else -> isCoach
+        }
 
     // ✅ גורם למסך להתרענן אחרי סימון יודע/לא יודע ממסכים אחרים, כולל RandomPracticeScreen
     val marksVersion by vm.marksVersion.collectAsState()
@@ -756,12 +839,19 @@ fun MaterialsScreen(
      * טוען את סטטוסי המאמן לאחר שרשימת התרגילים מוכנה.
      */
     LaunchedEffect(
-        isCoach,
+        effectiveIsCoach,
         belt.id,
         topicKey,
         itemList
     ) {
-        if (!isCoach || itemList.isEmpty()) {
+        if (
+            !effectiveIsCoach ||
+            itemList.isEmpty()
+        ) {
+            if (!effectiveIsCoach) {
+                coachProgressStates.clear()
+            }
+
             return@LaunchedEffect
         }
 
@@ -1664,7 +1754,7 @@ fun MaterialsScreen(
                                         .padding(horizontal = 8.dp, vertical = 6.dp),
                                     horizontalArrangement = Arrangement.spacedBy(6.dp)
                                 ) {
-                                    if (isCoach) {
+                                    if (effectiveIsCoach) {
                                         MaterialsTopStatChip(
                                             value = coachPracticedCount.toString(),
                                             label = if (isEnglish) "Practiced" else "תורגל",
@@ -2273,7 +2363,7 @@ fun MaterialsScreen(
 
                                                 Spacer(Modifier.width(6.dp))
 
-                                                if (isCoach) {
+                                                if (effectiveIsCoach) {
                                                     val coachProgress =
                                                         coachProgressStates[statusId]
                                                             ?: CoachMaterialProgress(

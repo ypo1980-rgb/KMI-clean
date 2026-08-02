@@ -99,10 +99,24 @@ object TrainingManagementNavigationStore {
     }
 }
 
+private fun extractManagementTime(
+    rawValue: String
+): String {
+    return Regex(
+        """(?:[01]\d|2[0-3]):[0-5]\d"""
+    )
+        .find(rawValue)
+        ?.value
+        ?: rawValue.trim()
+}
+
 private fun parseManagementTime(
     rawValue: String
 ): Pair<Int, Int>? {
-    val parts = rawValue.trim().split(":")
+    val cleanValue =
+        extractManagementTime(rawValue)
+
+    val parts = cleanValue.split(":")
 
     if (parts.size != 2) {
         return null
@@ -337,11 +351,19 @@ fun TrainingManagementScreen(
     }
 
     var changedStartTime by rememberSaveable {
-        mutableStateOf(training.startTime)
+        mutableStateOf(
+            extractManagementTime(
+                training.startTime
+            )
+        )
     }
 
     var changedEndTime by rememberSaveable {
-        mutableStateOf(training.endTime)
+        mutableStateOf(
+            extractManagementTime(
+                training.endTime
+            )
+        )
     }
 
     var showStartTimePicker by rememberSaveable {
@@ -407,8 +429,17 @@ fun TrainingManagementScreen(
     fun returnToMenu() {
         mode = TrainingManagementScreenMode.MENU
         reason = ""
-        changedStartTime = training.startTime
-        changedEndTime = training.endTime
+
+        changedStartTime =
+            extractManagementTime(
+                training.startTime
+            )
+
+        changedEndTime =
+            extractManagementTime(
+                training.endTime
+            )
+
         errorMessage = null
     }
 

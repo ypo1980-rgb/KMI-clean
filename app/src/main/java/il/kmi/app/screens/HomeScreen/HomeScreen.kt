@@ -3592,28 +3592,114 @@ fun HomeScreen(
             }
 
             if (showCoachMessagesDialog) {
+                val noticeColors =
+                    MaterialTheme.colorScheme
+
+                val noticeAccent =
+                    noticeColors.primary
+
+                val noticeCardBrush =
+                    Brush.linearGradient(
+                        colors = listOf(
+                            noticeColors.surface.copy(
+                                alpha = 0.97f
+                            ),
+                            noticeColors.surfaceVariant.copy(
+                                alpha = 0.92f
+                            ),
+                            noticeAccent.copy(
+                                alpha = 0.10f
+                            )
+                        )
+                    )
+
                 AlertDialog(
                     onDismissRequest = {
                         showCoachMessagesDialog = false
                     },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 4.dp)
+                        .clip(RoundedCornerShape(30.dp))
+                        .background(backgroundBrush),
                     shape = RoundedCornerShape(30.dp),
-                    containerColor = Color(0xFFF4F1FB),
-                    tonalElevation = 10.dp,
+                    containerColor = Color.Transparent,
+                    tonalElevation = 14.dp,
                     title = {
-                        Text(
-                            text =
-                                if (isEnglish) {
-                                    "Recent messages and events"
-                                } else {
-                                    "הודעות ואירועים אחרונים"
-                                },
-                            style = KmiTypography.sectionTitle,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                            color = Color(0xFF0F172A),
-                            textAlign = TextAlign.Center,
-                            modifier = Modifier.fillMaxWidth()
-                        )
+                        Column(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalAlignment =
+                                Alignment.CenterHorizontally
+                        ) {
+                            Surface(
+                                shape = RoundedCornerShape(999.dp),
+                                color =
+                                    noticeAccent.copy(alpha = 0.14f),
+                                tonalElevation = 0.dp,
+                                shadowElevation = 0.dp
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Filled.Email,
+                                    contentDescription = null,
+                                    tint = noticeAccent,
+                                    modifier = Modifier
+                                        .size(40.dp)
+                                        .padding(9.dp)
+                                )
+                            }
+
+                            Spacer(Modifier.height(10.dp))
+
+                            Surface(
+                                modifier = Modifier.fillMaxWidth(),
+                                shape = RoundedCornerShape(20.dp),
+                                color = Color.White.copy(alpha = 0.92f),
+                                tonalElevation = 0.dp,
+                                shadowElevation = 0.dp
+                            ) {
+                                Text(
+                                    text =
+                                        if (isEnglish) {
+                                            "Recent messages and events"
+                                        } else {
+                                            "הודעות ואירועים אחרונים"
+                                        },
+                                    style =
+                                        KmiTypography.sectionTitle.copy(
+                                            fontWeight =
+                                                FontWeight.Black
+                                        ),
+                                    maxLines = 2,
+                                    overflow =
+                                        TextOverflow.Ellipsis,
+                                    color = Color(0xFF10213A),
+                                    textAlign = TextAlign.Center,
+                                    modifier = Modifier.padding(
+                                        horizontal = 14.dp,
+                                        vertical = 10.dp
+                                    )
+                                )
+                            }
+
+                            Spacer(Modifier.height(9.dp))
+
+                            Box(
+                                modifier = Modifier
+                                    .width(64.dp)
+                                    .height(3.dp)
+                                    .background(
+                                        brush =
+                                            Brush.horizontalGradient(
+                                                colors = listOf(
+                                                    noticeAccent,
+                                                    noticeColors.secondary
+                                                )
+                                            ),
+                                        shape =
+                                            RoundedCornerShape(999.dp)
+                                    )
+                            )
+                        }
                     },
                     text = {
                         LazyColumn(
@@ -3627,26 +3713,53 @@ fun HomeScreen(
                                     Surface(
                                         modifier = Modifier.fillMaxWidth(),
                                         shape = RoundedCornerShape(20.dp),
-                                        color = Color.White.copy(alpha = 0.94f),
-                                        shadowElevation = 6.dp,
-                                        border = BorderStroke(
-                                            1.dp,
-                                            Color(0xFFE2E8F0)
-                                        )
+                                        color =
+                                            noticeColors.surfaceVariant.copy(
+                                                alpha = 0.88f
+                                            ),
+                                        tonalElevation = 0.dp,
+                                        shadowElevation = 0.dp
                                     ) {
-                                        Text(
-                                            text = if (isEnglish) {
-                                                "No messages right now."
-                                            } else {
-                                                "אין הודעות כרגע."
-                                            },
-                                            color = Color(0xFF64748B),
-                                            fontWeight = FontWeight.SemiBold,
-                                            textAlign = TextAlign.Center,
+                                        Column(
                                             modifier = Modifier
                                                 .fillMaxWidth()
-                                                .padding(horizontal = 14.dp, vertical = 18.dp)
-                                        )
+                                                .padding(
+                                                    horizontal = 16.dp,
+                                                    vertical = 20.dp
+                                                ),
+                                            horizontalAlignment =
+                                                Alignment.CenterHorizontally
+                                        ) {
+                                            Icon(
+                                                imageVector =
+                                                    Icons.Filled.Email,
+                                                contentDescription = null,
+                                                tint =
+                                                    noticeAccent.copy(
+                                                        alpha = 0.78f
+                                                    ),
+                                                modifier =
+                                                    Modifier.size(28.dp)
+                                            )
+
+                                            Spacer(Modifier.height(8.dp))
+
+                                            Text(
+                                                text =
+                                                    if (isEnglish) {
+                                                        "No messages right now."
+                                                    } else {
+                                                        "אין הודעות כרגע."
+                                                    },
+                                                color =
+                                                    noticeColors.onSurfaceVariant,
+                                                fontWeight =
+                                                    FontWeight.SemiBold,
+                                                textAlign = TextAlign.Center,
+                                                modifier =
+                                                    Modifier.fillMaxWidth()
+                                            )
+                                        }
                                     }
                                 }
                             } else {
@@ -3657,30 +3770,17 @@ fun HomeScreen(
                                     }
                                 ) { message ->
                                     Surface(
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .shadow(
-                                                elevation = 10.dp,
-                                                shape = RoundedCornerShape(22.dp),
-                                                clip = false
-                                            ),
+                                        modifier = Modifier.fillMaxWidth(),
                                         shape = RoundedCornerShape(22.dp),
-                                        color = Color.Transparent,
-                                        border = BorderStroke(
-                                            1.dp,
-                                            Color(0xFFD6E4F0)
-                                        )
+                                        color = noticeColors.surface,
+                                        tonalElevation = 0.dp,
+                                        shadowElevation = 0.dp
                                     ) {
                                         Box(
                                             modifier = Modifier
                                                 .fillMaxWidth()
                                                 .background(
-                                                    Brush.linearGradient(
-                                                        colors = listOf(
-                                                            Color(0xFFF8FCFF),
-                                                            Color(0xFFF1F7FB)
-                                                        )
-                                                    )
+                                                    noticeCardBrush
                                                 )
                                         ) {
                                             Row(
@@ -3693,8 +3793,8 @@ fun HomeScreen(
                                                         .background(
                                                             Brush.verticalGradient(
                                                                 colors = listOf(
-                                                                    Color(0xFF38BDF8),
-                                                                    Color(0xFF7C3AED)
+                                                                    noticeAccent,
+                                                                    noticeColors.secondary
                                                                 )
                                                             )
                                                         )
@@ -3725,16 +3825,17 @@ fun HomeScreen(
                                                         if (isEnglish) {
                                                             Surface(
                                                                 shape = CircleShape,
-                                                                color = Color(0xFFE0F2FE),
-                                                                border = BorderStroke(
-                                                                    1.dp,
-                                                                    Color(0xFFBAE6FD)
-                                                                )
+                                                                color =
+                                                                    noticeAccent.copy(
+                                                                        alpha = 0.14f
+                                                                    ),
+                                                                tonalElevation = 0.dp,
+                                                                shadowElevation = 0.dp
                                                             ) {
                                                                 Icon(
                                                                     imageVector = Icons.Filled.Person,
                                                                     contentDescription = null,
-                                                                    tint = Color(0xFF0369A1),
+                                                                    tint = noticeAccent,
                                                                     modifier = Modifier
                                                                         .size(30.dp)
                                                                         .padding(6.dp)
@@ -3753,7 +3854,7 @@ fun HomeScreen(
                                                                 }
                                                             },
                                                             style = KmiTypography.cardTitle,
-                                                            color = Color(0xFF0B5E8E),
+                                                            color = noticeAccent,
                                                             maxLines = 1,
                                                             overflow = TextOverflow.Ellipsis,
                                                             textAlign =
@@ -3770,16 +3871,17 @@ fun HomeScreen(
 
                                                             Surface(
                                                                 shape = CircleShape,
-                                                                color = Color(0xFFE0F2FE),
-                                                                border = BorderStroke(
-                                                                    1.dp,
-                                                                    Color(0xFFBAE6FD)
-                                                                )
+                                                                color =
+                                                                    noticeAccent.copy(
+                                                                        alpha = 0.14f
+                                                                    ),
+                                                                tonalElevation = 0.dp,
+                                                                shadowElevation = 0.dp
                                                             ) {
                                                                 Icon(
                                                                     imageVector = Icons.Filled.Person,
                                                                     contentDescription = null,
-                                                                    tint = Color(0xFF0369A1),
+                                                                    tint = noticeAccent,
                                                                     modifier = Modifier
                                                                         .size(30.dp)
                                                                         .padding(6.dp)
@@ -3795,7 +3897,7 @@ fun HomeScreen(
                                                         style = KmiTypography.body.copy(
                                                             fontWeight = FontWeight.Bold
                                                         ),
-                                                        color = Color(0xFF1E293B),
+                                                        color = noticeColors.onSurface,
                                                         textAlign =
                                                             if (isEnglish) {
                                                                 TextAlign.Left
@@ -3825,12 +3927,14 @@ fun HomeScreen(
                                                         Spacer(Modifier.height(8.dp))
 
                                                         Surface(
-                                                            shape = RoundedCornerShape(999.dp),
-                                                            color = Color(0xFFEFF6FF),
-                                                            border = BorderStroke(
-                                                                1.dp,
-                                                                Color(0xFFBFDBFE)
-                                                            )
+                                                            shape =
+                                                                RoundedCornerShape(18.dp),
+                                                            color =
+                                                                noticeAccent.copy(
+                                                                    alpha = 0.12f
+                                                                ),
+                                                            tonalElevation = 0.dp,
+                                                            shadowElevation = 0.dp
                                                         ) {
                                                             Text(
                                                                 text = branchGroupLine,
@@ -3839,7 +3943,8 @@ fun HomeScreen(
                                                                         fontWeight =
                                                                             FontWeight.SemiBold
                                                                     ),
-                                                                color = Color(0xFF475569),
+                                                                color =
+                                                                    noticeColors.onSurfaceVariant,
                                                                 maxLines = 2,
                                                                 overflow = TextOverflow.Ellipsis,
                                                                 textAlign =
@@ -3878,8 +3983,13 @@ fun HomeScreen(
                                                             }
                                                         ) {
                                                             Surface(
-                                                                shape = RoundedCornerShape(999.dp),
-                                                                color = Color(0xFFF1F5F9)
+                                                                shape =
+                                                                    RoundedCornerShape(999.dp),
+                                                                color =
+                                                                    noticeColors.surfaceVariant
+                                                                        .copy(alpha = 0.82f),
+                                                                tonalElevation = 0.dp,
+                                                                shadowElevation = 0.dp
                                                             ) {
                                                                 Row(
                                                                     modifier = Modifier.padding(
@@ -3894,7 +4004,8 @@ fun HomeScreen(
                                                                     Icon(
                                                                         imageVector = Icons.Filled.DateRange,
                                                                         contentDescription = null,
-                                                                        tint = Color(0xFF64748B),
+                                                                        tint =
+                                                                            noticeColors.onSurfaceVariant,
                                                                         modifier = Modifier.size(12.dp)
                                                                     )
 
@@ -3903,7 +4014,7 @@ fun HomeScreen(
                                                                         style =
                                                                             KmiTypography.caption,
                                                                         color =
-                                                                            Color(0xFF64748B),
+                                                                            noticeColors.onSurfaceVariant,
                                                                         maxLines = 1,
                                                                         overflow =
                                                                             TextOverflow.Ellipsis
@@ -3921,16 +4032,49 @@ fun HomeScreen(
                         }
                     },
                     confirmButton = {
-                        TextButton(
+                        Surface(
                             onClick = {
+                                clickSound()
+                                haptic(true)
                                 showCoachMessagesDialog = false
-                            }
+                            },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .heightIn(min = 56.dp),
+                            shape = RoundedCornerShape(18.dp),
+                            color = noticeAccent,
+                            tonalElevation = 0.dp,
+                            shadowElevation = 0.dp
                         ) {
-                            Text(
-                                text = if (isEnglish) "Close" else "סגור",
-                                fontWeight = FontWeight.ExtraBold,
-                                color = Color(0xFF5B21B6)
-                            )
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(
+                                        horizontal = 18.dp,
+                                        vertical = 14.dp
+                                    ),
+                                horizontalArrangement =
+                                    Arrangement.Center,
+                                verticalAlignment =
+                                    Alignment.CenterVertically
+                            ) {
+
+                                Text(
+                                    text =
+                                        if (isEnglish) {
+                                            "Close"
+                                        } else {
+                                            "סגור"
+                                        },
+                                    style =
+                                        KmiTypography.cardTitle,
+                                    fontWeight =
+                                        FontWeight.ExtraBold,
+                                    color =
+                                        noticeColors.onPrimary,
+                                    textAlign = TextAlign.Center
+                                )
+                            }
                         }
                     }
                 )

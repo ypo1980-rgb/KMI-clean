@@ -467,24 +467,41 @@ fun RegistrationFormScreen(
         isAdmin = runCatching { AdminAccess.isCurrentUserAdmin() }.getOrDefault(false)
     }
 
-    // ✅ נעילה אוטומטית:
-    // - בעריכת פרופיל: מאמן נשאר מאמן רק אם coach_authorized=true.
-    // - מי שלא מאומת כמאמן מול authorizedCoaches נשאר מתאמן בלבד.
+    // ✅ התאמת הטאב לתפקיד הפעיל בפועל:
+    // - בעריכת פרופיל הטאב נקבע לפי user_role השמור.
+    // - הרשאת מאמן מאפשרת גישה למאמן, אך אינה קובעת
+    //   שהמשתמש נמצא כרגע בפרופיל המאמן.
     // - ברישום ראשוני נשארת הלוגיקה הקיימת.
     LaunchedEffect(
         startAtProfile,
-        profileAllowsCoach,
+        profileSavedRole,
         isWhitelistedCoach,
         isAdmin,
         isSuperTester
     ) {
         if (startAtProfile) {
-            selectedTab = if (profileAllowsCoach) 1 else 0
+            selectedTab =
+                if (
+                    profileSavedRole.equals(
+                        "coach",
+                        ignoreCase = true
+                    )
+                ) {
+                    1
+                } else {
+                    0
+                }
+
             return@LaunchedEffect
         }
 
         if (!isAdmin && !isSuperTester) {
-            selectedTab = if (isWhitelistedCoach) 1 else 0
+            selectedTab =
+                if (isWhitelistedCoach) {
+                    1
+                } else {
+                    0
+                }
         }
     }
 

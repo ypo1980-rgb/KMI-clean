@@ -292,19 +292,29 @@ private fun subTopicDisplayName(
     topicTitle: String,
     isEnglish: Boolean
 ): String {
-    val clean = subTopicTitle?.trim().orEmpty()
+    val clean =
+        subTopicTitle
+            ?.trim()
+            .orEmpty()
 
+    // אם במסך התרגילים אין תת־נושא,
+    // גם במסך הסיכום לא ממציאים תת־נושא מלאכותי.
     if (clean.isBlank()) {
-        return if (isEnglish) "General exercises" else "תרגילים כלליים"
+        return ""
     }
 
-    if (!isEnglish) return clean
+    if (!isEnglish) {
+        return clean
+    }
 
-    val translated: String = ExerciseTitlesEn.get(clean)
-        .orEmpty()
-        .trim()
+    val translated =
+        ExerciseTitlesEn.get(clean)
+            .orEmpty()
+            .trim()
 
-    return translated.ifBlank { clean }
+    return translated.ifBlank {
+        clean
+    }
 }
 
 private fun exerciseDisplayNameForUi(
@@ -1210,11 +1220,13 @@ fun SummaryScreen(
   */
     val summaryColors = MaterialTheme.colorScheme
 
+    // אותו רקע מדורג שבו משתמשים המסכים הראשיים באפליקציה.
     val summaryBackgroundColors = listOf(
-        summaryColors.background,
-        summaryColors.surfaceVariant,
-        summaryColors.primary.copy(alpha = 0.16f),
-        summaryColors.background
+        Color(0xFFF8FBFF),
+        Color(0xFFEAF4FF),
+        Color(0xFFB7DDF7),
+        Color(0xFF1F78B4),
+        Color(0xFF062B4A)
     )
 
     val summaryCardColor =
@@ -1225,6 +1237,14 @@ fun SummaryScreen(
         belt.color.copy(alpha = 0.10f),
         summaryColors.surface
     )
+
+    // צבעים נפרדים ליצירת היררכיה ברורה:
+    // נושא, תת־נושא ותרגילים.
+    val summaryTopicTitleColor =
+        summaryColors.primary
+
+    val summarySubTopicTitleColor =
+        summaryColors.tertiary
 
     val summaryPrimaryText =
         summaryColors.onSurface
@@ -2634,7 +2654,11 @@ fun SummaryScreen(
                                                 } else {
                                                     "$topicTitle – $pct%"
                                                 },
-                                            style = KmiTypography.cardTitle,
+                                            style =
+                                                KmiTypography.cardTitle.copy(
+                                                    fontWeight =
+                                                        FontWeight.Black
+                                                ),
                                             textAlign =
                                                 if (isEnglish) {
                                                     TextAlign.Left
@@ -2643,7 +2667,8 @@ fun SummaryScreen(
                                                 },
                                             maxLines = 2,
                                             modifier = Modifier.weight(1f),
-                                            color = summaryPrimaryText
+                                            color =
+                                                summaryTopicTitleColor
                                         )
                                     }
 
@@ -2693,40 +2718,103 @@ fun SummaryScreen(
                                             val subTotal = rowsInSubTopic.size
                                             val subPct = if (subTotal > 0) (subDone * 100 / subTotal) else 0
 
+                                            val hasRealSubTopic =
+                                                subTopicTitleRaw
+                                                    .trim()
+                                                    .isNotBlank()
+
                                             Surface(
-                                                modifier = Modifier.fillMaxWidth(),
-                                                shape = RoundedCornerShape(16.dp),
-                                                color = belt.color.copy(alpha = 0.055f),
-                                                border = BorderStroke(
-                                                    width = 1.dp,
-                                                    color = belt.color.copy(alpha = 0.10f)
-                                                )
+                                                modifier =
+                                                    Modifier.fillMaxWidth(),
+                                                shape =
+                                                    RoundedCornerShape(16.dp),
+                                                color =
+                                                    if (hasRealSubTopic) {
+                                                        belt.color.copy(
+                                                            alpha = 0.055f
+                                                        )
+                                                    } else {
+                                                        Color.Transparent
+                                                    },
+                                                border =
+                                                    if (hasRealSubTopic) {
+                                                        BorderStroke(
+                                                            width = 1.dp,
+                                                            color =
+                                                                belt.color.copy(
+                                                                    alpha = 0.10f
+                                                                )
+                                                        )
+                                                    } else {
+                                                        null
+                                                    },
+                                                tonalElevation = 0.dp,
+                                                shadowElevation = 0.dp
                                             ) {
                                                 Column(
                                                     modifier = Modifier
                                                         .fillMaxWidth()
-                                                        .padding(horizontal = 10.dp, vertical = 8.dp),
-                                                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                                                        .padding(
+                                                            horizontal =
+                                                                if (
+                                                                    hasRealSubTopic
+                                                                ) {
+                                                                    10.dp
+                                                                } else {
+                                                                    0.dp
+                                                                },
+                                                            vertical =
+                                                                if (
+                                                                    hasRealSubTopic
+                                                                ) {
+                                                                    8.dp
+                                                                } else {
+                                                                    0.dp
+                                                                }
+                                                        ),
+                                                    verticalArrangement =
+                                                        Arrangement.spacedBy(
+                                                            6.dp
+                                                        )
                                                 ) {
-                                                    Text(
-                                                        text =
-                                                            if (isEnglish) {
-                                                                "${subTopicDisplayName(subTopicTitleRaw, topicTitle, true)} - $subPct%"
-                                                            } else {
-                                                                "${subTopicDisplayName(subTopicTitleRaw, topicTitle, false)} – $subPct%"
-                                                            },
-                                                        style = KmiTypography.cardTitle,
-                                                        color = summaryPrimaryText,
-                                                        textAlign =
-                                                            if (isEnglish) {
-                                                                TextAlign.Left
-                                                            } else {
-                                                                TextAlign.Right
-                                                            },
-                                                        maxLines = 2,
-                                                        modifier =
-                                                            Modifier.fillMaxWidth()
-                                                    )
+                                                    if (hasRealSubTopic) {
+                                                        Text(
+                                                            text =
+                                                                if (isEnglish) {
+                                                                    "${
+                                                                        subTopicDisplayName(
+                                                                            subTopicTitleRaw,
+                                                                            topicTitle,
+                                                                            true
+                                                                        )
+                                                                    } - $subPct%"
+                                                                } else {
+                                                                    "${
+                                                                        subTopicDisplayName(
+                                                                            subTopicTitleRaw,
+                                                                            topicTitle,
+                                                                            false
+                                                                        )
+                                                                    } – $subPct%"
+                                                                },
+                                                            style =
+                                                                KmiTypography.cardTitle.copy(
+                                                                    fontWeight =
+                                                                        FontWeight.ExtraBold
+                                                                ),
+                                                            color =
+                                                                summarySubTopicTitleColor,
+                                                            textAlign =
+                                                                if (isEnglish) {
+                                                                    TextAlign.Left
+                                                                } else {
+                                                                    TextAlign.Right
+                                                                },
+                                                            maxLines = 2,
+                                                            modifier =
+                                                                Modifier.fillMaxWidth()
+                                                        )
+                                                    }
 
                                                     rowsInSubTopic.forEach { row ->
                                                         val itemRaw = row.itemRaw
