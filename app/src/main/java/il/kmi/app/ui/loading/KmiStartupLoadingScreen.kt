@@ -63,8 +63,6 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.ColorFilter
-import androidx.compose.ui.graphics.ColorMatrix
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
@@ -236,25 +234,21 @@ fun KmiStartupLoadingScreen(
         }
 
     /*
-     * במצב כהה הופכים את בהירות תמונת הרקע:
-     * הלבן הופך לשחור והפרטים השחורים הופכים לבהירים.
+     * מצב התצוגה באפליקציה נקבע מתוך MaterialTheme,
+     * ולכן בוחרים כאן את קובץ הרקע המתאים.
      *
-     * זה אותו מנגנון שבו משתמש מסך הפתיחה.
+     * שתי התמונות נמצאות בתיקיית drawable:
+     *
+     * kmi_startup_loading_bg.png
+     * kmi_startup_loading_bg_dark.png
+     *
+     * אין ColorMatrix, אין ColorFilter ואין שכבת כהות.
      */
-    val darkImageColorFilter =
+    val loadingBackgroundRes =
         if (isDarkTheme) {
-            ColorFilter.colorMatrix(
-                ColorMatrix(
-                    floatArrayOf(
-                        -0.2126f, -0.7152f, -0.0722f, 0f, 255f,
-                        -0.2126f, -0.7152f, -0.0722f, 0f, 255f,
-                        -0.2126f, -0.7152f, -0.0722f, 0f, 255f,
-                        0f,       0f,       0f,       1f, 0f
-                    )
-                )
-            )
+            R.drawable.kmi_startup_loading_bg_dark
         } else {
-            null
+            R.drawable.kmi_startup_loading_bg
         }
 
     BoxWithConstraints(
@@ -264,27 +258,12 @@ fun KmiStartupLoadingScreen(
     ) {
         Image(
             painter = painterResource(
-                id = R.drawable.kmi_startup_loading_bg
+                id = loadingBackgroundRes
             ),
             contentDescription = null,
             modifier = Modifier.fillMaxSize(),
-            contentScale = ContentScale.Crop,
-            colorFilter = darkImageColorFilter
+            contentScale = ContentScale.Crop
         )
-
-        /*
-         * שכבה חלשה בלבד מאחדת את התמונה עם רקע האפליקציה,
-         * בלי להעלים את הלוגו, הדמויות והכיתובים.
-         */
-        if (isDarkTheme) {
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .background(
-                        colorScheme.background.copy(alpha = 0.08f)
-                    )
-            )
-        }
 
         val isCompactHeight = maxHeight < 760.dp
         val isVeryCompactHeight = maxHeight < 690.dp

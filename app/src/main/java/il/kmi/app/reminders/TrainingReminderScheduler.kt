@@ -168,21 +168,28 @@ object TrainingReminderScheduler {
                     val realCoach =
                         training.coach.trim()
 
-                    val trainingKey = listOf(
-                        realBranch,
-                        realGroup,
-                        realPlace,
-                        realCoach,
-                        startCal
-                            .get(Calendar.DAY_OF_WEEK)
-                            .toString(),
-                        startCal
-                            .get(Calendar.HOUR_OF_DAY)
-                            .toString(),
-                        startCal
-                            .get(Calendar.MINUTE)
-                            .toString()
-                    ).joinToString("|")
+                    /*
+                     * אותו אימון יכול להימצא באמצעות יותר מקבוצה אחת,
+                     * למשל "בוגרים" וגם "נוער + בוגרים".
+                     *
+                     * הקבוצה אינה חלק מזהות האימון. הזהות נקבעת
+                     * לפי מועד ההתחלה והמקום בלבד.
+                     */
+                    val trainingPlaceIdentity =
+                        realPlace
+                            .ifBlank { realBranch }
+                            .trim()
+                            .lowercase()
+                            .replace("–", "-")
+                            .replace("—", "-")
+                            .replace(Regex("\\s+"), " ")
+
+                    val trainingStartMinute =
+                        finalStartMillis / 60_000L
+
+                    val trainingKey =
+                        "$trainingStartMinute|" +
+                                trainingPlaceIdentity
 
                     if (
                         !scheduledTrainingKeys.add(
@@ -194,20 +201,9 @@ object TrainingReminderScheduler {
 
                     val requestCode =
                         stableRequestCode(
-                            branch = realBranch,
-                            group = realGroup,
-                            dayOfWeek =
-                                startCal.get(
-                                    Calendar.DAY_OF_WEEK
-                                ),
-                            hour =
-                                startCal.get(
-                                    Calendar.HOUR_OF_DAY
-                                ),
-                            minute =
-                                startCal.get(
-                                    Calendar.MINUTE
-                                )
+                            place = trainingPlaceIdentity,
+                            startMinute =
+                                trainingStartMinute
                         )
 
                     scheduleOneTrainingAlarm(
@@ -508,14 +504,18 @@ object TrainingReminderScheduler {
     }
 
     private fun stableRequestCode(
-        branch: String,
-        group: String,
-        dayOfWeek: Int,
-        hour: Int,
-        minute: Int
+        place: String,
+        startMinute: Long
     ): Int {
-        val raw = "$branch|$group|$dayOfWeek|$hour|$minute"
-        return 42000 + abs(raw.hashCode() % 50_000)
+        /*
+         * הקבוצה אינה חלק מהמזהה, משום שאותו אימון
+         * עשוי להתאים לכמה קבוצות של אותו משתמש.
+         */
+        val raw =
+            "$startMinute|$place"
+
+        return 42000 +
+                abs(raw.hashCode() % 50_000)
     }
 
     private fun saveRequestCodes(

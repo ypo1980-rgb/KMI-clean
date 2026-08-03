@@ -15,8 +15,6 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.ColorFilter
-import androidx.compose.ui.graphics.ColorMatrix
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.text.font.FontWeight
@@ -575,45 +573,28 @@ private fun IntroWelcomeImageScreen(
         val beltVerticalOffset =
             -(maxHeight * 0.015f)
 
-        val darkImageColorFilter =
+        /*
+         * מצב התצוגה באפליקציה נקבע מתוך MaterialTheme
+         * ולכן בוחרים כאן רק את קובץ התמונה המתאים.
+         *
+         * אין ColorMatrix, אין מסנן צבע ואין שכבת כהות:
+         * כל מצב מציג תמונה שעוצבה במיוחד עבורו.
+         */
+        val introBackgroundRes =
             if (isDarkTheme) {
-                ColorFilter.colorMatrix(
-                    ColorMatrix(
-                        floatArrayOf(
-                            -0.2126f, -0.7152f, -0.0722f, 0f, 255f,
-                            -0.2126f, -0.7152f, -0.0722f, 0f, 255f,
-                            -0.2126f, -0.7152f, -0.0722f, 0f, 255f,
-                            0f,       0f,       0f,       1f, 0f
-                        )
-                    )
-                )
+                R.drawable.intro_welcome_screen_v2_dark
             } else {
-                null
+                R.drawable.intro_welcome_screen_v2
             }
 
         Image(
             painter = painterResource(
-                id = R.drawable.intro_welcome_screen_v2
+                id = introBackgroundRes
             ),
             contentDescription = null,
             modifier = Modifier.matchParentSize(),
-            contentScale = ContentScale.Crop,
-            colorFilter = darkImageColorFilter
+            contentScale = ContentScale.Crop
         )
-
-        /*
-         * גוון קל של רקע האפליקציה מאחד את התמונה עם
-         * ערכת הנושא, בלי להעלים שוב את הפרטים הבהירים.
-         */
-        if (isDarkTheme) {
-            Box(
-                modifier = Modifier
-                    .matchParentSize()
-                    .background(
-                        colorScheme.background.copy(alpha = 0.08f)
-                    )
-            )
-        }
 
         Column(
             modifier = Modifier

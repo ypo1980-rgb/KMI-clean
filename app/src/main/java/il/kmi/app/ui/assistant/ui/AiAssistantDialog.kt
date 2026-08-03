@@ -2244,9 +2244,23 @@ fun AiAssistantDialog(
         }
 
         speechRecognizer?.setRecognitionListener(object : RecognitionListener {
-            override fun onReadyForSpeech(params: Bundle?) {}
+            override fun onReadyForSpeech(params: Bundle?) {
+                /*
+                 * זהו האישור הרשמי של Android שמנוע הדיבור
+                 * מוכן ומאזין. מפעילים כאן שוב את מצב האנימציה
+                 * כדי שגם סשן ההאזנה הראשון יוצג מיד.
+                 */
+                isListening = true
+                speechStatusMessage = null
+            }
 
-            override fun onBeginningOfSpeech() {}
+            override fun onBeginningOfSpeech() {
+                /*
+                 * שומרים את האנימציה פעילה גם מהרגע שבו
+                 * המנוע זיהה שהמשתמש התחיל לדבר בפועל.
+                 */
+                isListening = true
+            }
 
             override fun onRmsChanged(rmsdB: Float) {}
 
@@ -2254,11 +2268,17 @@ fun AiAssistantDialog(
 
             override fun onPartialResults(partialResults: Bundle) {
                 val partial = partialResults
-                    .getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
+                    .getStringArrayList(
+                        SpeechRecognizer.RESULTS_RECOGNITION
+                    )
                     ?.firstOrNull()
                     ?.trim()
 
                 if (!partial.isNullOrBlank()) {
+                    /*
+                     * תוצאה חלקית מעידה שסשן ההאזנה עדיין פעיל.
+                     */
+                    isListening = true
                     input = partial
                 }
             }
@@ -2267,15 +2287,14 @@ fun AiAssistantDialog(
 
             override fun onEndOfSpeech() {
                 /*
-                 * מפסיקים את הקלט מיד כשהמנוע מזהה שהמשתמש
-                 * סיים לדבר. לא משתמשים כאן ב-cancel כדי
-                 * לא לאבד את התוצאות שמגיעות לאחר מכן.
+                 * אין לכבות כאן את isListening ואין לקרוא שוב
+                 * ל-stopListening().
+                 *
+                 * Android כבר סיים לקבל את הקול וכעת מעבד אותו.
+                 * מצב ההאזנה והאנימציה ייסגרו רק ב-onResults()
+                 * או ב-onError(), כדי למנוע הבהוב או היעלמות
+                 * של האנימציה בסשן הראשון.
                  */
-                isListening = false
-
-                runCatching {
-                    speechRecognizer?.stopListening()
-                }
             }
 
             override fun onError(error: Int) {
@@ -4787,51 +4806,42 @@ fun AiAssistantDialog(
                     .focusable()
             )
 
-            val pulseTransition = rememberInfiniteTransition(label = "micPulse")
+                    val pulseTransition =
+                        rememberInfiniteTransition(
+                            label = "micPulse"
+                        )
 
-            val pulseScale by pulseTransition.animateFloat(
-                initialValue = 1f,
-                targetValue = 1.18f,
-                animationSpec = infiniteRepeatable(
-                    animation = tween(650, easing = FastOutSlowInEasing),
-                    repeatMode = RepeatMode.Reverse
-                ),
-                label = "pulseScale"
-            )
+                    val pulseScale by pulseTransition.animateFloat(
+                        initialValue = 1f,
+                        targetValue = 1.18f,
+                        animationSpec = infiniteRepeatable(
+                            animation = tween(
+                                durationMillis = 650,
+                                easing = FastOutSlowInEasing
+                            ),
+                            repeatMode = RepeatMode.Reverse
+                        ),
+                        label = "pulseScale"
+                    )
 
-            val waveTransition = rememberInfiniteTransition(label = "micWave")
+                    /*
+                     * הפעימה של האייקון נשלטת ישירות ממצב ההאזנה.
+                     * אנימציית הגל עצמה נוצרת בהמשך מחדש עבור כל סשן.
+                     */
+                    val micScale by animateFloatAsState(
+                        targetValue = when {
+                            isSpeaking -> pulseScale
+                            isListening -> pulseScale
+                            else -> 1f
+                        },
+                        animationSpec = tween(
+                            durationMillis = 220,
+                            easing = FastOutSlowInEasing
+                        ),
+                        label = "micScale"
+                    )
 
-            val waveScale by waveTransition.animateFloat(
-                initialValue = 0.92f,
-                targetValue = 1.55f,
-                animationSpec = infiniteRepeatable(
-                    animation = tween(1100, easing = FastOutSlowInEasing),
-                    repeatMode = RepeatMode.Restart
-                ),
-                label = "waveScale"
-            )
-
-            val waveAlpha by waveTransition.animateFloat(
-                initialValue = 0.24f,
-                targetValue = 0f,
-                animationSpec = infiniteRepeatable(
-                    animation = tween(1100),
-                    repeatMode = RepeatMode.Restart
-                ),
-                label = "waveAlpha"
-            )
-
-            val micScale by animateFloatAsState(
-                targetValue = when {
-                    isSpeaking -> pulseScale
-                    isListening -> 1.12f
-                    else -> 1f
-                },
-                animationSpec = tween(220, easing = FastOutSlowInEasing),
-                label = "micScale"
-            )
-
-            val liveAssistantStatus = when {
+                    val liveAssistantStatus = when {
                 isThinking && assistantMode == AssistantMode.EXERCISE ->
                     tr(
                         "מאתר את התרגיל ובודק את ההסבר המתאים…",
@@ -5161,18 +5171,61 @@ fun AiAssistantDialog(
                             ),
                             contentAlignment = Alignment.Center
                         ) {
+                            /*
+                             * המפתח הוא מזהה סשן ההאזנה.
+                             * בכל לחיצה על המיקרופון נוצר Transition חדש
+                             * שמתחיל מהגל הראשון כשהוא גלוי לחלוטין.
+                             */
                             if (isListening) {
-                                Box(
-                                    modifier = Modifier
-                                        .size(
-                                            scaledIconSize(40.dp)
+                                androidx.compose.runtime.key(
+                                    currentListeningSessionId
+                                ) {
+                                    val listeningWaveTransition =
+                                        rememberInfiniteTransition(
+                                            label = "activeMicWave"
                                         )
-                                        .scale(waveScale)
-                                        .background(
-                                            MaterialTheme.colorScheme.primary.copy(alpha = waveAlpha),
-                                            shape = RoundedCornerShape(50)
-                                        )
-                                )
+
+                                    val listeningWaveScale by
+                                    listeningWaveTransition.animateFloat(
+                                        initialValue = 0.92f,
+                                        targetValue = 1.55f,
+                                        animationSpec = infiniteRepeatable(
+                                            animation = tween(
+                                                durationMillis = 1100,
+                                                easing = FastOutSlowInEasing
+                                            ),
+                                            repeatMode = RepeatMode.Restart
+                                        ),
+                                        label = "activeMicWaveScale"
+                                    )
+
+                                    val listeningWaveAlpha by
+                                    listeningWaveTransition.animateFloat(
+                                        initialValue = 0.32f,
+                                        targetValue = 0f,
+                                        animationSpec = infiniteRepeatable(
+                                            animation = tween(
+                                                durationMillis = 1100
+                                            ),
+                                            repeatMode = RepeatMode.Restart
+                                        ),
+                                        label = "activeMicWaveAlpha"
+                                    )
+
+                                    Box(
+                                        modifier = Modifier
+                                            .size(
+                                                scaledIconSize(40.dp)
+                                            )
+                                            .scale(listeningWaveScale)
+                                            .background(
+                                                color = MaterialTheme.colorScheme.primary.copy(
+                                                    alpha = listeningWaveAlpha
+                                                ),
+                                                shape = CircleShape
+                                            )
+                                    )
+                                }
                             }
 
                             Box(
@@ -5183,9 +5236,11 @@ fun AiAssistantDialog(
                                     .background(
                                         when {
                                             isSpeaking -> Color(0x22E53935)
-                                            isListening -> MaterialTheme.colorScheme.primary.copy(
-                                                alpha = 0.14f
-                                            )
+
+                                            isListening ->
+                                                MaterialTheme.colorScheme.primary.copy(
+                                                    alpha = 0.14f
+                                                )
 
                                             else -> Color.Transparent
                                         },
@@ -5193,31 +5248,11 @@ fun AiAssistantDialog(
                                     ),
                                 contentAlignment = Alignment.Center
                             ) {
-                                val micPulseTransition =
-                                    rememberInfiniteTransition(
-                                        label = "assistantMicPulse"
-                                    )
-
-                                val micScale by
-                                if (isListening) {
-                                    micPulseTransition.animateFloat(
-                                        initialValue = 1f,
-                                        targetValue = 1.18f,
-                                        animationSpec = infiniteRepeatable(
-                                            animation = tween(
-                                                durationMillis = 700,
-                                                easing = FastOutSlowInEasing
-                                            ),
-                                            repeatMode = RepeatMode.Reverse
-                                        ),
-                                        label = "assistantMicScale"
-                                    )
-                                } else {
-                                    remember {
-                                        mutableStateOf(1f)
-                                    }
-                                }
-
+                                /*
+                                 * micScale מוגדר פעם אחת מעל אזור שורת הקלט.
+                                 * אין ליצור כאן Transition נוסף שמתחיל רק
+                                 * לאחר שההאזנה כבר הופעלה.
+                                 */
                                 IconButton(
                                     modifier = Modifier
                                         .size(

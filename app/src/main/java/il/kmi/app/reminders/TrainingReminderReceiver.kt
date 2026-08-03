@@ -86,7 +86,6 @@ class TrainingReminderReceiver : BroadcastReceiver() {
             val reminderIdentity =
                 buildReminderIdentity(
                     branch = branch,
-                    group = group,
                     place = place,
                     startMillis = startMillis
                 )
@@ -284,11 +283,12 @@ class TrainingReminderReceiver : BroadcastReceiver() {
 
     private fun buildReminderIdentity(
         branch: String,
-        group: String,
         place: String,
         startMillis: Long
     ): String {
-        fun normalizePart(value: String): String {
+        fun normalizePart(
+            value: String
+        ): String {
             return value
                 .trim()
                 .lowercase()
@@ -307,12 +307,20 @@ class TrainingReminderReceiver : BroadcastReceiver() {
         val placeIdentity =
             place.ifBlank { branch }
 
+        /*
+         * הקבוצה אינה חלק מהזהות:
+         * אותו אימון יכול להתאים גם ל"בוגרים"
+         * וגם ל"נוער + בוגרים", אך צריך להציג
+         * עבורו התראה אחת בלבד.
+         */
         return buildString {
             append(startMinute)
             append("|")
-            append(normalizePart(placeIdentity))
-            append("|")
-            append(normalizePart(group))
+            append(
+                normalizePart(
+                    placeIdentity
+                )
+            )
         }
     }
 
