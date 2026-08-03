@@ -11,58 +11,144 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 
-private fun parseExerciseExplanationForUi(raw: String): AnnotatedString {
-    val startTag = "[[RED_BOLD]]"
-    val endTag = "[[/RED_BOLD]]"
+private fun parseExerciseExplanationForUi(
+    raw: String
+): AnnotatedString {
+    val redStartTag = "[[RED_BOLD]]"
+    val redEndTag = "[[/RED_BOLD]]"
+
+    val blueStartTag = "[[BLUE_BOLD]]"
+    val blueEndTag = "[[/BLUE_BOLD]]"
 
     val builder = AnnotatedString.Builder()
     var remaining = raw
 
     while (remaining.isNotEmpty()) {
-        val startIndex = remaining.indexOf(startTag)
+        val redStartIndex =
+            remaining.indexOf(redStartTag)
 
-        if (startIndex == -1) {
+        val blueStartIndex =
+            remaining.indexOf(blueStartTag)
+
+        /*
+         * בוחרים את התגית הקרובה ביותר בטקסט.
+         * כך ניתן לשלב כמה קטעים אדומים וכחולים
+         * באותו הסבר ובכל סדר.
+         */
+        val useRedTag =
+            redStartIndex >= 0 &&
+                    (
+                            blueStartIndex < 0 ||
+                                    redStartIndex < blueStartIndex
+                            )
+
+        val useBlueTag =
+            blueStartIndex >= 0 &&
+                    (
+                            redStartIndex < 0 ||
+                                    blueStartIndex < redStartIndex
+                            )
+
+        if (!useRedTag && !useBlueTag) {
             builder.append(remaining)
             break
         }
 
-        builder.append(remaining.substring(0, startIndex))
+        val startTag =
+            if (useRedTag) {
+                redStartTag
+            } else {
+                blueStartTag
+            }
 
-        val contentStart = startIndex + startTag.length
-        val endIndex = remaining.indexOf(endTag, contentStart)
+        val endTag =
+            if (useRedTag) {
+                redEndTag
+            } else {
+                blueEndTag
+            }
 
-        if (endIndex == -1) {
-            builder.append(remaining.substring(startIndex))
+        val startIndex =
+            if (useRedTag) {
+                redStartIndex
+            } else {
+                blueStartIndex
+            }
+
+        builder.append(
+            remaining.substring(
+                startIndex = 0,
+                endIndex = startIndex
+            )
+        )
+
+        val contentStart =
+            startIndex + startTag.length
+
+        val endIndex =
+            remaining.indexOf(
+                string = endTag,
+                startIndex = contentStart
+            )
+
+        /*
+         * תגית שלא נסגרה נשארת כטקסט רגיל,
+         * כדי שלא ייעלם חלק מההסבר.
+         */
+        if (endIndex < 0) {
+            builder.append(
+                remaining.substring(startIndex)
+            )
             break
         }
 
-        val highlightedText = remaining.substring(contentStart, endIndex)
+        val highlightedText =
+            remaining.substring(
+                startIndex = contentStart,
+                endIndex = endIndex
+            )
 
         builder.pushStyle(
             SpanStyle(
-                color = Color(0xFFDC2626),
+                color =
+                    if (useRedTag) {
+                        Color(0xFFDC2626)
+                    } else {
+                        Color(0xFF2563EB)
+                    },
                 fontWeight = FontWeight.Black
             )
         )
+
         builder.append(highlightedText)
         builder.pop()
 
-        remaining = remaining.substring(endIndex + endTag.length)
+        remaining =
+            remaining.substring(
+                endIndex + endTag.length
+            )
 
-        // אם הנקודה נמצאת מחוץ להדגשה:
-        // [[RED_BOLD]]עמידת מוצא רגילה[[/RED_BOLD]]. המשך...
-        if (remaining.startsWith(". ")) {
-            builder.append(".\n")
-            remaining = remaining.removePrefix(". ")
-        } else if (remaining.startsWith(".")) {
-            builder.append(".\n")
-            remaining = remaining.removePrefix(".")
-
-            // אם הנקודה כבר נמצאת בתוך ההדגשה:
-            // [[RED_BOLD]]עמידת מוצא רגילה.[[/RED_BOLD]] המשך...
-        } else if (remaining.startsWith(" ")) {
-            builder.append("\n")
-            remaining = remaining.trimStart()
+        /*
+         * שומרים את ההתנהגות הקיימת של RED_BOLD:
+         * עמידת המוצא מוצגת בשורה נפרדת.
+         *
+         * BLUE_BOLD אינו משנה שורות בעצמו.
+         * ירידת שורה כחולה נקבעת במחרוזת באמצעות \n.
+         */
+        if (useRedTag) {
+            if (remaining.startsWith(". ")) {
+                builder.append(".\n")
+                remaining =
+                    remaining.removePrefix(". ")
+            } else if (remaining.startsWith(".")) {
+                builder.append(".\n")
+                remaining =
+                    remaining.removePrefix(".")
+            } else if (remaining.startsWith(" ")) {
+                builder.append("\n")
+                remaining =
+                    remaining.trimStart()
+            }
         }
     }
 

@@ -28,134 +28,86 @@ object ExerciseAssistantEngine {
             val exerciseName = cleanExerciseName(cleanQuestion)
 
             /*
- * התאמה חד־משמעית לפני החיפוש המקורב.
- * מונעת בלבול עם תרגילים דומים של איום סכין לבטן.
- */
-            val normalizedExerciseName = exerciseName
-                .replace("–", "-")
-                .replace("—", "-")
-                .replace("־", "-")
-                .replace(Regex("\\s+"), " ")
-                .trim()
-
-            val isLowerAbdomenKnifeThreat =
-                normalizedExerciseName.contains("איום סכין") &&
-                        normalizedExerciseName.contains("חוד") &&
-                        (
-                                normalizedExerciseName.contains("לבטן התחתונה") ||
-                                        normalizedExerciseName.contains("לבטן תחתונה")
-                                )
-
-            if (!isEnglish && isLowerAbdomenKnifeThreat) {
-                return "ביד שמאל תפיסת שרש כף יד הסכין תוך דחיפת יד התוקף למטה ושמאלה להרחקת הסכין ואגרוף ימין לפנים. במידה והאיום צמוד: נגיחה ולהמשיך התקפות. (יש ללמד גם בשמאל)"
-            }
-
-            /*
-             * מחפשים את כל המועמדים לפני בחירת התוצאה הטובה ביותר.
-             * כאשר שם כללי מתאים לכמה תרגילים, אין לבחור אחד
-             * מהם אוטומטית.
-             */
+      * חיפוש כללי מול האינדקס המרכזי.
+      *
+      * אין כאן שמות קשיחים של תרגילים, סוגי תקיפה,
+      * כיוונים או איברי גוף. אותה לוגיקה חלה על כל
+      * משפחות התרגילים הקיימות והעתידיות.
+      */
             val searchQuestion =
                 exerciseName.ifBlank {
                     cleanQuestion
                 }
 
-            val initialHits =
-                ExerciseSearchService
-                    .searchExercisesForQuestion(
-                        question = searchQuestion,
-                        beltEnum = preferredBelt
-                    )
+            val indexedMatches =
+                ExplanationSearchIndex.findMatches(
+                    query = searchQuestion,
+                    preferredBelt = preferredBelt,
+                    minScore = 180,
+                    maxItems = 12
+                )
 
             /*
-             * בקשה כללית להגנה מאיום סכין אינה מספיקה
-             * לבחירת תרגיל מסוים.
+             * ציון של 1000 ומעלה מצביע על התאמה מילולית
+             * מדויקת לשם רשמי או לכינוי שהוגדר ב־Registry.
              *
-             * בבקשה כללית מחפשים בכל החגורות כדי שלא תיבחר
-             * אוטומטית התאמה יחידה מהחגורה המועדפת.
+             * אם קיימת התאמה מדויקת אחת בעלת הציון הגבוה
+             * ביותר, אפשר להציג אותה ישירות.
+             *
+             * אם אין התאמה מדויקת ויש מספר תוצאות, השאילתה
+             * כללית או חלקית ולכן המשתמש חייב לבחור.
              */
-            val normalizedChoiceQuery =
-                normalizedExerciseName.lowercase()
+            val bestIndexedScore =
+                indexedMatches
+                    .firstOrNull()
+                    ?.score
+                    ?: 0
 
-            val isKnifeThreatRequest =
-                normalizedChoiceQuery.contains("איום סכין") ||
-                        normalizedChoiceQuery.contains("knife threat")
+            val bestMatchIsExact =
+                bestIndexedScore >= 1000
 
-            val exerciseDetailMarkers = listOf(
-                "ימין",
-                "שמאל",
-                "מלפנים",
-                "מאחור",
-                "קדמי",
-                "אחורי",
-                "בטן",
-                "צוואר",
-                "גרון",
-                "עורק",
-                "חוד",
-                "להב",
-                "צמוד",
-                "מרחוק",
-                "right",
-                "left",
-                "front",
-                "rear",
-                "behind",
-                "abdomen",
-                "stomach",
-                "throat",
-                "neck",
-                "artery",
-                "blade",
-                "close"
-            )
-
-            val hasExerciseDetails =
-                exerciseDetailMarkers.any { marker ->
-                    normalizedChoiceQuery.contains(marker)
+            val competingMatches =
+                if (bestMatchIsExact) {
+                    /*
+                     * חגורה מועדפת מקבלת תוספת ציון ולכן תכריע
+                     * בין אותו שם שמופיע בכמה חגורות.
+                     * ללא הכרעה נשאיר את כל התוצאות המובילות.
+                     */
+                    indexedMatches.filter { match ->
+                        match.score == bestIndexedScore
+                    }
+                } else {
+                    /*
+                     * בשאילתה חלקית כל ההתאמות רלוונטיות לבחירה,
+                     * גם אם אחת מהן קיבלה מעט יותר נקודות.
+                     */
+                    indexedMatches
                 }
 
-            val isGenericKnifeThreatRequest =
-                isKnifeThreatRequest &&
-                        !hasExerciseDetails
+            val shouldRequestExerciseChoice =
+                competingMatches.size > 1
 
-            /*
-             * בבקשה כללית מציגים את כל תרגילי איום הסכין
-             * ישירות ממקור האמת. המשתמש אינו נדרש לזכור
-             * את השם המדויק של התרגיל.
-             */
-            if (isGenericKnifeThreatRequest) {
-                val knifeThreatOptions =
-                    ContentRepo
-                        .findExerciseOptionsContainingAll(
-                            requiredTerms = listOf(
-                                "איום",
-                                "סכין"
-                            )
-                        )
-                        .take(20)
-
+            if (shouldRequestExerciseChoice) {
                 val optionsText =
-                    knifeThreatOptions
-                        .mapIndexed { index, option ->
+                    competingMatches
+                        .take(8)
+                        .mapIndexed { index, match ->
                             val beltText =
                                 if (isEnglish) {
-                                    option.belt.name
+                                    match.belt.name
                                         .lowercase()
                                         .replaceFirstChar { character ->
                                             character.uppercase()
                                         }
                                 } else {
-                                    option.belt.heb
+                                    match.belt.heb
                                 }
 
                             if (isEnglish) {
                                 buildString {
                                     append(index + 1)
                                     append(". ")
-                                    append(option.itemTitle)
-                                    append(" — ")
-                                    append(option.topicTitle)
+                                    append(match.title)
                                     append(" — ")
                                     append(beltText)
                                     append(" belt")
@@ -164,10 +116,12 @@ object ExerciseAssistantEngine {
                                 buildString {
                                     append(index + 1)
                                     append(". ")
-                                    append(option.itemTitle)
+                                    append(match.title)
                                     append(" — ")
-                                    append(option.topicTitle)
-                                    append(" — חגורה ")
+                                    /*
+                                     * belt.heb כבר מחזיר שם מלא,
+                                     * לדוגמה: "חגורה כחולה".
+                                     */
                                     append(beltText)
                                 }
                             }
@@ -177,153 +131,49 @@ object ExerciseAssistantEngine {
                 return if (isEnglish) {
                     buildString {
                         appendLine(
-                            "I found the following knife-threat defence exercises:"
+                            "I found several exercises that match your request."
+                        )
+                        appendLine(
+                            "Which exercise did you mean?"
                         )
                         appendLine()
-                        appendLine(optionsText)
+                        append(optionsText)
                         appendLine()
                         append(
-                            "Choose an exercise from the list " +
-                                    "and I’ll explain it."
+                            "Say or enter the full exercise name."
                         )
                     }
                 } else {
                     buildString {
                         appendLine(
-                            "מצאתי את התרגילים הבאים של הגנה מאיום סכין:"
+                            "מצאתי מספר תרגילים שמתאימים לבקשה."
+                        )
+                        appendLine(
+                            "לאיזה תרגיל התכוונת?"
                         )
                         appendLine()
-                        appendLine(optionsText)
+                        append(optionsText)
                         appendLine()
                         append(
-                            "בחר תרגיל מהרשימה ואני אסביר אותו."
+                            "אמור או הקלד את שמו המלא של התרגיל."
                         )
                     }
                 }
             }
 
             /*
-             * בבקשה כללית לאיום סכין מריצים כמה חיפושים
-             * משלימים. כך נאספות אפשרויות שונות גם כאשר
-             * החיפוש בביטוי הכללי מחזיר התאמה יחידה בלבד.
+             * תוצאות החיפוש הכללי נשמרות גם עבור מנגנוני
+             * הגיבוי בהמשך הפונקציה.
              */
-            val ambiguitySourceHits =
-                if (isGenericKnifeThreatRequest) {
-                    listOf(
-                        searchQuestion,
-                        "איום סכין",
-                        "הגנה מאיום סכין",
-                        "איום סכין לעורק",
-                        "איום סכין לגרגרת",
-                        "איום סכין מלפנים",
-                        "איום סכין מאחור",
-                        "knife threat"
+            val initialHits =
+                ExerciseSearchService
+                    .searchExercisesForQuestion(
+                        question = searchQuestion,
+                        beltEnum = preferredBelt
                     )
-                        .flatMap { query ->
-                            ExerciseSearchService
-                                .searchExercisesForQuestion(
-                                    question = query,
-                                    beltEnum = null
-                                )
-                        }
-                        .distinctBy { hit ->
-                            listOf(
-                                hit.belt.name,
-                                hit.topic,
-                                hit.item.orEmpty()
-                            ).joinToString("|")
-                        }
-                } else {
-                    initialHits
-                }
-
-            val ambiguousHits =
-                if (isGenericKnifeThreatRequest) {
-                    /*
-                     * בקשה כללית תמיד מחייבת בחירה.
-                     * אין לדרוש כאן יותר מתוצאה אחת, מפני שגם
-                     * תוצאת חיפוש יחידה אינה הופכת את הבקשה
-                     * הכללית לשם מדויק של תרגיל.
-                     */
-                    ambiguitySourceHits.take(8)
-                } else {
-                    ExerciseSearchService
-                        .findAmbiguousExerciseHits(
-                            question = searchQuestion,
-                            hits = ambiguitySourceHits,
-                            maxItems = 8
-                        )
-                }
 
             /*
-             * חשוב: בקשה כללית לאיום סכין מסתיימת כאן תמיד.
-             * אסור להמשיך אחריה ל-findBest ולבחור תרגיל אוטומטית.
-             */
-            if (
-                isGenericKnifeThreatRequest ||
-                ambiguousHits.isNotEmpty()
-            ) {
-                val exerciseList =
-                    ExerciseSearchService
-                        .formatHitsAsExerciseList(
-                            hits = ambiguousHits,
-                            maxItems = 8,
-                            isEnglish = isEnglish
-                        )
-                        .trim()
-
-                return if (isEnglish) {
-                    buildString {
-                        appendLine(
-                            if (isGenericKnifeThreatRequest) {
-                                "I found several knife-threat defence exercises."
-                            } else {
-                                "I found several exercises that match your request."
-                            }
-                        )
-
-                        appendLine("Which exercise did you mean?")
-
-                        if (exerciseList.isNotBlank()) {
-                            appendLine()
-                            append(exerciseList)
-                        } else {
-                            appendLine()
-                            append(
-                                "Please specify the direction, body area, " +
-                                        "or exact exercise name."
-                            )
-                        }
-                    }
-                } else {
-                    buildString {
-                        appendLine(
-                            if (isGenericKnifeThreatRequest) {
-                                "מצאתי מספר תרגילים של הגנה מאיום סכין."
-                            } else {
-                                "מצאתי מספר תרגילים שמתאימים לבקשה."
-                            }
-                        )
-
-                        appendLine("לאיזה תרגיל התכוונת?")
-
-                        if (exerciseList.isNotBlank()) {
-                            appendLine()
-                            append(exerciseList)
-                        } else {
-                            appendLine()
-                            append(
-                                "ציין את הכיוון, אזור האיום או את " +
-                                        "שמו המדויק של התרגיל."
-                            )
-                        }
-                    }
-                }
-            }
-
-            /*
-             * רק בקשה שאינה כללית ואינה עמומה
-             * יכולה להמשיך לחיפוש הסבר ישיר.
+             * רק בקשה חד־משמעית יכולה להמשיך לחיפוש הסבר.
              */
             if (exerciseName.isNotBlank()) {
                 val matchedExercise =

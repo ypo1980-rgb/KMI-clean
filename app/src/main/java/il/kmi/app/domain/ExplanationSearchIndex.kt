@@ -149,15 +149,30 @@ object ExplanationSearchIndex {
         return score
     }
 
-    fun findBest(
+    /**
+     * מחזיר את כל התרגילים המתאימים לשאילתה.
+     *
+     * כל התוצאות מגיעות ישירות מ־ExerciseIdentityRegistry
+     * ומ־Explanations, ללא רשימות קשיחות של משפחות תרגילים.
+     */
+    fun findMatches(
         query: String,
         preferredBelt: Belt? = null,
-        minScore: Int = 70
-    ): Match? {
+        minScore: Int = 70,
+        maxItems: Int = 20
+    ): List<Match> {
         val variants = queryAliases(query)
-        if (variants.isEmpty()) return null
 
-        val best =
+        if (variants.isEmpty()) {
+            return emptyList()
+        }
+
+        /*
+         * אותו תרגיל עשוי להופיע מספר פעמים בגלל כינויים.
+         * מאחדים לפי חגורה וכותרת קנונית ושומרים את הציון
+         * הגבוה ביותר שהתקבל מאחד הכינויים.
+         */
+        val scoredEntries =
             entries
                 .asSequence()
                 .map { entry ->
@@ -184,30 +199,78 @@ object ExplanationSearchIndex {
                 .filter { (_, score) ->
                     score >= minScore
                 }
-                .sortedWith(
-                    compareByDescending<Pair<Entry, Int>> {
-                        it.second
+                .groupBy { (entry, _) ->
+                    entry.belt to normalize(
+                        entry.canonicalTitle
+                    )
+                }
+                .values
+                .mapNotNull { sameExerciseEntries ->
+                    sameExerciseEntries.maxByOrNull { (_, score) ->
+                        score
                     }
-                        .thenBy {
-                            it.first.canonicalTitle.length
-                        }
-                )
-                .firstOrNull()
-                ?: return null
+                }
 
-        val explanation =
-            Explanations.get(
-                belt = best.first.belt,
-                item = best.first.canonicalTitle
+        return scoredEntries
+            .mapNotNull { (entry, score) ->
+                val explanation =
+                    Explanations.get(
+                        belt = entry.belt,
+                        item = entry.canonicalTitle
+                    )
+                        .trim()
+
+                val isFallback =
+                    explanation.isBlank() ||
+                            explanation.startsWith(
+                                "הסבר מפורט על:"
+                            ) ||
+                            explanation.startsWith(
+                                "אין כרגע"
+                            )
+
+                if (isFallback) {
+                    null
+                } else {
+                    Match(
+                        belt = entry.belt,
+                        title = entry.canonicalTitle,
+                        explanation = explanation,
+                        score = score
+                    )
+                }
+            }
+            .sortedWith(
+                compareByDescending<Match> {
+                    it.score
+                }
+                    .thenBy {
+                        it.title.length
+                    }
+                    .thenBy {
+                        it.title
+                    }
             )
-                .trim()
-        if (explanation.isBlank() || explanation.startsWith("הסבר מפורט על:")) return null
+            .take(
+                maxItems.coerceAtLeast(1)
+            )
+    }
 
-        return Match(
-            belt = best.first.belt,
-            title = best.first.canonicalTitle,
-            explanation = explanation,
-            score = best.second
+    /**
+     * נשמרת תאימות לכל המקומות הקיימים באפליקציה
+     * שזקוקים להתאמה הטובה ביותר בלבד.
+     */
+    fun findBest(
+        query: String,
+        preferredBelt: Belt? = null,
+        minScore: Int = 70
+    ): Match? {
+        return findMatches(
+            query = query,
+            preferredBelt = preferredBelt,
+            minScore = minScore,
+            maxItems = 1
         )
+            .firstOrNull()
     }
 }

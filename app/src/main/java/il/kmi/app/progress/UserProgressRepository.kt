@@ -60,91 +60,107 @@ object UserProgressRepository {
         beltId: String,
         userKnownPercent: Int
     ): UserProgressComparison? {
+        val currentUid =
+            FirebaseAuth.getInstance()
+                .currentUser
+                ?.uid
+                .orEmpty()
+
         val cleanBeltId = beltId.trim()
-        if (cleanBeltId.isBlank()) return null
 
-        val snap = FirebaseFirestore.getInstance()
-            .collection("beltStats")
-            .document(cleanBeltId)
-            .get()
-            .await()
-
-        if (!snap.exists()) return null
-
-        fun intField(name: String): Int {
-            return when (val value = snap.get(name)) {
-                is Long -> value.toInt()
-                is Int -> value
-                is Double -> value.toInt()
-                is Number -> value.toInt()
-                else -> 0
-            }.coerceAtLeast(0)
+        if (
+            currentUid.isBlank() ||
+            cleanBeltId.isBlank()
+        ) {
+            return null
         }
 
-        val usersCount = intField("usersCount")
-        val averageKnownPercent = intField("averageKnownPercent")
-            .coerceIn(0, 100)
+        /*
+         * קוראים את נתוני ההתקדמות האמיתיים של המשתמשים
+         * באותה חגורה. אין תלות במסמך beltStats חיצוני
+         * שאינו מתעדכן מתוך האפליקציה.
+         */
+        val snapshot =
+            FirebaseFirestore.getInstance()
+                .collection("userProgress")
+                .whereEqualTo(
+                    "beltId",
+                    cleanBeltId
+                )
+                .get()
+                .await()
 
-        val safeUserPercent = userKnownPercent.coerceIn(0, 100)
-        val userBucket = bucketForPercent(safeUserPercent)
+        /*
+         * המשתמש הנוכחי אינו משתתף בממוצע.
+         * בנוסף מתעלמים ממסמכים ריקים או לא תקינים.
+         */
+        val otherTraineePercents =
+            snapshot.documents
+                .mapNotNull { document ->
+                    val documentUid =
+                        document.getString("uid")
+                            ?.trim()
+                            .orEmpty()
 
-        val lowerUsersCount = when (userBucket) {
-            0 -> 0
-            10 -> intField("bucket_0_10")
-            20 -> intField("bucket_0_10") +
-                    intField("bucket_10_20")
-            30 -> intField("bucket_0_10") +
-                    intField("bucket_10_20") +
-                    intField("bucket_20_30")
-            40 -> intField("bucket_0_10") +
-                    intField("bucket_10_20") +
-                    intField("bucket_20_30") +
-                    intField("bucket_30_40")
-            50 -> intField("bucket_0_10") +
-                    intField("bucket_10_20") +
-                    intField("bucket_20_30") +
-                    intField("bucket_30_40") +
-                    intField("bucket_40_50")
-            60 -> intField("bucket_0_10") +
-                    intField("bucket_10_20") +
-                    intField("bucket_20_30") +
-                    intField("bucket_30_40") +
-                    intField("bucket_40_50") +
-                    intField("bucket_50_60")
-            70 -> intField("bucket_0_10") +
-                    intField("bucket_10_20") +
-                    intField("bucket_20_30") +
-                    intField("bucket_30_40") +
-                    intField("bucket_40_50") +
-                    intField("bucket_50_60") +
-                    intField("bucket_60_70")
-            80 -> intField("bucket_0_10") +
-                    intField("bucket_10_20") +
-                    intField("bucket_20_30") +
-                    intField("bucket_30_40") +
-                    intField("bucket_40_50") +
-                    intField("bucket_50_60") +
-                    intField("bucket_60_70") +
-                    intField("bucket_70_80")
-            90, 100 -> intField("bucket_0_10") +
-                    intField("bucket_10_20") +
-                    intField("bucket_20_30") +
-                    intField("bucket_30_40") +
-                    intField("bucket_40_50") +
-                    intField("bucket_50_60") +
-                    intField("bucket_60_70") +
-                    intField("bucket_70_80") +
-                    intField("bucket_80_90")
-            else -> 0
-        }.coerceAtLeast(0)
+                    val totalCount =
+                        (document.getLong("totalCount") ?: 0L)
+                            .toInt()
 
-        val percentileAbove = if (usersCount <= 0) {
-            0
-        } else {
-            ((lowerUsersCount.toFloat() / usersCount.toFloat()) * 100f)
+                    val knownPercent =
+                        (document.getLong("knownPercent") ?: -1L)
+                            .toInt()
+
+                    if (
+                        documentUid.isNotBlank() &&
+                        documentUid != currentUid &&
+                        totalCount > 0 &&
+                        knownPercent in 0..100
+                    ) {
+                        documentUid to knownPercent
+                    } else {
+                        null
+                    }
+                }
+                .distinctBy { (uid, _) ->
+                    uid
+                }
+                .map { (_, percent) ->
+                    percent
+                }
+
+        if (otherTraineePercents.isEmpty()) {
+            return null
+        }
+
+        val safeUserPercent =
+            userKnownPercent.coerceIn(0, 100)
+
+        val usersCount =
+            otherTraineePercents.size
+
+        val averageKnownPercent =
+            otherTraineePercents
+                .average()
                 .roundToInt()
                 .coerceIn(0, 100)
-        }
+
+        /*
+         * "אתה מעל" מחושב רק מול מתאמנים שהאחוז שלהם
+         * נמוך ממש מאחוז המשתמש, ולא כולל שוויון.
+         */
+        val traineesBelowUser =
+            otherTraineePercents.count { percent ->
+                percent < safeUserPercent
+            }
+
+        val percentileAbove =
+            (
+                    traineesBelowUser.toFloat() /
+                            usersCount.toFloat() *
+                            100f
+                    )
+                .roundToInt()
+                .coerceIn(0, 100)
 
         return UserProgressComparison(
             beltId = cleanBeltId,
@@ -152,7 +168,7 @@ object UserProgressRepository {
             userKnownPercent = safeUserPercent,
             averageKnownPercent = averageKnownPercent,
             percentileAbove = percentileAbove,
-            hasEnoughData = usersCount >= 5
+            hasEnoughData = true
         )
     }
 }

@@ -686,11 +686,13 @@ private fun UserProgressComparisonCard(
 
     val c = comparison
 
-    // ✅ אם אין מתאמנים בכלל / אין נתונים מספיקים — לא מציגים 0% ו-0 מתאמנים.
-    // זה מונע מצב לא הגיוני כמו "ממוצע 0%" + "מתאמנים 0".
+    /*
+     * המשתמש הנוכחי כבר הוסר מהחישוב ב־Repository.
+     * לכן גם מתאמן אחר אחד הוא נתון השוואה אמיתי ותקין.
+     */
     val hasValidComparisonData =
         c != null &&
-                c.usersCount >= 2
+                c.usersCount >= 1
 
     val textAlign = if (isEnglish) TextAlign.Start else TextAlign.Right
     val columnAlignment = if (isEnglish) Alignment.Start else Alignment.End
@@ -971,106 +973,79 @@ private fun SummaryToggleButton(
     onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val selectedBorder = iconColor.copy(alpha = 0.46f)
-    val idleBorder = Color.White.copy(alpha = 0.78f)
+    val colorScheme = MaterialTheme.colorScheme
+
+    /*
+     * הכפתור כולו צבוע. אין Surface שקוף, רקע לבן,
+     * מסגרת לבנה או שכבה נוספת מתחת לכפתור.
+     */
+    val buttonBrush =
+        if (selected) {
+            Brush.horizontalGradient(
+                colors = listOf(
+                    colorScheme.primary,
+                    colorScheme.secondary
+                )
+            )
+        } else {
+            Brush.horizontalGradient(
+                colors = listOf(
+                    iconColor.copy(alpha = 0.92f),
+                    colorScheme.primary.copy(alpha = 0.88f)
+                )
+            )
+        }
 
     Surface(
         onClick = onClick,
+        modifier = modifier.height(48.dp),
         shape = RoundedCornerShape(19.dp),
-        color = Color.Transparent,
-        shadowElevation = if (selected) 8.dp else 5.dp,
+        color = colorScheme.primary,
         tonalElevation = 0.dp,
-        border = BorderStroke(
-            width = 1.dp,
-            color = if (selected) selectedBorder else idleBorder
-        ),
-        modifier = modifier.height(48.dp)
+        shadowElevation = if (selected) 7.dp else 3.dp
     ) {
         Box(
             modifier = Modifier
                 .fillMaxSize()
                 .background(
-                    brush = if (selected) {
-                        Brush.verticalGradient(
-                            colors = listOf(
-                                Color.White.copy(alpha = 0.98f),
-                                iconColor.copy(alpha = 0.24f),
-                                iconColor.copy(alpha = 0.15f)
-                            )
-                        )
-                    } else {
-                        Brush.verticalGradient(
-                            colors = listOf(
-                                Color.White.copy(alpha = 0.98f),
-                                Color.White.copy(alpha = 0.90f),
-                                iconColor.copy(alpha = 0.055f)
-                            )
-                        )
-                    },
-                    shape = RoundedCornerShape(19.dp)
+                    brush = buttonBrush
                 )
-                .border(
-                    width = 1.dp,
-                    brush = Brush.linearGradient(
-                        colors = if (selected) {
-                            listOf(
-                                Color.White.copy(alpha = 0.95f),
-                                iconColor.copy(alpha = 0.36f),
-                                Color.White.copy(alpha = 0.82f)
-                            )
-                        } else {
-                            listOf(
-                                Color.White.copy(alpha = 0.95f),
-                                Color.White.copy(alpha = 0.55f),
-                                iconColor.copy(alpha = 0.12f)
-                            )
-                        }
-                    ),
-                    shape = RoundedCornerShape(19.dp)
-                ),
+                .padding(horizontal = 12.dp),
             contentAlignment = Alignment.Center
         ) {
             Row(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(horizontal = 10.dp),
+                modifier = Modifier.fillMaxSize(),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.Center
             ) {
                 Text(
                     text = text,
                     style = KmiTypography.action,
-                    color =
-                        if (selected) {
-                            Color(0xFF172033)
-                        } else {
-                            Color(0xFF263238)
-                        },
+                    color = Color.White,
+                    fontWeight = FontWeight.ExtraBold,
                     maxLines = 1,
                     textAlign = TextAlign.Center
                 )
 
-                Spacer(Modifier.width(6.dp))
+                Spacer(Modifier.width(7.dp))
 
                 Surface(
+                    modifier = Modifier.size(26.dp),
                     shape = CircleShape,
-                    color = if (selected) {
-                        iconColor.copy(alpha = 0.18f)
-                    } else {
-                        iconColor.copy(alpha = 0.09f)
-                    },
-                    border = BorderStroke(
-                        width = 1.dp,
-                        color = iconColor.copy(alpha = if (selected) 0.24f else 0.12f)
+                    color = Color.White.copy(
+                        alpha = if (selected) 0.24f else 0.17f
                     ),
-                    modifier = Modifier.size(25.dp)
+                    tonalElevation = 0.dp,
+                    shadowElevation = 0.dp
                 ) {
-                    Box(contentAlignment = Alignment.Center) {
+                    Box(
+                        contentAlignment = Alignment.Center
+                    ) {
                         Icon(
                             imageVector = Icons.Filled.Insights,
                             contentDescription = null,
-                            tint = iconColor,
-                            modifier = Modifier.size(15.dp)
+                            tint = Color.White,
+                            modifier = Modifier.size(16.dp)
                         )
                     }
                 }
@@ -1787,46 +1762,32 @@ fun SummaryScreen(
         }
 
         runCatching {
-            val comparisons = mutableListOf<UserProgressComparison>()
-
-            val beltStatsComparison = runCatching {
+            /*
+             * מקור אמת יחיד: userProgress.
+             * ה־Repository מסנן את המשתמש הנוכחי ומחשב
+             * את הממוצע והאחוזון מול יתר המתאמנים בלבד.
+             */
+            userProgressComparison =
                 UserProgressRepository.loadBeltComparison(
                     beltId = belt.id,
                     userKnownPercent = overallPct
                 )
-            }.getOrNull()
-
-            if (beltStatsComparison != null && beltStatsComparison.usersCount > 0) {
-                comparisons += beltStatsComparison
-            }
-
-            val fallbackComparison = runCatching {
-                loadBeltComparisonFallbackFromUserProgress(
-                    beltId = belt.id,
-                    userKnownPercent = overallPct
-                )
-            }.getOrNull()
-
-            if (fallbackComparison != null && fallbackComparison.usersCount > 0) {
-                comparisons += fallbackComparison
-            }
-
-            userProgressComparison = comparisons
-                .sortedWith(
-                    compareBy<UserProgressComparison> { comparison ->
-                        if (comparison.usersCount >= 2) 1 else 0
-                    }.thenBy { comparison ->
-                        comparison.usersCount
-                    }.thenBy { comparison ->
-                        if (comparison.hasEnoughData) 1 else 0
-                    }
-                )
-                .lastOrNull()
 
             userProgressComparisonLoaded = true
-        }.onFailure {
+        }.onFailure { error ->
+            /*
+             * שגיאת טעינה אינה נחשבת ל"אין מספיק נתונים".
+             * רושמים אותה גם ב־loadError כדי שלא תיבלע בשקט.
+             */
             userProgressComparison = null
             userProgressComparisonLoaded = true
+
+            loadError =
+                error.message
+                    ?: tr(
+                        "שגיאה בטעינת נתוני ההשוואה",
+                        "Error loading comparison data"
+                    )
         }
     }
 

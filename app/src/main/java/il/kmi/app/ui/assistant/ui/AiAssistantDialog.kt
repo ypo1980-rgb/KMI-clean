@@ -111,6 +111,7 @@ import il.kmi.app.ui.KmiIconSize
 import il.kmi.app.ui.KmiTopBar
 import il.kmi.app.ui.KmiTtsManager
 import il.kmi.app.ui.KmiTypography
+import il.kmi.app.ui.StyledExplanationText
 import il.kmi.app.ui.scaledIconSize
 import il.kmi.app.ui.assistant.core.AssistantKnowledgeSource
 import il.kmi.app.ui.assistant.core.AssistantMatchQuality
@@ -639,21 +640,13 @@ private fun buildExplanationWithStanceHighlight(
 private fun sanitizeAssistantMarkup(
     source: String
 ): String {
+    /*
+     * RED_BOLD ו־BLUE_BOLD נשמרות עד לרכיב התצוגה,
+     * כדי ש־StyledExplanationText יוכל לצבוע אותן.
+     *
+     * תגיות ישנות שאינן נתמכות ברכיב נשארות מוסרות.
+     */
     return source
-        .replace(
-            Regex(
-                pattern = """\[\[\s*/?\s*RED_BOLD\s*]]""",
-                option = RegexOption.IGNORE_CASE
-            ),
-            ""
-        )
-        .replace(
-            Regex(
-                pattern = """\[\s*/?\s*RED_BOLD\s*]""",
-                option = RegexOption.IGNORE_CASE
-            ),
-            ""
-        )
         .replace(
             Regex(
                 pattern = """\[\[\s*/?\s*BOLD\s*]]""",
@@ -1395,7 +1388,31 @@ private fun sanitizeTrainingTextForSpeech(text: String, isEnglish: Boolean): Str
     }
 }
 
-private fun sanitizeAssistantTextForSpeech(text: String, isEnglish: Boolean): String {
+private fun sanitizeAssistantTextForSpeech(
+    text: String,
+    isEnglish: Boolean
+): String {
+    /*
+     * תגיות הצבע מיועדות לתצוגה בלבד.
+     * מסירים אותן לפני עיבוד הטקסט להקראה.
+     */
+    val speechSource =
+        text
+            .replace(
+                Regex(
+                    pattern = """\[\[\s*/?\s*RED_BOLD\s*]]""",
+                    option = RegexOption.IGNORE_CASE
+                ),
+                ""
+            )
+            .replace(
+                Regex(
+                    pattern = """\[\[\s*/?\s*BLUE_BOLD\s*]]""",
+                    option = RegexOption.IGNORE_CASE
+                ),
+                ""
+            )
+
     fun isCodeLikeLine(line: String): Boolean {
         val trimmed = line.trim()
 
@@ -1437,7 +1454,7 @@ private fun sanitizeAssistantTextForSpeech(text: String, isEnglish: Boolean): St
 
     var spokenSubTopicIndex = 0
 
-    val cleaned = text
+    val cleaned = speechSource
         .lineSequence()
         .map { line ->
             val originalLine = line.trim()
@@ -2898,29 +2915,47 @@ fun AiAssistantDialog(
         val assistantResult = response.result
 
         /*
-   * במצב הסבר תרגיל, הטקסט נשלף דרך
-   * ExerciseAssistantEngine ולא ישירות מתוצאת החיפוש המקורב.
-   */
+    * החגורה שנאמרה בשאלה קודמת לחגורה השמורה בפרופיל.
+    */
         val preferredBelt =
             detectBeltEnum(question)
-                ?: detectBeltEnum(registeredBeltText.orEmpty())
+                ?: detectBeltEnum(
+                    registeredBeltText.orEmpty()
+                )
 
+        /*
+         * במצב הסבר תרגיל משתמשים במנוע התרגילים המלא.
+         *
+         * המנוע בודק קודם אם קיימות מספר התאמות:
+         * - התאמה מדויקת אחת מחזירה הסבר.
+         * - שם כללי מחזיר רשימת תרגילים לבחירה.
+         *
+         * אסור לקרוא כאן ישירות ל-findBest(), משום שהוא
+         * מחזיר תמיד תוצאה אחת ועלול לבחור תרגיל שרירותי.
+         */
         val exerciseAnswer =
             if (
                 assistantMode == AssistantMode.EXERCISE ||
-                assistantResult.source == AssistantKnowledgeSource.EXERCISES
+                assistantResult.source ==
+                AssistantKnowledgeSource.EXERCISES
             ) {
-                getExerciseAnswerWithFallback(
+                ExerciseAssistantEngine.answer(
                     question = question,
                     preferredBelt = preferredBelt,
                     isEnglish = isEnglish
                 )
                     .trim()
-                    .takeIf { it.isNotBlank() }
+                    .takeIf {
+                        it.isNotBlank()
+                    }
             } else {
                 null
             }
 
+        /*
+         * אם מנוע התרגילים החזיר רשימת בחירה, היא מוצגת
+         * בשלמותה ולא נדרסת על ידי התאמת findBest().
+         */
         val finalAnswer =
             sanitizeAssistantMarkup(
                 exerciseAnswer
@@ -4224,18 +4259,26 @@ fun AiAssistantDialog(
                                                                         }
                                                                 }
                                                             } else {
-                                                                Text(
-                                                                    text = answerText,
+                                                                /*
+                                                                 * אותו רכיב שמשמש בדיאלוג ההסבר:
+                                                                 * RED_BOLD מוצג באדום,
+                                                                 * BLUE_BOLD מוצג בכחול.
+                                                                 */
+                                                                StyledExplanationText(
+                                                                    raw = answerText,
                                                                     modifier =
                                                                         Modifier.fillMaxWidth(),
+                                                                    style =
+                                                                        KmiTypography.body.copy(
+                                                                            fontSize = 14.sp,
+                                                                            lineHeight = 21.sp,
+                                                                            fontWeight =
+                                                                                FontWeight.Normal
+                                                                        ),
                                                                     color =
                                                                         Color(0xFF232333),
                                                                     textAlign =
-                                                                        textAlignPrimary,
-                                                                    fontSize = 14.sp,
-                                                                    lineHeight = 21.sp,
-                                                                    fontWeight =
-                                                                        FontWeight.Normal
+                                                                        textAlignPrimary
                                                                 )
                                                             }
                                                         }
