@@ -9,7 +9,6 @@ import android.app.Activity
 import android.content.ContextWrapper
 import android.view.inputmethod.InputMethodManager
 import androidx.activity.ComponentActivity
-import androidx.activity.compose.BackHandler
 import androidx.activity.compose.LocalOnBackPressedDispatcherOwner
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.Spring
@@ -22,7 +21,6 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -50,7 +48,6 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
-import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.painterResource
@@ -59,7 +56,6 @@ import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
@@ -67,15 +63,12 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.zIndex
 import il.kmi.app.R
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.delay
 import androidx.core.view.doOnPreDraw
 import shareCurrentScreen
 import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.foundation.lazy.itemsIndexed
-import androidx.compose.foundation.text.KeyboardActions
-import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.material.icons.filled.ChevronLeft
-import il.kmi.app.search.KmiSearchBridge
+import il.kmi.app.search.GlobalExerciseSearchDialog
+import il.kmi.app.search.GlobalExerciseSearchEngine
+import il.kmi.app.search.ExerciseSearchSelectionResolver
 import androidx.compose.ui.AbsoluteAlignment
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.IntOffset
@@ -94,7 +87,6 @@ import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.unit.Density
 import il.kmi.app.ui.assistant.ui.AiAssistantDialog
-import il.kmi.shared.domain.Explanations
 
 //===============================================================================
 
@@ -138,12 +130,6 @@ private fun DividerLine() {
             .background(DividerCol)
     )
 }
-
-data class UiSearchResult(
-    val id: String,
-    val title: String,
-    val subtitle: String?
-)
 
 /**
  * גשר גלובלי לפתיחת הסבר על תרגיל באמצעות פקודה קולית.
@@ -472,10 +458,14 @@ fun KmiTopBar(
     // ✅ טור פעולות צדדי במקום סרגל אייקונים אופקי פתוח תמיד
     var quickActionsExpanded by rememberSaveable { mutableStateOf(false) }
 
-    // ✅ חיפוש גלובאלי מתוך טור האייקונים החדש
-    var showGlobalSearch by rememberSaveable { mutableStateOf(false) }
-    var globalSearchQuery by rememberSaveable { mutableStateOf("") }
-    var globalSearchInputEnabled by rememberSaveable { mutableStateOf(true) }
+    // ✅ חיפוש גלובלי מתוך טור האייקונים החדש
+    var showGlobalSearch by rememberSaveable {
+        mutableStateOf(false)
+    }
+
+    var globalSearchQuery by rememberSaveable {
+        mutableStateOf("")
+    }
 
 // ✅ דיאלוג הסבר גלובלי חדש לתוצאות חיפוש
     var showPremiumExerciseDialog by rememberSaveable { mutableStateOf(false) }
@@ -521,18 +511,6 @@ fun KmiTopBar(
         }, 80)
     }
 
-    fun finishGlobalSearchTyping() {
-        hideGlobalSearchKeyboard()
-
-        // כיבוי קצר של TextField מכריח את Samsung Keyboard לסגור את המקלדת.
-        globalSearchInputEnabled = false
-
-        scope.launch {
-            delay(180)
-            globalSearchInputEnabled = true
-        }
-    }
-
 // היה כאן mutableStateListOf(...) ללא remember → עוטפים ב-remember(spUser)
     val recentMessages = remember(spUser) {
         mutableStateListOf<RecentBroadcast>().apply {
@@ -567,6 +545,139 @@ fun KmiTopBar(
         showGlobalSearch = true
 
         return true
+    }
+
+    /*
+     * פותח את דיאלוג ההסבר מתוך תוצאה של
+     * מנוע החיפוש הגלובלי.
+     */
+    fun openGlobalExerciseSearchResult(
+        result: GlobalExerciseSearchEngine.Result
+    ) {
+        val selected =
+            ExerciseSearchSelectionResolver.resolve(
+                result = result,
+                isEnglish = isEnglish
+            )
+
+        hideGlobalSearchKeyboard()
+        showGlobalSearch = false
+        globalSearchQuery = ""
+
+        /*
+         * לא ממציאים חגורה, תרגיל או הסבר כאשר
+         * התוצאה אינה קיימת במקור התוכן הגלובלי.
+         */
+        if (selected == null) {
+            android.widget.Toast.makeText(
+                ctx,
+                if (isEnglish) {
+                    "The selected exercise is no longer available."
+                } else {
+                    "התרגיל שנבחר אינו זמין עוד במאגר."
+                },
+                android.widget.Toast.LENGTH_SHORT
+            ).show()
+
+            return
+        }
+
+        val keyForPrefs =
+            selected.stableKey.ifBlank {
+                selected.title
+            }
+
+        val editedExplanation =
+            ctx.getSharedPreferences(
+                "kmi_explanation_overrides",
+                Context.MODE_PRIVATE
+            )
+                .getString(
+                    keyForPrefs,
+                    null
+                )
+                ?.trim()
+                .orEmpty()
+
+        val favoritesSet =
+            ctx.getSharedPreferences(
+                "kmi_global_favorites",
+                Context.MODE_PRIVATE
+            )
+                .getStringSet(
+                    "favorite_exercises",
+                    emptySet()
+                )
+                ?: emptySet()
+
+        val noteRoleKey =
+            if (userIsCoach) {
+                "coach"
+            } else {
+                "trainee"
+            }
+
+        val notePrefsKey =
+            "$keyForPrefs::$noteRoleKey"
+
+        val savedUserNote =
+            ctx.getSharedPreferences(
+                "kmi_exercise_user_notes",
+                Context.MODE_PRIVATE
+            )
+                .getString(
+                    notePrefsKey,
+                    ""
+                )
+                ?.trim()
+                .orEmpty()
+
+        premiumExerciseTitle =
+            selected.title
+
+        premiumExerciseBeltName =
+            selected.beltLabel
+
+        premiumExerciseExplanation =
+            editedExplanation.ifBlank {
+                selected.explanation
+            }
+
+        premiumExerciseStableKey =
+            keyForPrefs
+
+        premiumExerciseIsFavorite =
+            favoritesSet.contains(
+                keyForPrefs
+            )
+
+        premiumExerciseUserNote =
+            savedUserNote
+
+        premiumExerciseUserNoteTitle =
+            if (userIsCoach) {
+                if (isEnglish) {
+                    "Coach notes"
+                } else {
+                    "הערות המאמן"
+                }
+            } else {
+                if (isEnglish) {
+                    "Trainee notes"
+                } else {
+                    "הערות המתאמן"
+                }
+            }
+
+        showPremiumExerciseDialog = true
+
+        /*
+         * הקריאה נשמרת לצורך מסכים שמספקים callback
+         * חיצוני בעת בחירת תרגיל.
+         */
+        onPickSearchResult?.invoke(
+            selected.stableKey
+        )
     }
 
     DisposableEffect(
@@ -1265,1073 +1376,22 @@ fun KmiTopBar(
         }
     }
 
-    // === חיפוש גלובאלי מתפריט האייקונים הצדדי ===
+    // === חיפוש גלובלי בתרגילים ===
     if (showGlobalSearch) {
-
-        val globalSearchSheetState =
-            rememberModalBottomSheetState(
-                skipPartiallyExpanded = true
-            )
-
-        val isGlobalSearchKeyboardVisible =
-            WindowInsets.ime
-                .getBottom(density) > 0
-
-        fun closeGlobalSearch() {
-            hideGlobalSearchKeyboard()
-            showGlobalSearch = false
-            globalSearchQuery = ""
-        }
-
-        /*
-         * כאשר המקלדת פתוחה:
-         * Back סוגר רק את המקלדת ומשאיר את החיפוש פתוח.
-         *
-         * כאשר המקלדת כבר סגורה:
-         * Back סוגר את חלון החיפוש.
-         */
-        BackHandler(enabled = showGlobalSearch) {
-            if (isGlobalSearchKeyboardVisible) {
-                finishGlobalSearchTyping()
-            } else {
-                closeGlobalSearch()
-            }
-        }
-
-        ModalBottomSheet(
-            onDismissRequest = {
-                closeGlobalSearch()
+        GlobalExerciseSearchDialog(
+            initialQuery = globalSearchQuery,
+            isEnglish = isEnglish,
+            onDismiss = {
+                hideGlobalSearchKeyboard()
+                showGlobalSearch = false
+                globalSearchQuery = ""
             },
-            sheetState = globalSearchSheetState,
-
-            /*
-             * מונע מ־ModalBottomSheet לסגור את עצמו ישירות
-             * בעת לחיצה על Back. הטיפול מתבצע ב־BackHandler.
-             */
-            properties = ModalBottomSheetProperties(
-                shouldDismissOnBackPress = false
-            ),
-
-            shape = RoundedCornerShape(
-                topStart = 34.dp,
-                topEnd = 34.dp
-            ),
-            containerColor = Color.Transparent,
-            tonalElevation = 0.dp,
-            dragHandle = {
-                Box(
-                    modifier = Modifier
-                        .padding(
-                            top = 10.dp,
-                            bottom = 4.dp
-                        )
-                        .width(42.dp)
-                        .height(5.dp)
-                        .clip(
-                            RoundedCornerShape(999.dp)
-                        )
-                        .background(
-                            Color(0xFF111827)
-                                .copy(alpha = 0.42f)
-                        )
+            onExerciseSelected = { result ->
+                openGlobalExerciseSearchResult(
+                    result
                 )
             }
-        ) {
-            val searchTitle = if (isEnglish) "Search exercise" else "חיפוש תרגיל"
-            val searchLabel = if (isEnglish) {
-                "Search exercise"
-            } else {
-                "חפש תרגיל"
-            }
-
-            val searchHint = if (isEnglish) {
-                "Type a word to search all exercises."
-            } else {
-                "הקלד מילה כדי לחפש בכל התרגילים."
-            }
-
-            val noResultsText = if (isEnglish) {
-                "No results found"
-            } else {
-                "לא נמצאו תוצאות"
-            }
-
-            val searchLayoutDirection =
-                if (isEnglish) LayoutDirection.Ltr else LayoutDirection.Rtl
-
-            val searchTextAlign =
-                if (isEnglish) TextAlign.Left else TextAlign.Right
-
-            val searchHorizontalAlignment =
-                if (isEnglish) Alignment.Start else Alignment.End
-
-            fun normalizedSearchVariants(query: String): List<String> {
-                val q = query
-                    .replace("\u200F", "")
-                    .replace("\u200E", "")
-                    .replace("\u00A0", " ")
-                    .replace(Regex("\\s+"), " ")
-                    .trim()
-
-                if (q.isBlank()) return emptyList()
-
-                val variants = linkedSetOf<String>()
-
-                fun add(value: String) {
-                    val clean = value
-                        .replace("\u200F", "")
-                        .replace("\u200E", "")
-                        .replace("\u00A0", " ")
-                        .replace(Regex("\\s+"), " ")
-                        .trim()
-
-                    if (clean.length >= 2) {
-                        variants += clean
-                    }
-                }
-
-                fun cleanForMatch(value: String): String {
-                    return value
-                        .replace("\u200F", "")
-                        .replace("\u200E", "")
-                        .replace("\u00A0", " ")
-                        .replace("–", "-")
-                        .replace("—", "-")
-                        .replace("־", "-")
-                        .replace(Regex("\\s+"), " ")
-                        .trim()
-                        .lowercase()
-                }
-
-                fun englishWordsMatch(englishTitle: String): Boolean {
-                    val cleanTitle = cleanForMatch(englishTitle)
-                    val cleanQuery = cleanForMatch(q)
-
-                    if (cleanQuery.length < 2) return false
-
-                    return cleanTitle.contains(cleanQuery) ||
-                            cleanQuery
-                                .split(" ")
-                                .filter { it.length >= 2 }
-                                .all { word -> cleanTitle.contains(word) }
-                }
-
-                fun addEnglishHebrewVariants() {
-                    if (!isEnglish) return
-
-                    val qLower = cleanForMatch(q)
-
-                    when {
-                        qLower.contains("body") || qLower.contains("hug") -> {
-                            add("חביקות גוף")
-                            add("שחרור מחביקות")
-                            add("שחרורים")
-                        }
-
-                        qLower.contains("knife") -> {
-                            add("סכין")
-                            add("הגנות מסכין")
-                            add("הגנות")
-                        }
-
-                        qLower.contains("kick") -> {
-                            add("בעיטה")
-                            add("בעיטות")
-                            add("הגנות נגד בעיטות")
-                        }
-
-                        qLower.contains("punch") -> {
-                            add("אגרוף")
-                            add("אגרופים")
-                            add("הגנות פנימיות")
-                            add("הגנות חיצוניות")
-                        }
-
-                        qLower.contains("release") ||
-                                qLower.contains("choke") ||
-                                qLower.contains("grab") -> {
-                            add("שחרור")
-                            add("שחרורים")
-                            add("שחרור מחניקות")
-                            add("שחרור מתפיסות ידיים / שיער / חולצה")
-                        }
-
-                        qLower.contains("elbow") -> {
-                            add("מרפק")
-                            add("מכות מרפק")
-                        }
-
-                        qLower.contains("stick") || qLower.contains("rifle") -> {
-                            add("מקל")
-                            add("רובה")
-                        }
-
-                        qLower.contains("roll") || qLower.contains("fall") -> {
-                            add("גלגול")
-                            add("בלימות וגלגולים")
-                        }
-                    }
-                }
-
-                add(q)
-
-                // אם המשתמש הקליד בטעות "ה נגד..." או "הגנה נגד..."
-                add(q.removePrefix("ה ").trim())
-                add(q.removePrefix("ה").trim())
-
-                add(q.replace("הגנה נגד", "נגד").trim())
-                add(q.replace("הגנה", "").trim())
-                add(q.replace("ה ", "").trim())
-
-                val isSideKickDefenseSearch =
-                    q.contains("הגנה נגד בעיטה לצד") ||
-                            q.contains("הגנה נגד בעיטות לצד") ||
-                            q.contains("נגד בעיטה לצד") ||
-                            q.contains("נגד בעיטות לצד") ||
-                            q.contains("הגנה חיצונית באמת") ||
-                            q.contains("הגנה חיצונית באמה") ||
-                            q.contains("באמת ימין") ||
-                            q.contains("באמת שמאל") ||
-                            q.contains("באמה ימין") ||
-                            q.contains("באמה שמאל")
-
-                if (isSideKickDefenseSearch) {
-                    add("הגנה חיצונית באמת ימין נגד בעיטה לצד")
-                    add("הגנה חיצונית באמת שמאל נגד בעיטה לצד")
-                    add("הגנה נגד בעיטה לצד - בעיטת סטירה חיצונית")
-                    add("הגנות נגד בעיטות נגד בעיטות לצד")
-                    add("הגנות נגד בעיטות")
-                    add("נגד בעיטה לצד")
-                    add("נגד בעיטות לצד")
-                }
-
-                addEnglishHebrewVariants()
-
-                return variants.toList()
-            }
-
-            fun normalizeForGlobalSearch(value: String): String {
-                return value
-                    .replace("\u200F", "")
-                    .replace("\u200E", "")
-                    .replace("\u00A0", " ")
-                    .replace("–", "-")
-                    .replace("—", "-")
-                    .replace("־", "-")
-                    .replace(Regex("\\s+"), " ")
-                    .trim()
-            }
-
-            fun englishSearchWordsMatch(
-                englishTitle: String,
-                query: String
-            ): Boolean {
-                val cleanTitle = normalizeForGlobalSearch(englishTitle).lowercase()
-                val cleanQuery = normalizeForGlobalSearch(query).lowercase()
-
-                if (cleanQuery.length < 2) return false
-
-                return cleanTitle.contains(cleanQuery) ||
-                        cleanQuery
-                            .split(" ")
-                            .filter { it.length >= 2 }
-                            .all { word -> cleanTitle.contains(word) }
-            }
-
-            fun translatedTitleForSearchUi(rawTitle: String): String {
-                return rawTitle
-            }
-
-            fun beltLabelForDialog(belt: il.kmi.shared.domain.Belt): String {
-                return when (belt) {
-                    il.kmi.shared.domain.Belt.YELLOW -> if (isEnglish) "Yellow belt" else "חגורה צהובה"
-                    il.kmi.shared.domain.Belt.ORANGE -> if (isEnglish) "Orange belt" else "חגורה כתומה"
-                    il.kmi.shared.domain.Belt.GREEN -> if (isEnglish) "Green belt" else "חגורה ירוקה"
-                    il.kmi.shared.domain.Belt.BLUE -> if (isEnglish) "Blue belt" else "חגורה כחולה"
-                    il.kmi.shared.domain.Belt.BROWN -> if (isEnglish) "Brown belt" else "חגורה חומה"
-                    il.kmi.shared.domain.Belt.BLACK -> if (isEnglish) "Black belt" else "חגורה שחורה"
-                    else -> ""
-                }
-            }
-
-            fun beltLabelForSearch(beltName: String): String {
-                return when (beltName.uppercase()) {
-                    "YELLOW" -> if (isEnglish) "Yellow belt" else "חגורה צהובה"
-                    "ORANGE" -> if (isEnglish) "Orange belt" else "חגורה כתומה"
-                    "GREEN" -> if (isEnglish) "Green belt" else "חגורה ירוקה"
-                    "BLUE" -> if (isEnglish) "Blue belt" else "חגורה כחולה"
-                    "BROWN" -> if (isEnglish) "Brown belt" else "חגורה חומה"
-                    "BLACK" -> if (isEnglish) "Black belt" else "חגורה שחורה"
-                    else -> beltName
-                }
-            }
-
-            fun searchTitleColorForResult(
-                rawKey: String,
-                subtitle: String?
-            ): Color {
-                val resolvedBelt = runCatching {
-                    il.kmi.app.domain.ContentRepo
-                        .resolveItemKey(rawKey)
-                        ?.belt
-                }.getOrNull()
-
-                resolvedBelt?.let { belt ->
-                    return when (belt) {
-                        il.kmi.shared.domain.Belt.YELLOW -> Color(0xFFF59E0B)
-                        il.kmi.shared.domain.Belt.ORANGE -> Color(0xFFFF9800)
-                        il.kmi.shared.domain.Belt.GREEN -> Color(0xFF2E7D32)
-                        il.kmi.shared.domain.Belt.BLUE -> Color(0xFF1E88E5)
-                        il.kmi.shared.domain.Belt.BROWN -> Color(0xFF6D4C41)
-                        il.kmi.shared.domain.Belt.BLACK -> Color(0xFF111827)
-                        else -> Color(0xFF111827)
-                    }
-                }
-
-                val text = "${subtitle.orEmpty()} $rawKey".lowercase()
-
-                return when {
-                    text.contains("צהובה") || text.contains("yellow") ->
-                        Color(0xFFF59E0B)
-
-                    text.contains("כתומה") || text.contains("orange") ->
-                        Color(0xFFFF9800)
-
-                    text.contains("ירוקה") || text.contains("green") ->
-                        Color(0xFF2E7D32)
-
-                    text.contains("כחולה") || text.contains("blue") ->
-                        Color(0xFF1E88E5)
-
-                    text.contains("חומה") || text.contains("brown") ->
-                        Color(0xFF6D4C41)
-
-                    text.contains("שחורה") || text.contains("black") ->
-                        Color(0xFF111827)
-
-                    else ->
-                        Color(0xFF111827)
-                }
-            }
-
-            fun searchSubtitleFromResolvedKey(rawKey: String, fallbackBeltName: String): String {
-                val resolved = il.kmi.app.domain.ContentRepo.resolveItemKey(rawKey)
-
-                return if (resolved != null) {
-                    val beltLabel = beltLabelForSearch(resolved.belt.name)
-
-                    if (resolved.topicTitle.isNotBlank()) {
-                        "$beltLabel • ${resolved.topicTitle}"
-                    } else {
-                        beltLabel
-                    }
-                } else {
-                    beltLabelForSearch(fallbackBeltName)
-                }
-            }
-
-            fun matchesGlobalSearchTitle(
-                title: String,
-                variants: List<String>
-            ): Boolean {
-                val normalizedTitle = normalizeForGlobalSearch(title)
-
-                return variants.any { variant ->
-                    val normalizedVariant = normalizeForGlobalSearch(variant)
-
-                    if (normalizedVariant.length < 2) {
-                        false
-                    } else {
-                        normalizedTitle.contains(normalizedVariant, ignoreCase = true) ||
-                                normalizedVariant
-                                    .split(" ")
-                                    .filter { it.length >= 2 }
-                                    .all { word ->
-                                        normalizedTitle.contains(word, ignoreCase = true)
-                                    }
-                    }
-                }
-            }
-
-            fun hardSectionSearchResultsForQuery(
-                query: String,
-                variants: List<String>
-            ): List<UiSearchResult> {
-                val normalizedQuery = normalizeForGlobalSearch(query)
-
-                val shouldSearchKnife =
-                    normalizedQuery.contains("סכין") ||
-                            normalizedQuery.contains("knife", ignoreCase = true) ||
-                            variants.any { variant ->
-                                val v = normalizeForGlobalSearch(variant)
-                                v.contains("סכין") || v.contains("knife", ignoreCase = true)
-                            }
-
-                if (!shouldSearchKnife) {
-                    return emptyList()
-                }
-
-                val resolved = runCatching {
-                    il.kmi.shared.domain.content.HardSectionsResolver.resolve(
-                        subjectId = "knife_defense",
-                        sectionId = null
-                    )
-                }.getOrNull()
-
-                fun beltLabelForHardResult(
-                    belt: il.kmi.shared.domain.Belt
-                ): String {
-                    return when (belt) {
-                        il.kmi.shared.domain.Belt.YELLOW ->
-                            if (isEnglish) "Yellow belt" else "חגורה צהובה"
-
-                        il.kmi.shared.domain.Belt.ORANGE ->
-                            if (isEnglish) "Orange belt" else "חגורה כתומה"
-
-                        il.kmi.shared.domain.Belt.GREEN ->
-                            if (isEnglish) "Green belt" else "חגורה ירוקה"
-
-                        il.kmi.shared.domain.Belt.BLUE ->
-                            if (isEnglish) "Blue belt" else "חגורה כחולה"
-
-                        il.kmi.shared.domain.Belt.BROWN ->
-                            if (isEnglish) "Brown belt" else "חגורה חומה"
-
-                        il.kmi.shared.domain.Belt.BLACK ->
-                            if (isEnglish) "Black belt" else "חגורה שחורה"
-
-                        else -> belt.name
-                    }
-                }
-
-                fun hardItemsForSearchGroup(
-                    group: il.kmi.shared.domain.content.HardSectionsResolver.BeltItems
-                ): List<String> {
-                    val rawItems: Any? = group.items
-
-                    return when (rawItems) {
-                        is Iterable<*> -> rawItems
-                            .mapNotNull { item: Any? -> item?.toString()?.trim() }
-
-                        is Array<*> -> rawItems
-                            .mapNotNull { item: Any? -> item?.toString()?.trim() }
-
-                        else -> listOfNotNull(rawItems?.toString()?.trim())
-                    }
-                        .filter { item: String -> item.isNotBlank() }
-                        .distinct()
-                }
-
-                fun resultFromGroup(
-                    group: il.kmi.shared.domain.content.HardSectionsResolver.BeltItems
-                ): List<UiSearchResult> {
-                    val beltLabel = beltLabelForHardResult(group.belt)
-                    val topicLabel = if (isEnglish) "Knife defenses" else "הגנות מסכין"
-
-                    return hardItemsForSearchGroup(group)
-                        .filter { itemTitle: String ->
-                            matchesGlobalSearchTitle(
-                                title = itemTitle,
-                                variants = variants
-                            ) ||
-                                    normalizeForGlobalSearch(itemTitle)
-                                        .contains("סכין") ||
-                                    normalizeForGlobalSearch(itemTitle)
-                                        .contains("knife", ignoreCase = true)
-                        }
-                        .map { itemTitle: String ->
-                            UiSearchResult(
-                                id = "${group.belt.id}::הגנות מסכין::$itemTitle",
-                                title = translatedTitleForSearchUi(itemTitle),
-                                subtitle = "$beltLabel • $topicLabel"
-                            )
-                        }
-                }
-
-                fun flattenSections(
-                    subjectId: String,
-                    entries: List<il.kmi.shared.domain.content.HardSectionsResolver.SectionEntry>
-                ): List<UiSearchResult> {
-                    return entries.flatMap { entry ->
-                        when (
-                            val nested = runCatching {
-                                il.kmi.shared.domain.content.HardSectionsResolver.resolve(
-                                    subjectId = subjectId,
-                                    sectionId = entry.id
-                                )
-                            }.getOrNull()
-                        ) {
-                            is il.kmi.shared.domain.content.HardSectionsResolver.NodeResult.BeltGroups -> {
-                                nested.groups.flatMap { group: il.kmi.shared.domain.content.HardSectionsResolver.BeltItems ->
-                                    resultFromGroup(group)
-                                }
-                            }
-
-                            is il.kmi.shared.domain.content.HardSectionsResolver.NodeResult.Sections -> {
-                                flattenSections(subjectId, nested.entries)
-                            }
-
-                            null -> emptyList()
-                        }
-                    }
-                }
-
-                return when (resolved) {
-                    is il.kmi.shared.domain.content.HardSectionsResolver.NodeResult.BeltGroups -> {
-                        resolved.groups.flatMap { group: il.kmi.shared.domain.content.HardSectionsResolver.BeltItems ->
-                            resultFromGroup(group)
-                        }
-                    }
-
-                    is il.kmi.shared.domain.content.HardSectionsResolver.NodeResult.Sections -> {
-                        flattenSections(
-                            subjectId = "knife_defense",
-                            entries = resolved.entries
-                        )
-                    }
-
-                    null -> emptyList()
-                }
-            }
-
-            fun directExplanationSideKickDefenseResults(query: String): List<UiSearchResult> {
-                val normalizedQuery = normalizeForGlobalSearch(query)
-
-                val shouldUseDirectSideKickDefense =
-                    normalizedQuery.contains("הגנה נגד בעיטה לצד") ||
-                            normalizedQuery.contains("הגנה נגד בעיטות לצד") ||
-                            normalizedQuery.contains("נגד בעיטה לצד") ||
-                            normalizedQuery.contains("נגד בעיטות לצד")
-
-                if (!shouldUseDirectSideKickDefense) {
-                    return emptyList()
-                }
-
-                val greenBelt = il.kmi.shared.domain.Belt.GREEN
-
-                val directTitles = listOf(
-                    "הגנה חיצונית באמת ימין נגד בעיטה לצד",
-                    "הגנה חיצונית באמת שמאל נגד בעיטה לצד",
-                    "הגנה נגד בעיטה לצד - בעיטת סטירה חיצונית"
-                )
-
-                return directTitles.mapNotNull { title ->
-                    val explanation = Explanations
-                        .get(
-                            belt = greenBelt,
-                            item = title,
-                            exerciseId = null
-                        )
-                        .trim()
-
-                    val isRealExplanation =
-                        explanation.isNotBlank() &&
-                                !explanation.startsWith("הסבר מפורט על:")
-
-                    if (isRealExplanation) {
-                        UiSearchResult(
-                            id = "green::הגנות::$title",
-                            title = title,
-                            subtitle = if (isEnglish) {
-                                "Green belt • Defenses"
-                            } else {
-                                "חגורה ירוקה • הגנות"
-                            }
-                        )
-                    } else {
-                        null
-                    }
-                }
-            }
-
-            val results: List<UiSearchResult> = remember(globalSearchQuery, isEnglish) {
-                val query = globalSearchQuery.trim()
-
-                if (query.length < 2) {
-                    emptyList()
-                } else {
-                    val variants: List<String> = normalizedSearchVariants(query)
-
-                    val directExplanationResults: List<UiSearchResult> =
-                        directExplanationSideKickDefenseResults(query)
-
-                    val hardSectionResults: List<UiSearchResult> =
-                        hardSectionSearchResultsForQuery(
-                            query = query,
-                            variants = variants
-                        )
-
-                    val bridgeResults: List<UiSearchResult> = variants
-                        .flatMap { variant: String ->
-                            runCatching {
-                                KmiSearchBridge.searchExercises(variant)
-                            }.getOrElse {
-                                emptyList()
-                            }
-                        }
-                        .map { hit ->
-                            val rawKey = hit.id ?: hit.title
-
-                            UiSearchResult(
-                                id = rawKey,
-                                title = translatedTitleForSearchUi(hit.title),
-                                subtitle = hit.subtitle
-                                    ?: searchSubtitleFromResolvedKey(
-                                        rawKey = rawKey,
-                                        fallbackBeltName = ""
-                                    )
-                            )
-                        }
-
-                    (
-                            directExplanationResults +
-                                    hardSectionResults +
-                                    bridgeResults
-                            )
-                        .distinctBy { hit: UiSearchResult ->
-                            normalizeForGlobalSearch(hit.title)
-                        }
-                }
-            }
-
-            val sheetDirection = if (isEnglish) {
-                LayoutDirection.Ltr
-            } else {
-                LayoutDirection.Rtl
-            }
-
-            CompositionLocalProvider(LocalLayoutDirection provides sheetDirection) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .background(
-                            brush = Brush.verticalGradient(
-                                colors = listOf(
-                                    Color(0xFFF8F5FB),
-                                    Color(0xFFEDE7F6),
-                                    Color(0xFFF9F6FC)
-                                )
-                            )
-                        )
-                ) {
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .navigationBarsPadding()
-                            .padding(horizontal = 18.dp, vertical = 14.dp),
-                        verticalArrangement = Arrangement.spacedBy(14.dp),
-                        horizontalAlignment = searchHorizontalAlignment
-                    ) {
-                        Surface(
-                            modifier = Modifier.fillMaxWidth(),
-                            shape = RoundedCornerShape(28.dp),
-                            color = Color.Transparent,
-                            shadowElevation = 10.dp,
-                            tonalElevation = 0.dp
-                        ) {
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .background(
-                                        brush = Brush.linearGradient(
-                                            colors = listOf(
-                                                Color(0xFF0F1B35),
-                                                Color(0xFF243B6B),
-                                                Color(0xFF5B4BB7)
-                                            )
-                                        ),
-                                        shape = RoundedCornerShape(28.dp)
-                                    )
-                                    .padding(horizontal = 18.dp, vertical = 18.dp)
-                            ) {
-                                IconButton(
-                                    onClick = {
-                                        hideGlobalSearchKeyboard()
-                                        showGlobalSearch = false
-                                        globalSearchQuery = ""
-                                    },
-                                    modifier = Modifier
-                                        .align(
-                                            if (isEnglish) {
-                                                AbsoluteAlignment.TopRight
-                                            } else {
-                                                AbsoluteAlignment.TopLeft
-                                            }
-                                        )
-                                        .offset(
-                                            x = if (isEnglish) 6.dp else (-6).dp,
-                                            y = (-6).dp
-                                        )
-                                        .size(36.dp)
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Filled.Close,
-                                        contentDescription = if (isEnglish) "Close search" else "סגור חיפוש",
-                                        tint = Color.White,
-                                        modifier = Modifier.size(KmiIconSize.medium)
-                                    )
-                                }
-
-                                Column(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    verticalArrangement = Arrangement.spacedBy(6.dp),
-                                    horizontalAlignment = searchHorizontalAlignment
-                                ) {
-                                    Text(
-                                        text = searchTitle,
-                                        modifier = Modifier.fillMaxWidth(),
-                                        textAlign = searchTextAlign,
-                                        fontSize = 24.sp,
-                                        lineHeight = 28.sp,
-                                        fontWeight = FontWeight.ExtraBold,
-                                        color = Color.White
-                                    )
-
-                                    Text(
-                                        text = searchHint,
-                                        modifier = Modifier.fillMaxWidth(),
-                                        textAlign = searchTextAlign,
-                                        fontSize = 13.sp,
-                                        lineHeight = 17.sp,
-                                        fontWeight = FontWeight.Medium,
-                                        color = Color.White.copy(alpha = 0.78f)
-                                    )
-                                }
-                            }
-                        }
-
-                        Surface(
-                            modifier = Modifier.fillMaxWidth(),
-                            shape = RoundedCornerShape(24.dp),
-                            color = Color.White,
-                            shadowElevation = 8.dp,
-                            tonalElevation = 0.dp,
-                            border = BorderStroke(
-                                width = 1.dp,
-                                color = Color(0xFFE9DDF7)
-                            )
-                        ) {
-                            CompositionLocalProvider(
-                                LocalLayoutDirection provides searchLayoutDirection
-                            ) {
-                                OutlinedTextField(
-                                    value = globalSearchQuery,
-                                    onValueChange = { newValue ->
-                                        val cleanValue = newValue
-                                            .replace("\n", " ")
-                                            .replace("\r", " ")
-                                            .replace(Regex("\\s+"), " ")
-
-                                        globalSearchQuery = cleanValue
-
-                                        if (cleanValue != newValue) {
-                                            finishGlobalSearchTyping()
-                                        }
-                                    },
-                                    enabled = globalSearchInputEnabled,
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .heightIn(min = 62.dp, max = 92.dp)
-                                        .padding(horizontal = 10.dp, vertical = 6.dp),
-                                    singleLine = false,
-                                    minLines = 1,
-                                    maxLines = 2,
-                                    keyboardOptions = KeyboardOptions(
-                                        imeAction = ImeAction.Done
-                                    ),
-                                    keyboardActions = KeyboardActions(
-                                        onDone = {
-                                            finishGlobalSearchTyping()
-                                        },
-                                        onSearch = {
-                                            finishGlobalSearchTyping()
-                                        },
-                                        onGo = {
-                                            finishGlobalSearchTyping()
-                                        },
-                                        onSend = {
-                                            finishGlobalSearchTyping()
-                                        }
-                                    ),
-                                    textStyle = MaterialTheme.typography.bodyMedium.copy(
-                                        fontSize = 11.sp,
-                                        lineHeight = 14.sp,
-                                        fontWeight = FontWeight.SemiBold,
-                                        textAlign = searchTextAlign,
-                                        color = Color(0xFF111827)
-                                    ),
-                                    label = {
-                                        Text(
-                                            text = searchLabel,
-                                            modifier = Modifier.fillMaxWidth(),
-                                            textAlign = searchTextAlign,
-                                            fontSize = 10.sp,
-                                            lineHeight = 12.sp,
-                                            fontWeight = FontWeight.SemiBold
-                                        )
-                                    },
-                                    placeholder = {
-                                        Text(
-                                            text = searchLabel,
-                                            modifier = Modifier.fillMaxWidth(),
-                                            textAlign = searchTextAlign,
-                                            fontSize = 11.5.sp,
-                                            lineHeight = 14.sp,
-                                            fontWeight = FontWeight.SemiBold,
-                                            color = Color(0xFF64748B)
-                                        )
-                                    },
-                                    leadingIcon = {
-                                        Icon(
-                                            imageVector = Icons.Filled.Search,
-                                            contentDescription = searchLabel,
-                                            tint = Color(0xFF10B981),
-                                            modifier = Modifier.size(KmiIconSize.medium)
-                                        )
-                                    },
-                                    trailingIcon = {
-                                        if (globalSearchQuery.isNotBlank()) {
-                                            IconButton(
-                                                onClick = {
-                                                    globalSearchQuery = ""
-                                                }
-                                            ) {
-                                                Icon(
-                                                    imageVector = Icons.Filled.Close,
-                                                    contentDescription = if (isEnglish) "Clear" else "נקה",
-                                                    tint = Color(0xFF6D4ED8),
-                                                    modifier = Modifier.size(KmiIconSize.medium)
-                                                )
-                                            }
-                                        }
-                                    },
-                                    shape = RoundedCornerShape(18.dp),
-                                    colors = OutlinedTextFieldDefaults.colors(
-                                        focusedContainerColor = Color(0xFFFDFBFF),
-                                        unfocusedContainerColor = Color(0xFFFDFBFF),
-                                        focusedBorderColor = Color(0xFF8B5CF6),
-                                        unfocusedBorderColor = Color(0xFFE5DDF2),
-                                        focusedLabelColor = Color(0xFF6D4ED8),
-                                        unfocusedLabelColor = Color(0xFF64748B),
-                                        cursorColor = Color(0xFF6D4ED8)
-                                    )
-                                )
-                            }
-                        }
-
-                        when {
-                            globalSearchQuery.trim().length < 2 -> {
-                                Text(
-                                    text = searchHint,
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(horizontal = 8.dp, vertical = 2.dp),
-                                    textAlign = searchTextAlign,
-                                    color = Color(0xFF111827),
-                                    fontSize = 17.sp,
-                                    lineHeight = 22.sp,
-                                    fontWeight = FontWeight.ExtraBold
-                                )
-                            }
-
-                            results.isEmpty() -> {
-                                Surface(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    shape = RoundedCornerShape(20.dp),
-                                    color = Color(0xFFFFF7ED),
-                                    shadowElevation = 3.dp,
-                                    tonalElevation = 0.dp
-                                ) {
-                                    Text(
-                                        text = "$noResultsText: ${globalSearchQuery.trim()}",
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .padding(horizontal = 16.dp, vertical = 14.dp),
-                                        textAlign = searchTextAlign,
-                                        color = Color(0xFF9A3412),
-                                        fontSize = 15.sp,
-                                        lineHeight = 20.sp,
-                                        fontWeight = FontWeight.Bold
-                                    )
-                                }
-                            }
-
-                            else -> {
-                                LazyColumn(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .heightIn(max = 420.dp)
-                                        .clip(RoundedCornerShape(22.dp))
-                                        .background(Color.White.copy(alpha = 0.96f)),
-                                    verticalArrangement = Arrangement.spacedBy(0.dp)
-                                ) {
-                                    itemsIndexed(
-                                        items = results,
-                                        key = { _, hit -> hit.id ?: hit.title }
-                                    ) { index, hit ->
-                                        val rawKey = (hit.id ?: hit.title).trim()
-                                        val cleanTitle = hit.title.trim()
-
-                                        val exerciseTitleColor = searchTitleColorForResult(
-                                            rawKey = rawKey,
-                                            subtitle = hit.subtitle
-                                        )
-
-                                        Row(
-                                            modifier = Modifier
-                                                .fillMaxWidth()
-                                                .clickable {
-                                                    val resolved =
-                                                        il.kmi.app.domain.ContentRepo.resolveItemKey(
-                                                            rawKey
-                                                        )
-
-                                                    val dialogBelt =
-                                                        resolved?.belt
-                                                            ?: il.kmi.shared.domain.Belt.GREEN
-
-                                                    val dialogTitle =
-                                                        resolved?.itemTitle
-                                                            ?: cleanTitle.ifBlank { rawKey }
-
-                                                    val explanation = Explanations.get(
-                                                        belt = dialogBelt,
-                                                        item = dialogTitle,
-                                                        exerciseId = rawKey
-                                                    )
-
-                                                    val stableKey = if (resolved != null) {
-                                                        listOf(
-                                                            resolved.belt.id,
-                                                            resolved.topicTitle,
-                                                            resolved.itemTitle
-                                                        ).joinToString("::")
-                                                    } else {
-                                                        rawKey.ifBlank { dialogTitle }
-                                                    }
-
-                                                    keyboardController?.hide()
-                                                    focusManager.clearFocus(force = true)
-
-                                                    showGlobalSearch = false
-                                                    globalSearchQuery = ""
-
-                                                    val keyForPrefs =
-                                                        stableKey.ifBlank { dialogTitle }
-
-                                                    val editedExplanation = ctx
-                                                        .getSharedPreferences(
-                                                            "kmi_explanation_overrides",
-                                                            Context.MODE_PRIVATE
-                                                        )
-                                                        .getString(keyForPrefs, null)
-                                                        ?.trim()
-                                                        .orEmpty()
-
-                                                    val favoritesSet = ctx
-                                                        .getSharedPreferences(
-                                                            "kmi_global_favorites",
-                                                            Context.MODE_PRIVATE
-                                                        )
-                                                        .getStringSet(
-                                                            "favorite_exercises",
-                                                            emptySet()
-                                                        )
-                                                        ?: emptySet()
-
-                                                    val noteRoleKey =
-                                                        if (userIsCoach) "coach" else "trainee"
-                                                    val notePrefsKey = "$keyForPrefs::$noteRoleKey"
-
-                                                    val savedUserNote = ctx
-                                                        .getSharedPreferences(
-                                                            "kmi_exercise_user_notes",
-                                                            Context.MODE_PRIVATE
-                                                        )
-                                                        .getString(notePrefsKey, "")
-                                                        ?.trim()
-                                                        .orEmpty()
-
-                                                    premiumExerciseTitle = dialogTitle
-                                                    premiumExerciseBeltName =
-                                                        beltLabelForDialog(dialogBelt)
-                                                    premiumExerciseExplanation =
-                                                        editedExplanation.ifBlank { explanation }
-                                                    premiumExerciseStableKey = keyForPrefs
-                                                    premiumExerciseIsFavorite =
-                                                        favoritesSet.contains(keyForPrefs)
-                                                    premiumExerciseUserNote = savedUserNote
-                                                    premiumExerciseUserNoteTitle =
-                                                        if (userIsCoach) {
-                                                            if (isEnglish) "Coach notes" else "הערות המאמן"
-                                                        } else {
-                                                            if (isEnglish) "Trainee notes" else "הערות המתאמן"
-                                                        }
-                                                    showPremiumExerciseDialog = true
-                                                }
-                                                .padding(horizontal = 12.dp, vertical = 8.dp),
-                                            verticalAlignment = Alignment.CenterVertically
-                                        ) {
-                                            Icon(
-                                                imageVector = Icons.Filled.ChevronLeft,
-                                                contentDescription = null,
-                                                tint = Color(0xFF6D4ED8),
-                                                modifier = Modifier.size(KmiIconSize.tiny)
-                                            )
-
-                                            Spacer(Modifier.width(8.dp))
-
-                                            Column(
-                                                modifier = Modifier.weight(1f),
-                                                horizontalAlignment = searchHorizontalAlignment
-                                            ) {
-                                                Text(
-                                                    text = hit.title,
-                                                    modifier = Modifier.fillMaxWidth(),
-                                                    textAlign = searchTextAlign,
-                                                    fontWeight = FontWeight.Bold,
-                                                    fontSize = 12.5.sp,
-                                                    lineHeight = 15.sp,
-                                                    maxLines = 2,
-                                                    overflow = TextOverflow.Ellipsis,
-                                                    color = exerciseTitleColor
-                                                )
-
-                                                if (!hit.subtitle.isNullOrBlank()) {
-                                                    Spacer(Modifier.height(1.dp))
-
-                                                    Text(
-                                                        text = hit.subtitle!!,
-                                                        modifier = Modifier.fillMaxWidth(),
-                                                        textAlign = searchTextAlign,
-                                                        fontSize = 10.5.sp,
-                                                        lineHeight = 12.sp,
-                                                        fontWeight = FontWeight.Bold,
-                                                        maxLines = 1,
-                                                        overflow = TextOverflow.Ellipsis,
-                                                        color = Color(0xFF64748B)
-                                                    )
-                                                }
-                                            }
-                                        }
-
-                                        if (index != results.lastIndex) {
-                                            HorizontalDivider(
-                                                color = Color(0x18000000),
-                                                thickness = 0.8.dp,
-                                                modifier = Modifier.padding(horizontal = 12.dp)
-                                            )
-                                        }
-                                    }
-                                }
-                            }
-                        }
-
-                        Spacer(Modifier.height(10.dp))
-                    }
-                }
-            }
-        }
+        )
     }
 
     if (showPremiumExerciseDialog) {
