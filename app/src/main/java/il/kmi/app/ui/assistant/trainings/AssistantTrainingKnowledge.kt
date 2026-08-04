@@ -1936,41 +1936,400 @@ In addition, a groin guard is strongly recommended for maximum safety during tra
 
     fun buildCoach(
         list: List<TrainingRow>,
+        branch: String?,
+        group: String?,
         isEnglish: Boolean = false
     ): String {
-        if (list.isEmpty()) {
-            return tr(isEnglish, "לא מצאתי את שם המאמן.", "I could not find the coach name.")
+        val weeklyRows =
+            list
+                .filter { training ->
+                    training.coachName.isNotBlank()
+                }
+                .distinctBy { training ->
+                    listOf(
+                        training.branchName,
+                        TrainingCatalog.normalizeGroupName(
+                            training.groupName
+                        ),
+                        training.dayName,
+                        training.timeRange,
+                        training.coachName
+                    ).joinToString("|")
+                }
+
+        if (weeklyRows.isEmpty()) {
+            return tr(
+                isEnglish,
+                "לא מצאתי מאמן התואם לסניף או לקבוצה שביקשת.",
+                "I could not find a coach matching the requested branch or group."
+            )
         }
 
-        // ✅ תשובה עניינית: המאמן של האימון הקרוב ביותר מתוך הסינון
-        val next = list.minByOrNull { it.startAtMillis }
-            ?: return tr(isEnglish, "לא מצאתי את שם המאמן.", "I could not find the coach name.")
+        val coachesByGroup =
+            weeklyRows
+                .groupBy { training ->
+                    training.groupName
+                }
+                .mapValues { (_, rows) ->
+                    rows
+                        .map { training ->
+                            training.coachName
+                        }
+                        .filter { coachName ->
+                            coachName.isNotBlank()
+                        }
+                        .distinct()
+                }
+                .filterValues { coaches ->
+                    coaches.isNotEmpty()
+                }
 
-        return if (isEnglish) {
-            "The coach is ${next.coachName} (nearest training: ${next.branchName}, group ${next.groupName}, ${next.dayName} ${next.timeRange})."
-        } else {
-            "המאמן הוא ${next.coachName} (באימון הקרוב: ${next.branchName}, קבוצה ${next.groupName}, ${next.dayName} ${next.timeRange})."
+        if (coachesByGroup.isEmpty()) {
+            return tr(
+                isEnglish,
+                "לא מצאתי את שם המאמן.",
+                "I could not find the coach name."
+            )
         }
+
+        if (
+            group != null &&
+            coachesByGroup.size == 1
+        ) {
+            val coaches =
+                coachesByGroup.values
+                    .first()
+                    .joinToString(", ")
+
+            return if (isEnglish) {
+                buildString {
+                    append("The coach")
+
+                    if (coachesByGroup.values.first().size > 1) {
+                        append("es are ")
+                    } else {
+                        append(" is ")
+                    }
+
+                    append(coaches)
+
+                    if (!branch.isNullOrBlank()) {
+                        append(" at ")
+                        append(branch)
+                    }
+
+                    append(" for ")
+                    append(group)
+                    append(".")
+                }
+            } else {
+                buildString {
+                    append(
+                        if (
+                            coachesByGroup.values
+                                .first()
+                                .size > 1
+                        ) {
+                            "המאמנים"
+                        } else {
+                            "המאמן"
+                        }
+                    )
+
+                    if (!branch.isNullOrBlank()) {
+                        append(" בסניף ")
+                        append(branch)
+                    }
+
+                    append(" לקבוצת ")
+                    append(group)
+                    append(" הם: ")
+                    append(coaches)
+                    append(".")
+                }
+            }
+        }
+
+        return buildString {
+            if (isEnglish) {
+                if (!branch.isNullOrBlank()) {
+                    append("Coaches at ")
+                    append(branch)
+                    append(":\n")
+                } else {
+                    append("Coaches found:\n")
+                }
+            } else {
+                if (!branch.isNullOrBlank()) {
+                    append("המאמנים בסניף ")
+                    append(branch)
+                    append(":\n")
+                } else {
+                    append("המאמנים שמצאתי:\n")
+                }
+            }
+
+            coachesByGroup.forEach { (groupName, coaches) ->
+                append("• ")
+
+                if (isEnglish) {
+                    append(groupName)
+                    append(": ")
+                } else {
+                    append("קבוצת ")
+                    append(groupName)
+                    append(": ")
+                }
+
+                append(
+                    coaches.joinToString(", ")
+                )
+                append('\n')
+            }
+        }.trim()
     }
 
     fun buildLocation(
+        branch: String?,
         list: List<TrainingRow>,
         isEnglish: Boolean = false
     ): String {
-        val locs = list.map { it.location }.distinct()
-        return when (locs.size) {
-            0 -> tr(isEnglish, "לא מצאתי את מיקום האימון.", "I could not find the training location.")
-            1 -> if (isEnglish) {
-                "The location is: ${locs.first()}."
+        val requestedBranches =
+            if (!branch.isNullOrBlank()) {
+                branch
+                    .split(
+                        ',',
+                        ';',
+                        '|',
+                        '\n'
+                    )
+                    .map { branchName ->
+                        branchName.trim()
+                    }
+                    .filter { branchName ->
+                        branchName.isNotBlank()
+                    }
+                    .distinct()
             } else {
-                "המקום הוא: ${locs.first()}."
+                list
+                    .map { training ->
+                        training.branchName.trim()
+                    }
+                    .filter { branchName ->
+                        branchName.isNotBlank()
+                    }
+                    .distinct()
             }
-            else -> if (isEnglish) {
-                "Possible training locations:\n${locs.joinToString("\n")}"
+
+        if (requestedBranches.isEmpty()) {
+            return tr(
+                isEnglish,
+                "לא מצאתי את הסניף שביקשת.",
+                "I could not find the requested branch."
+            )
+        }
+
+        val branchAddresses =
+            requestedBranches
+                .mapNotNull { branchName ->
+                    val address =
+                        TrainingCatalog
+                            .addressFor(
+                                branchName,
+                                isEnglish
+                            )
+                            .trim()
+
+                    address
+                        .takeIf {
+                            it.isNotBlank()
+                        }
+                        ?.let {
+                            branchName to address
+                        }
+                }
+
+        if (branchAddresses.isEmpty()) {
+            return tr(
+                isEnglish,
+                "לא מצאתי כתובת לסניף שביקשת.",
+                "I could not find an address for the requested branch."
+            )
+        }
+
+        if (branchAddresses.size == 1) {
+            val (branchName, address) =
+                branchAddresses.first()
+
+            return if (isEnglish) {
+                "The address of $branchName is:\n$address"
             } else {
-                "מקומות האימון האפשריים:\n${locs.joinToString("\n")}"
+                "הכתובת של סניף $branchName היא:\n$address"
             }
         }
+
+        return buildString {
+            append(
+                if (isEnglish) {
+                    "Branch addresses:\n"
+                } else {
+                    "כתובות הסניפים:\n"
+                }
+            )
+
+            branchAddresses.forEach { (branchName, address) ->
+                append("• ")
+                append(branchName)
+                append(":\n")
+                append(address)
+                append('\n')
+            }
+        }.trim()
+    }
+
+    fun buildTrainingTimes(
+        list: List<TrainingRow>,
+        branch: String?,
+        group: String?,
+        day: String?,
+        isEnglish: Boolean = false
+    ): String {
+        val weeklyRows =
+            list
+                .distinctBy { training ->
+                    listOf(
+                        training.branchName,
+                        TrainingCatalog.normalizeGroupName(
+                            training.groupName
+                        ),
+                        training.dayName,
+                        training.timeRange,
+                        training.coachName
+                    ).joinToString("|")
+                }
+                .sortedWith(
+                    compareBy<TrainingRow> {
+                        it.branchName
+                    }
+                        .thenBy {
+                            it.groupName
+                        }
+                        .thenBy {
+                            EntityExtractor.getDayIndex(
+                                it.dayName
+                                    .replace("יום ", "")
+                                    .trim()
+                            ) ?: Int.MAX_VALUE
+                        }
+                        .thenBy {
+                            EntityExtractor.parseStartMinutes(
+                                it.timeRange
+                            ) ?: Int.MAX_VALUE
+                        }
+                )
+
+        if (weeklyRows.isEmpty()) {
+            return tr(
+                isEnglish,
+                "לא מצאתי שעות אימון התואמות לבקשה.",
+                "I could not find training times matching the request."
+            )
+        }
+
+        return buildString {
+            if (isEnglish) {
+                when {
+                    branch != null && group != null ->
+                        append(
+                            "Training times at $branch for $group:\n"
+                        )
+
+                    branch != null ->
+                        append(
+                            "Training times at $branch:\n"
+                        )
+
+                    group != null ->
+                        append(
+                            "Training times for $group:\n"
+                        )
+
+                    else ->
+                        append(
+                            "Training times:\n"
+                        )
+                }
+            } else {
+                when {
+                    branch != null && group != null ->
+                        append(
+                            "שעות האימון בסניף $branch לקבוצת $group:\n"
+                        )
+
+                    branch != null ->
+                        append(
+                            "שעות האימון בסניף $branch:\n"
+                        )
+
+                    group != null ->
+                        append(
+                            "שעות האימון לקבוצת $group:\n"
+                        )
+
+                    else ->
+                        append(
+                            "שעות האימון:\n"
+                        )
+                }
+            }
+
+            weeklyRows
+                .groupBy { training ->
+                    training.groupName
+                }
+                .forEach { (groupName, groupRows) ->
+                    if (
+                        group == null ||
+                        weeklyRows
+                            .map { it.groupName }
+                            .distinct()
+                            .size > 1
+                    ) {
+                        append('\n')
+
+                        if (isEnglish) {
+                            append("Group: ")
+                        } else {
+                            append("קבוצה: ")
+                        }
+
+                        append(groupName)
+                        append('\n')
+                    }
+
+                    groupRows.forEach { training ->
+                        append("• ")
+                        append(training.dayName)
+                        append(": ")
+                        append(training.timeRange)
+
+                        if (
+                            day == null &&
+                            training.coachName.isNotBlank()
+                        ) {
+                            if (isEnglish) {
+                                append(" — Coach: ")
+                            } else {
+                                append(" — מאמן: ")
+                            }
+
+                            append(training.coachName)
+                        }
+
+                        append('\n')
+                    }
+                }
+        }.trim()
     }
 
     fun buildNextTraining(
@@ -2070,6 +2429,96 @@ In addition, a groin guard is strongly recommended for maximum safety during tra
                     "בסניף ${next.branchName}, " +
                     "לקבוצת ${next.groupName}. " +
                     "המאמן הוא ${next.coachName}."
+        }
+    }
+
+    fun buildLastTraining(
+        list: List<TrainingRow>,
+        isEnglish: Boolean = false
+    ): String {
+        val last =
+            list.maxByOrNull { training ->
+                training.startAtMillis
+            } ?: return tr(
+                isEnglish,
+                "לא מצאתי אימון קודם.",
+                "I could not find a previous training."
+            )
+
+        val locale =
+            if (isEnglish) {
+                Locale.US
+            } else {
+                Locale("he", "IL")
+            }
+
+        val dateText =
+            SimpleDateFormat(
+                "dd/MM/yyyy",
+                locale
+            ).format(
+                Date(last.startAtMillis)
+            )
+
+        val startTime =
+            last.timeRange
+                .substringBefore("–")
+                .substringBefore("-")
+                .trim()
+
+        val cleanDay =
+            last.dayName
+                .replace("יום ", "")
+                .trim()
+
+        return if (isEnglish) {
+            buildString {
+                append("Your last training was on ")
+                append(cleanDay)
+                append(", ")
+                append(dateText)
+                append(" at ")
+                append(startTime)
+                append(".")
+                append("\nBranch: ")
+                append(last.branchName)
+                append("\nGroup: ")
+                append(last.groupName)
+
+                if (last.location.isNotBlank()) {
+                    append("\nLocation: ")
+                    append(last.location)
+                }
+
+                if (last.coachName.isNotBlank()) {
+                    append("\nCoach: ")
+                    append(last.coachName)
+                }
+            }
+        } else {
+            buildString {
+                append("האימון האחרון שלך היה ביום ")
+                append(cleanDay)
+                append(", ")
+                append(dateText)
+                append(" בשעה ")
+                append(startTime)
+                append(".")
+                append("\nסניף: ")
+                append(last.branchName)
+                append("\nקבוצה: ")
+                append(last.groupName)
+
+                if (last.location.isNotBlank()) {
+                    append("\nמיקום: ")
+                    append(last.location)
+                }
+
+                if (last.coachName.isNotBlank()) {
+                    append("\nמאמן: ")
+                    append(last.coachName)
+                }
+            }
         }
     }
 
@@ -2373,16 +2822,125 @@ object AssistantTrainingKnowledge {
         val wantsNextWeek =
             EntityExtractor.wantsNextWeek(norm)
 
-        val wantsTrainingList =
-            EntityExtractor.wantsTrainingList(norm)
+        /*
+         * שאלה מפורשת על האימון הבא היא תמיד בקשה
+         * לאימון יחיד — גם אם שכבת הניתוב הוסיפה לשאלה
+         * את הביטוי "רשימת אימונים".
+         */
+        val asksForSingleNextTraining =
+            intent == AssistantIntent.ASK_NEXT_TRAINING &&
+                    listOf(
+                        "האימון הבא",
+                        "אימון הבא",
+                        "האימון הקרוב",
+                        "אימון קרוב",
+                        "הבא שלי",
+                        "הקרוב שלי",
+                        "מתי אני מתאמן",
+                        "next training",
+                        "my next training",
+                        "upcoming training",
+                        "nearest training",
+                        "when do i train next"
+                    ).any { phrase ->
+                        phrase in norm
+                    } &&
+                    listOf(
+                        "האימונים הבאים",
+                        "אימונים הבאים",
+                        "האימונים הקרובים",
+                        "אימונים קרובים",
+                        "next trainings",
+                        "upcoming trainings",
+                        "upcoming classes",
+                        "next classes",
+                        "next workouts",
+                        "this week",
+                        "next week",
+                        "השבוע הקרוב",
+                        "שבוע הבא"
+                    ).none { phrase ->
+                        phrase in norm
+                    }
 
         /*
-         * שומרים בנפרד אם המשתמש ביקש מספר אימונים מפורש.
-         * ברירת המחדל 5 משמשת רק כאשר באמת נדרשת רשימה,
-         * ואינה הופכת שאלה על אימון יחיד לבקשת רשימה.
+         * שאלה על "האימון האחרון" היא בקשה לאימון עבר
+         * יחיד. לעומת זאת, "האימונים האחרונים" היא
+         * בקשה לרשימת אימוני עבר.
+         */
+        val asksForSinglePastTraining =
+            wantsPast &&
+                    listOf(
+                        "האימון האחרון",
+                        "אימון אחרון",
+                        "האימון הקודם",
+                        "אימון קודם",
+                        "מתי התאמנתי לאחרונה",
+                        "מתי היה לי אימון לאחרונה",
+                        "last training",
+                        "my last training",
+                        "most recent training",
+                        "previous training"
+                    ).any { phrase ->
+                        phrase in norm
+                    } &&
+                    listOf(
+                        "האימונים האחרונים",
+                        "אימונים אחרונים",
+                        "האימונים הקודמים",
+                        "אימונים קודמים",
+                        "באילו אימונים הייתי",
+                        "last trainings",
+                        "my last trainings",
+                        "recent trainings",
+                        "past trainings",
+                        "previous trainings",
+                        "trainings i attended",
+                        "trainings i had",
+                        "workouts i attended"
+                    ).none { phrase ->
+                        phrase in norm
+                    }
+
+        /*
+         * הביטוי "רשימת אימונים" עשוי להתווסף בשכבת הניתוב,
+         * ולכן הוא אינו רשאי להפוך שאלה מפורשת על אימון יחיד
+         * לבקשה של כמה אימונים.
+         */
+        val wantsTrainingList =
+            EntityExtractor.wantsTrainingList(norm) &&
+                    !asksForSingleNextTraining &&
+                    !asksForSinglePastTraining
+
+        /*
+         * מספר אימונים רלוונטי רק לבקשת רשימה.
+         * בשאלה על אימון יחיד תמיד מוחזר אימון אחד.
          */
         val explicitlyRequestedTrainingCount =
-            EntityExtractor.requestedTrainingCount(norm)
+            if (
+                asksForSingleNextTraining ||
+                asksForSinglePastTraining
+            ) {
+                null
+            } else {
+                EntityExtractor.requestedTrainingCount(norm)
+            }
+
+        /*
+         * זהו המקור היחיד שקובע אם יש להחזיר רשימה.
+         * שאלה על האימון הבא או האחרון מחזירה אימון אחד.
+         */
+        val wantsMultipleTrainings =
+            !asksForSingleNextTraining &&
+                    !asksForSinglePastTraining &&
+                    (
+                            wantsTrainingList ||
+                                    wantsUpcoming ||
+                                    wantsPast ||
+                                    wantsThisWeek ||
+                                    wantsNextWeek ||
+                                    explicitlyRequestedTrainingCount != null
+                            )
 
         /*
          * בקשה על שבוע שלם מקבלת רשימה רחבה.
@@ -2395,11 +2953,11 @@ object AssistantTrainingKnowledge {
                             wantsNextWeek ->
                         20
 
-                    wantsTrainingList ->
+                    wantsMultipleTrainings ->
                         8
 
                     else ->
-                        5
+                        1
                 }
 
         // ישויות מפורשות מהשאלה
@@ -2421,7 +2979,7 @@ object AssistantTrainingKnowledge {
                                     intent == AssistantIntent.ASK_NEXT_TRAINING ||
                                     intent == AssistantIntent.ASK_WHAT_TODAY ||
                                     wantsTrainingList ||
-                                    wantsUpcoming ||
+                                    (wantsUpcoming && !asksForSingleNextTraining) ||
                                     wantsPast ||
                                     wantsThisWeek ||
                                     wantsNextWeek
@@ -2504,10 +3062,36 @@ object AssistantTrainingKnowledge {
                     ("לוז" in norm) || ("לו\"ז" in norm) || ("לוח" in norm)
 
         val isNextOrUpcoming =
-            (intent == AssistantIntent.ASK_NEXT_TRAINING) || wantsUpcoming
+            (intent == AssistantIntent.ASK_NEXT_TRAINING) ||
+                    wantsUpcoming
 
         if (isNextOrUpcoming || isScheduleQuestion) {
             if (!isPersonalQuestion && explicitGroup == null) {
+                group = null
+            }
+
+            if (explicitDay == null) {
+                day = null
+            }
+        }
+
+        /*
+         * כאשר המשתמש מבקש מידע על סניף מסוים,
+         * אסור להשתמש בקבוצה או ביום שנשמרו משאלה קודמת.
+         *
+         * קבוצה ויום מסננים את התוצאה רק כאשר הם
+         * נאמרו במפורש בשאלה הנוכחית.
+         */
+        val isExplicitBranchInformationQuestion =
+            explicitBranch != null &&
+                    (
+                            intent == AssistantIntent.ASK_COACH ||
+                                    intent == AssistantIntent.ASK_LOCATION ||
+                                    intent == AssistantIntent.ASK_TIME
+                            )
+
+        if (isExplicitBranchInformationQuestion) {
+            if (explicitGroup == null) {
                 group = null
             }
 
@@ -2604,15 +3188,31 @@ object AssistantTrainingKnowledge {
             wantsNextWeek
         ) {
             seq = seq.filter { training ->
-                val status =
-                    statusFor(training)
+                val effectiveEndMillis =
+                    training.endAtMillis
+                        ?: training.startAtMillis
 
-                status.isScheduled ||
-                        status.isOngoing ||
-                        (
-                                shouldIncludeCancelledInList &&
-                                        status.isCancelled
-                                )
+                /*
+                 * בבקשת אימונים עתידיים אסור להחזיר
+                 * שום אימון שכבר הסתיים — גם אם הוא
+                 * מסומן כמבוטל בגלל חג.
+                 */
+                val isCurrentOrFutureTraining =
+                    effectiveEndMillis > nowMillis
+
+                if (!isCurrentOrFutureTraining) {
+                    false
+                } else {
+                    val status =
+                        statusFor(training)
+
+                    status.isScheduled ||
+                            status.isOngoing ||
+                            (
+                                    shouldIncludeCancelledInList &&
+                                            status.isCancelled
+                                    )
+                }
             }
         }
 
@@ -2765,17 +3365,24 @@ object AssistantTrainingKnowledge {
             }
 
         /*
-         * ברשימת שבוע או רשימת אימונים משאירים גם
-         * אימונים מבוטלים כדי להציג את הסטטוס והסיבה.
-         * בבקשה לאימון יחיד מדלגים עליהם.
+         * אימון שבוטל אינו נחשב לאימון שהמשתמש התאמן בו.
+         * ברשימת שבוע עתידית עדיין ניתן להציג אימון מבוטל
+         * כדי להסביר שהוא מופיע בלוח אך אינו מתקיים.
          */
         var results =
-            if (shouldIncludeCancelledInList || wantsPast) {
-                matchedResults
-            } else {
-                matchedResults.filter { training ->
-                    !statusFor(training).isCancelled
-                }
+            when {
+                wantsPast ->
+                    matchedResults.filter { training ->
+                        !statusFor(training).isCancelled
+                    }
+
+                shouldIncludeCancelledInList ->
+                    matchedResults
+
+                else ->
+                    matchedResults.filter { training ->
+                        !statusFor(training).isCancelled
+                    }
             }
 
         results =
@@ -3075,11 +3682,7 @@ object AssistantTrainingKnowledge {
    * שממנו נבנית התשובה הטקסטואלית.
    */
         val shouldCreateTrainingCards =
-            wantsTrainingList ||
-                    wantsUpcoming ||
-                    wantsPast ||
-                    wantsThisWeek ||
-                    wantsNextWeek
+            wantsMultipleTrainings
 
         val structuredCards =
             if (shouldCreateTrainingCards) {
@@ -3187,11 +3790,27 @@ object AssistantTrainingKnowledge {
                     isEnglish
                 )
 
-            wantsTrainingList ||
-                    wantsUpcoming ||
-                    wantsPast ||
-                    wantsThisWeek ||
-                    wantsNextWeek ->
+            /*
+             * שאלות על אימון יחיד מקבלות קדימות על פני
+             * מילות ניתוב כמו "רשימת אימונים".
+             */
+            asksForSingleNextTraining ->
+                AnswerBuilder.buildNextTraining(
+                    list = results.take(1),
+                    isEnglish = isEnglish
+                )
+
+            asksForSinglePastTraining ->
+                AnswerBuilder.buildLastTraining(
+                    list = results.take(1),
+                    isEnglish = isEnglish
+                )
+
+            /*
+             * בקשת רבים מחזירה טקסט מסכם ובמקביל
+             * כרטיס מובנה ונפרד לכל אימון.
+             */
+            wantsMultipleTrainings ->
                 AnswerBuilder.buildUpcomingTrainings(
                     list = results,
                     branch = branch,
@@ -3204,58 +3823,32 @@ object AssistantTrainingKnowledge {
                     }
                 )
 
-            intent == AssistantIntent.ASK_DURATION -> AnswerBuilder.buildDuration(results, isEnglish)
-            intent == AssistantIntent.ASK_COACH    -> AnswerBuilder.buildCoach(results, isEnglish)
+            intent == AssistantIntent.ASK_DURATION ->
+                AnswerBuilder.buildDuration(
+                    results,
+                    isEnglish
+                )
+
+            intent == AssistantIntent.ASK_COACH ->
+                AnswerBuilder.buildCoach(
+                    list = results,
+                    branch = branch,
+                    group = group,
+                    isEnglish = isEnglish
+                )
+
             intent == AssistantIntent.ASK_LOCATION ->
-                AnswerBuilder.buildLocation(results, isEnglish)
+                AnswerBuilder.buildLocation(
+                    branch = branch,
+                    list = results,
+                    isEnglish = isEnglish
+                )
 
-            intent == AssistantIntent.ASK_NEXT_TRAINING -> {
-                val asksForMultipleTrainings =
-                    wantsThisWeek ||
-                            wantsNextWeek ||
-                            explicitlyRequestedTrainingCount != null ||
-                            listOf(
-                                "רשימת אימונים",
-                                "רשימה של אימונים",
-                                "תן רשימת אימונים",
-                                "תציג אימונים",
-                                "האימונים הבאים",
-                                "אימונים הבאים",
-                                "האימונים הקרובים",
-                                "אימונים קרובים",
-                                "השבוע הקרוב",
-                                "שבוע הבא",
-                                "training list",
-                                "list of trainings",
-                                "next trainings",
-                                "upcoming trainings",
-                                "upcoming classes",
-                                "next classes",
-                                "next workouts",
-                                "this week",
-                                "next week"
-                            ).any { phrase ->
-                                phrase in norm
-                            }
-
-                if (asksForMultipleTrainings) {
-                    AnswerBuilder.buildUpcomingTrainings(
-                        list = results,
-                        branch = branch,
-                        group = group,
-                        limit = requestedTrainingCount,
-                        isEnglish = isEnglish,
-                        statusProvider = { training ->
-                            statusFor(training)
-                        }
-                    )
-                } else {
-                    AnswerBuilder.buildNextTraining(
-                        list = results,
-                        isEnglish = isEnglish
-                    )
-                }
-            }
+            intent == AssistantIntent.ASK_NEXT_TRAINING ->
+                AnswerBuilder.buildNextTraining(
+                    list = results.take(1),
+                    isEnglish = isEnglish
+                )
 
             intent == AssistantIntent.ASK_EQUIPMENT ->
                 AnswerBuilder.buildEquipment(isEnglish)
@@ -3267,21 +3860,55 @@ object AssistantTrainingKnowledge {
                 )
 
             intent == AssistantIntent.ASK_WHAT_TODAY -> {
-                val todayDay = EntityExtractor.detectDay("היום")
-                val todayList = results.filter { it.dayName.contains(todayDay!!) }
-                AnswerBuilder.buildFullSchedule(todayList, branch, group, todayDay, isEnglish)
+                val todayDay =
+                    EntityExtractor.detectDay("היום")
+
+                val todayList =
+                    results.filter { training ->
+                        training.dayName.contains(
+                            todayDay.orEmpty()
+                        )
+                    }
+
+                AnswerBuilder.buildFullSchedule(
+                    list = todayList,
+                    branch = branch,
+                    group = group,
+                    day = todayDay,
+                    isEnglish = isEnglish
+                )
             }
 
             intent == AssistantIntent.ASK_TIME ->
-                AnswerBuilder.buildFullSchedule(results, branch, group, day, isEnglish)
+                AnswerBuilder.buildTrainingTimes(
+                    list = results,
+                    branch = branch,
+                    group = group,
+                    day = day,
+                    isEnglish = isEnglish
+                )
+
             intent == AssistantIntent.ASK_WEEKLY_COUNT ->
-                AnswerBuilder.buildWeeklyCountAnswer(allTrainings, branch, group, isEnglish)
+                AnswerBuilder.buildWeeklyCountAnswer(
+                    allTrainings,
+                    branch,
+                    group,
+                    isEnglish
+                )
 
             intent == AssistantIntent.ASK_SPECIAL_WEEK ->
-                AnswerBuilder.buildSpecialWeekAnswer(isEnglish)
+                AnswerBuilder.buildSpecialWeekAnswer(
+                    isEnglish
+                )
 
             else ->
-                AnswerBuilder.buildFullSchedule(results, branch, group, day, isEnglish)
+                AnswerBuilder.buildFullSchedule(
+                    list = results,
+                    branch = branch,
+                    group = group,
+                    day = day,
+                    isEnglish = isEnglish
+                )
         }
 
         memory.setLastAnswerContext(answer)

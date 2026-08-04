@@ -934,6 +934,50 @@ private fun normalizeRecognizedExerciseSpeech(
         .trim()
 }
 
+/*
+ * מנוע זיהוי הדיבור מפרק לעיתים את המילה "מהם"
+ * לשתי מילים: "מה עם".
+ *
+ * התיקון מתבצע רק לפני שם עצם ברבים, כדי לא לפגוע
+ * בשאלה תקינה כמו "מה עם האימון ביום חמישי".
+ */
+private fun normalizeRecognizedAssistantSpeech(
+    raw: String
+): String {
+    val clean =
+        raw
+            .trim()
+            .replace(
+                Regex("""\s+"""),
+                " "
+            )
+
+    if (clean.isBlank()) {
+        return clean
+    }
+
+    return clean
+        .replace(
+            Regex(
+                pattern =
+                    """^מה\s+עם\s+((?:ה)?(?:אימונים|תרגילים|נושאים|סניפים|מאמנים|ימים|שעות|קבוצות|חגורות))(?=\s|$)"""
+            ),
+            "מהם $1"
+        )
+        .replace(
+            Regex(
+                pattern =
+                    """^מה\s+הם\s+((?:ה)?(?:אימונים|תרגילים|נושאים|סניפים|מאמנים|ימים|שעות|קבוצות|חגורות))(?=\s|$)"""
+            ),
+            "מהם $1"
+        )
+        .replace(
+            Regex("""\s+"""),
+            " "
+        )
+        .trim()
+}
+
 private fun resolveExerciseAlias(raw: String): String {
     val q = normalizeExerciseQuery(raw)
 
@@ -2525,7 +2569,7 @@ fun AiAssistantDialog(
                 val rawSpoken =
                     best.text.trim()
 
-                val spoken =
+                val modeNormalizedSpoken =
                     if (
                         assistantMode ==
                         AssistantMode.EXERCISE
@@ -2536,6 +2580,15 @@ fun AiAssistantDialog(
                     } else {
                         rawSpoken
                     }
+
+                /*
+                 * תיקון טעויות תמלול כלליות מתבצע לאחר
+                 * התיקונים הייעודיים למצב הפעיל.
+                 */
+                val spoken =
+                    normalizeRecognizedAssistantSpeech(
+                        modeNormalizedSpoken
+                    )
 
                 if (spoken.isBlank()) {
                     speechCanRetry = true
@@ -2731,22 +2784,22 @@ fun AiAssistantDialog(
         speechStatusMessage = null
         isThinking = true
 
-        messages = if (
-            assistantMode == AssistantMode.EXERCISE ||
-            assistantMode == AssistantMode.KMI_MATERIAL
-        ) {
-            listOf(
-                AiMessage(
-                    fromUser = true,
-                    text = question
-                )
-            )
-        } else {
-            messages + AiMessage(
+        /*
+         * בכל שליחת שאלה מתחילים את אזור התוצאה
+         * מהשאלה הנוכחית. כך השאלה תמיד מוצגת בראש
+         * והתשובה החדשה מופיעה ישירות מתחתיה.
+         *
+         * זיכרון ההקשר נשמר ב־AssistantMemory ולכן
+         * אין צורך להשאיר את כל הכרטיסים הקודמים במסך.
+         */
+        messages = listOf(
+            AiMessage(
                 fromUser = true,
                 text = question
             )
-        }
+        )
+
+        scrollToTop()
 
         assistantMemoryLocal.saveLastQuestion(question)
 
@@ -3078,20 +3131,17 @@ fun AiAssistantDialog(
             materialItems = materialItems
         )
 
-        messages = if (
-            assistantMode == AssistantMode.EXERCISE ||
-            assistantMode == AssistantMode.KMI_MATERIAL
-        ) {
-            listOf(
-                AiMessage(
-                    fromUser = true,
-                    text = question
-                ),
-                aiMessage
-            )
-        } else {
-            messages + aiMessage
-        }
+        /*
+         * השאלה הנוכחית נשארת בראש והתשובה מוצגת
+         * מיד מתחתיה בכל מצבי העוזר.
+         */
+        messages = listOf(
+            AiMessage(
+                fromUser = true,
+                text = question
+            ),
+            aiMessage
+        )
 
         lastAiAnswer = finalAnswer
         isThinking = false
@@ -3121,14 +3171,12 @@ fun AiAssistantDialog(
             answer = finalAnswer
         )
 
-        if (
-            assistantMode == AssistantMode.EXERCISE ||
-            assistantMode == AssistantMode.KMI_MATERIAL
-        ) {
-            scrollToTop()
-        } else {
-            scrollToBottom()
-        }
+        /*
+         * לאחר קבלת התשובה חוזרים לתחילת אזור השיחה,
+         * שבו נמצאת השאלה הנוכחית. המשתמש רואה את
+         * השאלה ואת תחילת התשובה בלי לגלול לאחור.
+         */
+        scrollToTop()
 
         val spokenAnswer = when (assistantResult) {
             is AssistantResult.Clarification ->
@@ -4729,25 +4777,12 @@ fun AiAssistantDialog(
                             }
 
                             LaunchedEffect(messages.size) {
-                                val latestMessage =
-                                    messages.lastOrNull()
-
-                                val receivedTrainingCards =
-                                    latestMessage != null &&
-                                            !latestMessage.fromUser &&
-                                            latestMessage.trainingItems.isNotEmpty()
-
-                                if (receivedTrainingCards) {
+                                if (messages.isNotEmpty()) {
                                     /*
-                                     * תשובת אימונים מכילה מספר כרטיסים.
-                                     * מציגים את תחילת התשובה ולא את הכרטיס האחרון.
+                                     * בכל שאלה ובכל סוג תשובה מציגים את
+                                     * תחילת השיחה הנוכחית ולא את תחתיתה.
                                      */
                                     scrollToTop()
-                                } else {
-                                    /*
-                                     * בשיחה רגילה נשמרת ההתנהגות הקיימת.
-                                     */
-                                    scrollToBottom()
                                 }
                             }
                         }
