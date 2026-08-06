@@ -136,10 +136,27 @@ data class AssistantConversationContext(
             intent = intent ?: AssistantIntent.UNKNOWN
         )
 
+        /*
+         * תשובה ללא תוצאות חדשות אינה מוחקת את
+         * התוצאות הקודמות.
+         *
+         * כך גם אם שאלת המשך לא הובנה, המשתמש עדיין
+         * יכול לומר "התכוונתי לתרגיל בחגורה ירוקה"
+         * או "תסביר את האפשרות השנייה".
+         */
+        val rememberedResults =
+            if (results.isNotEmpty()) {
+                results.take(MAX_RESULTS)
+            } else {
+                lastResults
+            }
+
         return copy(
             lastAnswer = cleanAnswer,
-            lastResults = results.take(MAX_RESULTS),
-            recentTurns = (recentTurns + turn).takeLast(MAX_RECENT_TURNS),
+            lastResults = rememberedResults,
+            recentTurns =
+                (recentTurns + turn)
+                    .takeLast(MAX_RECENT_TURNS),
             awaitingClarification = false,
             clarificationQuestion = null,
             clarificationOptions = emptyList(),
@@ -209,9 +226,13 @@ data class AssistantConversationContext(
     }
 
     companion object {
-        private const val MAX_RECENT_TURNS = 6
-        private const val MAX_RESULTS = 8
-        private const val MAX_CLARIFICATION_OPTIONS = 5
-        private const val MAX_ANSWER_PREVIEW_LENGTH = 500
+        /*
+         * שומרים הקשר רחב מספיק לשאלות המשך,
+         * בלי להפוך את הזיכרון לבלתי מוגבל.
+         */
+        private const val MAX_RECENT_TURNS = 16
+        private const val MAX_RESULTS = 50
+        private const val MAX_CLARIFICATION_OPTIONS = 20
+        private const val MAX_ANSWER_PREVIEW_LENGTH = 1_000
     }
 }

@@ -1,5 +1,7 @@
 package il.kmi.app.ui.assistant.core
 
+import il.kmi.shared.domain.Belt
+
 /**
  * תוצר מלא של סבב שיחה אחד.
  *
@@ -63,6 +65,22 @@ class AssistantOrchestrator(
                 resolution = resolution,
                 context = conversationContext
             )
+        }
+
+        /*
+         * קודם בודקים אם המשתמש מתקן או משלים את
+         * השאלה הקודמת באמצעות חגורה.
+         *
+         * לדוגמה:
+         * "התכוונתי לתרגיל שמצאת בחגורה ירוקה"
+         * "לא, התרגיל בחגורה הכחולה"
+         * "זה שמופיע בחגורה חומה"
+         */
+        resolveContextualBeltCorrection(
+            question = cleanQuestion,
+            isEnglish = isEnglish
+        )?.let { contextualResponse ->
+            return contextualResponse
         }
 
         /**
@@ -352,6 +370,268 @@ class AssistantOrchestrator(
     }
 
     /**
+     * פותר תיקון או השלמה שמתייחסים לשאלה הקודמת
+     * באמצעות חגורה.
+     *
+     * אם קיימת תוצאה קודמת יחידה בחגורה המבוקשת,
+     * היא נבחרת ישירות.
+     *
+     * אם אין תוצאה כזאת ברשימה האחרונה, מריצים מחדש
+     * את השאלה הקודמת עם החגורה החדשה.
+     */
+    private fun resolveContextualBeltCorrection(
+        question: String,
+        isEnglish: Boolean
+    ): AssistantOrchestratorResponse? {
+        if (!conversationContext.hasConversationSubject()) {
+            return null
+        }
+
+        val normalizedQuestion =
+            normalizeSelectionText(question)
+
+        val hasContextReference =
+            listOf(
+                "התכוונתי",
+                "אני מתכוון",
+                "לא לזה",
+                "לא זה",
+                "זה שמצאת",
+                "זה שהצגת",
+                "התרגיל שמצאת",
+                "התרגיל שהצגת",
+                "התרגיל בחגורה",
+                "זה שבחגורה",
+                "בחגורה",
+                "אותו תרגיל",
+                "אותו אחד",
+                "meant",
+                "i mean",
+                "the one you found",
+                "the exercise you found",
+                "the one in the",
+                "in the belt"
+            ).any { marker ->
+                marker in normalizedQuestion
+            }
+
+        if (!hasContextReference) {
+            return null
+        }
+
+        val referencedBelt =
+            detectReferencedBelt(question)
+                ?: return null
+
+        /*
+         * אם נשמרה תוצאה יחידה מהחגורה שנאמרה,
+         * בוחרים אותה ישירות ומבקשים עליה הסבר.
+         */
+        val matchingPreviousResults =
+            conversationContext.lastResults
+                .filter { result ->
+                    result.belt == referencedBelt
+                }
+
+        if (matchingPreviousResults.size == 1) {
+            return processSelectedContextResult(
+                selected = matchingPreviousResults.first(),
+                isEnglish = isEnglish,
+                forcedIntent =
+                    AssistantIntent.EXPLAIN_EXERCISE
+            )
+        }
+
+        /*
+         * אם לא ניתן לבחור תוצאה יחידה, משתמשים
+         * בשאלה הקודמת כנושא ומחליפים רק את החגורה.
+         */
+        val previousQuestion =
+            conversationContext.lastResolvedQuestion
+                ?.trim()
+                ?.takeIf { previous ->
+                    previous.isNotBlank() &&
+                            !previous.equals(
+                                question,
+                                ignoreCase = true
+                            )
+                }
+                ?: conversationContext.lastUserQuestion
+                    ?.trim()
+                    ?.takeIf { previous ->
+                        previous.isNotBlank() &&
+                                !previous.equals(
+                                    question,
+                                    ignoreCase = true
+                                )
+                    }
+                ?: return null
+
+        val previousQuestionWithoutBelt =
+            removeBeltReferences(previousQuestion)
+                .trim()
+                .takeIf { previous ->
+                    previous.isNotBlank()
+                }
+                ?: return null
+
+        val contextualQuestion =
+            buildString {
+                append(previousQuestionWithoutBelt)
+                append(" ")
+                append(referencedBelt.heb)
+            }
+                .replace(
+                    Regex("\\s+"),
+                    " "
+                )
+                .trim()
+
+        val contextWithCorrectedBelt =
+            conversationContext
+                .clearClarification()
+                .copy(
+                    belt = referencedBelt,
+                    lastUserQuestion = question,
+                    lastResolvedQuestion =
+                        contextualQuestion,
+                    updatedAtMillis =
+                        System.currentTimeMillis()
+                )
+
+        val detectedResolution =
+            AssistantIntentResolver.resolve(
+                question = contextualQuestion,
+                context = contextWithCorrectedBelt
+            )
+
+        /*
+         * המשתמש מתקן את החגורה של התרגיל שעליו
+         * ביקש הסבר. אין לשמר כאן LIST_EXERCISES
+         * או MATERIAL מהתשובה הקודמת.
+         */
+        val correctedIntent: AssistantIntent =
+            AssistantIntent.EXPLAIN_EXERCISE
+
+        val correctedSource: AssistantKnowledgeSource =
+            AssistantKnowledgeSource.EXERCISES
+
+        val correctedResolution =
+            detectedResolution.copy(
+                originalQuestion = question,
+                resolvedQuestion = contextualQuestion,
+                intent = correctedIntent,
+                source = correctedSource,
+                confidence =
+                    maxOf(
+                        detectedResolution.confidence,
+                        0.98f
+                    ),
+                exerciseName =
+                    detectedResolution.exerciseName
+                        ?.trim()
+                        ?.takeIf { it.isNotBlank() }
+                        ?: conversationContext.exerciseName
+                            ?.trim()
+                            ?.takeIf { it.isNotBlank() },
+                belt = referencedBelt,
+                isFollowUp = true,
+                alternatives = emptyList(),
+                requiresClarification = false
+            )
+
+        conversationContext =
+            contextWithCorrectedBelt.withDetectedRequest(
+                detectedIntent =
+                    correctedResolution.intent,
+                detectedSource =
+                    correctedResolution.source,
+                detectedExerciseName =
+                    correctedResolution.exerciseName,
+                detectedTopicName =
+                    correctedResolution.topicName,
+                detectedBelt =
+                    referencedBelt,
+                userQuestion =
+                    question,
+                resolvedQuestion =
+                    contextualQuestion
+            )
+
+        return executeResolution(
+            originalQuestion = question,
+            resolution = correctedResolution,
+            isEnglish = isEnglish
+        )
+    }
+
+    /**
+     * מזהה חגורה שנאמרה במפורש בשאלת המשך.
+     */
+    private fun detectReferencedBelt(
+        text: String
+    ): Belt? {
+        val normalizedText =
+            normalizeSelectionText(text)
+
+        return enumValues<Belt>()
+            .firstOrNull { belt ->
+                val beltValues =
+                    listOf(
+                        belt.id,
+                        belt.name,
+                        belt.heb,
+                        belt.heb
+                            .replace(
+                                "חגורה",
+                                ""
+                            )
+                            .trim()
+                    )
+                        .map(::normalizeSelectionText)
+                        .filter { value ->
+                            value.isNotBlank()
+                        }
+
+                beltValues.any { value ->
+                    value in normalizedText
+                }
+            }
+    }
+
+    /**
+     * מסיר אזכור של חגורה קודמת לפני שמצרפים
+     * את החגורה החדשה לשאלה שנפתרת מחדש.
+     */
+    private fun removeBeltReferences(
+        text: String
+    ): String {
+        return enumValues<Belt>()
+            .fold(text) { currentText, belt ->
+                listOf(
+                    belt.heb,
+                    belt.name,
+                    belt.id
+                )
+                    .fold(currentText) {
+                            updatedText,
+                            beltValue ->
+
+                        updatedText.replace(
+                            oldValue = beltValue,
+                            newValue = " ",
+                            ignoreCase = true
+                        )
+                    }
+            }
+            .replace(
+                Regex("\\s+"),
+                " "
+            )
+            .trim()
+    }
+
+    /**
      * פותר בקשת הסבר על פריט מתוך ResultList קודם.
      *
      * לדוגמה:
@@ -542,8 +822,17 @@ class AssistantOrchestrator(
                 .copy(
                     intent = selectedIntent,
                     source = selected.source,
+                    /*
+                     * אם exerciseName לא מולא בפריט הרשימה,
+                     * הכותרת עצמה היא שם התרגיל שנבחר.
+                     */
                     exerciseName =
                         selected.exerciseName
+                            ?.trim()
+                            ?.takeIf { it.isNotBlank() }
+                            ?: selected.title
+                                .trim()
+                                .takeIf { it.isNotBlank() }
                             ?: conversationContext.exerciseName,
                     topicName =
                         selected.topicName
@@ -564,7 +853,12 @@ class AssistantOrchestrator(
             source = selected.source,
             confidence = 1f,
             exerciseName =
-                selected.exerciseName,
+                selected.exerciseName
+                    ?.trim()
+                    ?.takeIf { it.isNotBlank() }
+                    ?: selected.title
+                        .trim()
+                        .takeIf { it.isNotBlank() },
             topicName =
                 selected.topicName,
             belt =

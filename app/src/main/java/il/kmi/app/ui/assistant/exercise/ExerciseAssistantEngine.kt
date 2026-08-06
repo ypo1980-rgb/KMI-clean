@@ -109,18 +109,33 @@ object ExerciseAssistantEngine {
              * אם לא נמצאה אף תוצאה בחגורה, שומרים את
              * התוצאות הכלליות ולא מסתירים מידע אפשרי.
              */
+            /*
+             * חגורת המשתמש היא העדפה בלבד.
+             *
+             * מסננים באופן קשיח לפי חגורה רק כאשר
+             * המשתמש ציין אותה במפורש בשאלה.
+             *
+             * כך משתמש בחגורה כתומה עדיין יכול לבקש
+             * הסבר על תרגיל שנמצא בחגורה ירוקה.
+             */
+            val beltWasExplicitlyRequested =
+                preferredBelt != null &&
+                        questionExplicitlyRequestsBelt(
+                            question = cleanQuestion,
+                            belt = preferredBelt
+                        )
+
             val beltFilteredMatches =
-                preferredBelt
-                    ?.let { belt ->
-                        allIndexedMatches
-                            .filter { match ->
-                                match.belt == belt
-                            }
-                            .takeIf { matches ->
-                                matches.isNotEmpty()
-                            }
+                if (
+                    preferredBelt != null &&
+                    beltWasExplicitlyRequested
+                ) {
+                    allIndexedMatches.filter { match ->
+                        match.belt == preferredBelt
                     }
-                    ?: allIndexedMatches
+                } else {
+                    allIndexedMatches
+                }
 
             /*
              * הפונקציה כבר קיימת בהמשך הקובץ.
@@ -436,6 +451,66 @@ object ExerciseAssistantEngine {
             } else {
                 "אירעה תקלה בעיבוד בקשת התרגיל."
             }
+        }
+    }
+
+    /**
+     * בודק אם החגורה הוזכרה במפורש בשאלה.
+     *
+     * חגורת הפרופיל לבדה אינה נחשבת לבקשת סינון.
+     */
+    private fun questionExplicitlyRequestsBelt(
+        question: String,
+        belt: Belt
+    ): Boolean {
+        val normalizedQuestion =
+            question
+                .lowercase()
+                .replace("־", " ")
+                .replace("–", " ")
+                .replace("—", " ")
+                .replace("-", " ")
+                .replace(
+                    Regex("""[^\p{L}\p{N}]+"""),
+                    " "
+                )
+                .replace(
+                    Regex("\\s+"),
+                    " "
+                )
+                .trim()
+
+        val beltValues =
+            listOf(
+                belt.id,
+                belt.name,
+                belt.heb,
+                belt.heb
+                    .replace(
+                        "חגורה",
+                        ""
+                    )
+                    .trim()
+            )
+                .map { value ->
+                    value
+                        .lowercase()
+                        .replace(
+                            Regex("""[^\p{L}\p{N}]+"""),
+                            " "
+                        )
+                        .replace(
+                            Regex("\\s+"),
+                            " "
+                        )
+                        .trim()
+                }
+                .filter { value ->
+                    value.isNotBlank()
+                }
+
+        return beltValues.any { beltValue ->
+            beltValue in normalizedQuestion
         }
     }
 
@@ -864,6 +939,21 @@ object ExerciseAssistantEngine {
     ): Set<String> {
         return value
             .lowercase()
+            /*
+             * נרמול גלובלי של הכתיב הישן לכתיב התקני.
+             *
+             * ההחלפה פועלת גם עם תחיליות:
+             * הצואר -> הצוואר
+             * בצואר -> בצוואר
+             * מחביקת צואר -> מחביקת צוואר
+             */
+            .replace(
+                "צואר",
+                "צוואר"
+            )
+            .replace("\u200f", "")
+            .replace("\u200e", "")
+            .replace("\u00a0", " ")
             .replace("־", " ")
             .replace("–", " ")
             .replace("—", " ")

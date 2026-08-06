@@ -2,6 +2,7 @@ package il.kmi.shared.domain.content
 
 import il.kmi.shared.domain.Belt
 import il.kmi.shared.domain.ContentRepo
+import il.kmi.shared.domain.content.ExerciseIdentityRegistry.normalize
 
 /**
  * מקור מרכזי לזהות חד־ערכית של תרגילים.
@@ -968,7 +969,9 @@ object ExerciseIdentityRegistry {
             )
         ),
 
-        // ===== חגורה כתומה — תרגילים ex_072 עד ex_149 =====
+        // ==========================================================================
+        // ================= חגורה כתומה — תרגילים ex_072 עד ex_149 =================
+        // ==========================================================================
 
         // ===== חגורה כתומה — כללי =====
 
@@ -1998,8 +2001,9 @@ object ExerciseIdentityRegistry {
                 "defenses_root"
             )
         ),
-
-        // ===== חגורה ירוקה — תרגילים ex_150 עד ex_221 =====
+        // ====================================================================================
+        // ===================== חגורה ירוקה — תרגילים ex_150 עד ex_221 =======================
+        // ====================================================================================
 
         // ===== חגורה ירוקה — בלימות וגלגולים =====
 
@@ -2026,69 +2030,78 @@ object ExerciseIdentityRegistry {
         ExerciseIdentity(
             id = "ex_152",
             belt = Belt.GREEN,
-            hebrewTitle = "גלגול לפנים ובלימה לאחור - ימין",
+            hebrewTitle =
+                "גלגול לפנים ובלימה לאחור - ימין / שמאל",
             topicKeys = setOf(
                 "בלימות וגלגולים",
                 "topic_breakfalls_rolls"
             ),
             aliases = setOf(
-                "גלגול לפנים ובלימה לאחור - ימין/שמאל"
-            )
-        ),
+                /*
+                 * שמות ישנים שנשמרים לצורכי חיפוש
+                 * ותאימות מול ContentRepo.
+                 */
+                "גלגול לפנים ובלימה לאחור - ימין",
+                "גלגול לפנים ובלימה לאחור - שמאל",
 
-        ExerciseIdentity(
-            id = "ex_153",
-            belt = Belt.GREEN,
-            hebrewTitle = "גלגול לפנים ובלימה לאחור - שמאל",
-            topicKeys = setOf(
-                "בלימות וגלגולים",
-                "topic_breakfalls_rolls"
+                /*
+                 * וריאציות כתיב אפשריות.
+                 */
+                "גלגול לפנים ובלימה לאחור - ימין/שמאל",
+                "גלגול לפנים ובלימה לאחור ימין ושמאל",
+                "גלגול לפנים ובלימה לאחור בשני הצדדים"
             )
         ),
 
         ExerciseIdentity(
             id = "ex_154",
             belt = Belt.GREEN,
-            hebrewTitle = "גלגול לפנים ולאחור - ימין",
+            hebrewTitle =
+                "גלגול לפנים ולאחור - ימין / שמאל",
             topicKeys = setOf(
                 "בלימות וגלגולים",
                 "topic_breakfalls_rolls"
             ),
             aliases = setOf(
-                "גלגול לפנים ולאחור - ימין/שמאל"
-            )
-        ),
+                /*
+                 * השמות הישנים נשמרים לצורכי חיפוש
+                 * ותאימות מול ContentRepo.
+                 */
+                "גלגול לפנים ולאחור - ימין",
+                "גלגול לפנים ולאחור - שמאל",
 
-        ExerciseIdentity(
-            id = "ex_155",
-            belt = Belt.GREEN,
-            hebrewTitle = "גלגול לפנים ולאחור - שמאל",
-            topicKeys = setOf(
-                "בלימות וגלגולים",
-                "topic_breakfalls_rolls"
+                /*
+                 * וריאציות כתיב אפשריות.
+                 */
+                "גלגול לפנים ולאחור - ימין/שמאל",
+                "גלגול לפנים ולאחור ימין ושמאל",
+                "גלגול לפנים ולאחור בשני הצדדים"
             )
         ),
 
         ExerciseIdentity(
             id = "ex_156",
             belt = Belt.GREEN,
-            hebrewTitle = "גלגול ביד אחת - ימין",
+            hebrewTitle =
+                "גלגול ביד אחת - ימין / שמאל",
             topicKeys = setOf(
                 "בלימות וגלגולים",
                 "topic_breakfalls_rolls"
             ),
             aliases = setOf(
-                "גלגול ביד אחת - ימין/שמאל"
-            )
-        ),
+                /*
+                 * השמות הישנים נשמרים לצורכי חיפוש
+                 * ותאימות מול ContentRepo.
+                 */
+                "גלגול ביד אחת - ימין",
+                "גלגול ביד אחת - שמאל",
 
-        ExerciseIdentity(
-            id = "ex_157",
-            belt = Belt.GREEN,
-            hebrewTitle = "גלגול ביד אחת - שמאל",
-            topicKeys = setOf(
-                "בלימות וגלגולים",
-                "topic_breakfalls_rolls"
+                /*
+                 * וריאציות כתיב אפשריות.
+                 */
+                "גלגול ביד אחת - ימין/שמאל",
+                "גלגול ביד אחת ימין ושמאל",
+                "גלגול ביד אחת בשני הצדדים"
             )
         ),
 
@@ -3076,7 +3089,24 @@ object ExerciseIdentityRegistry {
                 "releases_hugs_body"
             ),
             aliases = setOf(
-                "שחרור מחביקת צואר מאחור"
+                /*
+                 * כתיב המאגר הישן.
+                 */
+                "שחרור מחביקת צואר מאחור",
+
+                /*
+                 * הכתיב התקני שבו המשתמש צפוי
+                 * לכתוב או לומר את שם התרגיל.
+                 */
+                "שחרור מחביקת צוואר מאחור",
+                "שחרור חביקת צוואר מאחור",
+
+                /*
+                 * ניסוחים טבעיים נוספים שמגיעים
+                 * מהקלדה או מזיהוי קולי.
+                 */
+                "שחרור מחביקת הצוואר מאחור",
+                "שחרור מחביקת הצואר מאחור"
             )
         ),
 
@@ -3118,8 +3148,10 @@ object ExerciseIdentityRegistry {
             )
         ),
 
-        // ===== חגורה כחולה — תרגילים ex_228 עד ex_272 =====
 
+        // ============================================================================
+        // ================== חגורה כחולה — תרגילים ex_228 עד ex_272 ==================
+        // ============================================================================
         // ===== חגורה כחולה — כללי / עבודת קרקע / בלימות וגלגולים =====
 
         ExerciseIdentity(
@@ -6050,20 +6082,37 @@ object ExerciseIdentityRegistry {
         return "exercise_favorite_${exerciseId.trim()}"
     }
 
-    private fun ExerciseIdentity.matchesTitle(cleanTitle: String): Boolean {
-        if (normalize(hebrewTitle) == cleanTitle) return true
+    private fun ExerciseIdentity.matchesTitle(
+        cleanTitle: String
+    ): Boolean {
+        val comparableTitle =
+            normalizeForSearch(cleanTitle)
+
+        if (
+            normalizeForSearch(hebrewTitle) ==
+            comparableTitle
+        ) {
+            return true
+        }
 
         return aliases.any { alias ->
-            normalize(alias) == cleanTitle
+            normalizeForSearch(alias) ==
+                    comparableTitle
         }
     }
 
-    private fun ExerciseIdentity.matchesTopic(cleanTopic: String?): Boolean {
+    private fun ExerciseIdentity.matchesTopic(
+        cleanTopic: String?
+    ): Boolean {
         if (cleanTopic.isNullOrBlank()) return true
         if (topicKeys.isEmpty()) return true
 
+        val comparableTopic =
+            normalizeForSearch(cleanTopic)
+
         return topicKeys.any { topic ->
-            normalize(topic) == cleanTopic
+            normalizeForSearch(topic) ==
+                    comparableTopic
         }
     }
 
@@ -6117,4 +6166,42 @@ object ExerciseIdentityRegistry {
             .trim()
             .lowercase()
     }
+}
+/**
+ * נרמול שמיועד לחיפוש ולהשוואת שמות בלבד.
+ *
+ * חשוב:
+ * אין להשתמש בו ליצירת IDs או מפתחות שמירה,
+ * כדי לא לשנות מזהים קיימים של תרגילים.
+ *
+ * כל צורות הכתיב הישנות של "צואר" הופכות
+ * לכתיב התקני "צוואר", גם כאשר קיימת תחילית:
+ *
+ * צואר   -> צוואר
+ * הצואר  -> הצוואר
+ * בצואר  -> בצוואר
+ * לצואר  -> לצוואר
+ * מחביקת צואר -> מחביקת צוואר
+ */
+fun normalizeForSearch(
+    raw: String
+): String {
+    return normalize(raw)
+        .replace(
+            "צואר",
+            "צוואר"
+        )
+        .replace("/", " ")
+        .replace("?", " ")
+        .replace("!", " ")
+        .replace(",", " ")
+        .replace(".", " ")
+        .replace(":", " ")
+        .replace(";", " ")
+        .replace("-", " ")
+        .replace(
+            Regex("\\s+"),
+            " "
+        )
+        .trim()
 }

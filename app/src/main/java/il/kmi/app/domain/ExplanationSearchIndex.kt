@@ -8,7 +8,7 @@ import il.kmi.shared.domain.content.ExerciseIdentityRegistry
 object ExplanationSearchIndex {
 
     data class Match(
-        val belt: il.kmi.shared.domain.Belt,
+        val belt: Belt,
         val title: String,
         val explanation: String,
         val score: Int
@@ -62,23 +62,56 @@ object ExplanationSearchIndex {
             }
     }
 
-    private fun normalize(value: String): String =
-        value
+    /*
+     * משתמשים באותו נרמול גלובלי של ה־Registry.
+     *
+     * כך צואר/צוואר וכל הצורות עם תחיליות
+     * מקבלות אותה משמעות בכל שכבות החיפוש.
+     */
+    /**
+     * נרמול מקומי לצורכי חיפוש בלבד.
+     *
+     * מאחד את כל צורות הכתיב של צואר/צוואר,
+     * בלי לשנות שמות תרגילים, IDs או נתוני התקדמות.
+     */
+    private fun normalize(
+        value: String
+    ): String {
+        return value
             .lowercase()
             .trim()
             .replace("\u200f", "")
             .replace("\u200e", "")
             .replace("\u00a0", " ")
-            .replace("–", "-")
-            .replace("—", "-")
-            .replace("־", "-")
+
+            /*
+             * פועל גם כאשר מחוברת תחילית:
+             * הצואר -> הצוואר
+             * בצואר -> בצוואר
+             * לצואר -> לצוואר
+             */
+            .replace(
+                "צואר",
+                "צוואר"
+            )
+
+            .replace("–", " ")
+            .replace("—", " ")
+            .replace("־", " ")
+            .replace("-", " ")
             .replace("/", " ")
             .replace("?", " ")
             .replace("!", " ")
             .replace(",", " ")
             .replace(".", " ")
-            .replace(Regex("\\s+"), " ")
+            .replace(":", " ")
+            .replace(";", " ")
+            .replace(
+                Regex("\\s+"),
+                " "
+            )
             .trim()
+    }
 
     private fun cleanQuestion(value: String): String {
         var t = normalize(value)
