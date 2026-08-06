@@ -148,8 +148,62 @@ class AssistantOrchestrator(
             marker in normalizedQuestion
         }
 
+        /*
+         * בקשת רשימה מפורשת מקבלת עדיפות על התאמה
+         * אפשרית לשם של תרגיל יחיד.
+         *
+         * לדוגמה:
+         * "תציג את כל תרגילי הסכין בחגורה ירוקה"
+         */
+        val hasExerciseListMarker =
+            listOf(
+                "כל תרגיל",
+                "כל התרגיל",
+                "כל הגנה",
+                "כל ההגנות",
+                "איזה תרגיל",
+                "אילו תרגיל",
+                "איזה הגנות",
+                "אילו הגנות",
+                "מהם התרגילים",
+                "מה הם התרגילים",
+                "מה הן ההגנות",
+                "רשימת תרגיל",
+                "רשימת הגנות",
+                "תרגילים יש",
+                "הגנות יש",
+                "all exercises",
+                "all the exercises",
+                "which exercises",
+                "what exercises",
+                "exercise list",
+                "list exercises",
+                "list of exercises"
+            ).any { marker ->
+                marker in normalizedQuestion
+            }
+
         val resolution =
-            if (hasTrainingMarker && hasTrainingTimeMarker) {
+            if (hasExerciseListMarker) {
+                detectedResolution.copy(
+                    intent =
+                        AssistantIntent.LIST_EXERCISES,
+                    source =
+                        AssistantKnowledgeSource.MATERIAL,
+                    confidence =
+                        maxOf(
+                            detectedResolution.confidence,
+                            0.98f
+                        ),
+                    alternatives =
+                        emptyList(),
+                    requiresClarification =
+                        false
+                )
+            } else if (
+                hasTrainingMarker &&
+                hasTrainingTimeMarker
+            ) {
                 detectedResolution.copy(
                     intent = when {
                         "שבוע הבא" in normalizedQuestion ||

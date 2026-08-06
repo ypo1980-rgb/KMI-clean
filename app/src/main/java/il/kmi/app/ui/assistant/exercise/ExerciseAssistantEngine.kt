@@ -1,11 +1,11 @@
 package il.kmi.app.ui.assistant.exercise
 
-import il.kmi.app.domain.ContentRepo
 import il.kmi.app.domain.ExerciseExplanationResolver
 import il.kmi.app.domain.ExplanationSearchIndex
 import il.kmi.app.ui.assistant.search.ExerciseSearchService
 import il.kmi.shared.domain.Belt
 import il.kmi.shared.domain.Explanations
+import il.kmi.shared.domain.content.ExerciseIdentityRegistry
 
 object ExerciseAssistantEngine {
 
@@ -39,12 +39,103 @@ object ExerciseAssistantEngine {
                     cleanQuestion
                 }
 
-            val indexedMatches =
+            /*
+             * שאלת ספירה על חגורה נבדקת לפני חיפוש
+             * משפחת תרגילים.
+             *
+             * לדוגמה:
+             * "כמה תרגילים יש סך הכול בחגורה חומה"
+             */
+            if (
+                isExerciseCountQuestion(
+                    cleanQuestion
+                ) &&
+                preferredBelt != null
+            ) {
+                return formatExerciseCountAnswer(
+                    belt = preferredBelt,
+                    isEnglish = isEnglish
+                )
+            }
+
+            /*
+             * שאלת רשימה או משפחה נבדקת קודם מול
+             * topicKeys של ה־Registry.
+             *
+             * כך מפרידים בין:
+             * - בעיטות
+             * - הגנות נגד בעיטות
+             * - הגנות נגד מכות יד
+             * - הגנות נגד דקירות
+             *
+             * ללא רשימה קשיחה של סוגי התקיפות.
+             */
+            if (
+                isExerciseFamilyListQuestion(
+                    cleanQuestion
+                )
+            ) {
+                val familyMatches =
+                    findExercisesByTopicFamily(
+                        query = searchQuestion,
+                        preferredBelt = preferredBelt
+                    )
+
+                if (familyMatches.isNotEmpty()) {
+                    return formatExerciseFamilyList(
+                        matches = familyMatches,
+                        isEnglish = isEnglish
+                    )
+                }
+            }
+
+            /*
+             * בשאלה כללית, למשל "אילו הגנות נגד בעיטות
+             * יש בחגורה שלי", אין לצפות להתאמה מלאה לשם
+             * של תרגיל יחיד.
+             */
+            val allIndexedMatches =
                 ExplanationSearchIndex.findMatches(
                     query = searchQuestion,
                     preferredBelt = preferredBelt,
-                    minScore = 180,
-                    maxItems = 12
+                    minScore = 70,
+                    maxItems = 20
+                )
+
+            /*
+             * כאשר ידועה חגורת המשתמש, מעדיפים רשימה
+             * שמכילה רק תרגילים מאותה חגורה.
+             *
+             * אם לא נמצאה אף תוצאה בחגורה, שומרים את
+             * התוצאות הכלליות ולא מסתירים מידע אפשרי.
+             */
+            val beltFilteredMatches =
+                preferredBelt
+                    ?.let { belt ->
+                        allIndexedMatches
+                            .filter { match ->
+                                match.belt == belt
+                            }
+                            .takeIf { matches ->
+                                matches.isNotEmpty()
+                            }
+                    }
+                    ?: allIndexedMatches
+
+            /*
+             * הפונקציה כבר קיימת בהמשך הקובץ.
+             *
+             * כאן מפעילים אותה בפועל כדי שהמונח
+             * המבחין בשאלה ישמש לסינון הרשימה.
+             *
+             * לדוגמה:
+             * "הגנות נגד בעיטות" ישאיר תוצאות
+             * שכותרתן קשורה לבעיטות ולא לידיים.
+             */
+            val indexedMatches =
+                focusMatchesByQueryMeaning(
+                    query = searchQuestion,
+                    matches = beltFilteredMatches
                 )
 
             /*
@@ -349,14 +440,517 @@ object ExerciseAssistantEngine {
     }
 
     /**
+     * מזהה שהמשתמש מבקש רשימת תרגילים או משפחה,
+     * ולא הסבר לתרגיל יחיד.
+     */
+    private fun isExerciseFamilyListQuestion(
+        question: String
+    ): Boolean {
+        val normalized =
+            question
+                .lowercase()
+                .replace("־", " ")
+                .replace("–", " ")
+                .replace("—", " ")
+                .replace("-", " ")
+                .replace(Regex("\\s+"), " ")
+                .trim()
+
+        return listOf(
+            "כל תרגיל",
+            "כל התרגיל",
+            "כל הגנה",
+            "כל ההגנות",
+            "איזה תרגיל",
+            "אילו תרגיל",
+            "איזה הגנות",
+            "אילו הגנות",
+            "איזה סוג",
+            "אילו סוג",
+            "מהם התרגילים",
+            "מה הם התרגילים",
+            "מה הן ההגנות",
+            "רשימת תרגיל",
+            "רשימת הגנות",
+            "תרגילים יש",
+            "הגנות יש",
+            "all exercises",
+            "all the exercises",
+            "which exercises",
+            "what exercises",
+            "which types",
+            "what types",
+            "exercise list",
+            "list exercises",
+            "list of exercises"
+        ).any { marker ->
+            marker in normalized
+        }
+    }
+
+    /**
+     * מזהה בקשה לספירת כל התרגילים בחגורה,
+     * ולא בקשה לשמות של משפחת תרגילים מסוימת.
+     */
+    private fun isExerciseCountQuestion(
+        question: String
+    ): Boolean {
+        val normalized =
+            question
+                .lowercase()
+                .replace("־", " ")
+                .replace("–", " ")
+                .replace("—", " ")
+                .replace("-", " ")
+                .replace(Regex("\\s+"), " ")
+                .trim()
+
+        val hasCountMarker =
+            listOf(
+                "כמה",
+                "מספר התרגילים",
+                "כמות התרגילים",
+                "how many",
+                "number of exercises"
+            ).any { marker ->
+                marker in normalized
+            }
+
+        val hasExerciseMarker =
+            listOf(
+                "תרגיל",
+                "תרגילים",
+                "exercise",
+                "exercises"
+            ).any { marker ->
+                marker in normalized
+            }
+
+        return hasCountMarker && hasExerciseMarker
+    }
+
+    /**
+     * מחזיר את מספר התרגילים הייחודיים בחגורה.
+     */
+    private fun formatExerciseCountAnswer(
+        belt: Belt,
+        isEnglish: Boolean
+    ): String {
+        val exerciseCount =
+            ExerciseIdentityRegistry
+                .allKnown()
+                .asSequence()
+                .filter { identity ->
+                    identity.belt == belt
+                }
+                .distinctBy { identity ->
+                    identity.id
+                }
+                .count()
+
+        return if (isEnglish) {
+            val beltName =
+                belt.name
+                    .lowercase()
+                    .replaceFirstChar { character ->
+                        character.uppercase()
+                    }
+
+            "There are $exerciseCount exercises in the $beltName belt in total."
+        } else {
+            "ב${belt.heb} יש $exerciseCount תרגילים בסך הכול."
+        }
+    }
+
+    /**
+     * מחפש תרגילים לפי שיוך הנושא האמיתי שלהם
+     * ב־ExerciseIdentityRegistry.
+     */
+    private fun findExercisesByTopicFamily(
+        query: String,
+        preferredBelt: Belt?
+    ): List<
+            ExerciseIdentityRegistry.ExerciseIdentity
+            > {
+        /*
+         * מסירים רק מילים שמתארות את הבקשה עצמה.
+         *
+         * המילים "הגנה" ו"הגנות" אינן מילות רעש:
+         * הן חיוניות להבחנה בין "בעיטות" לבין
+         * "הגנות נגד בעיטות".
+         */
+        val requestNoiseRoots =
+            semanticRoots(
+                """
+                כל התרגיל התרגילים תרגיל תרגילי תרגילים
+                סוג סוגי הסוג הסוגים רשימה
+                הצג הציגי תציג תציגי הראה הראי
+                תן תני איזה אילו מהם מה הן
+                יש קיימים קיימות בחגורה חגורה
+                all the exercise exercises types list show
+                which what available belt
+                """.trimIndent()
+            )
+
+        val preferredBeltRoots =
+            preferredBelt
+                ?.let { belt ->
+                    semanticRoots(
+                        listOf(
+                            belt.id,
+                            belt.name,
+                            belt.heb
+                        ).joinToString(" ")
+                    )
+                }
+                .orEmpty()
+
+        val queryRoots =
+            semanticRoots(query)
+                .minus(requestNoiseRoots)
+                .minus(preferredBeltRoots)
+
+        if (queryRoots.isEmpty()) {
+            return emptyList()
+        }
+
+        val allKnown =
+            ExerciseIdentityRegistry.allKnown()
+
+        val beltCandidates =
+            preferredBelt
+                ?.let { belt ->
+                    allKnown.filter { identity ->
+                        identity.belt == belt
+                    }
+                }
+                ?: allKnown
+
+        /*
+         * לכל תרגיל שומרים את מספר המילים העודפות
+         * במפתח הנושא המתאים ביותר.
+         *
+         * לדוגמה, עבור השאלה "סוגי בעיטות":
+         *
+         * topicKey "בעיטות"               -> 0 מילים עודפות
+         * topicKey "הגנות נגד בעיטות"     -> 2 מילים עודפות
+         *
+         * לכן יישארו רק תרגילי הבעיטות עצמם.
+         *
+         * לעומת זאת, עבור "הגנות נגד בעיטות" כל שלוש
+         * המילים נדרשות, ולכן יישארו רק ההגנות.
+         */
+        val candidatesWithSpecificity =
+            beltCandidates
+                .mapNotNull { identity ->
+                    val bestExtraRootCount =
+                        identity.topicKeys
+                            .mapNotNull { topicKey ->
+                                val topicRoots =
+                                    semanticRoots(topicKey)
+
+                                if (
+                                    queryRoots.all { queryRoot ->
+                                        queryRoot in topicRoots
+                                    }
+                                ) {
+                                    topicRoots
+                                        .minus(queryRoots)
+                                        .size
+                                } else {
+                                    null
+                                }
+                            }
+                            .minOrNull()
+
+                    bestExtraRootCount
+                        ?.let { extraRootCount ->
+                            identity to extraRootCount
+                        }
+                }
+
+        val bestSpecificity =
+            candidatesWithSpecificity
+                .minOfOrNull { (_, extraRootCount) ->
+                    extraRootCount
+                }
+                ?: return emptyList()
+
+        return candidatesWithSpecificity
+            .asSequence()
+            .filter { (_, extraRootCount) ->
+                extraRootCount == bestSpecificity
+            }
+            .map { (identity, _) ->
+                identity
+            }
+            .distinctBy { identity ->
+                identity.id
+            }
+            .sortedWith(
+                compareBy<
+                        ExerciseIdentityRegistry.ExerciseIdentity
+                        > {
+                    it.hebrewTitle.length
+                }
+                    .thenBy {
+                        it.hebrewTitle
+                    }
+            )
+            .toList()
+    }
+
+    private fun formatExerciseFamilyList(
+        matches: List<
+                ExerciseIdentityRegistry.ExerciseIdentity
+                >,
+        isEnglish: Boolean
+    ): String {
+        /*
+         * בקשת רשימה מפורשת צריכה להציג את כל
+         * התרגילים המתאימים ולא לעצור לאחר 15.
+         */
+        val visibleMatches =
+            matches
+
+        val listText =
+            visibleMatches
+                .mapIndexed { index, identity ->
+                    buildString {
+                        append(index + 1)
+                        append(". ")
+                        append(identity.hebrewTitle)
+                        append(" — ")
+
+                        if (isEnglish) {
+                            append(
+                                identity.belt.name
+                                    .lowercase()
+                                    .replaceFirstChar { character ->
+                                        character.uppercase()
+                                    }
+                            )
+                            append(" belt")
+                        } else {
+                            append(identity.belt.heb)
+                        }
+                    }
+                }
+                .joinToString("\n")
+
+        return if (isEnglish) {
+            buildString {
+                appendLine(
+                    "I found ${matches.size} exercises in the requested category:"
+                )
+                appendLine()
+                append(listText)
+
+                if (matches.size > visibleMatches.size) {
+                    appendLine()
+                    append(
+                        "קיימים עוד ${matches.size - visibleMatches.size} תרגילים בנושא."
+                    )
+                }
+
+                appendLine()
+                appendLine()
+                append(
+                    "Choose an exercise by its number or full name."
+                )
+            }
+        } else {
+            buildString {
+                appendLine(
+                    "מצאתי ${matches.size} תרגילים בנושא שביקשת:"
+                )
+                appendLine()
+                append(listText)
+
+                if (matches.size > visibleMatches.size) {
+                    appendLine()
+                    append(
+                        "קיימים עוד ${matches.size - visibleMatches.size} תרגילים בנושא."
+                    )
+                }
+
+                appendLine()
+                appendLine()
+                append(
+                    "בחר תרגיל לפי המספר או לפי שמו המלא."
+                )
+            }
+        }
+    }
+
+/**
+ * משאיר את התוצאות שמתאימות למונח המבחין
+    * ביותר בשאלה, בלי להכיר מראש משפחות תרגילים.
+     */
+    private fun focusMatchesByQueryMeaning(
+        query: String,
+        matches: List<ExplanationSearchIndex.Match>
+    ): List<ExplanationSearchIndex.Match> {
+        if (matches.size <= 1) {
+            return matches
+        }
+
+        val queryRoots =
+            semanticRoots(query)
+
+        if (queryRoots.isEmpty()) {
+            return matches
+        }
+
+        val titleRootsByMatch =
+            matches.associateWith { match ->
+                semanticRoots(match.title)
+            }
+
+        val rootFrequency =
+            queryRoots
+                .mapNotNull { root ->
+                    val count =
+                        titleRootsByMatch
+                            .values
+                            .count { titleRoots ->
+                                root in titleRoots
+                            }
+
+                    if (count > 0) {
+                        root to count
+                    } else {
+                        null
+                    }
+                }
+
+        if (rootFrequency.isEmpty()) {
+            return matches
+        }
+
+        val lowestFrequency =
+            rootFrequency.minOf { (_, count) ->
+                count
+            }
+
+        val distinctiveRoots =
+            rootFrequency
+                .filter { (_, count) ->
+                    count == lowestFrequency
+                }
+                .map { (root, _) ->
+                    root
+                }
+                .toSet()
+
+        val focusedMatches =
+            matches.filter { match ->
+                val titleRoots =
+                    titleRootsByMatch[match]
+                        .orEmpty()
+
+                distinctiveRoots.any { root ->
+                    root in titleRoots
+                }
+            }
+
+        return focusedMatches
+            .takeIf { it.isNotEmpty() }
+            ?: matches
+    }
+
+    private fun semanticRoots(
+        value: String
+    ): Set<String> {
+        return value
+            .lowercase()
+            .replace("־", " ")
+            .replace("–", " ")
+            .replace("—", " ")
+            .replace("-", " ")
+            .replace(
+                Regex("[^א-תa-z0-9\\s]"),
+                " "
+            )
+            .split(Regex("\\s+"))
+            .mapNotNull { token ->
+                semanticRoot(token)
+                    .takeIf { root ->
+                        root.length >= 3
+                    }
+            }
+            .toSet()
+    }
+
+    private fun semanticRoot(
+        value: String
+    ): String {
+        var root =
+            value
+                .lowercase()
+                .trim()
+
+        root =
+            when {
+                root.length > 4 &&
+                        root.endsWith("ות") ->
+                    root.dropLast(2)
+
+                root.length > 4 &&
+                        root.endsWith("ים") ->
+                    root.dropLast(2)
+
+                else ->
+                    root
+            }
+
+        root =
+            when {
+                root.length > 4 &&
+                        root.endsWith("ה") ->
+                    root.dropLast(1)
+
+                root.length > 4 &&
+                        root.endsWith("ת") ->
+                    root.dropLast(1)
+
+                else ->
+                    root
+            }
+
+        return root
+    }
+
+    /**
      * מסיר מהשאלה ביטויי בקשה כלליים ומשאיר את שם התרגיל.
      *
      * לדוגמה:
      * "הסבר מניעת חניקה" -> "מניעת חניקה"
      * "תן לי הסבר על בעיטת מגל" -> "בעיטת מגל"
      */
-    private fun cleanExerciseName(question: String): String {
+    private fun cleanExerciseName(
+        question: String
+    ): String {
         return question
+            /*
+             * ביטויי שאלה כלליים אינם חלק משם התרגיל
+             * או ממשפחת התרגילים שאותה מחפשים.
+             */
+            .replace("איזה תרגילים יש", " ")
+            .replace("אילו תרגילים יש", " ")
+            .replace("איזה תרגילים", " ")
+            .replace("אילו תרגילים", " ")
+            .replace("איזה הגנות יש", "הגנות ")
+            .replace("אילו הגנות יש", "הגנות ")
+            .replace("איזה", " ")
+            .replace("אילו", " ")
+            .replace("בחגורה שלי", " ")
+            .replace("מהחגורה שלי", " ")
+            .replace("של החגורה שלי", " ")
+            .replace("יש לי", " ")
+            .replace("קיימים", " ")
+            .replace("קיימות", " ")
+
             .replace("תן לי הסבר על", " ")
             .replace("תני לי הסבר על", " ")
             .replace("אפשר הסבר על", " ")
@@ -371,14 +965,62 @@ object ExerciseAssistantEngine {
             .replace("איך מבצעים", " ")
             .replace("איך עושים את", " ")
             .replace("איך עושים", " ")
-            .replace("explain the exercise", " ", ignoreCase = true)
-            .replace("give me an explanation of", " ", ignoreCase = true)
-            .replace("give me an explanation for", " ", ignoreCase = true)
-            .replace("explain how to do", " ", ignoreCase = true)
-            .replace("how do i perform", " ", ignoreCase = true)
-            .replace("how to perform", " ", ignoreCase = true)
-            .replace("how do i do", " ", ignoreCase = true)
-            .replace("explain", " ", ignoreCase = true)
+
+            .replace(
+                "which exercises are in my belt",
+                " ",
+                ignoreCase = true
+            )
+            .replace(
+                "what exercises are in my belt",
+                " ",
+                ignoreCase = true
+            )
+            .replace(
+                "in my belt",
+                " ",
+                ignoreCase = true
+            )
+            .replace(
+                "explain the exercise",
+                " ",
+                ignoreCase = true
+            )
+            .replace(
+                "give me an explanation of",
+                " ",
+                ignoreCase = true
+            )
+            .replace(
+                "give me an explanation for",
+                " ",
+                ignoreCase = true
+            )
+            .replace(
+                "explain how to do",
+                " ",
+                ignoreCase = true
+            )
+            .replace(
+                "how do i perform",
+                " ",
+                ignoreCase = true
+            )
+            .replace(
+                "how to perform",
+                " ",
+                ignoreCase = true
+            )
+            .replace(
+                "how do i do",
+                " ",
+                ignoreCase = true
+            )
+            .replace(
+                "explain",
+                " ",
+                ignoreCase = true
+            )
             .replace("\"", " ")
             .replace("'", " ")
             .replace("?", " ")

@@ -145,7 +145,7 @@ fun GlobalExerciseSearchDialog(
     val speechState =
         rememberExerciseSearchSpeechState(
             isEnglish = isEnglish,
-            onResult = { recognizedText ->
+            onPartialResult = { recognizedText ->
                 query = recognizedText
                     .replace("\n", " ")
                     .replace("\r", " ")
@@ -156,7 +156,32 @@ fun GlobalExerciseSearchDialog(
                     .trim()
 
                 speechError = null
+            },
+            onResult = { recognizedText ->
+                val finalQuery = recognizedText
+                    .replace("\n", " ")
+                    .replace("\r", " ")
+                    .replace(
+                        Regex("""\s+"""),
+                        " "
+                    )
+                    .trim()
+
+                query = finalQuery
+                speechError = null
                 finishTyping()
+
+                val finalResults =
+                    GlobalExerciseSearchEngine.search(
+                        query = finalQuery,
+                        isEnglish = isEnglish
+                    )
+
+                if (finalResults.size == 1) {
+                    onExerciseSelected(
+                        finalResults.single()
+                    )
+                }
             },
             onError = { message ->
                 speechError = message
@@ -235,6 +260,11 @@ fun GlobalExerciseSearchDialog(
                             speechError = null
                             finishTyping()
                             speechState.toggleListening()
+                        },
+                        onClose = {
+                            finishTyping()
+                            speechState.stopListening()
+                            onDismiss()
                         }
                     )
                 }
@@ -293,7 +323,8 @@ private fun SearchHeader(
     isEnglish: Boolean,
     textAlign: TextAlign,
     isListening: Boolean,
-    onMicrophoneClick: () -> Unit
+    onMicrophoneClick: () -> Unit,
+    onClose: () -> Unit
 ) {
     val microphoneTransition =
         rememberInfiniteTransition(
@@ -338,10 +369,32 @@ private fun SearchHeader(
                 vertical = 12.dp
             )
     ) {
+        IconButton(
+            onClick = onClose,
+            modifier = Modifier
+                .align(Alignment.TopEnd)
+                .size(30.dp)
+        ) {
+            Icon(
+                imageVector = Icons.Filled.Close,
+                contentDescription =
+                    if (isEnglish) {
+                        "Close search"
+                    } else {
+                        "סגור חיפוש"
+                    },
+                tint = Color.White.copy(alpha = 0.9f),
+                modifier = Modifier.size(18.dp)
+            )
+        }
+
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 10.dp),
+                .padding(
+                    start = 30.dp,
+                    end = 30.dp
+                ),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             Text(

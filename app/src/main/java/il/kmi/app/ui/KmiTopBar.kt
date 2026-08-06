@@ -10,6 +10,7 @@ import android.content.ContextWrapper
 import android.view.inputmethod.InputMethodManager
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.LocalOnBackPressedDispatcherOwner
+import androidx.lifecycle.ViewModelProvider
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
@@ -61,6 +62,7 @@ import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.zIndex
+import il.kmi.app.KmiViewModel
 import il.kmi.app.R
 import kotlinx.coroutines.launch
 import androidx.core.view.doOnPreDraw
@@ -243,6 +245,29 @@ fun KmiTopBar(
 
     val ctx = LocalContext.current
     val density = LocalDensity.current
+
+    /*
+     * שולפים רק KmiViewModel שכבר שייך ל־Activity.
+     *
+     * אם הוא אינו זמין, לא מפילים את KmiTopBar
+     * ולא חוסמים את העוזר האישי.
+     */
+    val assistantVm =
+        remember(ctx) {
+            val componentActivity =
+                ctx.safeFindActivity()
+                        as? ComponentActivity
+
+            componentActivity
+                ?.let { activity ->
+                    runCatching {
+                        ViewModelProvider(
+                            activity
+                        )[KmiViewModel::class.java]
+                    }
+                        .getOrNull()
+                }
+        }
     val languageManager = remember { AppLanguageManager(ctx) }
     val currentLangResolved = languageManager.getCurrentLanguage().code
     val isEnglish = currentLangResolved == "en"
@@ -669,12 +694,13 @@ fun KmiTopBar(
                 }
             }
 
-        showPremiumExerciseDialog = true
-
         /*
-         * הקריאה נשמרת לצורך מסכים שמספקים callback
-         * חיצוני בעת בחירת תרגיל.
+         * מעבירים את התרגיל לכרטיס ההסבר החיצוני והגדול.
+         * לא מפעילים את ExercisePremiumSearchDialog המקומי,
+         * משום שזהו הכרטיס הקטן שאיננו רוצים להציג.
          */
+        showPremiumExerciseDialog = false
+
         onPickSearchResult?.invoke(
             selected.stableKey
         )
@@ -1370,7 +1396,11 @@ fun KmiTopBar(
                     onOpenDrawer = {
                         showAiDialog = false
                         DrawerBridge.open()
-                    }
+                    },
+                    currentLang =
+                        currentLang,
+                    vm =
+                        assistantVm
                 )
             }
         }

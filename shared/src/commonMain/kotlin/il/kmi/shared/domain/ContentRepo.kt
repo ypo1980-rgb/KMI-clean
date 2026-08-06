@@ -228,43 +228,152 @@ object ContentRepo {
         val qi = q.lowercase()
         val hits = mutableListOf<SearchHit>()
 
-        fun String?.norm(): String? = this?.trim()?.takeIf { it.isNotEmpty() }
-        fun matches(s: String?): Boolean = s?.lowercase()?.contains(qi) == true
+        fun String?.norm(): String? =
+            this
+                ?.trim()
+                ?.takeIf { it.isNotEmpty() }
 
-        fun addHit(title: String?, subtitle: String?, id: String? = null) {
-            val t = title.norm() ?: return
-            val sub = subtitle?.trim().orEmpty().ifBlank { null }
-            if (matches(t) || matches(sub)) {
-                hits += SearchHit(id = id, title = t, subtitle = sub)
+        fun matches(value: String?): Boolean =
+            value
+                ?.lowercase()
+                ?.contains(qi) == true
+
+        fun addHit(
+            title: String?,
+            subtitle: String?,
+            id: String? = null
+        ) {
+            val cleanTitle = title.norm() ?: return
+            val cleanSubtitle =
+                subtitle
+                    ?.trim()
+                    .orEmpty()
+                    .ifBlank { null }
+
+            if (
+                matches(cleanTitle) ||
+                matches(cleanSubtitle)
+            ) {
+                hits += SearchHit(
+                    id = id,
+                    title = cleanTitle,
+                    subtitle = cleanSubtitle
+                )
+            }
+        }
+
+        /*
+         * סריקה רקורסיבית של תתי־נושאים בכל עומק.
+         *
+         * בעבר נסרקה רק הרמה הראשונה של topic.subTopics,
+         * ולכן תרגילים שנמצאו בתוך subTopic.subTopics
+         * לא נכנסו כלל לתוצאות החיפוש.
+         */
+        fun searchSubTopic(
+            belt: Belt,
+            topic: Topic,
+            subTopic: SubTopic,
+            parentPath: List<String>
+        ) {
+            val currentPath =
+                parentPath + subTopic.title
+
+            val subtitle =
+                buildList {
+                    add(belt.heb)
+                    add(topic.title)
+                    addAll(currentPath)
+                }
+                    .filter { part ->
+                        part.isNotBlank()
+                    }
+                    .joinToString(" • ")
+
+            if (matches(subTopic.title)) {
+                addHit(
+                    title = subTopic.title,
+                    subtitle = subtitle,
+                    id = null
+                )
+            }
+
+            subTopic.items.forEach { item ->
+                if (matches(item)) {
+                    val key = makeItemKey(
+                        belt = belt,
+                        topicTitle = topic.title,
+                        subTopicTitle = subTopic.title,
+                        itemTitle = item
+                    )
+
+                    addHit(
+                        title = item,
+                        subtitle = subtitle,
+                        id = key
+                    )
+                }
+            }
+
+            subTopic.subTopics.forEach { nestedSubTopic ->
+                searchSubTopic(
+                    belt = belt,
+                    topic = topic,
+                    subTopic = nestedSubTopic,
+                    parentPath = currentPath
+                )
             }
         }
 
         data.forEach { (belt, beltContent) ->
             beltContent.topics.forEach { topic ->
-                if (matches(topic.title)) addHit(topic.title, belt.heb, null)
-
-                topic.subTopics.forEach { st ->
-                    if (matches(st.title)) addHit(st.title, "${belt.heb} • ${topic.title}", null)
-                    st.items.forEach { item ->
-                        if (matches(item)) {
-                            val key = makeItemKey(belt, topic.title, st.title, item)
-                            addHit(item, "${belt.heb} • ${topic.title} • ${st.title}", key)
-                        }
-                    }
+                if (matches(topic.title)) {
+                    addHit(
+                        title = topic.title,
+                        subtitle = belt.heb,
+                        id = null
+                    )
                 }
 
                 topic.items.forEach { item ->
                     if (matches(item)) {
-                        val key = makeItemKey(belt, topic.title, null, item)
-                        addHit(item, "${belt.heb} • ${topic.title}", key)
+                        val key = makeItemKey(
+                            belt = belt,
+                            topicTitle = topic.title,
+                            subTopicTitle = null,
+                            itemTitle = item
+                        )
+
+                        addHit(
+                            title = item,
+                            subtitle =
+                                "${belt.heb} • ${topic.title}",
+                            id = key
+                        )
                     }
+                }
+
+                topic.subTopics.forEach { subTopic ->
+                    searchSubTopic(
+                        belt = belt,
+                        topic = topic,
+                        subTopic = subTopic,
+                        parentPath = emptyList()
+                    )
                 }
             }
         }
 
         return hits
-            .distinctBy { (it.id ?: it.title).lowercase() }
-            .sortedBy { it.title }
+            .distinctBy { hit ->
+                (
+                        hit.id
+                            ?: "${hit.title}::${hit.subtitle.orEmpty()}"
+                        )
+                    .lowercase()
+            }
+            .sortedBy { hit ->
+                hit.title
+            }
     }
 
     // ---------------------------------------------------------

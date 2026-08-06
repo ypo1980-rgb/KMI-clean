@@ -86,6 +86,8 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusEvent
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionInParent
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
@@ -105,6 +107,7 @@ import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.ktx.firestore
 import com.google.firebase.ktx.Firebase
 import il.kmi.shared.domain.Belt
+import il.kmi.app.KmiViewModel
 import il.kmi.app.R
 import il.kmi.app.domain.ExerciseExplanationResolver
 import il.kmi.app.ui.KmiIconSize
@@ -119,6 +122,9 @@ import il.kmi.app.ui.assistant.core.AssistantMemory
 import il.kmi.app.ui.assistant.core.AssistantOrchestrator
 import il.kmi.app.ui.assistant.core.AssistantResult
 import il.kmi.app.ui.assistant.core.AssistantResultItem
+import il.kmi.app.ui.assistant.core.RemoteAssistantEngine
+import il.kmi.app.ui.assistant.core.RemoteAssistantMessage
+import il.kmi.app.ui.assistant.core.RemoteAssistantResult
 import il.kmi.app.ui.assistant.core.matchQuality
 import il.kmi.app.ui.assistant.core.primaryText
 import il.kmi.app.ui.assistant.exercise.ExerciseAssistantEngine
@@ -149,6 +155,7 @@ private enum class AssistantMode {
 private data class AiMessage(
     val fromUser: Boolean,
     val text: String,
+    val answerTitle: String? = null,
     val relatedQuestion: String? = null,
     val feedback: Feedback = Feedback.NONE,
     val trainingItems:
@@ -1571,11 +1578,93 @@ private fun sanitizeAssistantTextForSpeech(
     }
 }
 
-private fun shortMaterialSpeech(isEnglish: Boolean): String {
-    return if (isEnglish) {
-        "I found the list you asked for. It is shown on the screen."
+/**
+ * מחזיר להקראה רק את משפט הפתיחה של תשובת רשימה.
+ *
+ * לדוגמה, מתוך:
+ * "מצאתי 21 תרגילים בנושא שביקשת:
+ *
+ * 1. תרגיל ראשון
+ * 2. תרגיל שני"
+ *
+ * יוקרא רק:
+ * "מצאתי 21 תרגילים בנושא שביקשת."
+ */
+private fun shortMaterialSpeech(
+    answer: String,
+    isEnglish: Boolean
+): String {
+    val openingLine =
+        answer
+            .lineSequence()
+            .map { line ->
+                line
+                    .trim()
+                    .removeSuffix(":")
+                    .trim()
+            }
+            .firstOrNull { line ->
+                line.isNotBlank()
+            }
+            .orEmpty()
+
+    if (openingLine.isBlank()) {
+        return if (isEnglish) {
+            "I found the requested items. They are shown on the screen."
+        } else {
+            "מצאתי את הפריטים שביקשת. הם מופיעים על המסך."
+        }
+    }
+
+    return sanitizeAssistantTextForSpeech(
+        text = openingLine,
+        isEnglish = isEnglish
+    )
+}
+
+/**
+ * קובע מה יוקרא בעת לחיצה על "הקרא שוב".
+ *
+ * אם התשובה מכילה רשימה ממוספרת או רשימת נקודות,
+ * מקריאים רק את משפט הפתיחה. בתשובה רגילה ממשיכים
+ * להשתמש בניקוי ההקראה הקיים.
+ */
+private fun assistantAnswerTextForSpeech(
+    answer: String,
+    isEnglish: Boolean
+): String {
+    val nonBlankLines =
+        answer
+            .lineSequence()
+            .map { line ->
+                line.trim()
+            }
+            .filter { line ->
+                line.isNotBlank()
+            }
+            .toList()
+
+    val containsStructuredList =
+        nonBlankLines
+            .drop(1)
+            .any { line ->
+                line.matches(
+                    Regex(
+                        """^(?:\d+[.)]|[•●▪◦]|[-–—])\s+.+"""
+                    )
+                )
+            }
+
+    return if (containsStructuredList) {
+        shortMaterialSpeech(
+            answer = answer,
+            isEnglish = isEnglish
+        )
     } else {
-        "מצאתי את הרשימה שביקשת. היא מופיעה על המסך."
+        sanitizeAssistantTextForSpeech(
+            text = answer,
+            isEnglish = isEnglish
+        )
     }
 }
 
@@ -1651,7 +1740,8 @@ fun AiAssistantDialog(
     onDismiss: () -> Unit,
     onVoiceCommand: ((VoiceNavCommand) -> Unit)? = null,
     onOpenDrawer: (() -> Unit)? = null,
-    currentLang: String = ""
+    currentLang: String = "",
+    vm: KmiViewModel? = null
 ) {
     val ctx = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -1851,10 +1941,34 @@ fun AiAssistantDialog(
         }
     }
 
-    var input by remember { mutableStateOf("") }
-    var messages by remember { mutableStateOf(listOf<AiMessage>()) }
-    var isThinking by remember { mutableStateOf(false) }
-    var lastAiAnswer by remember { mutableStateOf<String?>(null) }
+    var input by remember {
+        mutableStateOf("")
+    }
+
+    var messages by remember {
+        mutableStateOf(
+            listOf<AiMessage>()
+        )
+    }
+
+    /*
+     * כל ההודעות נשמרות במסך כדי לאפשר גלילה אחורה.
+     * למנוע המרוחק נשמרת היסטוריה נפרדת ומוגבלת,
+     * המיועדת להבנת שאלות המשך.
+     */
+    var remoteConversationHistory by remember {
+        mutableStateOf(
+            listOf<RemoteAssistantMessage>()
+        )
+    }
+
+    var isThinking by remember {
+        mutableStateOf(false)
+    }
+
+    var lastAiAnswer by remember {
+        mutableStateOf<String?>(null)
+    }
     var speechStatusMessage by remember { mutableStateOf<String?>(null) }
 
     // הצעות המשך שנוצרות בהתאם למצב ולתשובה האחרונה.
@@ -1894,6 +2008,25 @@ fun AiAssistantDialog(
     }
 
     val scrollState = rememberScrollState()
+
+    /*
+     * המיקום בתוך תוכן השיחה שבו מתחילה
+     * השאלה הנוכחית.
+     */
+    var latestQuestionScrollOffset by remember {
+        mutableStateOf<Int?>(null)
+    }
+
+    /*
+     * גלילה אוטומטית מתבצעת פעם אחת בלבד:
+     * לאחר שהתשובה לשאלה החדשה הסתיימה.
+     *
+     * לאחר מכן גלילה ידנית של המשתמש אינה נקטעת.
+     */
+    var pendingScrollToLatestQuestion by remember {
+        mutableStateOf(false)
+    }
+
     val latestUserMessage = messages.lastOrNull { it.fromUser }
     val latestAssistantMessage = messages.lastOrNull { !it.fromUser }
 
@@ -1905,8 +2038,17 @@ fun AiAssistantDialog(
         assistantMode == AssistantMode.KMI_MATERIAL &&
                 (latestUserMessage != null || latestAssistantMessage != null || isThinking)
 
+    /*
+     * בתשובה הראשונה נשמר כרטיס הפרימיום הגדול.
+     * כאשר השיחה מתארכת עוברים לרשימת בועות נגללת,
+     * שבה ניתן לראות את כל השאלות והתשובות.
+     */
     val showPremiumAnswerLayout =
-        showExerciseAnswerLayout || showMaterialAnswerLayout
+        (
+                showExerciseAnswerLayout ||
+                        showMaterialAnswerLayout
+                ) &&
+                messages.size <= 2
 
     val explanationScrollState = rememberScrollState()
 
@@ -2673,12 +2815,6 @@ fun AiAssistantDialog(
         }
     }
 
-    fun scrollToBottom() {
-        scope.launch {
-            scrollState.animateScrollTo(scrollState.maxValue)
-        }
-    }
-
     fun setFeedback(index: Int, fb: Feedback) {
         messages = messages.mapIndexed { i, m ->
             if (i == index) m.copy(feedback = fb) else m
@@ -2724,6 +2860,8 @@ fun AiAssistantDialog(
 
         // reset שיחה
         messages = emptyList()
+        remoteConversationHistory =
+            emptyList()
         lastAiAnswer = null
         followUpSuggestions = emptyList()
         resultQuality = null
@@ -2751,6 +2889,8 @@ fun AiAssistantDialog(
 
         assistantMode = null
         messages = emptyList()
+        remoteConversationHistory =
+            emptyList()
         lastAiAnswer = null
         followUpSuggestions = emptyList()
         resultQuality = null
@@ -2785,30 +2925,48 @@ fun AiAssistantDialog(
         isThinking = true
 
         /*
-         * בכל שליחת שאלה מתחילים את אזור התוצאה
-         * מהשאלה הנוכחית. כך השאלה תמיד מוצגת בראש
-         * והתשובה החדשה מופיעה ישירות מתחתיה.
-         *
-         * זיכרון ההקשר נשמר ב־AssistantMemory ולכן
-         * אין צורך להשאיר את כל הכרטיסים הקודמים במסך.
+         * מצרפים את השאלה לשיחה הקיימת במקום למחוק
+         * את הכרטיסים הקודמים.
          */
-        messages = listOf(
-            AiMessage(
-                fromUser = true,
-                text = question
-            )
-        )
-
-        scrollToTop()
-
-        assistantMemoryLocal.saveLastQuestion(question)
+        /*
+         * לפני הוספת השאלה מנקים את המיקום הקודם.
+         * המיקום החדש יימדד לאחר שהשאלה תוצג במסך.
+         */
+        latestQuestionScrollOffset = null
+        pendingScrollToLatestQuestion = true
 
         /*
-         * המצב שנבחר במסך חייב להשתתף בניתוב.
-         * עד עכשיו assistantMode שינה רק את העיצוב והטקסטים במסך,
-         * אך השאלה נשלחה ל־Orchestrator ללא מידע אם המשתמש בחר
-         * תרגילים, אימונים או חומר ק.מ.י.
+         * שומרים את כל הודעות השיחה הנוכחית.
+         * ההיסטוריה תתאפס רק בסגירת השיחה או בהחלפת מצב.
          */
+        messages =
+            messages +
+                    AiMessage(
+                        fromUser = true,
+                        text = question
+                    )
+
+        /*
+         * אין לגלול כעת. ממתינים עד שהתשובה תתווסף,
+         * ואז מציבים פעם אחת את השאלה בתחילת המסך.
+         */
+
+        /*
+         * העיבוד המקומי נשאר כפי שהוא, ולאחריו
+         * מתבצעת קריאה אסינכרונית לשרת ה־AI.
+         */
+        scope.launch {
+            assistantMemoryLocal
+                .saveLastQuestion(
+                    question
+                )
+
+            /*
+             * המצב שנבחר במסך חייב להשתתף בניתוב.
+             * עד עכשיו assistantMode שינה רק את העיצוב והטקסטים במסך,
+             * אך השאלה נשלחה ל־Orchestrator ללא מידע אם המשתמש בחר
+             * תרגילים, אימונים או חומר ק.מ.י.
+             */
         val routedQuestion = when (assistantMode) {
             /*
              * מוסיפים סימון ניתוב בלבד, בלי לשנות את
@@ -2962,10 +3120,10 @@ fun AiAssistantDialog(
             )
 
             speakBest(errorAnswer)
-            return
+            return@launch
         }
 
-        val assistantResult = response.result
+            val assistantResult = response.result
 
         /*
     * החגורה שנאמרה בשאלה קודמת לחגורה השמורה בפרופיל.
@@ -3009,19 +3167,228 @@ fun AiAssistantDialog(
          * אם מנוע התרגילים החזיר רשימת בחירה, היא מוצגת
          * בשלמותה ולא נדרסת על ידי התאמת findBest().
          */
-        val finalAnswer =
-            sanitizeAssistantMarkup(
-                exerciseAnswer
-                    ?: assistantResult.primaryText()
-            )
-                .ifBlank {
-                    tr(
-                        "לא התקבלה תשובה מהמאגר. נסה לנסח את הבקשה בצורה אחרת.",
-                        "No answer was returned. Try phrasing the request differently."
-                    )
+            val localFinalAnswer =
+                sanitizeAssistantMarkup(
+                    exerciseAnswer
+                        ?: assistantResult
+                            .primaryText()
+                )
+                    .ifBlank {
+                        tr(
+                            "לא התקבלה תשובה מהמאגר. נסה לנסח את הבקשה בצורה אחרת.",
+                            "No answer was returned. Try phrasing the request differently."
+                        )
+                    }
+
+            /*
+             * קוראים את ההתקדמות ממקור האמת רק עבור
+             * החגורה הרלוונטית לשיחה.
+             *
+             * הכשל בקריאת ההתקדמות אינו מפיל את העוזר;
+             * במקרה כזה השיחה ממשיכה ללא פרופיל התקדמות.
+             */
+            val progressSnapshot =
+                if (
+                    vm != null &&
+                    preferredBelt != null
+                ) {
+                    runCatching {
+                        vm.readBeltProgressForAssistant(
+                            belt =
+                                preferredBelt
+                        )
+                    }
+                        .getOrNull()
+                } else {
+                    null
                 }
 
-        assistantMode = when (assistantResult.source) {
+            /*
+             * המנוע המרוחק מקבל:
+             * - את השאלה המקורית.
+             * - את החגורה המועדפת.
+             * - את היסטוריית השיחה.
+             * - את התשובה המקומית כמידע מאומת.
+             * - את סימוני יודע/לא יודע של המשתמש.
+             *
+             * אם אין מנוי, אין מכסה או קיימת תקלה,
+             * התוצאה המקומית נשארת ללא שינוי.
+             */
+            val remoteResult =
+                RemoteAssistantEngine.answer(
+                    question = question,
+                    preferredBelt =
+                        preferredBelt,
+                    isEnglish =
+                        isEnglish,
+                    conversationHistory =
+                        remoteConversationHistory,
+                    additionalUserProfile =
+                        buildString {
+                            registeredBeltText
+                                ?.trim()
+                                ?.takeIf {
+                                    it.isNotBlank()
+                                }
+                                ?.let { beltText ->
+                                    appendLine(
+                                        "registeredBelt=$beltText"
+                                    )
+                                }
+
+                            assistantMode
+                                ?.let { mode ->
+                                    appendLine(
+                                        "selectedAssistantMode=${mode.name}"
+                                    )
+                                }
+
+                            progressSnapshot
+                                ?.let { snapshot ->
+                                    appendLine(
+                                        "progressBeltId=${snapshot.belt.id}"
+                                    )
+                                    appendLine(
+                                        "progressBeltName=${snapshot.belt.name}"
+                                    )
+                                    appendLine(
+                                        "totalExercises=${snapshot.totalExercises}"
+                                    )
+                                    appendLine(
+                                        "knownExercisesCount=${snapshot.knownExercises.size}"
+                                    )
+                                    appendLine(
+                                        "unknownExercisesCount=${snapshot.unknownExercises.size}"
+                                    )
+                                    appendLine(
+                                        "unmarkedExercisesCount=${snapshot.unmarkedExercisesCount}"
+                                    )
+
+                                    appendLine(
+                                        "knownExercises:"
+                                    )
+
+                                    if (
+                                        snapshot.knownExercises
+                                            .isEmpty()
+                                    ) {
+                                        appendLine(
+                                            "- none"
+                                        )
+                                    } else {
+                                        snapshot.knownExercises
+                                            .take(20)
+                                            .forEach { item ->
+                                                appendLine(
+                                                    "- ${item.title} | topic=${item.topicTitle}" +
+                                                            item.subTopicTitle
+                                                                ?.takeIf {
+                                                                    it.isNotBlank()
+                                                                }
+                                                                ?.let {
+                                                                    " | subTopic=$it"
+                                                                }
+                                                                .orEmpty()
+                                                )
+                                            }
+
+                                        val omittedKnown =
+                                            snapshot.knownExercises.size -
+                                                    20
+
+                                        if (omittedKnown > 0) {
+                                            appendLine(
+                                                "- $omittedKnown additional known exercises omitted"
+                                            )
+                                        }
+                                    }
+
+                                    appendLine(
+                                        "unknownExercises:"
+                                    )
+
+                                    if (
+                                        snapshot.unknownExercises
+                                            .isEmpty()
+                                    ) {
+                                        appendLine(
+                                            "- none"
+                                        )
+                                    } else {
+                                        snapshot.unknownExercises
+                                            .take(20)
+                                            .forEach { item ->
+                                                appendLine(
+                                                    "- ${item.title} | topic=${item.topicTitle}" +
+                                                            item.subTopicTitle
+                                                                ?.takeIf {
+                                                                    it.isNotBlank()
+                                                                }
+                                                                ?.let {
+                                                                    " | subTopic=$it"
+                                                                }
+                                                                .orEmpty()
+                                                )
+                                            }
+
+                                        val omittedUnknown =
+                                            snapshot.unknownExercises.size -
+                                                    20
+
+                                        if (omittedUnknown > 0) {
+                                            appendLine(
+                                                "- $omittedUnknown additional unknown exercises omitted"
+                                            )
+                                        }
+                                    }
+                                }
+                        }
+                            .trim(),
+                    verifiedLocalAnswer =
+                        localFinalAnswer
+                )
+
+            val remoteAnswer =
+                when (remoteResult) {
+                    is RemoteAssistantResult.Success ->
+                        remoteResult.answer
+
+                    is RemoteAssistantResult.Fallback ->
+                        null
+                }
+
+            val finalAnswer =
+                remoteAnswer
+                    ?.text
+                    ?.let {
+                        sanitizeAssistantMarkup(
+                            it
+                        )
+                    }
+                    ?.takeIf {
+                        it.isNotBlank()
+                    }
+                    ?: localFinalAnswer
+
+            /*
+             * שומרים עד 12 הודעות אחרונות כדי לאפשר
+             * הבנת שאלות המשך בלי לשלוח שיחה אינסופית.
+             */
+            remoteConversationHistory =
+                (
+                        remoteConversationHistory +
+                                RemoteAssistantMessage(
+                                    role = "user",
+                                    text = question
+                                ) +
+                                RemoteAssistantMessage(
+                                    role = "assistant",
+                                    text = finalAnswer
+                                )
+                        )
+                    .takeLast(12)
+
+            assistantMode = when (assistantResult.source) {
             AssistantKnowledgeSource.EXERCISES ->
                 AssistantMode.EXERCISE
 
@@ -3068,7 +3435,16 @@ fun AiAssistantDialog(
             }
         }
 
-        val resultSuggestions =
+            if (
+                remoteAnswer
+                    ?.needsClarification == true
+            ) {
+                resultQuality =
+                    AssistantResultQuality
+                        .NEEDS_CLARIFICATION
+            }
+
+            val resultSuggestions =
             assistantResult.suggestedActions.map { action ->
                 AssistantSuggestion(
                     label = action.label(isEnglish),
@@ -3123,28 +3499,146 @@ fun AiAssistantDialog(
                 emptyList()
             }
 
-        val aiMessage = AiMessage(
-            fromUser = false,
-            text = finalAnswer,
-            relatedQuestion = question,
-            trainingItems = trainingItems,
-            materialItems = materialItems
-        )
+            /*
+      * שומרים גם את ההתאמה עצמה ולא רק את הכותרת,
+      * כדי להשתמש בחגורה האמיתית שאליה התרגיל שייך.
+      */
+            val verifiedExerciseMatch =
+                runCatching {
+                    il.kmi.app.domain
+                        .ExplanationSearchIndex
+                        .findBest(
+                            query =
+                                question,
+                            preferredBelt =
+                                preferredBelt,
+                            minScore =
+                                180
+                        )
+                }
+                    .getOrNull()
 
-        /*
-         * השאלה הנוכחית נשארת בראש והתשובה מוצגת
-         * מיד מתחתיה בכל מצבי העוזר.
-         */
-        messages = listOf(
-            AiMessage(
-                fromUser = true,
-                text = question
-            ),
-            aiMessage
-        )
+            val verifiedAnswerTitle =
+                verifiedExerciseMatch
+                    ?.title
+                    ?.trim()
+                    ?.takeIf {
+                        it.isNotBlank()
+                    }
 
-        lastAiAnswer = finalAnswer
-        isThinking = false
+            val baseAnswerTitle =
+                remoteAnswer
+                    ?.title
+                    ?.trim()
+                    ?.takeIf {
+                        it.isNotBlank()
+                    }
+                    ?: verifiedAnswerTitle
+                    ?: when (assistantMode) {
+                        AssistantMode.EXERCISE ->
+                            tr(
+                                "תשובה על תרגילים",
+                                "Exercise answer"
+                            )
+
+                        AssistantMode.KMI_MATERIAL ->
+                            tr(
+                                "חומר ק.מ.י",
+                                "KAMI material"
+                            )
+
+                        AssistantMode.TRAININGS ->
+                            tr(
+                                "מידע על אימונים",
+                                "Training information"
+                            )
+
+                        null ->
+                            tr(
+                                "תשובת העוזר",
+                                "Assistant answer"
+                            )
+                    }
+
+            /*
+             * בתשובות על תרגילים או חומר מציגים תמיד
+             * את החגורה הרלוונטית בכותרת הכרטיס.
+             *
+             * חגורת ההתאמה המדויקת קודמת לחגורת המשתמש.
+             */
+            val answerBelt =
+                verifiedExerciseMatch?.belt
+                    ?: preferredBelt
+
+            val isBeltScopedAnswer =
+                assistantMode ==
+                        AssistantMode.EXERCISE ||
+                        assistantMode ==
+                        AssistantMode.KMI_MATERIAL ||
+                        assistantResult.source ==
+                        AssistantKnowledgeSource.EXERCISES ||
+                        assistantResult.source ==
+                        AssistantKnowledgeSource.MATERIAL
+
+            val answerBeltLabel =
+                answerBelt
+                    ?.takeIf {
+                        isBeltScopedAnswer
+                    }
+                    ?.let { belt ->
+                        beltDisplayLabel(
+                            belt = belt,
+                            isEnglish = isEnglish
+                        )
+                    }
+
+            val resolvedAnswerTitle =
+                answerBeltLabel
+                    ?.takeIf { beltLabel ->
+                        /*
+                         * מונעים הוספה כפולה אם השרת כבר
+                         * כלל את צבע החגורה בכותרת.
+                         */
+                        !baseAnswerTitle.contains(
+                            beltLabel,
+                            ignoreCase = true
+                        )
+                    }
+                    ?.let { beltLabel ->
+                        "$baseAnswerTitle • $beltLabel"
+                    }
+                    ?: baseAnswerTitle
+
+            val aiMessage =
+                AiMessage(
+                    fromUser =
+                        false,
+                    text =
+                        finalAnswer,
+                    answerTitle =
+                        resolvedAnswerTitle,
+                    relatedQuestion =
+                        question,
+                    trainingItems =
+                        trainingItems,
+                    materialItems =
+                        materialItems
+                )
+
+            /*
+             * מצרפים את התשובה לשיחה ושומרים מספר
+             * מוגבל של הודעות כדי למנוע עומס במסך.
+             */
+            /*
+             * מוסיפים את התשובה בלי למחוק את תחילת
+             * השיחה הנוכחית.
+             */
+            messages =
+                messages +
+                        aiMessage
+
+            lastAiAnswer = finalAnswer
+            isThinking = false
 
         val logStatus = when (assistantResult) {
             is AssistantResult.Error ->
@@ -3162,31 +3656,25 @@ fun AiAssistantDialog(
                 AssistantLogStatus.SUCCESS
         }
 
-        saveAssistantCommandLog(
-            rawCommand = question,
-            status = logStatus,
-            alternatives = followUpSuggestions.map {
-                it.query
-            },
-            answer = finalAnswer
-        )
+            saveAssistantCommandLog(
+                rawCommand = question,
+                status = logStatus,
+                alternatives = followUpSuggestions.map {
+                    it.query
+                },
+                answer = finalAnswer
+            )
 
-        /*
-         * לאחר קבלת התשובה חוזרים לתחילת אזור השיחה,
-         * שבו נמצאת השאלה הנוכחית. המשתמש רואה את
-         * השאלה ואת תחילת התשובה בלי לגלול לאחור.
-         */
-        scrollToTop()
-
-        val spokenAnswer = when (assistantResult) {
-            is AssistantResult.Clarification ->
-                sanitizeAssistantTextForSpeech(
-                    text = finalAnswer,
-                    isEnglish = isEnglish
-                )
-
-            is AssistantResult.ResultList ->
+            /*
+             * סוג התוצאה לבדו אינו מספיק לזיהוי רשימה.
+             *
+             * גם תשובה שמסווגת כ־Answer יכולה להכיל בפועל
+             * רשימה ממוספרת של תרגילים. לכן בכל תשובה שאינה
+             * רשימת אימונים בודקים את מבנה הטקסט עצמו.
+             */
+            val spokenAnswer =
                 if (
+                    assistantResult is AssistantResult.ResultList &&
                     assistantResult.source ==
                     AssistantKnowledgeSource.TRAININGS
                 ) {
@@ -3196,17 +3684,14 @@ fun AiAssistantDialog(
                         isEnglish = isEnglish
                     )
                 } else {
-                    shortMaterialSpeech(isEnglish)
+                    assistantAnswerTextForSpeech(
+                        answer = finalAnswer,
+                        isEnglish = isEnglish
+                    )
                 }
 
-            else ->
-                sanitizeAssistantTextForSpeech(
-                    text = finalAnswer,
-                    isEnglish = isEnglish
-                )
+            speakBest(spokenAnswer)
         }
-
-        speakBest(spokenAnswer)
     }
 
     // ✅ STT -> Send
@@ -4208,31 +4693,43 @@ fun AiAssistantDialog(
                                                                     Spacer(Modifier.width(9.dp))
                                                                 }
 
-                                                                Text(
-                                                                    text = when (assistantMode) {
-                                                                        AssistantMode.EXERCISE ->
-                                                                            tr(
-                                                                                "הסבר לתרגיל",
-                                                                                "Exercise explanation"
-                                                                            )
+                                                                StyledExplanationText(
+                                                                    raw =
+                                                                        latestAssistantMessage
+                                                                            ?.answerTitle
+                                                                            ?.trim()
+                                                                            ?.takeIf {
+                                                                                it.isNotBlank()
+                                                                            }
+                                                                            ?: when (
+                                                                                assistantMode
+                                                                            ) {
+                                                                                AssistantMode.EXERCISE ->
+                                                                                    tr(
+                                                                                        "תשובה על תרגילים",
+                                                                                        "Exercise answer"
+                                                                                    )
 
-                                                                        AssistantMode.KMI_MATERIAL ->
-                                                                            tr(
-                                                                                "תוצאה מהמאגר",
-                                                                                "Database result"
-                                                                            )
+                                                                                AssistantMode.KMI_MATERIAL ->
+                                                                                    tr(
+                                                                                        "חומר ק.מ.י",
+                                                                                        "KAMI material"
+                                                                                    )
 
-                                                                        else ->
-                                                                            tr(
-                                                                                "התשובה של יובל",
-                                                                                "Yuval's answer"
-                                                                            )
-                                                                    },
+                                                                                else ->
+                                                                                    tr(
+                                                                                        "התשובה של יובל",
+                                                                                        "Yuval's answer"
+                                                                                    )
+                                                                            },
                                                                     modifier = Modifier.weight(1f),
+                                                                    style =
+                                                                        MaterialTheme.typography.bodyLarge.copy(
+                                                                            fontSize = 14.sp,
+                                                                            lineHeight = 18.sp,
+                                                                            fontWeight = FontWeight.ExtraBold
+                                                                        ),
                                                                     color = Color(0xFF302553),
-                                                                    fontSize = 14.sp,
-                                                                    lineHeight = 18.sp,
-                                                                    fontWeight = FontWeight.ExtraBold,
                                                                     textAlign = textAlignPrimary
                                                                 )
 
@@ -4356,8 +4853,8 @@ fun AiAssistantDialog(
                                                     Surface(
                                                         onClick = {
                                                             speakBest(
-                                                                sanitizeAssistantTextForSpeech(
-                                                                    text = answerText,
+                                                                assistantAnswerTextForSpeech(
+                                                                    answer = answerText,
                                                                     isEnglish = isEnglish
                                                                 )
                                                             )
@@ -4564,28 +5061,73 @@ fun AiAssistantDialog(
 
                                 }
 
-                                LaunchedEffect(
-                                    displayTopRequestText,
-                                    answerText,
-                                    isThinking
-                                ) {
-                                    explanationScrollState.scrollTo(0)
+                                        LaunchedEffect(
+                                            displayTopRequestText,
+                                            answerText,
+                                            isThinking
+                                        ) {
+                                            explanationScrollState.scrollTo(0)
+                                        }
+                                    }
                                 }
-                            }
-                        }
-                    } else {
-                        Column(
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .padding(horizontal = 12.dp, vertical = 12.dp)
-                                .verticalScroll(scrollState),
-                            verticalArrangement = Arrangement.spacedBy(10.dp)
-                        ) {
+                            } else {
+                                /*
+                                 * לאחר יותר משאלה ותשובה אחת מציגים
+                                     * את כל השיחה הנוכחית בתוך אותו כרטיס.
+                                     *
+                                     * הרשימה נמצאת בתוך ה־Surface של השיחה,
+                                     * ולכן ניתן לגלול עד להודעה הראשונה.
+                                     */
+                                    Column(
+                                        modifier = Modifier
+                                            .fillMaxSize()
+                                            .padding(
+                                                horizontal = 12.dp,
+                                                vertical = 12.dp
+                                            )
+                                            .verticalScroll(scrollState),
+                                        verticalArrangement =
+                                            Arrangement.spacedBy(10.dp)
+                                    ) {
 
-                            messages.forEachIndexed { index, msg ->
-                                Box(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    contentAlignment = when {
+                                        val latestUserMessageIndex =
+                                            messages.indexOfLast { message ->
+                                                message.fromUser
+                                            }
+
+                                        messages.forEachIndexed { index, msg ->
+                                            val isLatestQuestion =
+                                                msg.fromUser &&
+                                                        index ==
+                                                        latestUserMessageIndex
+
+                                            Box(
+                                                modifier =
+                                                    Modifier
+                                                        .fillMaxWidth()
+                                                        .then(
+                                                            if (isLatestQuestion) {
+                                                                Modifier
+                                                                    .onGloballyPositioned {
+                                                                            coordinates ->
+                                                                        /*
+                                                                         * positionInParent מושפע
+                                                                         * מהגלילה הנוכחית, ולכן
+                                                                         * מוסיפים את scrollState.value
+                                                                         * לקבלת המיקום בתוכן המלא.
+                                                                         */
+                                                                        latestQuestionScrollOffset =
+                                                                            coordinates
+                                                                                .positionInParent()
+                                                                                .y
+                                                                                .toInt() +
+                                                                                    scrollState.value
+                                                                    }
+                                                            } else {
+                                                                Modifier
+                                                            }
+                                                        ),
+                                                contentAlignment = when {
                                         msg.fromUser && !isEnglish -> Alignment.CenterEnd
                                         msg.fromUser && isEnglish -> Alignment.CenterStart
                                         !msg.fromUser && !isEnglish -> Alignment.CenterStart
@@ -4618,6 +5160,40 @@ fun AiAssistantDialog(
                                         shadowElevation = 2.dp
                                     ) {
                                         Column {
+                                            if (
+                                                !msg.fromUser &&
+                                                !msg.answerTitle
+                                                    .isNullOrBlank()
+                                            ) {
+                                                StyledExplanationText(
+                                                    raw =
+                                                        msg.answerTitle,
+                                                    modifier =
+                                                        Modifier
+                                                            .fillMaxWidth()
+                                                            .padding(
+                                                                start = 14.dp,
+                                                                end = 14.dp,
+                                                                top = 12.dp,
+                                                                bottom = 2.dp
+                                                            ),
+                                                    style =
+                                                        MaterialTheme
+                                                            .typography
+                                                            .bodyLarge
+                                                            .copy(
+                                                                fontSize = 15.sp,
+                                                                lineHeight = 19.sp,
+                                                                fontWeight =
+                                                                    FontWeight.ExtraBold
+                                                            ),
+                                                    color =
+                                                        Color(0xFF4C3A80),
+                                                    textAlign =
+                                                        textAlignPrimary
+                                                )
+                                            }
+
                                             if (
                                                 !msg.fromUser &&
                                                 msg.trainingItems.isNotEmpty()
@@ -4653,17 +5229,39 @@ fun AiAssistantDialog(
                                                     }
                                                 }
                                             } else {
-                                                Text(
-                                                    text = msg.text,
-                                                    color = textColor,
-                                                    modifier = Modifier.padding(
-                                                        horizontal = 14.dp,
-                                                        vertical = 12.dp
-                                                    ),
-                                                    textAlign = textAlignPrimary,
-                                                    style =
-                                                        MaterialTheme.typography.bodyMedium
-                                                )
+                                                if (msg.fromUser) {
+                                                    Text(
+                                                        text = msg.text,
+                                                        color = textColor,
+                                                        modifier =
+                                                            Modifier.padding(
+                                                                horizontal = 14.dp,
+                                                                vertical = 12.dp
+                                                            ),
+                                                        textAlign =
+                                                            textAlignPrimary,
+                                                        style =
+                                                            MaterialTheme
+                                                                .typography
+                                                                .bodyMedium
+                                                    )
+                                                } else {
+                                                    StyledExplanationText(
+                                                        raw = msg.text,
+                                                        modifier =
+                                                            Modifier.padding(
+                                                                horizontal = 14.dp,
+                                                                vertical = 12.dp
+                                                            ),
+                                                        style =
+                                                            MaterialTheme
+                                                                .typography
+                                                                .bodyMedium,
+                                                        color = textColor,
+                                                        textAlign =
+                                                            textAlignPrimary
+                                                    )
+                                                }
                                             }
 
                                             if (!msg.fromUser) {
@@ -4776,25 +5374,59 @@ fun AiAssistantDialog(
                                 }
                             }
 
-                            LaunchedEffect(messages.size) {
-                                if (messages.isNotEmpty()) {
-                                    /*
-                                     * בכל שאלה ובכל סוג תשובה מציגים את
-                                     * תחילת השיחה הנוכחית ולא את תחתיתה.
-                                     */
-                                    scrollToTop()
-                                }
+                                        LaunchedEffect(
+                                            messages.size,
+                                            isThinking,
+                                            latestQuestionScrollOffset,
+                                            pendingScrollToLatestQuestion
+                                        ) {
+                                            /*
+                                             * לא גוללים בזמן שהעוזר עדיין חושב,
+                                             * ולא גוללים שוב לאחר שהפעולה הושלמה.
+                                             */
+                                            if (
+                                                isThinking ||
+                                                !pendingScrollToLatestQuestion
+                                            ) {
+                                                return@LaunchedEffect
+                                            }
+
+                                            val questionOffset =
+                                                latestQuestionScrollOffset
+                                                    ?: return@LaunchedEffect
+
+                                            /*
+                                             * ממתינים עד שכרטיס התשובה הארוך
+                                             * יימדד וה־maxValue יתעדכן.
+                                             */
+                                            delay(150L)
+
+                                            /*
+                                             * מכבים את הבקשה לפני הגלילה עצמה.
+                                             * כך שינויי מיקום שנגרמים מהגלילה אינם
+                                             * יכולים להפעיל גלילה אוטומטית נוספת.
+                                             */
+                                            pendingScrollToLatestQuestion = false
+
+                                            scrollState.animateScrollTo(
+                                                value =
+                                                    questionOffset.coerceIn(
+                                                        minimumValue = 0,
+                                                        maximumValue =
+                                                            scrollState.maxValue
+                                                    )
+                                            )
+                                        }
+                                    }
                             }
                         }
+                    } else {
+                        Box(
+                            modifier = Modifier
+                                .weight(1f, fill = true)
+                                .fillMaxWidth()
+                        )
                     }
-                }
-            } else {
-            Box(
-                modifier = Modifier
-                    .weight(1f, fill = true)
-                    .fillMaxWidth()
-            )
-        }
 
             /*
              * בזמן שמוצגת שיחה אין צורך בשורת "מדבר…"
@@ -5631,15 +6263,117 @@ private fun detectIntent(question: String): String {
 }
 
 // ───────────────────────────────
-// זיהוי חגורה מהטקסט
+// זיהוי והצגת חגורה
 // ───────────────────────────────
-private fun detectBeltEnum(text: String): Belt? = when {
-    "לבן" in text || "לבנה" in text -> Belt.WHITE
-    "צהוב" in text || "צהובה" in text -> Belt.YELLOW
-    "כתום" in text || "כתומה" in text -> Belt.ORANGE
-    "ירוק" in text || "ירוקה" in text -> Belt.GREEN
-    "כחול" in text || "כחולה" in text -> Belt.BLUE
-    "חום" in text || "חומה" in text -> Belt.BROWN
-    "שחור" in text || "שחורה" in text -> Belt.BLACK
-    else -> null
+private fun detectBeltEnum(
+    text: String
+): Belt? {
+    val normalized =
+        text
+            .lowercase()
+            .replace("_", " ")
+            .replace("-", " ")
+            .replace("־", " ")
+            .replace("–", " ")
+            .replace("—", " ")
+            .replace(Regex("\\s+"), " ")
+            .trim()
+
+    return when {
+        "לבן" in normalized ||
+                "לבנה" in normalized ||
+                "white" in normalized ->
+            Belt.WHITE
+
+        "צהוב" in normalized ||
+                "צהובה" in normalized ||
+                "yellow" in normalized ->
+            Belt.YELLOW
+
+        "כתום" in normalized ||
+                "כתומה" in normalized ||
+                "orange" in normalized ->
+            Belt.ORANGE
+
+        "ירוק" in normalized ||
+                "ירוקה" in normalized ||
+                "green" in normalized ->
+            Belt.GREEN
+
+        "כחול" in normalized ||
+                "כחולה" in normalized ||
+                "blue" in normalized ->
+            Belt.BLUE
+
+        "חום" in normalized ||
+                "חומה" in normalized ||
+                "brown" in normalized ->
+            Belt.BROWN
+
+        "שחור" in normalized ||
+                "שחורה" in normalized ||
+                "black" in normalized ->
+            Belt.BLACK
+
+        else -> null
+    }
+}
+
+private fun beltDisplayLabel(
+    belt: Belt,
+    isEnglish: Boolean
+): String {
+    return when (belt) {
+        Belt.WHITE ->
+            if (isEnglish) {
+                "White belt"
+            } else {
+                "חגורה לבנה"
+            }
+
+        Belt.YELLOW ->
+            if (isEnglish) {
+                "Yellow belt"
+            } else {
+                "חגורה צהובה"
+            }
+
+        Belt.ORANGE ->
+            if (isEnglish) {
+                "Orange belt"
+            } else {
+                "חגורה כתומה"
+            }
+
+        Belt.GREEN ->
+            if (isEnglish) {
+                "Green belt"
+            } else {
+                "חגורה ירוקה"
+            }
+
+        Belt.BLUE ->
+            if (isEnglish) {
+                "Blue belt"
+            } else {
+                "חגורה כחולה"
+            }
+
+        Belt.BROWN ->
+            if (isEnglish) {
+                "Brown belt"
+            } else {
+                "חגורה חומה"
+            }
+
+        Belt.BLACK ->
+            if (isEnglish) {
+                "Black belt"
+            } else {
+                "חגורה שחורה"
+            }
+
+        else ->
+            belt.name
+    }
 }

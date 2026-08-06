@@ -4,6 +4,8 @@ import android.Manifest
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.media.AudioManager
+import android.media.ToneGenerator
 import android.os.Bundle
 import android.speech.RecognitionListener
 import android.speech.RecognizerIntent
@@ -35,16 +37,32 @@ class ExerciseSearchSpeechState internal constructor(
 
     private var recognizer: SpeechRecognizer? = null
 
+    private val toneGenerator =
+        runCatching {
+            ToneGenerator(
+                AudioManager.STREAM_NOTIFICATION,
+                80
+            )
+        }.getOrNull()
+
     private var permissionRequester:
             (() -> Unit)? = null
 
     private var resultHandler:
                 (String) -> Unit = {}
 
+    private var partialResultHandler:
+                (String) -> Unit = {}
+
     private var errorHandler:
                 (String) -> Unit = {}
 
     private var isEnglish: Boolean = false
+
+    /*
+     * מונע שליחה חוזרת של אותו תמלול חלקי למסך.
+     */
+    private var lastDeliveredText: String = ""
 
     var isListening by mutableStateOf(false)
         private set
@@ -57,14 +75,34 @@ class ExerciseSearchSpeechState internal constructor(
             applicationContext
         )
 
+    private fun playListeningStartedTone() {
+        runCatching {
+            toneGenerator?.startTone(
+                ToneGenerator.TONE_PROP_BEEP,
+                120
+            )
+        }
+    }
+
+    private fun playListeningFinishedTone() {
+        runCatching {
+            toneGenerator?.startTone(
+                ToneGenerator.TONE_PROP_ACK,
+                140
+            )
+        }
+    }
+
     internal fun update(
         isEnglish: Boolean,
         onResult: (String) -> Unit,
+        onPartialResult: (String) -> Unit,
         onError: (String) -> Unit,
         requestPermission: () -> Unit
     ) {
         this.isEnglish = isEnglish
         resultHandler = onResult
+        partialResultHandler = onPartialResult
         errorHandler = onError
         permissionRequester = requestPermission
     }
@@ -87,8 +125,12 @@ class ExerciseSearchSpeechState internal constructor(
         isListening = false
         statusMessage = null
 
+        /*
+         * עצירה ידנית מבטלת את הזיהוי לחלוטין ואינה
+         * ממתינה לתוצאה נוספת מהמנוע.
+         */
         runCatching {
-            recognizer?.stopListening()
+            recognizer?.cancel()
         }
     }
 
@@ -122,6 +164,10 @@ class ExerciseSearchSpeechState internal constructor(
 
         runCatching {
             recognizer?.destroy()
+        }
+
+        runCatching {
+            toneGenerator?.release()
         }
 
         recognizer = null
@@ -179,6 +225,7 @@ class ExerciseSearchSpeechState internal constructor(
          * מפעילים את מצב ההאזנה לפני startListening,
          * כדי שהאנימציה תופיע כבר בלחיצה הראשונה.
          */
+        lastDeliveredText = ""
         isListening = true
         statusMessage =
             if (isEnglish) {
@@ -186,6 +233,8 @@ class ExerciseSearchSpeechState internal constructor(
             } else {
                 "מקשיב..."
             }
+
+        playListeningStartedTone()
 
         val languageTag =
             if (isEnglish) {
@@ -276,15 +325,19 @@ class ExerciseSearchSpeechState internal constructor(
 
                         override fun onEndOfSpeech() {
                             /*
-                             * לא מכבים כאן את החיווי. המנוע עדיין
-                             * מעבד את המלל עד onResults או onError.
+                             * ההקלטה הסתיימה. המנוע יכול להמשיך
+                             * לעבד את התוצאה, אך המיקרופון כבר
+                             * אינו נמצא במצב האזנה פעיל.
                              */
+                            isListening = false
                             statusMessage =
                                 if (isEnglish) {
                                     "Recognizing..."
                                 } else {
                                     "מזהה..."
                                 }
+
+                            playListeningFinishedTone()
                         }
 
                         override fun onError(
@@ -348,7 +401,31 @@ class ExerciseSearchSpeechState internal constructor(
 
                         override fun onPartialResults(
                             partialResults: Bundle?
-                        ) = Unit
+                        ) {
+                            val partialText =
+                                partialResults
+                                    ?.getStringArrayList(
+                                        SpeechRecognizer
+                                            .RESULTS_RECOGNITION
+                                    )
+                                    ?.firstOrNull()
+                                    ?.let { candidate ->
+                                        GlobalExerciseSearchEngine
+                                            .normalizeSpokenQuery(
+                                                candidate
+                                            )
+                                    }
+                                    .orEmpty()
+                                    .trim()
+
+                            if (
+                                partialText.length >= 2 &&
+                                partialText != lastDeliveredText
+                            ) {
+                                lastDeliveredText = partialText
+                                partialResultHandler(partialText)
+                            }
+                        }
 
                         override fun onEvent(
                             eventType: Int,
@@ -422,12 +499,16 @@ class ExerciseSearchSpeechState internal constructor(
 fun rememberExerciseSearchSpeechState(
     isEnglish: Boolean,
     onResult: (String) -> Unit,
+    onPartialResult: (String) -> Unit = {},
     onError: (String) -> Unit = {}
 ): ExerciseSearchSpeechState {
     val context = LocalContext.current
 
     val currentResultHandler by
     rememberUpdatedState(onResult)
+
+    val currentPartialResultHandler by
+    rememberUpdatedState(onPartialResult)
 
     val currentErrorHandler by
     rememberUpdatedState(onError)
@@ -449,6 +530,9 @@ fun rememberExerciseSearchSpeechState(
         isEnglish = isEnglish,
         onResult = { value ->
             currentResultHandler(value)
+        },
+        onPartialResult = { value ->
+            currentPartialResultHandler(value)
         },
         onError = { message ->
             currentErrorHandler(message)

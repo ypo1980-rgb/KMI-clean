@@ -4,9 +4,12 @@ import android.app.Activity
 import android.content.Context
 import android.util.Log
 import com.android.billingclient.api.*
+import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.functions.FirebaseFunctions
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.tasks.await
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -51,9 +54,31 @@ class BillingRepository(
         }
     }
 
-    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
-    private val _state = MutableStateFlow(SubscriptionState())
-    val state: StateFlow<SubscriptionState> = _state.asStateFlow()
+    private val scope =
+        CoroutineScope(
+            SupervisorJob() +
+                    Dispatchers.IO
+        )
+
+    private val _state =
+        MutableStateFlow(
+            SubscriptionState()
+        )
+
+    val state: StateFlow<SubscriptionState> =
+        _state.asStateFlow()
+
+    /*
+     * הפונקציות הקיימות נפרסות באזור ברירת המחדל
+     * us-central1, לכן אין לציין כאן אזור אחר.
+     */
+    private val firebaseFunctions:
+            FirebaseFunctions =
+        FirebaseFunctions.getInstance()
+
+    private val firebaseAuth:
+            FirebaseAuth =
+        FirebaseAuth.getInstance()
 
     // העדפות למידע טכני על המנוי (מזהה מוצר, טוקן)
     private val sp = context.getSharedPreferences("kmi_subs", Context.MODE_PRIVATE)
@@ -638,6 +663,23 @@ class BillingRepository(
             // יש מנוי פעיל חדש/תקף
             acknowledgeIfNeeded(sub)
 
+            /*
+             * אימות נוסף בצד השרת מול Google Play.
+             *
+             * האימות מתבצע ברקע ואינו חוסם את פתיחת
+             * התוכן הקיים באפליקציה. עוזר ה־AI ייפתח
+             * רק לאחר שהשרת אישר את המנוי.
+             */
+            if (
+                !ownedProduct.isNullOrBlank()
+            ) {
+                verifySubscriptionOnServer(
+                    productId = ownedProduct,
+                    purchaseToken =
+                        sub.purchaseToken
+                )
+            }
+
             // את פרטי המנוי שומרים רק בתוך writeAccessEverywhere,
             // כדי שלא נייצר בטעות "אותו טוקן פעיל" לפני בדיקת תוקף.
             writeAccessEverywhere(
@@ -712,18 +754,241 @@ class BillingRepository(
         }
     }
 
-    private fun acknowledgeIfNeeded(p: Purchase) {
-        if (p.isAcknowledged) return
+    /**
+     * שולח את פרטי המנוי לאימות מאובטח בשרת.
+     *
+     * השרת בודק את purchaseToken ישירות מול
+     * Google Play ושומר הרשאת AI לפי Firebase UID.
+     */
+    private fun verifySubscriptionOnServer(
+        productId: String,
+        purchaseToken: String
+    ) {
+        val cleanProductId =
+            productId.trim()
+
+        val cleanPurchaseToken =
+            purchaseToken.trim()
+
+        if (
+            cleanProductId.isBlank() ||
+            cleanPurchaseToken.isBlank()
+        ) {
+            logBillingWarning(
+                "Server subscription verification skipped: " +
+                        "missing productId or purchaseToken"
+            )
+
+            return
+        }
+
+        /*
+         * Callable Function דורשת Firebase Auth.
+         * אם המשתמש עדיין לא מחובר, יתבצע ניסיון נוסף
+         * ברענון המנוי הבא.
+         */
+        val firebaseUser =
+            firebaseAuth.currentUser
+
+        if (firebaseUser == null) {
+            logBillingWarning(
+                "Server subscription verification skipped: " +
+                        "Firebase user is not signed in"
+            )
+
+            return
+        }
+
         scope.launch {
             runCatching {
-                val params = AcknowledgePurchaseParams.newBuilder()
-                    .setPurchaseToken(p.purchaseToken)
-                    .build()
-                val res = billingClient.acknowledgePurchase(params)
-                if (res.responseCode != BillingClient.BillingResponseCode.OK) {
-                    logBillingWarning("Acknowledge failed: ${res.debugMessage}")
+                val requestData =
+                    hashMapOf<String, Any>(
+                        "productId" to
+                                cleanProductId,
+
+                        "purchaseToken" to
+                                cleanPurchaseToken
+                    )
+
+                val callableResult =
+                    firebaseFunctions
+                        .getHttpsCallable(
+                            "verifyKmiSubscription"
+                        )
+                        .call(requestData)
+                        .await()
+
+                val response =
+                    callableResult.data
+                            as? Map<*, *>
+                        ?: error(
+                            "Invalid verification response"
+                        )
+
+                val verified =
+                    response["verified"]
+                            as? Boolean
+                        ?: false
+
+                val active =
+                    response["active"]
+                            as? Boolean
+                        ?: false
+
+                val verifiedProductId =
+                    response["productId"]
+                        ?.toString()
+                        ?.trim()
+                        .orEmpty()
+
+                val subscriptionState =
+                    response["subscriptionState"]
+                        ?.toString()
+                        ?.trim()
+                        .orEmpty()
+
+                val expiryMillis =
+                    when (
+                        val rawExpiry =
+                            response["expiryMillis"]
+                    ) {
+                        is Number ->
+                            rawExpiry.toLong()
+
+                        is String ->
+                            rawExpiry.toLongOrNull()
+                                ?: 0L
+
+                        else ->
+                            0L
+                    }
+
+                val checkedAt =
+                    System.currentTimeMillis()
+
+                /*
+                 * המידע נשמר לצורכי מצב ותצוגה בלבד.
+                 * השרת נשאר מקור האמת להפעלת עוזר AI.
+                 */
+                sp.edit()
+                    .putBoolean(
+                        "server_subscription_verified",
+                        verified
+                    )
+                    .putBoolean(
+                        "server_subscription_active",
+                        active
+                    )
+                    .putString(
+                        "server_subscription_product",
+                        verifiedProductId
+                    )
+                    .putString(
+                        "server_subscription_state",
+                        subscriptionState
+                    )
+                    .putLong(
+                        "server_subscription_expiry",
+                        expiryMillis
+                    )
+                    .putLong(
+                        "server_subscription_checked_at",
+                        checkedAt
+                    )
+                    .apply()
+
+                userSp.edit()
+                    .putBoolean(
+                        "server_subscription_verified",
+                        verified
+                    )
+                    .putBoolean(
+                        "server_subscription_active",
+                        active
+                    )
+                    .putString(
+                        "server_subscription_product",
+                        verifiedProductId
+                    )
+                    .putString(
+                        "server_subscription_state",
+                        subscriptionState
+                    )
+                    .putLong(
+                        "server_subscription_expiry",
+                        expiryMillis
+                    )
+                    .putLong(
+                        "server_subscription_checked_at",
+                        checkedAt
+                    )
+                    .apply()
+
+                logBilling(
+                    "SERVER SUBSCRIPTION VERIFIED " +
+                            "uid=${firebaseUser.uid} " +
+                            "verified=$verified " +
+                            "active=$active " +
+                            "product=$verifiedProductId " +
+                            "state=$subscriptionState " +
+                            "expiryMillis=$expiryMillis"
+                )
+            }
+                .onFailure { error ->
+                    /*
+                     * לא מבטלים כאן את המנוי המקומי.
+                     * תקלה זמנית בשרת לא צריכה לנעול
+                     * את שאר תוכן האפליקציה.
+                     */
+                    logBillingError(
+                        "Server subscription verification failed",
+                        error
+                    )
+                }
+        }
+    }
+
+    private fun acknowledgeIfNeeded(
+        p: Purchase
+    ) {
+        if (p.isAcknowledged) {
+            return
+        }
+
+        scope.launch {
+            runCatching {
+                val params =
+                    AcknowledgePurchaseParams
+                        .newBuilder()
+                        .setPurchaseToken(
+                            p.purchaseToken
+                        )
+                        .build()
+
+                val result =
+                    billingClient
+                        .acknowledgePurchase(
+                            params
+                        )
+
+                if (
+                    result.responseCode !=
+                    BillingClient
+                        .BillingResponseCode
+                        .OK
+                ) {
+                    logBillingWarning(
+                        "Acknowledge failed: " +
+                                result.debugMessage
+                    )
                 }
             }
+                .onFailure { error ->
+                    logBillingError(
+                        "Acknowledge purchase failed",
+                        error
+                    )
+                }
         }
     }
 }

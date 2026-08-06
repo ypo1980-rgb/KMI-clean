@@ -2479,52 +2479,89 @@ fun HomeScreen(
                             value: String
                         ): String {
                             return value
+                                .replace("\u200F", "")
+                                .replace("\u200E", "")
+                                .replace("\u00A0", " ")
                                 .trim()
                                 .lowercase()
+                                .replace("־", "-")
                                 .replace("–", "-")
                                 .replace("—", "-")
                                 .replace(Regex("\\s+"), " ")
                         }
 
-                        val result =
-                            all.distinctBy { candidate ->
-                                /*
-                                 * מעגלים את חותמת הזמן לדקה.
-                                 *
-                                 * TrainingData.nextWeekly עשוי להחזיר
-                                 * שניות או אלפיות שנייה שונות בשתי
-                                 * יצירות של אותו אימון, אף שהתאריך
-                                 * והשעה המוצגים זהים.
-                                 */
-                                val startMinute =
-                                    candidate.training
-                                        .cal
-                                        .timeInMillis / 60_000L
+                        /*
+    * מזהה מופע פיזי של אימון.
+    *
+    * הקבוצה אינה חלק מהמפתח בכוונה:
+    * אותו אימון עשוי להתאים ליותר מקבוצה אחת,
+    * אך הוא צריך להופיע במסך הבית פעם אחת בלבד.
+    */
+                        fun physicalTrainingKey(
+                            candidate: HomeTrainingCandidate
+                        ): String {
+                            val training = candidate.training
 
-                                val placeIdentity =
-                                    candidate.training
-                                        .place
-                                        .orEmpty()
-                                        .ifBlank {
-                                            candidate.branch
-                                        }
+                            val startMinute =
+                                training.startMillis / 60_000L
 
-                                buildString {
-                                    append(startMinute)
-                                    append("|")
-                                    append(
-                                        normalizeTrainingIdentityPart(
-                                            placeIdentity
-                                        )
+                            val endMinute =
+                                (
+                                        training.endMillis
+                                            ?: training.startMillis
+                                        ) / 60_000L
+
+                            val placeIdentity =
+                                training.place
+                                    .orEmpty()
+                                    .ifBlank {
+                                        candidate.branch
+                                    }
+
+                            val addressIdentity =
+                                training.address.orEmpty()
+
+                            return buildString {
+                                append(startMinute)
+                                append("|")
+                                append(endMinute)
+                                append("|")
+                                append(
+                                    normalizeTrainingIdentityPart(
+                                        placeIdentity
                                     )
-                                    append("|")
-                                    append(
-                                        normalizeTrainingIdentityPart(
+                                )
+                                append("|")
+                                append(
+                                    normalizeTrainingIdentityPart(
+                                        addressIdentity
+                                    )
+                                )
+                            }
+                        }
+
+                        val result =
+                            all
+                                .groupBy(::physicalTrainingKey)
+                                .values
+                                .map { samePhysicalTraining ->
+                                    /*
+                                     * אם אותו אימון הגיע מכמה מקורות,
+                                     * מעדיפים את הרשומה המלאה ביותר.
+                                     */
+                                    samePhysicalTraining.maxByOrNull { candidate ->
+                                        listOf(
+                                            candidate.training.place,
+                                            candidate.training.address,
+                                            candidate.training.coach,
+                                            candidate.branch,
                                             candidate.group
                                         )
-                                    )
+                                            .count { value ->
+                                                !value.isNullOrBlank()
+                                            }
+                                    } ?: samePhysicalTraining.first()
                                 }
-                            }
                                 .sortedBy { candidate ->
                                     candidate.training.startMillis
                                 }

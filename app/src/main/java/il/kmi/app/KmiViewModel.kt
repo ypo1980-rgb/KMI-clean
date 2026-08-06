@@ -42,6 +42,31 @@ interface StatsVm {
     suspend fun isMastered(belt: Belt, topic: String, item: String): Boolean
 }
 
+/**
+ * פריט התקדמות מאומת שניתן להעביר לעוזר האישי.
+ *
+ * mastered:
+ * true  = יודע
+ * false = לא יודע
+ */
+data class AssistantExerciseProgressItem(
+    val title: String,
+    val topicTitle: String,
+    val subTopicTitle: String?,
+    val mastered: Boolean
+)
+
+/**
+ * תמונת מצב של סימוני המשתמש בחגורה מסוימת.
+ */
+data class AssistantBeltProgressSnapshot(
+    val belt: Belt,
+    val totalExercises: Int,
+    val knownExercises: List<AssistantExerciseProgressItem>,
+    val unknownExercises: List<AssistantExerciseProgressItem>,
+    val unmarkedExercisesCount: Int
+)
+
 class KmiViewModel(
     private val ds: DataStoreManager,
     private val trainingSummaryLocalRepo: TrainingSummaryLocalRepo, // ✅ NEW
@@ -203,6 +228,193 @@ class KmiViewModel(
         val beltMap = masteredItems[belt.id] ?: return emptyMap()
         return beltMap.mapValues { (_, topicMap) -> topicMap.toMap() }
     }
+
+    /**
+     * קורא תמונת התקדמות מלאה ומאומתת עבור העוזר האישי.
+     *
+     * הקריאה אינה מסתמכת רק על ה־cache, ולכן היא עובדת
+     * גם כאשר המשתמש פתח את העוזר מיד לאחר הפעלת האפליקציה.
+     */
+    suspend fun readBeltProgressForAssistant(
+        belt: Belt
+    ): AssistantBeltProgressSnapshot =
+        coroutineScope {
+            val catalogEntries =
+                getCatalogEntriesForBelt(
+                    belt
+                )
+
+            val resolvedItems =
+                catalogEntries
+                    .map { entry ->
+                        async {
+                            val canonicalFromRaw =
+                                il.kmi.app.domain.CanonicalIds
+                                    .canonicalFor(
+                                        belt =
+                                            belt,
+                                        topicTitle =
+                                            entry.topicTitle,
+                                        displayItem =
+                                            entry.rawItem
+                                    )
+                                    .trim()
+
+                            val canonicalFromDisplay =
+                                il.kmi.app.domain.CanonicalIds
+                                    .canonicalFor(
+                                        belt =
+                                            belt,
+                                        topicTitle =
+                                            entry.topicTitle,
+                                        displayItem =
+                                            entry.displayItem
+                                    )
+                                    .trim()
+
+                            val candidateIds =
+                                linkedSetOf<String>()
+                                    .apply {
+                                        add(
+                                            entry.rawItem
+                                                .trim()
+                                        )
+                                        add(
+                                            entry.displayItem
+                                                .trim()
+                                        )
+                                        add(
+                                            canonicalFromRaw
+                                        )
+                                        add(
+                                            canonicalFromDisplay
+                                        )
+                                    }
+                                    .filter {
+                                        it.isNotBlank()
+                                    }
+
+                            var resolvedStatus:
+                                    Boolean? =
+                                null
+
+                            for (
+                            candidateId in
+                            candidateIds
+                            ) {
+                                val candidateStatus =
+                                    getItemStatusNullable(
+                                        belt =
+                                            belt,
+                                        topic =
+                                            entry.topicTitle,
+                                        item =
+                                            candidateId
+                                    )
+
+                                if (
+                                    candidateStatus != null
+                                ) {
+                                    resolvedStatus =
+                                        candidateStatus
+
+                                    break
+                                }
+                            }
+
+                            resolvedStatus
+                                ?.let { mastered ->
+                                    AssistantExerciseProgressItem(
+                                        title =
+                                            entry.displayItem,
+                                        topicTitle =
+                                            entry.topicTitle,
+                                        subTopicTitle =
+                                            entry.subTopicTitle,
+                                        mastered =
+                                            mastered
+                                    )
+                                }
+                        }
+                    }
+                    .awaitAll()
+                    .filterNotNull()
+                    .distinctBy { item ->
+                        buildString {
+                            append(
+                                item.topicTitle
+                            )
+                            append("::")
+                            append(
+                                item.subTopicTitle
+                                    .orEmpty()
+                            )
+                            append("::")
+                            append(
+                                item.title
+                            )
+                        }
+                    }
+
+            val knownExercises =
+                resolvedItems
+                    .filter { item ->
+                        item.mastered
+                    }
+                    .sortedWith(
+                        compareBy<
+                                AssistantExerciseProgressItem
+                                > {
+                            it.topicTitle
+                        }
+                            .thenBy {
+                                it.subTopicTitle
+                                    .orEmpty()
+                            }
+                            .thenBy {
+                                it.title
+                            }
+                    )
+
+            val unknownExercises =
+                resolvedItems
+                    .filterNot { item ->
+                        item.mastered
+                    }
+                    .sortedWith(
+                        compareBy<
+                                AssistantExerciseProgressItem
+                                > {
+                            it.topicTitle
+                        }
+                            .thenBy {
+                                it.subTopicTitle
+                                    .orEmpty()
+                            }
+                            .thenBy {
+                                it.title
+                            }
+                    )
+
+            AssistantBeltProgressSnapshot(
+                belt =
+                    belt,
+                totalExercises =
+                    catalogEntries.size,
+                knownExercises =
+                    knownExercises,
+                unknownExercises =
+                    unknownExercises,
+                unmarkedExercisesCount =
+                    (
+                            catalogEntries.size -
+                                    resolvedItems.size
+                            )
+                        .coerceAtLeast(
+                            0
+                        )
+            )
+        }
 
     /** קבלת מצב של פריט (Nullable: true/false/null) */
     override suspend fun getItemStatusNullable(belt: Belt, topic: String, item: String): Boolean? {

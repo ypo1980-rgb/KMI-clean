@@ -11,6 +11,116 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 
+private data class BeltTextColor(
+    val labels: List<String>,
+    val color: Color
+)
+
+private val beltTextColors =
+    listOf(
+        BeltTextColor(
+            labels = listOf(
+                "חגורה לבנה",
+                "White belt"
+            ),
+            /*
+             * אפור כהה כדי שהחגורה הלבנה תהיה קריאה
+             * גם על רקע לבן.
+             */
+            color = Color(0xFF64748B)
+        ),
+        BeltTextColor(
+            labels = listOf(
+                "חגורה צהובה",
+                "Yellow belt"
+            ),
+            color = Color(0xFFD59A00)
+        ),
+        BeltTextColor(
+            labels = listOf(
+                "חגורה כתומה",
+                "Orange belt"
+            ),
+            color = Color(0xFFF97316)
+        ),
+        BeltTextColor(
+            labels = listOf(
+                "חגורה ירוקה",
+                "Green belt"
+            ),
+            color = Color(0xFF16A34A)
+        ),
+        BeltTextColor(
+            labels = listOf(
+                "חגורה כחולה",
+                "Blue belt"
+            ),
+            color = Color(0xFF2563EB)
+        ),
+        BeltTextColor(
+            labels = listOf(
+                "חגורה חומה",
+                "Brown belt"
+            ),
+            color = Color(0xFF92400E)
+        ),
+        BeltTextColor(
+            labels = listOf(
+                "חגורה שחורה",
+                "Black belt"
+            ),
+            color = Color(0xFF111827)
+        )
+    )
+
+private fun applyBeltColors(
+    source: AnnotatedString
+): AnnotatedString {
+    val builder =
+        AnnotatedString.Builder().apply {
+            /*
+             * append של AnnotatedString שומר גם את
+             * עיצובי RED_BOLD ו־BLUE_BOLD הקיימים.
+             */
+            append(source)
+        }
+
+    beltTextColors.forEach { beltStyle ->
+        beltStyle.labels.forEach { label ->
+            var searchFrom = 0
+
+            while (searchFrom < source.text.length) {
+                val start =
+                    source.text.indexOf(
+                        string = label,
+                        startIndex = searchFrom,
+                        ignoreCase = true
+                    )
+
+                if (start < 0) {
+                    break
+                }
+
+                val end =
+                    start + label.length
+
+                builder.addStyle(
+                    style = SpanStyle(
+                        color = beltStyle.color,
+                        fontWeight = FontWeight.Black
+                    ),
+                    start = start,
+                    end = end
+                )
+
+                searchFrom = end
+            }
+        }
+    }
+
+    return builder.toAnnotatedString()
+}
+
 private fun parseExerciseExplanationForUi(
     raw: String
 ): AnnotatedString {
@@ -31,22 +141,22 @@ private fun parseExerciseExplanationForUi(
             remaining.indexOf(blueStartTag)
 
         /*
-         * בוחרים את התגית הקרובה ביותר בטקסט.
-         * כך ניתן לשלב כמה קטעים אדומים וכחולים
-         * באותו הסבר ובכל סדר.
+         * בוחרים את תגית העיצוב הקרובה ביותר.
          */
         val useRedTag =
             redStartIndex >= 0 &&
                     (
                             blueStartIndex < 0 ||
-                                    redStartIndex < blueStartIndex
+                                    redStartIndex <
+                                    blueStartIndex
                             )
 
         val useBlueTag =
             blueStartIndex >= 0 &&
                     (
                             redStartIndex < 0 ||
-                                    blueStartIndex < redStartIndex
+                                    blueStartIndex <
+                                    redStartIndex
                             )
 
         if (!useRedTag && !useBlueTag) {
@@ -83,7 +193,8 @@ private fun parseExerciseExplanationForUi(
         )
 
         val contentStart =
-            startIndex + startTag.length
+            startIndex +
+                    startTag.length
 
         val endIndex =
             remaining.indexOf(
@@ -92,12 +203,14 @@ private fun parseExerciseExplanationForUi(
             )
 
         /*
-         * תגית שלא נסגרה נשארת כטקסט רגיל,
-         * כדי שלא ייעלם חלק מההסבר.
+         * אם תגית לא נסגרה, משאירים אותה כטקסט
+         * כדי שלא יאבד חלק מההסבר.
          */
         if (endIndex < 0) {
             builder.append(
-                remaining.substring(startIndex)
+                remaining.substring(
+                    startIndex
+                )
             )
             break
         }
@@ -116,43 +229,64 @@ private fun parseExerciseExplanationForUi(
                     } else {
                         Color(0xFF2563EB)
                     },
-                fontWeight = FontWeight.Black
+                fontWeight =
+                    FontWeight.Black
             )
         )
 
-        builder.append(highlightedText)
+        builder.append(
+            highlightedText
+        )
+
         builder.pop()
 
         remaining =
             remaining.substring(
-                endIndex + endTag.length
+                endIndex +
+                        endTag.length
             )
 
         /*
-         * שומרים את ההתנהגות הקיימת של RED_BOLD:
-         * עמידת המוצא מוצגת בשורה נפרדת.
-         *
-         * BLUE_BOLD אינו משנה שורות בעצמו.
-         * ירידת שורה כחולה נקבעת במחרוזת באמצעות \n.
+         * RED_BOLD ממשיך להציג את עמידת המוצא
+         * בשורה נפרדת.
          */
         if (useRedTag) {
-            if (remaining.startsWith(". ")) {
-                builder.append(".\n")
-                remaining =
-                    remaining.removePrefix(". ")
-            } else if (remaining.startsWith(".")) {
-                builder.append(".\n")
-                remaining =
-                    remaining.removePrefix(".")
-            } else if (remaining.startsWith(" ")) {
-                builder.append("\n")
-                remaining =
-                    remaining.trimStart()
+            when {
+                remaining.startsWith(". ") -> {
+                    builder.append(".\n")
+
+                    remaining =
+                        remaining.removePrefix(
+                            ". "
+                        )
+                }
+
+                remaining.startsWith(".") -> {
+                    builder.append(".\n")
+
+                    remaining =
+                        remaining.removePrefix(
+                            "."
+                        )
+                }
+
+                remaining.startsWith(" ") -> {
+                    builder.append("\n")
+
+                    remaining =
+                        remaining.trimStart()
+                }
             }
         }
     }
 
-    return builder.toAnnotatedString()
+    /*
+     * לאחר עיבוד RED_BOLD ו־BLUE_BOLD מוסיפים
+     * את צבעי החגורות לאותו AnnotatedString.
+     */
+    return applyBeltColors(
+        builder.toAnnotatedString()
+    )
 }
 
 @Composable
