@@ -68,7 +68,41 @@ class AssistantOrchestrator(
         }
 
         /*
-         * קודם בודקים אם המשתמש מתקן או משלים את
+         * תחילה בודקים אם המשתמש מבקש להפוך את
+         * התוצאה הקודמת לרשימה, בלי לחזור על הנושא
+         * ועל החגורה.
+         *
+         * לדוגמה:
+         * "תן את הרשימה"
+         * "תציג את כולם"
+         * "מה השמות שלהם"
+         */
+        resolveContextualExerciseListFollowUp(
+            question = cleanQuestion,
+            isEnglish = isEnglish
+        )?.let { contextualResponse ->
+            return contextualResponse
+        }
+
+        /*
+         * לאחר מכן בודקים אם המשתמש מבקש להמשיך לדבר
+         * על התרגיל הפעיל בלי לומר שוב את שמו.
+         *
+         * לדוגמה:
+         * "תסביר אותו"
+         * "תן עליו הסבר"
+         * "איך מבצעים אותו"
+         * "ומה ההסבר שלו"
+         */
+        resolveContextualExerciseFollowUp(
+            question = cleanQuestion,
+            isEnglish = isEnglish
+        )?.let { contextualResponse ->
+            return contextualResponse
+        }
+
+        /*
+         * לאחר מכן בודקים אם המשתמש מתקן או משלים את
          * השאלה הקודמת באמצעות חגורה.
          *
          * לדוגמה:
@@ -370,6 +404,357 @@ class AssistantOrchestrator(
     }
 
     /**
+     * הופך שאלת ספירה או חיפוש קודמת לבקשת רשימה,
+     * תוך שמירת הנושא והחגורה מההקשר.
+     *
+     * לדוגמה:
+     *
+     * שאלה קודמת:
+     * "כמה תרגילים עם בעיטות יש בחגורה צהובה"
+     *
+     * שאלת המשך:
+     * "תן את הרשימה"
+     *
+     * שאלה שנשלחת למנוע:
+     * "תן את רשימת התרגילים לפי הבקשה הקודמת:
+     * כמה תרגילים עם בעיטות יש בחגורה צהובה"
+     */
+    private fun resolveContextualExerciseListFollowUp(
+        question: String,
+        isEnglish: Boolean
+    ): AssistantOrchestratorResponse? {
+        if (!conversationContext.hasConversationSubject()) {
+            return null
+        }
+
+        val normalizedQuestion =
+            normalizeSelectionText(question)
+
+        val isShortListFollowUp =
+            listOf(
+                "תן את הרשימה",
+                "תני את הרשימה",
+                "תן רשימה",
+                "תני רשימה",
+                "תציג את הרשימה",
+                "תציגי את הרשימה",
+                "הצג את הרשימה",
+                "הציגי את הרשימה",
+                "תראה את הרשימה",
+                "תראי את הרשימה",
+                "תראה את כולם",
+                "תראי את כולם",
+                "תציג את כולם",
+                "תציגי את כולם",
+                "תן את כולם",
+                "תני את כולם",
+                "מה השמות שלהם",
+                "מה השמות שלהן",
+                "מהם השמות",
+                "מה הן השמות",
+                "list them",
+                "show the list",
+                "show them all",
+                "give me the list",
+                "what are their names"
+            ).any { marker ->
+                normalizedQuestion == marker ||
+                        normalizedQuestion.startsWith(
+                            "$marker "
+                        )
+            }
+
+        if (!isShortListFollowUp) {
+            return null
+        }
+
+        val previousQuestion =
+            conversationContext.lastResolvedQuestion
+                ?.trim()
+                ?.takeIf { previous ->
+                    previous.isNotBlank() &&
+                            !previous.equals(
+                                question,
+                                ignoreCase = true
+                            )
+                }
+                ?: conversationContext.lastUserQuestion
+                    ?.trim()
+                    ?.takeIf { previous ->
+                        previous.isNotBlank() &&
+                                !previous.equals(
+                                    question,
+                                    ignoreCase = true
+                                )
+                    }
+                ?: return null
+
+        /*
+         * משאירים את השאלה הקודמת בשלמותה כדי לשמר:
+         * נושא, תת־נושא, חגורה ומילות סינון.
+         *
+         * ExerciseAssistantEngine מסיר בעצמו את מילות
+         * הספירה ומזהה את בקשת הרשימה.
+         */
+        val contextualQuestion =
+            if (isEnglish) {
+                buildString {
+                    append("Show the exercise list. ")
+                    append(previousQuestion)
+                }
+            } else {
+                buildString {
+                    append("תן את רשימת התרגילים. ")
+                    append(previousQuestion)
+                }
+            }
+                .replace(
+                    Regex("\\s+"),
+                    " "
+                )
+                .trim()
+
+        /*
+         * החגורה שנאמרה בשאלה הקודמת קודמת לחגורת
+         * הפרופיל שנשמרה קודם בהקשר.
+         *
+         * לדוגמה, אם חגורת המשתמש כתומה אבל הוא שאל
+         * על חגורה ירוקה, שאלת ההמשך חייבת להישאר
+         * בחגורה הירוקה.
+         */
+        val contextualBelt =
+            detectReferencedBelt(
+                previousQuestion
+            )
+                ?: detectReferencedBelt(
+                    contextualQuestion
+                )
+                ?: conversationContext.belt
+
+        val contextForResolution =
+            conversationContext.copy(
+                belt = contextualBelt,
+                updatedAtMillis =
+                    System.currentTimeMillis()
+            )
+
+        val detectedResolution =
+            AssistantIntentResolver.resolve(
+                question = contextualQuestion,
+                context = contextForResolution
+            )
+
+        /*
+         * משתמשים ב־EXERCISE ולא ב־LIST_EXERCISES,
+         * כדי שהבקשה תגיע ל־ExerciseAssistantEngine,
+         * שמבצע את סינון הנושא והחגורה בפועל.
+         */
+        val contextualResolution =
+            detectedResolution.copy(
+                originalQuestion = question,
+                resolvedQuestion = contextualQuestion,
+                intent = AssistantIntent.EXERCISE,
+                source = AssistantKnowledgeSource.EXERCISES,
+                confidence = 1f,
+                exerciseName =
+                    conversationContext.exerciseName,
+                topicName =
+                    conversationContext.topicName,
+                belt =
+                    contextualBelt,
+                isFollowUp = true,
+                alternatives = emptyList(),
+                requiresClarification = false
+            )
+
+        conversationContext =
+            conversationContext.withDetectedRequest(
+                detectedIntent =
+                    contextualResolution.intent,
+                detectedSource =
+                    contextualResolution.source,
+                detectedExerciseName =
+                    contextualResolution.exerciseName,
+                detectedTopicName =
+                    contextualResolution.topicName,
+                detectedSubTopicName =
+                    conversationContext.subTopicName,
+                detectedBelt =
+                    contextualBelt,
+                userQuestion =
+                    question,
+                resolvedQuestion =
+                    contextualQuestion
+            )
+
+        return executeResolution(
+            originalQuestion = question,
+            resolution = contextualResolution,
+            isEnglish = isEnglish
+        )
+    }
+
+    /**
+     * פותר שאלת המשך שמתייחסת לתרגיל הפעיל בלי
+     * שהמשתמש אומר שוב את שמו.
+     *
+     * לדוגמה:
+     * "תסביר אותו"
+     * "תן עליו הסבר"
+     * "איך מבצעים אותו"
+     * "ומה ההסבר שלו"
+     */
+    private fun resolveContextualExerciseFollowUp(
+        question: String,
+        isEnglish: Boolean
+    ): AssistantOrchestratorResponse? {
+        val rememberedExerciseName =
+            conversationContext.exerciseName
+                ?.trim()
+                ?.takeIf { it.isNotBlank() }
+                ?: conversationContext.lastResults
+                    .singleOrNull()
+                    ?.exerciseName
+                    ?.trim()
+                    ?.takeIf { it.isNotBlank() }
+                ?: conversationContext.lastResults
+                    .singleOrNull()
+                    ?.title
+                    ?.trim()
+                    ?.takeIf { it.isNotBlank() }
+                ?: return null
+
+        val normalizedQuestion =
+            normalizeSelectionText(question)
+
+        val hasExplanationRequest =
+            listOf(
+                "הסבר",
+                "תסביר",
+                "תסבירי",
+                "תפרט",
+                "פרט",
+                "איך עושים",
+                "איך מבצעים",
+                "איך לבצע",
+                "explain",
+                "explanation",
+                "give details",
+                "how to do",
+                "how do i do",
+                "how to perform"
+            ).any { marker ->
+                marker in normalizedQuestion
+            }
+
+        if (!hasExplanationRequest) {
+            return null
+        }
+
+        val hasContextReference =
+            listOf(
+                "אותו",
+                "אותה",
+                "עליו",
+                "עליה",
+                "שלו",
+                "שלה",
+                "הזה",
+                "הזאת",
+                "התרגיל",
+                "it",
+                "that one",
+                "this one",
+                "the exercise"
+            ).any { marker ->
+                marker in normalizedQuestion
+            }
+
+        /*
+         * אם המשתמש אמר שם מפורש של תרגיל חדש,
+         * זו אינה שאלת המשך ויש לנתח אותה כבקשה חדשה.
+         */
+        if (!hasContextReference) {
+            return null
+        }
+
+        val rememberedBelt =
+            conversationContext.belt
+
+        val contextualQuestion =
+            buildString {
+                if (isEnglish) {
+                    append("Explain exercise ")
+                    append(rememberedExerciseName)
+
+                    rememberedBelt?.let { belt ->
+                        append(" ")
+                        append(belt.name)
+                    }
+                } else {
+                    append("הסבר על תרגיל ")
+                    append(rememberedExerciseName)
+
+                    rememberedBelt?.let { belt ->
+                        append(" ")
+                        append(belt.heb)
+                    }
+                }
+            }
+                .replace(
+                    Regex("\\s+"),
+                    " "
+                )
+                .trim()
+
+        val detectedResolution =
+            AssistantIntentResolver.resolve(
+                question = contextualQuestion,
+                context = conversationContext
+            )
+
+        val contextualResolution =
+            detectedResolution.copy(
+                originalQuestion = question,
+                resolvedQuestion = contextualQuestion,
+                intent = AssistantIntent.EXPLAIN_EXERCISE,
+                source = AssistantKnowledgeSource.EXERCISES,
+                confidence = 1f,
+                exerciseName = rememberedExerciseName,
+                belt = rememberedBelt,
+                isFollowUp = true,
+                alternatives = emptyList(),
+                requiresClarification = false
+            )
+
+        conversationContext =
+            conversationContext.withDetectedRequest(
+                detectedIntent =
+                    contextualResolution.intent,
+                detectedSource =
+                    contextualResolution.source,
+                detectedExerciseName =
+                    rememberedExerciseName,
+                detectedTopicName =
+                    conversationContext.topicName,
+                detectedSubTopicName =
+                    conversationContext.subTopicName,
+                detectedBelt =
+                    rememberedBelt,
+                userQuestion =
+                    question,
+                resolvedQuestion =
+                    contextualQuestion
+            )
+
+        return executeResolution(
+            originalQuestion = question,
+            resolution = contextualResolution,
+            isEnglish = isEnglish
+        )
+    }
+
+    /**
      * פותר תיקון או השלמה שמתייחסים לשאלה הקודמת
      * באמצעות חגורה.
      *
@@ -424,27 +809,11 @@ class AssistantOrchestrator(
                 ?: return null
 
         /*
-         * אם נשמרה תוצאה יחידה מהחגורה שנאמרה,
-         * בוחרים אותה ישירות ומבקשים עליה הסבר.
-         */
-        val matchingPreviousResults =
-            conversationContext.lastResults
-                .filter { result ->
-                    result.belt == referencedBelt
-                }
-
-        if (matchingPreviousResults.size == 1) {
-            return processSelectedContextResult(
-                selected = matchingPreviousResults.first(),
-                isEnglish = isEnglish,
-                forcedIntent =
-                    AssistantIntent.EXPLAIN_EXERCISE
-            )
-        }
-
-        /*
-         * אם לא ניתן לבחור תוצאה יחידה, משתמשים
-         * בשאלה הקודמת כנושא ומחליפים רק את החגורה.
+         * תיקון חגורה אינו בהכרח בחירה של תרגיל יחיד.
+         *
+         * השאלה הקודמת יכולה להיות בקשת ספירה,
+         * רשימת תרגילים או הסבר. לכן משחזרים תחילה
+         * את הבקשה הקודמת ורק מחליפים את החגורה.
          */
         val previousQuestion =
             conversationContext.lastResolvedQuestion
@@ -469,6 +838,37 @@ class AssistantOrchestrator(
 
         val previousQuestionWithoutBelt =
             removeBeltReferences(previousQuestion)
+                /*
+                 * אם זיהוי הדיבור שמר רק את המילה
+                 * "חגורה" ללא צבע, מסירים אותה לפני
+                 * שמצרפים את החגורה המתוקנת.
+                 */
+                .replace(
+                    Regex(
+                        """(?:^|\s)ב?חגורה\s*$""",
+                        RegexOption.IGNORE_CASE
+                    ),
+                    " "
+                )
+                .replace(
+                    Regex(
+                        """(?:^|\s)(?:in\s+the\s+)?belt\s*$""",
+                        RegexOption.IGNORE_CASE
+                    ),
+                    " "
+                )
+                /*
+                 * לאחר הסרת "חגורה כתומה" עשויה
+                 * להישאר האות ב' לבדה בסוף המשפט.
+                 */
+                .replace(
+                    Regex("""(?:^|\s)ב\s*$"""),
+                    " "
+                )
+                .replace(
+                    Regex("\\s+"),
+                    " "
+                )
                 .trim()
                 .takeIf { previous ->
                     previous.isNotBlank()
@@ -478,8 +878,18 @@ class AssistantOrchestrator(
         val contextualQuestion =
             buildString {
                 append(previousQuestionWithoutBelt)
-                append(" ")
-                append(referencedBelt.heb)
+
+                if (isEnglish) {
+                    append(" in the ")
+                    append(
+                        referencedBelt.name
+                            .lowercase()
+                    )
+                    append(" belt")
+                } else {
+                    append(" ב")
+                    append(referencedBelt.heb)
+                }
             }
                 .replace(
                     Regex("\\s+"),
@@ -506,15 +916,99 @@ class AssistantOrchestrator(
             )
 
         /*
-         * המשתמש מתקן את החגורה של התרגיל שעליו
-         * ביקש הסבר. אין לשמר כאן LIST_EXERCISES
-         * או MATERIAL מהתשובה הקודמת.
+         * תיקון חגורה צריך לשמור את משמעות הבקשה:
+         *
+         * - שאלת ספירה נשארת שאלת ספירה.
+         * - בקשת רשימה נשארת בקשת רשימה.
+         * - בקשת הסבר נשארת בקשת הסבר.
          */
+        val normalizedContextualQuestion =
+            normalizeSelectionText(
+                contextualQuestion
+            )
+
+        val looksLikeCountQuestion =
+            listOf(
+                "כמה",
+                "מספר התרגילים",
+                "כמות התרגילים",
+                "how many",
+                "number of exercises"
+            ).any { marker ->
+                marker in normalizedContextualQuestion
+            }
+
+        val looksLikeListQuestion =
+            listOf(
+                "איזה תרגילים",
+                "אילו תרגילים",
+                "איזה הגנות",
+                "אילו הגנות",
+                "כל התרגילים",
+                "כל ההגנות",
+                "רשימת תרגילים",
+                "רשימת הגנות",
+                "which exercises",
+                "what exercises",
+                "all exercises",
+                "exercise list",
+                "list of exercises"
+            ).any { marker ->
+                marker in normalizedContextualQuestion
+            }
+
+        val looksLikeExplanationQuestion =
+            listOf(
+                "הסבר",
+                "תסביר",
+                "תסבירי",
+                "איך עושים",
+                "איך מבצעים",
+                "איך לבצע",
+                "explain",
+                "explanation",
+                "how to do",
+                "how to perform"
+            ).any { marker ->
+                marker in normalizedContextualQuestion
+            }
+
+        val rememberedIntent =
+            conversationContext.intent
+                ?.takeIf { previousIntent ->
+                    previousIntent !=
+                            AssistantIntent.UNKNOWN
+                }
+
         val correctedIntent: AssistantIntent =
-            AssistantIntent.EXPLAIN_EXERCISE
+            when {
+                looksLikeCountQuestion ->
+                    AssistantIntent.EXERCISE
+
+                looksLikeListQuestion ->
+                    AssistantIntent.LIST_EXERCISES
+
+                looksLikeExplanationQuestion ->
+                    AssistantIntent.EXPLAIN_EXERCISE
+
+                rememberedIntent != null ->
+                    rememberedIntent
+
+                else ->
+                    detectedResolution.intent
+            }
 
         val correctedSource: AssistantKnowledgeSource =
-            AssistantKnowledgeSource.EXERCISES
+            when (correctedIntent) {
+                AssistantIntent.EXERCISE,
+                AssistantIntent.EXPLAIN_EXERCISE,
+                AssistantIntent.SEARCH_EXERCISE,
+                AssistantIntent.LIST_EXERCISES ->
+                    AssistantKnowledgeSource.EXERCISES
+
+                else ->
+                    detectedResolution.source
+            }
 
         val correctedResolution =
             detectedResolution.copy(
@@ -1224,7 +1718,6 @@ class AssistantOrchestrator(
                     "Exercise list"
                 )
 
-            AssistantIntent.MATERIAL,
             AssistantIntent.MATERIAL,
             AssistantIntent.SEARCH_MATERIAL ->
                 localized(

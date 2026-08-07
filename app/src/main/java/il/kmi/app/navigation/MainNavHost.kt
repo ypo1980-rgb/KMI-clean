@@ -447,6 +447,7 @@ fun MainNavHost(
     kmiPrefs: KmiPrefs,
     themeMode: String,
     onThemeChange: (String) -> Unit,
+    onFontSizeChange: (String) -> Unit,
     onOpenDrawer: () -> Unit,
     startDestination: String = Route.Splash.route
 ) {
@@ -1474,7 +1475,9 @@ fun MainNavHost(
                 sp = sp,
                 kmiPrefs = kmiPrefs,
                 themeMode = themeMode,
-                onThemeChange = onThemeChange
+                onThemeChange = onThemeChange,
+                onFontSizeChange =
+                    onFontSizeChange
             )
 
             // --- NEW: Home graph (מינימלי) ---

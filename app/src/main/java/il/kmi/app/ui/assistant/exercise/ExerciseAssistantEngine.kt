@@ -40,41 +40,30 @@ object ExerciseAssistantEngine {
                 }
 
             /*
-             * שאלת ספירה על חגורה נבדקת לפני חיפוש
-             * משפחת תרגילים.
+             * שאלת המשך משוחזרת עשויה להכיל גם את
+             * בקשת הספירה הקודמת וגם בקשת רשימה חדשה.
              *
              * לדוגמה:
-             * "כמה תרגילים יש סך הכול בחגורה חומה"
-             */
-            if (
-                isExerciseCountQuestion(
-                    cleanQuestion
-                ) &&
-                preferredBelt != null
-            ) {
-                return formatExerciseCountAnswer(
-                    belt = preferredBelt,
-                    isEnglish = isEnglish
-                )
-            }
-
-            /*
-             * שאלת רשימה או משפחה נבדקת קודם מול
-             * topicKeys של ה־Registry.
+             * "תן את רשימת התרגילים.
+             * כמה תרגילים עם סכין יש בחגורה כחולה"
              *
-             * כך מפרידים בין:
-             * - בעיטות
-             * - הגנות נגד בעיטות
-             * - הגנות נגד מכות יד
-             * - הגנות נגד דקירות
-             *
-             * ללא רשימה קשיחה של סוגי התקיפות.
+             * במקרה כזה הפעולה החדשה — הצגת הרשימה —
+             * חייבת לקבל עדיפות על פעולת הספירה הישנה.
              */
-            if (
+            val isFamilyListQuestion =
                 isExerciseFamilyListQuestion(
                     cleanQuestion
                 )
-            ) {
+
+            val isCountQuestion =
+                isExerciseCountQuestion(
+                    cleanQuestion
+                )
+
+            /*
+             * בקשת רשימה נבדקת ראשונה.
+             */
+            if (isFamilyListQuestion) {
                 val familyMatches =
                     findExercisesByTopicFamily(
                         query = searchQuestion,
@@ -87,6 +76,38 @@ object ExerciseAssistantEngine {
                         isEnglish = isEnglish
                     )
                 }
+            }
+
+            /*
+             * ספירה מתבצעת רק כאשר לא קיימת באותה
+             * בקשה הוראה חדשה להציג רשימה.
+             *
+             * כך לא חוזרים בטעות למספר הכולל של
+             * התרגילים בחגורה.
+             */
+            if (
+                isCountQuestion &&
+                !isFamilyListQuestion &&
+                preferredBelt != null
+            ) {
+                val familyMatches =
+                    findExercisesByTopicFamily(
+                        query = searchQuestion,
+                        preferredBelt = preferredBelt
+                    )
+
+                if (familyMatches.isNotEmpty()) {
+                    return formatExerciseFamilyCount(
+                        matches = familyMatches,
+                        belt = preferredBelt,
+                        isEnglish = isEnglish
+                    )
+                }
+
+                return formatExerciseCountAnswer(
+                    belt = preferredBelt,
+                    isEnglish = isEnglish
+                )
             }
 
             /*
@@ -638,6 +659,38 @@ object ExerciseAssistantEngine {
     }
 
     /**
+     * מחזיר את מספר התרגילים במשפחה שהתבקשה,
+     * לאחר סינון לפי החגורה.
+     */
+    private fun formatExerciseFamilyCount(
+        matches: List<
+                ExerciseIdentityRegistry.ExerciseIdentity
+                >,
+        belt: Belt,
+        isEnglish: Boolean
+    ): String {
+        val exerciseCount =
+            matches
+                .distinctBy { identity ->
+                    identity.id
+                }
+                .size
+
+        return if (isEnglish) {
+            val beltName =
+                belt.name
+                    .lowercase()
+                    .replaceFirstChar { character ->
+                        character.uppercase()
+                    }
+
+            "There are $exerciseCount exercises in the requested category in the $beltName belt."
+        } else {
+            "ב${belt.heb} יש $exerciseCount תרגילים בנושא שביקשת."
+        }
+    }
+
+    /**
      * מחפש תרגילים לפי שיוך הנושא האמיתי שלהם
      * ב־ExerciseIdentityRegistry.
      */
@@ -661,9 +714,11 @@ object ExerciseAssistantEngine {
                 סוג סוגי הסוג הסוגים רשימה
                 הצג הציגי תציג תציגי הראה הראי
                 תן תני איזה אילו מהם מה הן
+                כמה מספר כמות עם בנושא
                 יש קיימים קיימות בחגורה חגורה
                 all the exercise exercises types list show
                 which what available belt
+                how many number amount with about
                 """.trimIndent()
             )
 
@@ -724,13 +779,46 @@ object ExerciseAssistantEngine {
                                 val topicRoots =
                                     semanticRoots(topicKey)
 
+                                /*
+                                 * לכל שורש בשאלה בודקים גם גרסה
+                                 * ללא אות יחס עברית שצמודה למילה.
+                                 *
+                                 * לדוגמה:
+                                 * בבעיטות -> בעיטות
+                                 * בהגנות  -> הגנות
+                                 * מסכין   -> סכין
+                                 *
+                                 * ההתאמה הישירה נבדקת קודם, ולכן
+                                 * מילה שהאות הראשונה היא חלק ממנה
+                                 * אינה נפגעת.
+                                 */
+                                val matchedQueryRoots =
+                                    queryRoots
+                                        .mapNotNull { queryRoot ->
+                                            when {
+                                                queryRoot in topicRoots ->
+                                                    queryRoot
+
+                                                queryRoot.length >= 4 &&
+                                                        queryRoot.first() in
+                                                        HEBREW_PREFIX_LETTERS &&
+                                                        queryRoot
+                                                            .drop(1) in
+                                                        topicRoots ->
+                                                    queryRoot.drop(1)
+
+                                                else ->
+                                                    null
+                                            }
+                                        }
+                                        .toSet()
+
                                 if (
-                                    queryRoots.all { queryRoot ->
-                                        queryRoot in topicRoots
-                                    }
+                                    matchedQueryRoots.size ==
+                                    queryRoots.size
                                 ) {
                                     topicRoots
-                                        .minus(queryRoots)
+                                        .minus(matchedQueryRoots)
                                         .size
                                 } else {
                                     null
@@ -1018,6 +1106,21 @@ object ExerciseAssistantEngine {
      * "הסבר מניעת חניקה" -> "מניעת חניקה"
      * "תן לי הסבר על בעיטת מגל" -> "בעיטת מגל"
      */
+    /**
+     * אותיות יחס שעשויות להיות מחוברות לתחילת מילה
+     * בזיהוי דיבור או בהקלדה בעברית.
+     */
+    private val HEBREW_PREFIX_LETTERS =
+        setOf(
+            'ב',
+            'ל',
+            'כ',
+            'מ',
+            'ה',
+            'ו',
+            'ש'
+        )
+
     private fun cleanExerciseName(
         question: String
     ): String {

@@ -118,7 +118,38 @@ fun MainApp(
         }
     }
 
-    val selectedFontSize = AppFontSize.fromStorageValue(fontSizeValue)
+    val selectedFontSize =
+        AppFontSize.fromStorageValue(
+            fontSizeValue
+        )
+
+    /*
+     * עדכון ישיר שמגיע ממסך ההגדרות.
+     *
+     * SharedPreferences עדיין נשמר כמקור קבוע,
+     * אך ה־state מתעדכן מיד כדי שכל Composition,
+     * כולל דיאלוג העוזר, יקבל Density חדש.
+     */
+    val handleFontSizeChange: (String) -> Unit =
+        { storageValue ->
+            val normalizedSize =
+                AppFontSize.fromStorageValue(
+                    storageValue
+                )
+
+            fontSizeValue =
+                normalizedSize.storageValue
+
+            kmiPrefs.fontSize =
+                normalizedSize.storageValue
+
+            sp.edit()
+                .putString(
+                    AppFontSize.PREFERENCE_KEY,
+                    normalizedSize.storageValue
+                )
+                .apply()
+        }
 
     /*
      * שומרים על גודל הכתב שנבחר בהגדרות הנגישות של המכשיר,
@@ -398,6 +429,8 @@ fun MainApp(
                                 kmiPrefs = kmiPrefs,
                                 themeMode = themeMode,
                                 onThemeChange = onThemeChange,
+                                onFontSizeChange =
+                                    handleFontSizeChange,
                                 onOpenDrawer = {
                                     // במסכי רישום לא פותחים Drawer
                                 },
@@ -754,6 +787,8 @@ fun MainApp(
                                     kmiPrefs = kmiPrefs,
                                     themeMode = themeMode,
                                     onThemeChange = onThemeChange,
+                                    onFontSizeChange =
+                                        handleFontSizeChange,
                                     onOpenDrawer = {
                                         if (drawerContentReady) {
                                             scope.launch {
@@ -761,7 +796,8 @@ fun MainApp(
                                             }
                                         }
                                     },
-                                    startDestination = resolvedStartDestination
+                                    startDestination =
+                                        resolvedStartDestination
                                 )
                             }
                         }

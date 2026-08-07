@@ -24,7 +24,8 @@ fun NavGraphBuilder.settingsNavGraph(
     sp: SharedPreferences,
     kmiPrefs: il.kmi.shared.prefs.KmiPrefs,
     themeMode: String,
-    onThemeChange: (String) -> Unit
+    onThemeChange: (String) -> Unit,
+    onFontSizeChange: (String) -> Unit
 ) {
     composable(
         route = Route.Settings.route,
@@ -76,8 +77,13 @@ fun NavGraphBuilder.settingsNavGraph(
             onOpenPrivacy = { nav.navigate(Route.Legal.route + "?tab=privacy") },
             onOpenTerms = { nav.navigate(Route.Legal.route + "?tab=terms") },
             onOpenAccessibility = { nav.navigate(Route.Legal.route + "?tab=accessibility") },
-            onOpenProgress = { nav.navigate(Route.Progress.route) },
-            onOpenCoachBroadcast = { nav.navigate(Route.CoachBroadcast.route) },
+            onOpenProgress = {
+                nav.navigate(Route.Progress.route)
+            },
+            onOpenCoachBroadcast = {
+                nav.navigate(Route.CoachBroadcast.route)
+            },
+            onFontSizeChange = onFontSizeChange,
 
             vm = vm
         )

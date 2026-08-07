@@ -102,7 +102,6 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import com.google.firebase.Timestamp
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.ktx.firestore
@@ -135,8 +134,6 @@ import il.kmi.shared.questions.model.util.ExerciseTitleFormatter
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-import java.time.LocalDate
-import java.time.format.DateTimeFormatter
 
 
 //======================================================
@@ -147,7 +144,7 @@ private enum class Feedback {
     NONE, LIKE, UNLIKE
 }
 
-private enum class AssistantMode {
+internal enum class AssistantMode {
     EXERCISE,   // מידע / הסבר על תרגיל
     TRAININGS,  // אימונים קרובים / לוח אימונים
     KMI_MATERIAL // חומר ק.מ.י (חיפוש בחומר)
@@ -172,367 +169,6 @@ private data class AiMessage(
     val materialItems:
     List<AssistantResultItem> = emptyList()
 )
-
-@Composable
-private fun AssistantTrainingCard(
-    item: AssistantResultItem,
-    isEnglish: Boolean
-) {
-    val statusCode =
-        item.trainingStatusCode
-            ?.trim()
-            ?.uppercase()
-            .orEmpty()
-
-    val statusColor =
-        when (statusCode) {
-            "ONGOING" ->
-                Color(0xFF047857)
-
-            "CANCELLED_BY_HOLIDAY" ->
-                Color(0xFFEA580C)
-
-            "COMPLETED" ->
-                Color(0xFF64748B)
-
-            "INVALID" ->
-                Color(0xFFDC2626)
-
-            else ->
-                Color(0xFF2563EB)
-        }
-
-    val statusBackground =
-        statusColor.copy(alpha = 0.14f)
-
-    val statusText =
-        item.trainingStatusText(
-            isEnglish
-        ).orEmpty()
-
-    val timeText =
-        buildString {
-            item.startTime
-                ?.takeIf { it.isNotBlank() }
-                ?.let {
-                    append(it)
-                }
-
-            item.endTime
-                ?.takeIf { it.isNotBlank() }
-                ?.let {
-                    if (isNotBlank()) {
-                        append("–")
-                    }
-
-                    append(it)
-                }
-        }
-
-    Surface(
-        modifier = Modifier
-            .fillMaxWidth()
-            .border(
-                width = 1.dp,
-                color = statusColor.copy(
-                    alpha = 0.28f
-                ),
-                shape = RoundedCornerShape(18.dp)
-            ),
-        shape = RoundedCornerShape(18.dp),
-        color = MaterialTheme.colorScheme.surface,
-        tonalElevation = 0.dp,
-        shadowElevation = 3.dp
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(
-                    horizontal = 12.dp,
-                    vertical = 10.dp
-                ),
-            verticalArrangement =
-                Arrangement.spacedBy(5.dp)
-        ) {
-            Text(
-                text = item.title,
-                color = MaterialTheme.colorScheme.onSurface,
-                style = KmiTypography.cardTitle,
-                textAlign = if (isEnglish) {
-                    TextAlign.Left
-                } else {
-                    TextAlign.Right
-                },
-                modifier = Modifier.fillMaxWidth()
-            )
-
-            if (timeText.isNotBlank()) {
-                Text(
-                    text = if (isEnglish) {
-                        "Time: $timeText"
-                    } else {
-                        "שעה: $timeText"
-                    },
-                    color = MaterialTheme.colorScheme.onSurface,
-                    style = KmiTypography.secondary.copy(
-                        fontWeight = FontWeight.Bold
-                    ),
-                    textAlign = if (isEnglish) {
-                        TextAlign.Left
-                    } else {
-                        TextAlign.Right
-                    },
-                    modifier = Modifier.fillMaxWidth()
-                )
-            }
-
-            item.branchName
-                ?.takeIf { it.isNotBlank() }
-                ?.let { branch ->
-                    Text(
-                        text = if (isEnglish) {
-                            "Branch: $branch"
-                        } else {
-                            "סניף: $branch"
-                        },
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        style = KmiTypography.secondary,
-                        textAlign = if (isEnglish) {
-                            TextAlign.Left
-                        } else {
-                            TextAlign.Right
-                        },
-                        modifier =
-                            Modifier.fillMaxWidth()
-                    )
-                }
-
-            item.groupName
-                ?.takeIf { it.isNotBlank() }
-                ?.let { group ->
-                    Text(
-                        text = if (isEnglish) {
-                            "Group: $group"
-                        } else {
-                            "קבוצה: $group"
-                        },
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        style = KmiTypography.secondary,
-                        textAlign = if (isEnglish) {
-                            TextAlign.Left
-                        } else {
-                            TextAlign.Right
-                        },
-                        modifier =
-                            Modifier.fillMaxWidth()
-                    )
-                }
-
-            item.location
-                ?.takeIf { it.isNotBlank() }
-                ?.let { location ->
-                    Text(
-                        text = if (isEnglish) {
-                            "Location: $location"
-                        } else {
-                            "מיקום: $location"
-                        },
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        style = KmiTypography.secondary,
-                        textAlign = if (isEnglish) {
-                            TextAlign.Left
-                        } else {
-                            TextAlign.Right
-                        },
-                        modifier =
-                            Modifier.fillMaxWidth()
-                    )
-                }
-
-            item.coachName
-                ?.takeIf { it.isNotBlank() }
-                ?.let { coach ->
-                    Text(
-                        text = if (isEnglish) {
-                            "Coach: $coach"
-                        } else {
-                            "מאמן: $coach"
-                        },
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        style = KmiTypography.secondary,
-                        textAlign = if (isEnglish) {
-                            TextAlign.Left
-                        } else {
-                            TextAlign.Right
-                        },
-                        modifier =
-                            Modifier.fillMaxWidth()
-                    )
-                }
-
-            if (statusText.isNotBlank()) {
-                Surface(
-                    modifier =
-                        Modifier.fillMaxWidth(),
-                    shape =
-                        RoundedCornerShape(999.dp),
-                    color = statusBackground
-                ) {
-                    Text(
-                        text = statusText,
-                        color = statusColor,
-                        style = KmiTypography.secondary.copy(
-                            fontWeight = FontWeight.Black
-                        ),
-                        textAlign = TextAlign.Center,
-                        modifier = Modifier.padding(
-                            horizontal = 10.dp,
-                            vertical = 6.dp
-                        )
-                    )
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun AssistantMaterialCard(
-    item: AssistantResultItem,
-    index: Int,
-    isEnglish: Boolean
-) {
-    val secondaryText =
-        item.subtitle
-            ?.trim()
-            ?.takeIf { it.isNotBlank() }
-            ?: item.topicName
-                ?.trim()
-                ?.takeIf { it.isNotBlank() }
-
-    Surface(
-        modifier = Modifier
-            .fillMaxWidth()
-            .border(
-                width = 1.dp,
-                color = Color(0xFF2563EB).copy(
-                    alpha = 0.25f
-                ),
-                shape = RoundedCornerShape(18.dp)
-            ),
-        shape = RoundedCornerShape(18.dp),
-        color = Color.White,
-        tonalElevation = 0.dp,
-        shadowElevation = 3.dp
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(
-                    horizontal = 12.dp,
-                    vertical = 11.dp
-                ),
-            horizontalArrangement =
-                Arrangement.spacedBy(10.dp),
-            verticalAlignment =
-                Alignment.Top
-        ) {
-            if (isEnglish) {
-                Surface(
-                    modifier = Modifier.size(30.dp),
-                    shape = RoundedCornerShape(10.dp),
-                    color = Color(0xFFEFF6FF)
-                ) {
-                    Box(
-                        contentAlignment =
-                            Alignment.Center
-                    ) {
-                        Text(
-                            text = (index + 1).toString(),
-                            color = Color(0xFF2563EB),
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.Black
-                        )
-                    }
-                }
-            }
-
-            Column(
-                modifier = Modifier.weight(1f),
-                verticalArrangement =
-                    Arrangement.spacedBy(5.dp)
-            ) {
-                Text(
-                    text = item.title,
-                    modifier = Modifier.fillMaxWidth(),
-                    color = Color(0xFF172033),
-                    fontSize = 14.5.sp,
-                    lineHeight = 19.sp,
-                    fontWeight = FontWeight.ExtraBold,
-                    textAlign = if (isEnglish) {
-                        TextAlign.Left
-                    } else {
-                        TextAlign.Right
-                    }
-                )
-
-                secondaryText?.let { details ->
-                    Text(
-                        text = details,
-                        modifier = Modifier.fillMaxWidth(),
-                        color = Color(0xFF526079),
-                        fontSize = 12.5.sp,
-                        lineHeight = 17.sp,
-                        fontWeight = FontWeight.Medium,
-                        textAlign = if (isEnglish) {
-                            TextAlign.Left
-                        } else {
-                            TextAlign.Right
-                        }
-                    )
-                }
-
-                item.description
-                    ?.trim()
-                    ?.takeIf { it.isNotBlank() }
-                    ?.let { description ->
-                        Text(
-                            text = description,
-                            modifier = Modifier.fillMaxWidth(),
-                            color = Color(0xFF64748B),
-                            fontSize = 12.sp,
-                            lineHeight = 17.sp,
-                            textAlign = if (isEnglish) {
-                                TextAlign.Left
-                            } else {
-                                TextAlign.Right
-                            }
-                        )
-                    }
-            }
-
-            if (!isEnglish) {
-                Surface(
-                    modifier = Modifier.size(30.dp),
-                    shape = RoundedCornerShape(10.dp),
-                    color = Color(0xFFEFF6FF)
-                ) {
-                    Box(
-                        contentAlignment =
-                            Alignment.Center
-                    ) {
-                        Text(
-                            text = (index + 1).toString(),
-                            color = Color(0xFF2563EB),
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.Black
-                        )
-                    }
-                }
-            }
-        }
-    }
-}
 
 private data class SpeechAlternative(
     val text: String,
@@ -559,1298 +195,6 @@ private enum class AssistantLogStatus {
     SUGGESTION_SELECTED,
     NOT_EXECUTED,
     PROCESSING_ERROR
-}
-
-// 🔹 פקודות ניווט בקול
-sealed class VoiceNavCommand {
-    object OpenHome : VoiceNavCommand()
-    object OpenTraining : VoiceNavCommand()
-    object OpenNextExercise : VoiceNavCommand()
-    data class Custom(val raw: String) : VoiceNavCommand()
-}
-
-/**
- * ניתוח טקסט דיבור לפקודת ניווט + תמיכה ב-"יובל" כ-Wake word
- */
-private fun parseVoiceNavCommand(raw: String): VoiceNavCommand? {
-    var t = raw.trim()
-
-    // Wake word – אם המשפט מתחיל ב"יובל", נוריד את זה מההתחלה
-    if (t.startsWith("יובל") || t.lowercase().startsWith("yuval")) {
-        t = t
-            .removePrefix("יובל")
-            .removePrefix("Yuval")
-            .removePrefix("yuval")
-            .removePrefix(",")
-            .trimStart()
-    }
-
-    return when {
-        "חזור למסך הבית" in t || "חזור לבית" in t || "מסך הבית" in t ||
-                "go home" in t.lowercase() || "open home" in t.lowercase() || "home screen" in t.lowercase() ->
-            VoiceNavCommand.OpenHome
-
-        "פתח אימון" in t || "פתח את האימון" in t ||
-                "open training" in t.lowercase() || "open workout" in t.lowercase() ->
-            VoiceNavCommand.OpenTraining
-
-        "התרגיל הבא" in t || "פתח תרגיל הבא" in t ||
-                "next exercise" in t.lowercase() || "open next exercise" in t.lowercase() ->
-            VoiceNavCommand.OpenNextExercise
-
-        else -> null
-    }
-}
-
-// ───────────────────────────────
-// הדגשת "עמידת מוצא" בתוך הסבר
-// ───────────────────────────────
-private fun buildExplanationWithStanceHighlight(
-    source: String,
-    stanceColor: Color
-): AnnotatedString {
-    val stancePrefix = "עמידת מוצא"
-    val idx = source.indexOf(stancePrefix)
-    if (idx < 0) return AnnotatedString(source)
-
-    val before = source.substring(0, idx)
-
-    val endPunctIndex = listOf(',', '.')
-        .map { ch -> source.indexOf(ch, idx + stancePrefix.length) }
-        .filter { it >= 0 }
-        .minOrNull()
-
-    val stanceEndExclusive = if (endPunctIndex != null) {
-        endPunctIndex + 1
-    } else {
-        source.indexOf('\n', idx + stancePrefix.length)
-            .takeIf { it >= 0 } ?: source.length
-    }
-
-    val stanceText = source.substring(idx, stanceEndExclusive)
-    val after = source.substring(stanceEndExclusive)
-
-    return buildAnnotatedString {
-        append(before)
-
-        val start = length
-        append(stanceText)
-        val end = length
-
-        addStyle(
-            SpanStyle(
-                fontWeight = FontWeight.Bold,
-                color = stanceColor
-            ),
-            start,
-            end
-        )
-
-        append(after)
-    }
-}
-
-// ───────────────────────────────
-// ניקוי תגיות עיצוב פנימיות לפני הצגה
-// ───────────────────────────────
-private fun sanitizeAssistantMarkup(
-    source: String
-): String {
-    /*
-     * RED_BOLD ו־BLUE_BOLD נשמרות עד לרכיב התצוגה,
-     * כדי ש־StyledExplanationText יוכל לצבוע אותן.
-     *
-     * תגיות ישנות שאינן נתמכות ברכיב נשארות מוסרות.
-     */
-    return source
-        .replace(
-            Regex(
-                pattern = """\[\[\s*/?\s*BOLD\s*]]""",
-                option = RegexOption.IGNORE_CASE
-            ),
-            ""
-        )
-        .replace(
-            Regex(
-                pattern = """\[\[\s*/?\s*RED\s*]]""",
-                option = RegexOption.IGNORE_CASE
-            ),
-            ""
-        )
-        .replace(
-            Regex("""[ \t]+\n"""),
-            "\n"
-        )
-        .replace(
-            Regex("""\n{3,}"""),
-            "\n\n"
-        )
-        .trim()
-}
-
-// ───────────────────────────────
-// מציאת הסבר מתוך Explanations
-// ───────────────────────────────
-private fun findExplanationForHit(
-    belt: Belt,
-    rawItem: String,
-    topic: String,
-    isEnglish: Boolean = false
-): String {
-    val cleanRawItem =
-        rawItem
-            .trim()
-            .replace(
-                Regex("\\s+"),
-                " "
-            )
-
-    val displayItem =
-        ExerciseTitleFormatter
-            .displayName(cleanRawItem)
-            .ifBlank {
-                cleanRawItem
-            }
-            .trim()
-
-    val canonicalAlias =
-        resolveExerciseAlias(
-            displayItem
-        )
-            .trim()
-
-    /*
-     * משתמשים רק בשמות מלאים ובטוחים.
-     *
-     * אסור לשלוח ל־Resolver מילה אחרונה בלבד כמו:
-     * "מלפנים", "חיצונית", "בסיבוב" או "ימין",
-     * משום שהיא עלולה להתאים לתרגיל אחר.
-     */
-    val candidates =
-        linkedSetOf<String>().apply {
-            add(cleanRawItem)
-            add(displayItem)
-            add(canonicalAlias)
-
-            add(
-                cleanRawItem
-                    .substringBefore("(")
-                    .trim()
-            )
-
-            add(
-                displayItem
-                    .substringBefore("(")
-                    .trim()
-            )
-        }
-            .map { candidate ->
-                candidate
-                    .trim()
-                    .replace(
-                        Regex("\\s+"),
-                        " "
-                    )
-            }
-            .filter { candidate ->
-                candidate.isNotBlank()
-            }
-            .distinct()
-
-    candidates.forEach { candidate ->
-        val resolved =
-            ExerciseExplanationResolver.get(
-                belt = belt,
-                topic = topic,
-                item = candidate,
-                isEnglish = isEnglish
-            )
-                .trim()
-
-        val cleaned =
-            if ("::" in resolved) {
-                resolved
-                    .split("::")
-                    .map { part ->
-                        part.trim()
-                    }
-                    .lastOrNull { part ->
-                        part.isNotBlank()
-                    }
-                    ?: resolved
-            } else {
-                resolved
-            }
-                .trim()
-
-        val isFallback =
-            if (isEnglish) {
-                cleaned.isBlank() ||
-                        cleaned.startsWith(
-                            "Detailed explanation for:"
-                        ) ||
-                        cleaned.startsWith(
-                            "There is currently no explanation"
-                        )
-            } else {
-                cleaned.isBlank() ||
-                        cleaned.startsWith(
-                            "הסבר מפורט על"
-                        ) ||
-                        cleaned.startsWith(
-                            "אין כרגע"
-                        )
-            }
-
-        if (!isFallback) {
-            return cleaned
-        }
-    }
-
-    return if (isEnglish) {
-        "There is currently no detailed explanation for this exact exercise in the database."
-    } else {
-        "אין כרגע הסבר מפורט לתרגיל המדויק הזה במאגר."
-    }
-}
-
-private fun normalizeExerciseQuery(text: String): String {
-    return text
-        .lowercase()
-
-        // זכר
-        .replace("תסביר לי", "")
-        .replace("תן הסבר", "")
-        .replace("הסבר על", "")
-        .replace("איך עושים", "")
-        .replace("איך מבצעים", "")
-
-        // נקבה
-        .replace("תסבירי לי", "")
-        .replace("תסבירי", "")
-        .replace("תני הסבר", "")
-        .replace("איך תבצעי", "")
-        .replace("איך עושים", "")
-        .replace("איך מבצעים", "")
-
-        // כללי
-        .replace("בבקשה", "")
-        .replace("אפשר", "")
-        .replace("תרגיל", "")
-        .replace("בעברית", "")
-        .replace("באנגלית", "")
-        .replace("?", "")
-        .replace("!", "")
-        .replace(",", " ")
-        .replace(".", " ")
-        .replace("־", "-")
-        .replace("–", "-")
-        .replace("—", "-")
-        .replace(
-            Regex("""\s*-\s*"""),
-            " - "
-        )
-        .replace("\\s+".toRegex(), " ")
-        .trim()
-}
-
-/*
- * נרמול לצורך השוואת זהות בין שמות תרגילים.
- *
- * המקפים השונים, סימני הפיסוק והרווחים אינם חלק
- * מזהות התרגיל. כך:
- *
- * "קוואלר - מרפק"
- * "קוואלר–מרפק"
- * "קוואלר מרפק"
- *
- * נחשבים לאותו שם, בלי לאפשר התאמה לתרגיל אחר.
- */
-private fun normalizeExerciseIdentity(
-    text: String
-): String {
-    return normalizeExerciseQuery(text)
-        .replace("־", " ")
-        .replace("–", " ")
-        .replace("—", " ")
-        .replace("-", " ")
-        .replace("/", " ")
-        .replace("\\", " ")
-        .replace(":", " ")
-        .replace(";", " ")
-        .replace(
-            Regex("""[()\[\]{}"'׳״]"""),
-            " "
-        )
-        .replace(
-            Regex("""\s+"""),
-            " "
-        )
-        .trim()
-}
-
-/*
- * תיקון טעויות נפוצות של מנוע זיהוי הדיבור
- * במילה "קוואלר".
- *
- * התיקון מופעל רק כאשר המשפט מכיל מאפיין ברור
- * של אחד מתרגילי הקוואלר, כדי שלא להחליף בטעות
- * את המילה "קבלה" במשפטים אחרים.
- */
-private fun normalizeRecognizedExerciseSpeech(
-    raw: String
-): String {
-    val clean =
-        raw
-            .trim()
-            .replace(
-                Regex("""\s+"""),
-                " "
-            )
-
-    if (clean.isBlank()) {
-        return clean
-    }
-
-    val normalized =
-        normalizeExerciseIdentity(
-            clean
-        )
-
-    val looksLikeKavalerExercise =
-        listOf(
-            "אגודלים",
-            "מרפק",
-            "הליכה לאחור",
-            "הליכה לפנים",
-            "נגד התנגדות",
-            "נגד ההתנגדות"
-        ).any { marker ->
-            marker in normalized
-        }
-
-    if (!looksLikeKavalerExercise) {
-        return clean
-    }
-
-    return clean
-        .replace(
-            Regex(
-                pattern =
-                    """(?<![\p{L}])(?:קבלה|קבלר|קוואל|קוואלר|קוואלרר|קאוולר|קוואולר)(?![\p{L}])""",
-                option =
-                    RegexOption.IGNORE_CASE
-            ),
-            "קוואלר"
-        )
-        .replace(
-            Regex("""\s+"""),
-            " "
-        )
-        .trim()
-}
-
-/*
- * מנוע זיהוי הדיבור מפרק לעיתים את המילה "מהם"
- * לשתי מילים: "מה עם".
- *
- * התיקון מתבצע רק לפני שם עצם ברבים, כדי לא לפגוע
- * בשאלה תקינה כמו "מה עם האימון ביום חמישי".
- */
-private fun normalizeRecognizedAssistantSpeech(
-    raw: String
-): String {
-    val clean =
-        raw
-            .trim()
-            .replace(
-                Regex("""\s+"""),
-                " "
-            )
-
-    if (clean.isBlank()) {
-        return clean
-    }
-
-    return clean
-        .replace(
-            Regex(
-                pattern =
-                    """^מה\s+עם\s+((?:ה)?(?:אימונים|תרגילים|נושאים|סניפים|מאמנים|ימים|שעות|קבוצות|חגורות))(?=\s|$)"""
-            ),
-            "מהם $1"
-        )
-        .replace(
-            Regex(
-                pattern =
-                    """^מה\s+הם\s+((?:ה)?(?:אימונים|תרגילים|נושאים|סניפים|מאמנים|ימים|שעות|קבוצות|חגורות))(?=\s|$)"""
-            ),
-            "מהם $1"
-        )
-        .replace(
-            Regex("""\s+"""),
-            " "
-        )
-        .trim()
-}
-
-private fun resolveExerciseAlias(raw: String): String {
-    val q = normalizeExerciseQuery(raw)
-
-    val aliases = linkedMapOf(
-        // עברית
-        "מגל" to "בעיטת מגל",
-        "בעיטת מגל" to "בעיטת מגל",
-        "בעיטת מגל ימנית" to "בעיטת מגל",
-        "בעיטת מגל שמאלית" to "בעיטת מגל",
-
-        "סטירה" to "בעיטת סטירה",
-        "בעיטת סטירה" to "בעיטת סטירה",
-        "בעיטת סטירה חיצונית" to "בעיטת סטירה חיצונית",
-        "בעיטת סטירה פנימית" to "בעיטת סטירה פנימית",
-        "בעיטת סטירה חיצונית בסיבוב" to "בעיטת סטירה חיצונית בסיבוב",
-
-        "דקירה" to "הגנה נגד דקירה",
-        "הגנה נגד דקירה" to "הגנה נגד דקירה",
-        "דקירה מזרחית" to "הגנה נגד דקירה מזרחית",
-        "דקירה מערבית" to "הגנה נגד דקירה מערבית",
-        "דקירת מלפנים" to "הגנה נגד דקירה מלפנים",
-        "דקירת מלמטה" to "הגנה נגד דקירה מלמטה",
-        "דקירה נמוכה" to "הגנה נגד דקירה נמוכה",
-
-        "roundhouse" to "בעיטת מגל",
-        "roundhouse kick" to "בעיטת מגל",
-
-        "outside slap kick" to "בעיטת סטירה חיצונית",
-        "slap kick" to "בעיטת סטירה",
-        "inside slap kick" to "בעיטת סטירה פנימית",
-        "spinning outside slap kick" to "בעיטת סטירה חיצונית בסיבוב",
-
-        "knife defense" to "הגנה נגד דקירה",
-        "knife stab defense" to "הגנה נגד דקירה",
-        "eastern stab defense" to "הגנה נגד דקירה מזרחית",
-        "western stab defense" to "הגנה נגד דקירה מערבית",
-
-        "בעיטה קדמית" to "בעיטה קדמית",
-        "קדמית" to "בעיטה קדמית",
-        "בעיטת צד" to "בעיטת צד",
-        "צד" to "בעיטת צד",
-        "אגרוף ישר" to "אגרוף ישר",
-        "ישר" to "אגרוף ישר",
-        "אפרקאט" to "אפרקאט",
-        "וו" to "וו",
-        "הוק" to "וו",
-        "מרפק" to "מכת מרפק",
-        "ברך" to "מכת ברך",
-
-        // אנגלית
-        "roundhouse" to "בעיטת מגל",
-        "roundhouse kick" to "בעיטת מגל",
-        "front kick" to "בעיטה קדמית",
-        "side kick" to "בעיטת צד",
-        "straight punch" to "אגרוף ישר",
-        "jab" to "אגרוף ישר",
-        "cross" to "אגרוף ישר",
-        "uppercut" to "אפרקאט",
-        "hook" to "וו",
-        "elbow" to "מכת מרפק",
-        "knee" to "מכת ברך"
-    )
-
-    /*
-   * ממירים רק כינוי שזהה לכל השאלה.
-   *
-   * אסור להשתמש ב־contains, משום ששם מלא כמו
-   * "קוואלר מרפק" מכיל את המילה "מרפק",
-   * אך אינו התרגיל הכללי "מכת מרפק".
-   */
-    aliases[q]?.let { exactAlias ->
-        return exactAlias
-    }
-
-    return raw
-        .trim()
-        .replace("־", "-")
-        .replace("–", "-")
-        .replace("—", "-")
-        .replace(
-            Regex("""\s*-\s*"""),
-            " - "
-        )
-        .replace(
-            Regex("""\s+"""),
-            " "
-        )
-}
-
-private fun getExerciseAnswerWithFallback(
-    question: String,
-    preferredBelt: Belt?,
-    isEnglish: Boolean
-): String {
-
-    val rawExercise =
-        extractExerciseNameFromQuestion(
-            question
-        )
-            ?.trim()
-            ?.takeIf {
-                it.isNotBlank()
-            }
-            ?: question.trim()
-
-    /*
-     * חיפוש יחיד ומרכזי מול ExplanationSearchIndex.
-     *
-     * האינדקס נבנה אוטומטית מתוך
-     * ExerciseIdentityRegistry, ולכן אין כאן
-     * שום רשימת תרגילים ידנית.
-     */
-    val verifiedMatch =
-        il.kmi.app.domain.ExplanationSearchIndex
-            .findBest(
-                query = rawExercise,
-                preferredBelt = preferredBelt,
-                minScore = 180
-            )
-
-    if (verifiedMatch != null) {
-        val verifiedExplanation =
-            verifiedMatch.explanation
-                .trim()
-
-        val isRealExplanation =
-            verifiedExplanation.isNotBlank() &&
-                    !verifiedExplanation.startsWith(
-                        "הסבר מפורט על:"
-                    ) &&
-                    !verifiedExplanation.startsWith(
-                        "אין כרגע"
-                    ) &&
-                    !verifiedExplanation.startsWith(
-                        "Detailed explanation for:"
-                    ) &&
-                    !verifiedExplanation.startsWith(
-                        "There is currently no explanation"
-                    )
-
-        if (isRealExplanation) {
-            return verifiedExplanation
-        }
-    }
-
-    /*
-     * ניסיון נוסף רק כאשר קיימת חגורה מועדפת.
-     *
-     * גם כאן לא מייצרים הסבר חדש, אלא פונים
-     * ל־Resolver הקיים שמחזיר רק תוכן מהמאגר.
-     */
-    if (preferredBelt != null) {
-        val localExplanation =
-            findExplanationForHit(
-                belt = preferredBelt,
-                rawItem = rawExercise,
-                topic = "",
-                isEnglish = isEnglish
-            )
-                .trim()
-
-        val isLocalFallback =
-            if (isEnglish) {
-                localExplanation.isBlank() ||
-                        localExplanation.startsWith(
-                            "There is currently no"
-                        ) ||
-                        localExplanation.startsWith(
-                            "Detailed explanation for:"
-                        )
-            } else {
-                localExplanation.isBlank() ||
-                        localExplanation.startsWith(
-                            "אין כרגע"
-                        ) ||
-                        localExplanation.startsWith(
-                            "הסבר מפורט על"
-                        )
-            }
-
-        if (!isLocalFallback) {
-            return localExplanation
-        }
-    }
-
-    /*
-     * אין להעביר את הבקשה ל־ExerciseAssistantEngine,
-     * משום שהוא עשוי לנסח תשובה כללית שאינה קיימת
-     * במאגר ההסברים.
-     */
-    return if (isEnglish) {
-        "I could not find a verified explanation for this exact exercise in the database. Try specifying the full exercise name and belt."
-    } else {
-        "לא נמצא במאגר הסבר מאומת לתרגיל המדויק הזה. נסה לציין את השם המלא ואת החגורה."
-    }
-}
-
-private fun hasVerifiedExerciseMatch(
-    rawQuestion: String,
-    preferredBelt: Belt? = null
-): Boolean {
-
-    val exerciseQuery =
-        extractExerciseNameFromQuestion(
-            rawQuestion
-        )
-            ?.trim()
-            ?.takeIf {
-                it.isNotBlank()
-            }
-            ?: rawQuestion.trim()
-
-    if (exerciseQuery.isBlank()) {
-        return false
-    }
-
-    return il.kmi.app.domain.ExplanationSearchIndex
-        .findBest(
-            query = exerciseQuery,
-            preferredBelt = preferredBelt,
-            minScore = 180
-        ) != null
-}
-
-private fun hebrewDayName(dayIndex: Int): String {
-    return when (dayIndex) {
-        1 -> "ראשון"
-        2 -> "שני"
-        3 -> "שלישי"
-        4 -> "רביעי"
-        5 -> "חמישי"
-        6 -> "שישי"
-        7 -> "שבת"
-        else -> ""
-    }
-}
-
-private fun englishDayName(dayIndex: Int): String {
-    return when (dayIndex) {
-        1 -> "Sunday"
-        2 -> "Monday"
-        3 -> "Tuesday"
-        4 -> "Wednesday"
-        5 -> "Thursday"
-        6 -> "Friday"
-        7 -> "Saturday"
-        else -> ""
-    }
-}
-
-private fun hebrewMonthName(month: Int): String {
-    return when (month) {
-        1 -> "ינואר"
-        2 -> "פברואר"
-        3 -> "מרץ"
-        4 -> "אפריל"
-        5 -> "מאי"
-        6 -> "יוני"
-        7 -> "יולי"
-        8 -> "אוגוסט"
-        9 -> "ספטמבר"
-        10 -> "אוקטובר"
-        11 -> "נובמבר"
-        12 -> "דצמבר"
-        else -> ""
-    }
-}
-
-private fun englishMonthName(month: Int): String {
-    return when (month) {
-        1 -> "January"
-        2 -> "February"
-        3 -> "March"
-        4 -> "April"
-        5 -> "May"
-        6 -> "June"
-        7 -> "July"
-        8 -> "August"
-        9 -> "September"
-        10 -> "October"
-        11 -> "November"
-        12 -> "December"
-        else -> ""
-    }
-}
-
-private fun numberToHebrewSpeech(n: Int): String {
-    return when (n) {
-        0 -> "אפס"
-        1 -> "אחת"
-        2 -> "שתיים"
-        3 -> "שלוש"
-        4 -> "ארבע"
-        5 -> "חמש"
-        6 -> "שש"
-        7 -> "שבע"
-        8 -> "שמונה"
-        9 -> "תשע"
-        10 -> "עשר"
-        11 -> "אחת עשרה"
-        12 -> "שתים עשרה"
-        13 -> "שלוש עשרה"
-        14 -> "ארבע עשרה"
-        15 -> "חמש עשרה"
-        16 -> "שש עשרה"
-        17 -> "שבע עשרה"
-        18 -> "שמונה עשרה"
-        19 -> "תשע עשרה"
-        20 -> "עשרים"
-        21 -> "עשרים ואחת"
-        22 -> "עשרים ושתיים"
-        23 -> "עשרים ושלוש"
-        24 -> "עשרים וארבע"
-        25 -> "עשרים וחמש"
-        26 -> "עשרים ושש"
-        27 -> "עשרים ושבע"
-        28 -> "עשרים ושמונה"
-        29 -> "עשרים ותשע"
-        30 -> "שלושים"
-        31 -> "שלושים ואחת"
-        else -> n.toString()
-    }
-}
-
-private fun formatDateForTrainingSpeech(rawDate: String, isEnglish: Boolean): String {
-    val value = rawDate.trim()
-
-    val parsedDate = runCatching {
-        when {
-            value.matches(Regex("""\d{4}-\d{2}-\d{2}""")) -> {
-                LocalDate.parse(value, DateTimeFormatter.ofPattern("yyyy-MM-dd"))
-            }
-
-            value.matches(Regex("""\d{1,2}/\d{1,2}/\d{4}""")) -> {
-                LocalDate.parse(value, DateTimeFormatter.ofPattern("d/M/yyyy"))
-            }
-
-            value.matches(Regex("""\d{1,2}-\d{1,2}-\d{4}""")) -> {
-                LocalDate.parse(value, DateTimeFormatter.ofPattern("d-M-yyyy"))
-            }
-
-            else -> null
-        }
-    }.getOrNull() ?: return rawDate
-
-    val dayOfWeekIndex = when (parsedDate.dayOfWeek.value) {
-        1 -> 2 // Monday -> שני
-        2 -> 3 // Tuesday -> שלישי
-        3 -> 4 // Wednesday -> רביעי
-        4 -> 5 // Thursday -> חמישי
-        5 -> 6 // Friday -> שישי
-        6 -> 7 // Saturday -> שבת
-        7 -> 1 // Sunday -> ראשון
-        else -> 1
-    }
-
-    val day = parsedDate.dayOfMonth
-    val month = parsedDate.monthValue
-    val year = parsedDate.year
-
-    return if (isEnglish) {
-        "${englishDayName(dayOfWeekIndex)}, $day ${englishMonthName(month)} $year"
-    } else {
-        "${hebrewDayName(dayOfWeekIndex)}, ${numberToHebrewSpeech(day)} ב${hebrewMonthName(month)}"
-    }
-}
-
-private fun formatTimeForTrainingSpeech(rawTime: String, isEnglish: Boolean): String {
-    val parts = rawTime.trim().split(":")
-    if (parts.size != 2) return rawTime
-
-    val hour = parts[0].toIntOrNull() ?: return rawTime
-    val minute = parts[1].toIntOrNull() ?: return rawTime
-
-    if (hour !in 0..23 || minute !in 0..59) return rawTime
-
-    return if (isEnglish) {
-        when (minute) {
-            0 -> "$hour o'clock"
-            else -> "$hour ${minute.toString().padStart(2, '0')}"
-        }
-    } else {
-        when (minute) {
-            0 -> "בשעה ${numberToHebrewSpeech(hour)}"
-            else -> "בשעה ${numberToHebrewSpeech(hour)} ו${numberToHebrewSpeech(minute)} דקות"
-        }
-    }
-}
-
-private fun prepareTrainingTextForSpeech(text: String, isEnglish: Boolean): String {
-    return text
-        // תאריכים: 2026-05-11
-        .replace(Regex("""\b\d{4}-\d{2}-\d{2}\b""")) { match ->
-            formatDateForTrainingSpeech(match.value, isEnglish)
-        }
-
-        // תאריכים: 11/05/2026
-        .replace(Regex("""\b\d{1,2}/\d{1,2}/\d{4}\b""")) { match ->
-            formatDateForTrainingSpeech(match.value, isEnglish)
-        }
-
-        // תאריכים: 11-05-2026
-        .replace(Regex("""\b\d{1,2}-\d{1,2}-\d{4}\b""")) { match ->
-            formatDateForTrainingSpeech(match.value, isEnglish)
-        }
-
-        // שעות: 18:30 / 20:00
-        .replace(Regex("""\b\d{1,2}:\d{2}\b""")) { match ->
-            formatTimeForTrainingSpeech(match.value, isEnglish)
-        }
-
-        // טווח שעות אחרי המרה, כדי שלא יישמע מקוטע מדי
-        .replace(" עד בשעה ", " עד ")
-}
-
-private fun sanitizeTrainingTextForSpeech(text: String, isEnglish: Boolean): String {
-    val speechReadyText = prepareTrainingTextForSpeech(
-        text = text,
-        isEnglish = isEnglish
-    )
-
-    val cleaned = speechReadyText
-        .lineSequence()
-        .map { it.trim() }
-        .filter { it.isNotBlank() }
-        .map { line ->
-            line
-                .replace("•", "")
-                .replace("(", ". ")
-                .replace(")", "")
-                .replace(" - ", ". ")
-                .replace(" – ", ". ")
-                .replace(":", " ")
-                .replace(Regex("""ביום\s+יום\s+"""), "ביום ")
-                .replace(Regex("""יום\s+יום\s+"""), "יום ")
-                .replace(Regex("""\s+"""), " ")
-                .replace("נוער + בוגרים", "נוער ובוגרים")
-                .replace("Youth + Adults", "Youth and Adults")
-                .trim()
-        }
-        .joinToString(". ")
-
-    return if (isEnglish) {
-        cleaned
-            .replace(Regex("\\s+"), " ")
-            .trim()
-    } else {
-        cleaned
-            .replace(Regex("[A-Za-z_]{2,}[A-Za-z0-9_().-]*"), " ")
-            .replace(Regex("\\s+"), " ")
-            .trim()
-    }
-}
-
-private fun sanitizeAssistantTextForSpeech(
-    text: String,
-    isEnglish: Boolean
-): String {
-    /*
-     * תגיות הצבע מיועדות לתצוגה בלבד.
-     * מסירים אותן לפני עיבוד הטקסט להקראה.
-     */
-    val speechSource =
-        text
-            .replace(
-                Regex(
-                    pattern = """\[\[\s*/?\s*RED_BOLD\s*]]""",
-                    option = RegexOption.IGNORE_CASE
-                ),
-                ""
-            )
-            .replace(
-                Regex(
-                    pattern = """\[\[\s*/?\s*BLUE_BOLD\s*]]""",
-                    option = RegexOption.IGNORE_CASE
-                ),
-                ""
-            )
-
-    fun isCodeLikeLine(line: String): Boolean {
-        val trimmed = line.trim()
-
-        if (trimmed.isBlank()) return true
-
-        if (
-            trimmed.startsWith("```") ||
-            trimmed.startsWith("import ") ||
-            trimmed.startsWith("package ") ||
-            trimmed.startsWith("class ") ||
-            trimmed.startsWith("fun ") ||
-            trimmed.startsWith("val ") ||
-            trimmed.startsWith("var ") ||
-            trimmed.startsWith("const ") ||
-            trimmed.startsWith("@Composable") ||
-            trimmed.startsWith("private fun ") ||
-            trimmed.startsWith("override fun ")
-        ) return true
-
-        if (
-            trimmed.contains("->") ||
-            trimmed.contains("==") ||
-            trimmed.contains(" = ") ||
-            trimmed.contains("Icons.") ||
-            trimmed.contains("MaterialTheme.") ||
-            trimmed.contains("TextField") ||
-            trimmed.contains("IconButton") ||
-            trimmed.contains("Modifier.") ||
-            trimmed.contains("mutableStateOf") ||
-            trimmed.contains("remember {") ||
-            trimmed.contains("LaunchedEffect(")
-        ) return true
-
-        val codeSymbolCount = trimmed.count { it in setOf('{', '}', '(', ')', '=', '<', '>', '@') }
-        if (codeSymbolCount >= 4) return true
-
-        return false
-    }
-
-    var spokenSubTopicIndex = 0
-
-    val cleaned = speechSource
-        .lineSequence()
-        .map { line ->
-            val originalLine = line.trim()
-            val startsWithSubTopicBullet =
-                originalLine.startsWith("•") ||
-                        originalLine.startsWith("●") ||
-                        originalLine.startsWith("▪") ||
-                        originalLine.startsWith("◦")
-
-            val cleanedLine = originalLine
-                // מסיר bullets / נקודות רשימה לפני כותרות
-                .replace(Regex("""^[•●▪◦]\s*"""), "")
-                .replace(Regex("""^[-–—]\s*"""), "")
-
-                // מסיר מספור בתחילת שורה: 1. / 2. / 10.
-                .replace(Regex("""^\d+\.\s*"""), "")
-
-                // במקום להגיד מקף / סימן — עושים הפסקה טבעית בדיבור
-                .replace(Regex("""\s+[-–—]\s+"""), ". ")
-                .replace(Regex("""[-–—]"""), ". ")
-
-                // מנקה תווים שלא צריכים להיקרא בקול
-                .replace("•", "")
-                .replace("●", "")
-                .replace("▪", "")
-                .replace("◦", "")
-                .replace("`", "")
-                .replace(Regex("""\s+"""), " ")
-                .trim()
-
-            if (startsWithSubTopicBullet && cleanedLine.isNotBlank()) {
-                spokenSubTopicIndex++
-
-                when {
-                    spokenSubTopicIndex == 1 && isEnglish ->
-                        "First sub-topic. $cleanedLine"
-
-                    spokenSubTopicIndex == 1 && !isEnglish ->
-                        "תת נושא ראשון. $cleanedLine"
-
-                    isEnglish ->
-                        "Next sub-topic. $cleanedLine"
-
-                    else ->
-                        "תת נושא הבא. $cleanedLine"
-                }
-            } else {
-                cleanedLine
-            }
-        }
-        .filter { it.isNotBlank() }
-        .filterNot { line -> isCodeLikeLine(line) }
-        .filterNot { line ->
-            line.equals("Can I help you with anything else?", ignoreCase = true) ||
-                    line.equals("אני יכול לעזור לך בעוד משהו?", ignoreCase = true)
-        }
-        .joinToString(". ")
-
-    return if (isEnglish) {
-        cleaned
-            .replace(Regex("""[`"']"""), "")
-            .replace(Regex("\\s+"), " ")
-            .trim()
-    } else {
-        cleaned
-            .replace(Regex("""[`"']"""), "")
-            .replace(Regex("""[A-Za-z_]{2,}[A-Za-z0-9_().]*"""), " ")
-            .replace(Regex("\\s+"), " ")
-            .trim()
-    }
-}
-
-/**
- * מחזיר להקראה רק את משפט הפתיחה של תשובת רשימה.
- *
- * לדוגמה, מתוך:
- * "מצאתי 21 תרגילים בנושא שביקשת:
- *
- * 1. תרגיל ראשון
- * 2. תרגיל שני"
- *
- * יוקרא רק:
- * "מצאתי 21 תרגילים בנושא שביקשת."
- */
-private fun shortMaterialSpeech(
-    answer: String,
-    isEnglish: Boolean
-): String {
-    val openingLine =
-        answer
-            .lineSequence()
-            .map { line ->
-                line
-                    .trim()
-                    .removeSuffix(":")
-                    .trim()
-            }
-            .firstOrNull { line ->
-                line.isNotBlank()
-            }
-            .orEmpty()
-
-    if (openingLine.isBlank()) {
-        return if (isEnglish) {
-            "I found the requested items. They are shown on the screen."
-        } else {
-            "מצאתי את הפריטים שביקשת. הם מופיעים על המסך."
-        }
-    }
-
-    return sanitizeAssistantTextForSpeech(
-        text = openingLine,
-        isEnglish = isEnglish
-    )
-}
-
-/**
- * קובע מה יוקרא בעת לחיצה על "הקרא שוב".
- *
- * אם התשובה מכילה רשימה ממוספרת או רשימת נקודות,
- * מקריאים רק את משפט הפתיחה. בתשובה רגילה ממשיכים
- * להשתמש בניקוי ההקראה הקיים.
- */
-private fun assistantAnswerTextForSpeech(
-    answer: String,
-    isEnglish: Boolean,
-    exerciseName: String? = null,
-    isExerciseExplanation: Boolean = false
-): String {
-    val nonBlankLines =
-        answer
-            .lineSequence()
-            .map { line ->
-                line.trim()
-            }
-            .filter { line ->
-                line.isNotBlank()
-            }
-            .toList()
-
-    val containsStructuredList =
-        nonBlankLines
-            .drop(1)
-            .any { line ->
-                line.matches(
-                    Regex(
-                        """^(?:\d+[.)]|[•●▪◦]|[-–—])\s+.+"""
-                    )
-                )
-            }
-
-    /*
-     * רשימה מקבלת עדיפות, גם אם מקור התשובה
-     * הוא מנוע התרגילים.
-     */
-    if (containsStructuredList) {
-        return shortMaterialSpeech(
-            answer = answer,
-            isEnglish = isEnglish
-        )
-    }
-
-    /*
-     * תשובת ספירה היא משפט קצר שכבר מתאים להקראה.
-     *
-     * היא עשויה להגיע ממקור EXERCISES, אבל אינה
-     * הסבר על תרגיל ולכן אסור להחליף אותה במשפט
-     * "מצאתי את ההסבר...".
-     */
-    val normalizedAnswer =
-        answer
-            .lowercase()
-            .replace(
-                Regex("\\s+"),
-                " "
-            )
-            .trim()
-
-    val isExerciseCountAnswer =
-        Regex(
-            """(?:יש\s+\d+\s+תרגילים|there\s+(?:are|is)\s+\d+\s+exercises)""",
-            RegexOption.IGNORE_CASE
-        )
-            .containsMatchIn(normalizedAnswer) ||
-                (
-                        "תרגילים בסך הכול" in
-                                normalizedAnswer
-                        ) ||
-                (
-                        "exercises in total" in
-                                normalizedAnswer
-                        )
-
-    if (isExerciseCountAnswer) {
-        return sanitizeAssistantTextForSpeech(
-            text = answer,
-            isEnglish = isEnglish
-        )
-    }
-
-    /*
-     * בהסבר על תרגיל מקריאים רק הקדמה קצרה.
-     * ההסבר המלא נשאר מוצג בכרטיס.
-     */
-    if (isExerciseExplanation) {
-        val cleanExerciseName =
-            exerciseName
-                ?.substringBefore(" • ")
-                ?.trim()
-                ?.takeIf { name ->
-                    name.isNotBlank() &&
-                            !name.equals(
-                                "תשובה על תרגילים",
-                                ignoreCase = true
-                            ) &&
-                            !name.equals(
-                                "Exercise answer",
-                                ignoreCase = true
-                            )
-                }
-
-        val introduction =
-            if (isEnglish) {
-                cleanExerciseName
-                    ?.let { name ->
-                        "I found the explanation for $name."
-                    }
-                    ?: "I found the explanation for the exercise you requested."
-            } else {
-                cleanExerciseName
-                    ?.let { name ->
-                        "מצאתי את ההסבר על תרגיל $name."
-                    }
-                    ?: "מצאתי את ההסבר על התרגיל שביקשת."
-            }
-
-        return sanitizeAssistantTextForSpeech(
-            text = introduction,
-            isEnglish = isEnglish
-        )
-    }
-
-    return sanitizeAssistantTextForSpeech(
-        text = answer,
-        isEnglish = isEnglish
-    )
-}
-
-private fun shortTrainingSpeech(
-    question: String,
-    answer: String,
-    isEnglish: Boolean
-): String {
-    val q = question.lowercase().trim()
-    val a = answer.lowercase().trim()
-
-    val looksLikeNextTraining =
-        q.contains("האימון הבא") ||
-                q.contains("אימון הבא") ||
-                q.contains("מתי האימון") ||
-                q.contains("next training") ||
-                q.contains("next workout") ||
-                a.contains("האימון הבא") ||
-                a.contains("next training")
-
-    val looksLikeTrainingList =
-        q.contains("רשימת") ||
-                q.contains("אימונים לשבוע") ||
-                q.contains("שבוע הקרוב") ||
-                q.contains("האימונים הקרובים") ||
-                q.contains("show me") ||
-                q.contains("upcoming") ||
-                q.contains("this week")
-
-    return when {
-        looksLikeNextTraining && isEnglish ->
-            "I found your next training. The details are shown on the screen."
-
-        looksLikeNextTraining && !isEnglish ->
-            "מצאתי את האימון הבא שלך. הפרטים מופיעים על המסך."
-
-        looksLikeTrainingList && isEnglish ->
-            "Here is the training list you asked for. The full details are shown on the screen."
-
-        looksLikeTrainingList && !isEnglish ->
-            "הנה רשימת האימונים שביקשת. הפרטים המלאים מופיעים על המסך."
-
-        isEnglish ->
-            "I found the training information you asked for. The details are shown on the screen."
-
-        else ->
-            "מצאתי את פרטי האימונים שביקשת. הם מופיעים על המסך."
-    }
-}
-
-private fun normalizeForTts(
-    text: String
-): String {
-    return text
-        .replace(
-            "ק.מ.י",
-            "קמי"
-        )
-        .replace(
-            "ק מ י",
-            "קמי"
-        )
-        .replace(
-            "K.A.M.I",
-            "KAMI",
-            ignoreCase = true
-        )
-        .replace(
-            "K M I",
-            "KAMI",
-            ignoreCase = true
-        )
-        .replace(
-            "יובל",
-            "יוּבַל"
-        )
-        /*
-         * אין להחליף כאן את המילה "שלך".
-         *
-         * ההגייה שלה מטופלת במקום המרכזי
-         * ב־KmiTtsManager.normalizeForTts().
-         */
-        .replace(
-            "Yuval",
-            "You-val",
-            ignoreCase = true
-        )
-        .replace(
-            "קמי",
-            "קָמִי"
-        )
 }
 
 // ───────────────────────────────
@@ -2518,6 +862,40 @@ fun AiAssistantDialog(
             // תוצאה מלאה וברורה עדיפה על מילה בודדת.
             score += minOf(text.length, 60) * 0.15f
 
+            /*
+             * כאשר המשתמש מזכיר חגורה, משפט שמכיל גם
+             * צבע חוקי עדיף משמעותית על משפט שנקטע
+             * לאחר המילה "חגורה".
+             */
+            val mentionsBelt =
+                listOf(
+                    "חגורה",
+                    "belt"
+                ).any { marker ->
+                    marker in normalized
+                }
+
+            val detectedCandidateBelt =
+                detectBeltEnum(text)
+
+            when {
+                mentionsBelt &&
+                        detectedCandidateBelt != null ->
+                    score += 110f
+
+                mentionsBelt &&
+                        detectedCandidateBelt == null ->
+                    score -= 140f
+            }
+
+            val endsWithIncompleteBelt =
+                normalized.endsWith("חגורה") ||
+                        normalized.endsWith("belt")
+
+            if (endsWithIncompleteBelt) {
+                score -= 180f
+            }
+
             when (assistantMode) {
                 AssistantMode.EXERCISE -> {
                     if (
@@ -2836,7 +1214,75 @@ fun AiAssistantDialog(
 
                 val resultsAreClose =
                     second != null &&
-                            best.relevanceScore - second.relevanceScore < 18f
+                            best.relevanceScore -
+                            second.relevanceScore < 18f
+
+                val normalizedBestText =
+                    best.text
+                        .lowercase()
+                        .replace(
+                            Regex("\\s+"),
+                            " "
+                        )
+                        .trim()
+
+                val bestMentionsBelt =
+                    "חגורה" in normalizedBestText ||
+                            "belt" in normalizedBestText
+
+                val bestDetectedBelt =
+                    detectBeltEnum(best.text)
+
+                /*
+                 * משפט שמזכיר חגורה אך אינו כולל צבע
+                 * הוא תוצאה חלקית ואסור לשלוח אותו.
+                 */
+                if (
+                    bestMentionsBelt &&
+                    bestDetectedBelt == null
+                ) {
+                    speechAlternatives =
+                        rankedAlternatives
+                            .filter { alternative ->
+                                detectBeltEnum(
+                                    alternative.text
+                                ) != null
+                            }
+                            .take(3)
+
+                    speechNeedsConfirmation =
+                        speechAlternatives.isNotEmpty()
+
+                    speechCanRetry =
+                        speechAlternatives.isEmpty()
+
+                    speechStatusMessage =
+                        if (speechAlternatives.isNotEmpty()) {
+                            tr(
+                                "לא זיהיתי בוודאות את צבע החגורה. בחר את המשפט הנכון.",
+                                "I could not recognize the belt color with confidence. Choose the correct sentence."
+                            )
+                        } else {
+                            tr(
+                                "שמעתי את המילה חגורה, אבל לא זיהיתי את הצבע. נסה לומר שוב את צבע החגורה.",
+                                "I heard the word belt, but not its color. Please say the belt color again."
+                            )
+                        }
+
+                    input = best.text.trim()
+
+                    saveAssistantCommandLog(
+                        rawCommand = best.text,
+                        status =
+                            AssistantLogStatus.NOT_RECOGNIZED,
+                        alternatives =
+                            speechAlternatives.map {
+                                it.text
+                            }
+                    )
+
+                    return
+                }
 
                 val bestHasRelevantMatch = when (assistantMode) {
                     AssistantMode.EXERCISE -> {
@@ -2883,9 +1329,71 @@ fun AiAssistantDialog(
                 }
 
                 /*
-      * בסיום זיהוי הדיבור שולחים אוטומטית את
-      * התוצאה המדורגת במקום להמתין ללחיצה נוספת.
-      */
+                 * בודקים אם חלופות הזיהוי מכילות צבעי
+                 * חגורה שונים. במקרה כזה אי אפשר לדעת
+                 * אוטומטית אם נאמר "כחולה" או "כתומה",
+                 * ולכן מציגים למשתמש אפשרויות לבחירה.
+                 */
+                val alternativeBelts =
+                    rankedAlternatives
+                        .mapNotNull { alternative ->
+                            detectBeltEnum(
+                                alternative.text
+                            )
+                        }
+                        .distinct()
+
+                val beltRecognitionIsAmbiguous =
+                    alternativeBelts.size > 1
+
+                val shouldConfirmSpeech =
+                    rankedAlternatives.size > 1 &&
+                            (
+                                    beltRecognitionIsAmbiguous ||
+                                            bestConfidenceIsLow ||
+                                            resultsAreClose
+                                    )
+
+                if (shouldConfirmSpeech) {
+                    speechAlternatives =
+                        rankedAlternatives
+                            .take(3)
+
+                    speechNeedsConfirmation = true
+                    speechCanRetry = true
+
+                    speechStatusMessage =
+                        if (beltRecognitionIsAmbiguous) {
+                            tr(
+                                "זיהיתי יותר מצבע חגורה אחד. בחר את המשפט הנכון.",
+                                "I recognized more than one belt color. Choose the correct sentence."
+                            )
+                        } else {
+                            tr(
+                                "לא הייתי בטוח מה נאמר. בחר את האפשרות הנכונה.",
+                                "I was not certain what was said. Choose the correct option."
+                            )
+                        }
+
+                    input = best.text.trim()
+
+                    saveAssistantCommandLog(
+                        rawCommand = best.text,
+                        status =
+                            AssistantLogStatus.ALTERNATIVES_SHOWN,
+                        alternatives =
+                            speechAlternatives.map {
+                                it.text
+                            }
+                    )
+
+                    return
+                }
+
+                /*
+                 * קיימת חלופה ברורה ולכן אפשר לשלוח
+                 * אותה אוטומטית.
+                 */
                 speechAlternatives = emptyList()
                 speechNeedsConfirmation = false
                 speechCanRetry = false
@@ -3149,21 +1657,92 @@ fun AiAssistantDialog(
                 )
 
             /*
-             * המצב שנבחר במסך חייב להשתתף בניתוב.
-             * עד עכשיו assistantMode שינה רק את העיצוב והטקסטים במסך,
-             * אך השאלה נשלחה ל־Orchestrator ללא מידע אם המשתמש בחר
-             * תרגילים, אימונים או חומר ק.מ.י.
+             * שאלת המשך קצרה צריכה להגיע ל־Orchestrator
+             * ללא הוספת חגורת הפרופיל.
+             *
+             * ה־Orchestrator משלים בעצמו את הנושא ואת
+             * החגורה מהשאלה הקודמת.
              */
-            val routedQuestion = when (assistantMode) {
-                /*
-                 * מוסיפים סימון ניתוב בלבד, בלי לשנות את
-                 * הכמות או את טווח הזמן שביקש המשתמש.
-                 *
-                 * לדוגמה:
-                 * "מהם 3 האימונים האחרונים"
-                 * הופך ל:
-                 * "מידע על אימונים. מהם 3 האימונים האחרונים"
-                 */
+            val normalizedQuestionForContext =
+                question
+                    .lowercase()
+                    .replace("־", " ")
+                    .replace("–", " ")
+                    .replace("—", " ")
+                    .replace("-", " ")
+                    .replace(
+                        Regex("\\s+"),
+                        " "
+                    )
+                    .trim()
+
+            val isContextualExerciseFollowUp =
+                (
+                        assistantMode ==
+                                AssistantMode.EXERCISE ||
+                                assistantMode ==
+                                AssistantMode.KMI_MATERIAL
+                        ) &&
+                        listOf(
+                            "תן את הרשימה",
+                            "תני את הרשימה",
+                            "תן רשימה",
+                            "תני רשימה",
+                            "תציג את הרשימה",
+                            "תציגי את הרשימה",
+                            "הצג את הרשימה",
+                            "הציגי את הרשימה",
+                            "תראה את הרשימה",
+                            "תראי את הרשימה",
+                            "תראה את כולם",
+                            "תראי את כולם",
+                            "תציג את כולם",
+                            "תציגי את כולם",
+                            "תן את כולם",
+                            "תני את כולם",
+                            "מה השמות שלהם",
+                            "מה השמות שלהן",
+                            "מהם השמות",
+                            "תסביר אותו",
+                            "תסביר אותה",
+                            "תן עליו הסבר",
+                            "תן עליה הסבר",
+                            "איך מבצעים אותו",
+                            "איך מבצעים אותה",
+                            "list them",
+                            "show the list",
+                            "show them all",
+                            "give me the list",
+                            "what are their names",
+                            "explain it",
+                            "how to perform it"
+                        ).any { marker ->
+                            normalizedQuestionForContext ==
+                                    marker ||
+                                    normalizedQuestionForContext
+                                        .startsWith(
+                                            "$marker "
+                                        )
+                        }
+
+            /*
+             * בשאלת המשך לא מוסיפים סימון מצב או חגורת
+             * פרופיל. בשאלה חדשה ממשיכים בניתוב הרגיל.
+             */
+            val routedQuestion =
+                if (isContextualExerciseFollowUp) {
+                    question
+                } else {
+                    when (assistantMode) {
+                        /*
+                         * מוסיפים סימון ניתוב בלבד, בלי לשנות את
+                         * הכמות או את טווח הזמן שביקש המשתמש.
+                         *
+                         * לדוגמה:
+                         * "מהם 3 האימונים האחרונים"
+                         * הופך ל:
+                         * "מידע על אימונים. מהם 3 האימונים האחרונים"
+                         */
                 AssistantMode.TRAININGS -> {
                     /*
                      * הביטוי "רשימת אימונים" מזוהה במפורש
@@ -3265,8 +1844,9 @@ fun AiAssistantDialog(
                     }
                 }
 
-                null -> question
-            }
+                        null -> question
+                    }
+                }
 
             val response = try {
                 assistantOrchestrator.process(
@@ -3313,10 +1893,42 @@ fun AiAssistantDialog(
             val assistantResult = response.result
 
             /*
-        * החגורה שנאמרה בשאלה קודמת לחגורה השמורה בפרופיל.
-        */
+             * ה־Orchestrator עשוי להשלים שאלת המשך קצרה
+             * באמצעות הנושא והחגורה מהשאלה הקודמת.
+             *
+             * לדוגמה:
+             * "תן את רשימת התרגילים"
+             *
+             * יכול להיפתר כ:
+             * "תן את רשימת תרגילי הסכין בחגורה כחולה".
+             */
+            val resolvedAssistantQuestion =
+                response.resolution
+                    .resolvedQuestion
+                    .trim()
+                    .takeIf {
+                        it.isNotBlank()
+                    }
+                    ?: question
+
+            /*
+             * סדר העדיפויות:
+             *
+             * 1. חגורה שנאמרה בשאלה הנוכחית.
+             * 2. חגורה שנמצאה בשאלה שה־Orchestrator השלים.
+             * 3. חגורה שנשמרה ב־resolution.
+             * 4. חגורה שנשמרה בהקשר השיחה.
+             * 5. חגורת הפרופיל כברירת מחדל בלבד.
+             */
             val preferredBelt =
-                detectBeltEnum(question)
+                detectBeltEnum(
+                    question
+                )
+                    ?: detectBeltEnum(
+                        resolvedAssistantQuestion
+                    )
+                    ?: response.resolution.belt
+                    ?: response.context.belt
                     ?: detectBeltEnum(
                         registeredBeltText.orEmpty()
                     )
@@ -3337,10 +1949,21 @@ fun AiAssistantDialog(
                     assistantResult.source ==
                     AssistantKnowledgeSource.EXERCISES
                 ) {
+                    /*
+                     * משתמשים בשאלה שהושלמה על ידי
+                     * ה־Orchestrator ולא בשאלת ההמשך
+                     * הקצרה שהמשתמש אמר.
+                     *
+                     * הטקסט המקורי עדיין נשאר מוצג
+                     * בכרטיס השאלה של המשתמש.
+                     */
                     ExerciseAssistantEngine.answer(
-                        question = question,
-                        preferredBelt = preferredBelt,
-                        isEnglish = isEnglish
+                        question =
+                            resolvedAssistantQuestion,
+                        preferredBelt =
+                            preferredBelt,
+                        isEnglish =
+                            isEnglish
                     )
                         .trim()
                         .takeIf {
@@ -3975,7 +2598,27 @@ fun AiAssistantDialog(
                         showMenu = true,
                         showFontQuick = false,
                         showRoleStatus = true,
-                        showSettings = false,
+                        showSettings = true,
+
+                        /*
+                         * עוצרים האזנה והקראה, סוגרים את
+                         * העוזר ורק אז פותחים את ההגדרות.
+                         * כך מסך ההגדרות לא נפתח מאחורי
+                         * דיאלוג העוזר.
+                         */
+                        onSettings = {
+                            /*
+                             * עוצרים האזנה והקראה, אך לא
+                             * סוגרים את דיאלוג העוזר.
+                             *
+                             * כך לאחר לחיצה על "אישור"
+                             * בהגדרות חוזרים למסך העוזר
+                             * ולמצב השיחה האחרון.
+                             */
+                            stopListeningHard()
+                            stopSpeaking()
+                            DrawerBridge.openSettings()
+                        },
 
 // מציג את סרגל האייקונים, ללא כפתורי המסך התחתונים.
                         showBottomActions = true,
@@ -4036,533 +2679,58 @@ fun AiAssistantDialog(
                     )
 
                     /*
-                     * כפתור ה־X הוסר לחלוטין.
-                     * הכרטיס הראשי מופיע מיד אחרי הכותרת ולכן
-                     * כל תוכן העוזר עולה כלפי מעלה.
-                     */
-                    val assistantHeroShape =
-                        RoundedCornerShape(
-                            topStart = 32.dp,
-                            topEnd = 32.dp,
-                            bottomStart = 24.dp,
-                            bottomEnd = 24.dp
-                        )
-
-                    Surface(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 14.dp)
-                            .border(
-                                width = 1.dp,
-                                color = Color.White.copy(alpha = 0.62f),
-                                shape = assistantHeroShape
-                            ),
-                        shape = assistantHeroShape,
-                        tonalElevation = 0.dp,
-                        shadowElevation = 18.dp,
-                        color = Color.Transparent
-                    ) {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .background(
-                                    brush = premiumCardBrush,
-                                    shape = assistantHeroShape
-                                )
-                                .padding(
-                                    horizontal = 18.dp,
-                                    vertical = 18.dp
-                                )
-                        ) {
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                /*
-                                 * אייקון המצב הוא מידע חזותי בלבד,
-                                 * ולכן אינו מוצג עוד בתוך כפתור.
-                                 */
-                                Icon(
-                                    imageVector = when (assistantMode) {
-                                        AssistantMode.EXERCISE ->
-                                            Icons.Filled.FitnessCenter
-
-                                        AssistantMode.TRAININGS ->
-                                            Icons.Filled.RecordVoiceOver
-
-                                        AssistantMode.KMI_MATERIAL ->
-                                            Icons.Filled.MenuBook
-
-                                        null ->
-                                            Icons.Filled.AutoAwesome
-                                    },
-                                    contentDescription = when (assistantMode) {
-                                        AssistantMode.EXERCISE -> tr(
-                                            "מצב מידע על תרגיל",
-                                            "Exercise information mode"
-                                        )
-
-                                        AssistantMode.TRAININGS -> tr(
-                                            "מצב מידע על אימונים",
-                                            "Training information mode"
-                                        )
-
-                                        AssistantMode.KMI_MATERIAL -> tr(
-                                            "מצב חומר ק.מ.י",
-                                            "KAMI material mode"
-                                        )
-
-                                        null -> tr(
-                                            "בחירת מצב עוזר",
-                                            "Assistant mode selection"
-                                        )
-                                    },
-                                    tint = Color.White,
-                                    modifier = Modifier.size(
-                                        scaledIconSize(25.dp)
-                                    )
-                                )
-
-                                Spacer(Modifier.width(10.dp))
-
-                                Text(
-                                    text = when (assistantMode) {
-                                        null ->
-                                            tr(
-                                                "בחר מצב כדי להתחיל",
-                                                "Choose a mode to begin"
-                                            )
-
-                                        AssistantMode.EXERCISE ->
-                                            tr(
-                                                "מצב: מידע / הסבר על תרגיל",
-                                                "Mode: Exercise info / explanation"
-                                            )
-
-                                        AssistantMode.TRAININGS ->
-                                            tr(
-                                                "מצב: מידע על אימונים",
-                                                "Mode: Training information"
-                                            )
-
-                                        AssistantMode.KMI_MATERIAL ->
-                                            tr(
-                                                "מצב: חומר ק.מ.י",
-                                                "Mode: KAMI material"
-                                            )
-                                    },
-                                    modifier = Modifier
-                                        .weight(1f)
-                                        .padding(
-                                            horizontal = 6.dp
-                                        ),
-                                    style = KmiTypography.cardTitle,
-                                    textAlign = textAlignPrimary,
-                                    color = Color.White
-                                )
-
-                                /*
-                                 * זהו הכפתור הפעיל שמחזיר למסך בחירת המצבים.
-                                 * המסגרת והרקע מדגישים כעת שהוא לחיץ.
-                                 */
-                                Surface(
-                                    onClick = {
-                                        backToModePicker()
-                                    },
-                                    modifier = Modifier.size(
-                                        scaledIconSize(48.dp)
-                                    ),
-                                    shape = RoundedCornerShape(16.dp),
-                                    color =
-                                        Color.White.copy(
-                                            alpha = 0.20f
-                                        ),
-                                    tonalElevation = 0.dp,
-                                    shadowElevation = 8.dp,
-                                    border =
-                                        androidx.compose.foundation.BorderStroke(
-                                            width = 1.dp,
-                                            color =
-                                                Color.White.copy(
-                                                    alpha = 0.36f
-                                                )
-                                        )
-                                ) {
-                                    Box(
-                                        modifier = Modifier.fillMaxSize(),
-                                        contentAlignment =
-                                            Alignment.Center
-                                    ) {
-                                        Icon(
-                                            imageVector =
-                                                Icons.Filled.SwapHoriz,
-                                            contentDescription =
-                                                tr(
-                                                    "חזרה לבחירת מצב",
-                                                    "Back to mode selection"
-                                                ),
-                                            tint = Color.White,
-                                            modifier = Modifier.size(
-                                                scaledIconSize(25.dp)
-                                            )
-                                        )
-                                    }
-                                }
-                            }
+                 * כרטיס מצב העוזר נמצא ברכיב נפרד,
+                 * כדי לצמצם את AiAssistantDialog.
+                 */
+                    AssistantModeHeader(
+                        assistantMode = assistantMode,
+                        isEnglish = isEnglish,
+                        premiumCardBrush = premiumCardBrush,
+                        onBackToModePicker = {
+                            backToModePicker()
                         }
-                    }
+                    )
 
                     if (assistantMode == null) {
-                        val modePickerShape = RoundedCornerShape(30.dp)
+                        AssistantModePicker(
+                            assistantMode = assistantMode,
+                            isEnglish = isEnglish,
+                            premiumCardBrush = premiumCardBrush,
+                            onModeSelected = { selectedMode ->
+                                setAssistantMode(selectedMode)
+                                stopSpeaking()
+                                pendingNavAfterSpeak = null
 
-                        Surface(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = 12.dp),
-                            shape = modePickerShape,
-                            color = Color.Transparent,
-                            tonalElevation = 0.dp,
-                            shadowElevation = 12.dp
-                        ) {
-                            Column(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .background(
-                                        brush = Brush.verticalGradient(
-                                            colors = listOf(
-                                                MaterialTheme.colorScheme.surface,
-                                                MaterialTheme.colorScheme.surfaceVariant,
-                                                MaterialTheme.colorScheme.primaryContainer.copy(
-                                                    alpha = 0.52f
-                                                )
-                                            )
-                                        ),
-                                        shape = modePickerShape
-                                    )
-                                    .border(
-                                        width = 1.dp,
-                                        color = MaterialTheme.colorScheme.outlineVariant,
-                                        shape = modePickerShape
-                                    )
-                                    .padding(12.dp),
-                                verticalArrangement = Arrangement.spacedBy(12.dp)
-                            ) {
-
-                                @Composable
-                                fun ModeButton(
-                                    title: String,
-                                    selected: Boolean,
-                                    icon: ImageVector,
-                                    iconDescription: String,
-                                    onClick: () -> Unit
-                                ) {
-                                    val shape = RoundedCornerShape(24.dp)
-
-                                    val outlineColor =
-                                        if (selected) {
-                                            Color(0xFF7C3AED)
-                                        } else {
-                                            MaterialTheme.colorScheme.outlineVariant
-                                        }
-
-                                    Surface(
-                                        onClick = onClick,
-                                        shape = shape,
-                                        tonalElevation = 0.dp,
-                                        shadowElevation =
-                                            if (selected) 14.dp else 7.dp,
-                                        color = Color.Transparent,
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .border(
-                                                width = 1.dp,
-                                                color = outlineColor,
-                                                shape = shape
-                                            )
-                                    ) {
-                                        Box(
-                                            modifier = Modifier
-                                                .fillMaxWidth()
-                                                .background(
-                                                    brush = if (selected) {
-                                                        premiumCardBrush
-                                                    } else {
-                                                        Brush.horizontalGradient(
-                                                            colors = listOf(
-                                                                MaterialTheme.colorScheme.surface,
-                                                                MaterialTheme.colorScheme.surfaceVariant,
-                                                                MaterialTheme.colorScheme.primaryContainer.copy(
-                                                                    alpha = 0.42f
-                                                                )
-                                                            )
-                                                        )
-                                                    },
-                                                    shape = shape
-                                                )
-                                                .padding(
-                                                    horizontal = 16.dp,
-                                                    vertical = 15.dp
-                                                )
-                                        ) {
-                                            Row(
-                                                modifier = Modifier.fillMaxWidth(),
-                                                verticalAlignment = Alignment.CenterVertically,
-                                                horizontalArrangement = if (isEnglish) Arrangement.Start else Arrangement.End
-                                            ) {
-                                                if (isEnglish) {
-                                                    Surface(
-                                                        modifier = Modifier.size(
-                                                            scaledIconSize(46.dp)
-                                                        ),
-                                                        shape = RoundedCornerShape(16.dp),
-                                                        color = if (selected) {
-                                                            Color.White.copy(alpha = 0.20f)
-                                                        } else {
-                                                            MaterialTheme.colorScheme.primaryContainer
-                                                        },
-                                                        tonalElevation = 0.dp,
-                                                        shadowElevation = 5.dp
-                                                    ) {
-                                                        Box(
-                                                            modifier = Modifier.fillMaxSize(),
-                                                            contentAlignment = Alignment.Center
-                                                        ) {
-                                                            Icon(
-                                                                imageVector = icon,
-                                                                contentDescription = iconDescription,
-                                                                tint = if (selected) {
-                                                                    Color.White
-                                                                } else {
-                                                                    MaterialTheme.colorScheme.primary
-                                                                },
-                                                                modifier = Modifier.size(
-                                                                    KmiIconSize.medium
-                                                                )
-                                                            )
-                                                        }
-                                                    }
-
-                                                    Spacer(Modifier.width(10.dp))
-                                                }
-
-                                                Text(
-                                                    text = title,
-                                                    modifier = Modifier.weight(1f),
-                                                    textAlign = textAlignPrimary,
-                                                    style = KmiTypography.sectionTitle,
-                                                    color = if (selected) {
-                                                        Color.White
-                                                    } else {
-                                                        MaterialTheme.colorScheme.onSurface
-                                                    }
-                                                )
-
-                                                if (!isEnglish) {
-                                                    Spacer(Modifier.width(10.dp))
-
-                                                    Surface(
-                                                        modifier = Modifier.size(
-                                                            scaledIconSize(46.dp)
-                                                        ),
-                                                        shape = RoundedCornerShape(16.dp),
-                                                        color = if (selected) {
-                                                            Color.White.copy(alpha = 0.20f)
-                                                        } else {
-                                                            MaterialTheme.colorScheme.primaryContainer
-                                                        },
-                                                        tonalElevation = 0.dp,
-                                                        shadowElevation = 5.dp
-                                                    ) {
-                                                        Box(
-                                                            modifier = Modifier.fillMaxSize(),
-                                                            contentAlignment = Alignment.Center
-                                                        ) {
-                                                            Icon(
-                                                                imageVector = icon,
-                                                                contentDescription = iconDescription,
-                                                                tint = if (selected) {
-                                                                    Color.White
-                                                                } else {
-                                                                    MaterialTheme.colorScheme.primary
-                                                                },
-                                                                modifier = Modifier.size(
-                                                                    KmiIconSize.medium
-                                                                )
-                                                            )
-                                                        }
-                                                    }
-                                                }
-                                            }
-                                        }
-                                    }
-                                }
-
-                                ModeButton(
-                                    title = tr("מידע על תרגיל", "Exercise information"),
-                                    icon = Icons.Filled.FitnessCenter,
-                                    iconDescription = tr("מידע על תרגיל", "Exercise information"),
-                                    selected = assistantMode == AssistantMode.EXERCISE,
-                                    onClick = {
-                                        setAssistantMode(AssistantMode.EXERCISE)
-                                        stopSpeaking()
-                                        pendingNavAfterSpeak = null
-                                        speak(
+                                val openingText =
+                                    when (selectedMode) {
+                                        AssistantMode.EXERCISE ->
                                             tr(
                                                 "אוקיי. אני מוכן להסביר על תרגילים.",
                                                 "Okay. I'm ready to explain exercises."
                                             )
-                                        )
-                                    }
-                                )
 
-                                ModeButton(
-                                    title = tr("מידע על אימונים", "Training information"),
-                                    icon = Icons.Filled.RecordVoiceOver,
-                                    iconDescription = tr("מידע על אימונים", "Training information"),
-                                    selected = assistantMode == AssistantMode.TRAININGS,
-                                    onClick = {
-                                        setAssistantMode(AssistantMode.TRAININGS)
-                                        stopSpeaking()
-                                        pendingNavAfterSpeak = null
-                                        speak(
+                                        AssistantMode.TRAININGS ->
                                             tr(
                                                 "אוקיי. אני מוכן לתת מידע על אימונים.",
                                                 "Okay. I'm ready to provide training information."
                                             )
-                                        )
-                                    }
-                                )
 
-                                ModeButton(
-                                    title = tr("חומר ק.מ.י", "KAMI material"),
-                                    icon = Icons.Filled.MenuBook,
-                                    iconDescription = tr("חומר ק.מ.י", "KAMI material"),
-                                    selected = assistantMode == AssistantMode.KMI_MATERIAL,
-                                    onClick = {
-                                        setAssistantMode(AssistantMode.KMI_MATERIAL)
-                                        stopSpeaking()
-                                        pendingNavAfterSpeak = null
-                                        speak(
+                                        AssistantMode.KMI_MATERIAL ->
                                             tr(
                                                 "מעולה. מצב חומר ק.מ.י פעיל. תגיד נושא או שם תרגיל ואני אחפש לך במאגר.",
                                                 "Great. KAMI material mode is active. Say a topic or exercise name and I will search it in the database."
                                             )
-                                        )
                                     }
-                                )
+
+                                speak(openingText)
                             }
-                        }
-
-                        val logoTransition =
-                            rememberInfiniteTransition(label = "kamiLogoPulse")
-
-                        val logoScale by logoTransition.animateFloat(
-                            initialValue = 0.97f,
-                            targetValue = 1.04f,
-                            animationSpec = infiniteRepeatable(
-                                animation = tween(1800),
-                                repeatMode = RepeatMode.Reverse
-                            ),
-                            label = "kamiLogoScale"
                         )
-
-                        Column(
-                            modifier = Modifier
-                                .weight(1f, fill = true)
-                                .fillMaxWidth()
-                                .padding(top = 44.dp, bottom = 2.dp),
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                            verticalArrangement = Arrangement.Center
-                        ) {
-                            Box(
-                                modifier = Modifier.requiredSize(
-                                    scaledIconSize(102.dp)
-                                ),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Box(
-                                    modifier = Modifier
-                                        .requiredSize(
-                                            scaledIconSize(100.dp)
-                                        )
-                                        .scale(logoScale)
-                                        .background(
-                                            brush = Brush.radialGradient(
-                                                colors = listOf(
-                                                    MaterialTheme.colorScheme.primary.copy(
-                                                        alpha = 0.34f
-                                                    ),
-                                                    MaterialTheme.colorScheme.secondary.copy(
-                                                        alpha = 0.14f
-                                                    ),
-                                                    Color.Transparent
-                                                )
-                                            ),
-                                            shape = CircleShape
-                                        )
-                                )
-
-                                Surface(
-                                    modifier = Modifier
-                                        .requiredSize(
-                                            scaledIconSize(84.dp)
-                                        )
-                                        .scale(logoScale)
-                                        .border(
-                                            width = 2.dp,
-                                            color = MaterialTheme.colorScheme.primary,
-                                            shape = CircleShape
-                                        ),
-                                    shape = CircleShape,
-                                    color = Color.White,
-                                    tonalElevation = 0.dp,
-                                    shadowElevation = 14.dp
-                                ) {
-                                    Image(
-                                        painter = painterResource(
-                                            R.drawable.kami_logo
-                                        ),
-                                        contentDescription = tr(
-                                            "לוגו ק.מ.י",
-                                            "K.A.M.I logo"
-                                        ),
-                                        modifier = Modifier
-                                            .fillMaxSize()
-                                            .padding(5.dp)
-                                    )
-                                }
-                            }
-
-                            Spacer(Modifier.height(6.dp))
-
-                            Text(
-                                text = tr(
-                                    "העוזר האישי של ק.מ.י",
-                                    "K.A.M.I Personal Assistant"
-                                ),
-                                color = MaterialTheme.colorScheme.onBackground,
-                                style = KmiTypography.cardTitle
-                            )
-
-                            Spacer(Modifier.height(3.dp))
-
-                            Text(
-                                text = tr(
-                                    "המיקרופון פועל רק לאחר לחיצה",
-                                    "Microphone activates only when tapped"
-                                ),
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                style = KmiTypography.caption.copy(
-                                    fontWeight = FontWeight.Medium
-                                )
-                            )
-                        }
-                    } else {
-                        // אזור השיחה מוצג לאחר בחירת מצב.
                     }
 
                     val shouldShowMessagesCard =
-                        assistantMode != null || messages.isNotEmpty() || isThinking
+                        assistantMode != null ||
+                                messages.isNotEmpty() ||
+                                isThinking
 
                     if (shouldShowMessagesCard) {
                         Surface(
@@ -4575,130 +2743,15 @@ fun AiAssistantDialog(
                             shadowElevation = 10.dp,
                             color = MaterialTheme.colorScheme.surface
                         ) {
-                            if (messages.isEmpty() && !isThinking) {
-                                Column(
-                                    modifier = Modifier
-                                        .fillMaxSize()
-                                        .padding(horizontal = 18.dp, vertical = 20.dp),
-                                    horizontalAlignment = Alignment.CenterHorizontally,
-                                    verticalArrangement = Arrangement.spacedBy(14.dp)
-                                ) {
-                                    Surface(
-                                        modifier = Modifier.size(
-                                            scaledIconSize(64.dp)
-                                        ),
-                                        shape = CircleShape,
-                                        color = MaterialTheme.colorScheme.primaryContainer,
-                                        shadowElevation = 8.dp
-                                    ) {
-                                        Box(
-                                            contentAlignment = Alignment.Center
-                                        ) {
-                                            Icon(
-                                                imageVector = when (assistantMode) {
-                                                    AssistantMode.EXERCISE ->
-                                                        Icons.Filled.FitnessCenter
-
-                                                    AssistantMode.TRAININGS ->
-                                                        Icons.Filled.RecordVoiceOver
-
-                                                    AssistantMode.KMI_MATERIAL ->
-                                                        Icons.Filled.MenuBook
-
-                                                    null ->
-                                                        Icons.Filled.AutoAwesome
-                                                },
-                                                contentDescription = null,
-                                                tint = MaterialTheme.colorScheme.primary,
-                                                modifier = Modifier.size(
-                                                    scaledIconSize(30.dp)
-                                                )
-                                            )
-                                        }
-                                    }
-
-                                    Text(
-                                        text = when (assistantMode) {
-                                            AssistantMode.EXERCISE ->
-                                                tr(
-                                                    "איזה תרגיל תרצה להכיר?",
-                                                    "Which exercise would you like to explore?"
-                                                )
-
-                                            AssistantMode.TRAININGS ->
-                                                tr(
-                                                    "מה תרצה לדעת על האימונים?",
-                                                    "What would you like to know about training?"
-                                                )
-
-                                            AssistantMode.KMI_MATERIAL ->
-                                                tr(
-                                                    "איזה חומר ק.מ.י נחפש?",
-                                                    "Which KAMI material should we find?"
-                                                )
-
-                                            null ->
-                                                tr(
-                                                    "איך אוכל לעזור?",
-                                                    "How can I help?"
-                                                )
-                                        },
-                                        color = MaterialTheme.colorScheme.onSurface,
-                                        style = KmiTypography.sectionTitle,
-                                        textAlign = TextAlign.Center
-                                    )
-
-                                    Text(
-                                        text = emptyStateText,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                        style = KmiTypography.body.copy(
-                                            fontWeight = FontWeight.Medium
-                                        ),
-                                        textAlign = TextAlign.Center
-                                    )
-
-                                    Surface(
-                                        shape = RoundedCornerShape(20.dp),
-                                        color = MaterialTheme.colorScheme.primaryContainer,
-                                        border = androidx.compose.foundation.BorderStroke(
-                                            width = 1.dp,
-                                            color = MaterialTheme.colorScheme.outlineVariant
-                                        )
-                                    ) {
-                                        Row(
-                                            modifier = Modifier.padding(
-                                                horizontal = 14.dp,
-                                                vertical = 10.dp
-                                            ),
-                                            verticalAlignment = Alignment.CenterVertically,
-                                            horizontalArrangement = Arrangement.Center
-                                        ) {
-                                            Icon(
-                                                imageVector = Icons.Filled.AutoAwesome,
-                                                contentDescription = null,
-                                                tint = MaterialTheme.colorScheme.primary,
-                                                modifier = Modifier.size(
-                                                    KmiIconSize.small
-                                                )
-                                            )
-
-                                            Spacer(Modifier.width(7.dp))
-
-                                            Text(
-                                                text = tr(
-                                                    "אפשר לדבר באופן טבעי — יובל יבין את ההקשר",
-                                                    "Speak naturally — Yuval will understand the context"
-                                                ),
-                                                color = MaterialTheme.colorScheme.onPrimaryContainer,
-                                                style = KmiTypography.secondary.copy(
-                                                    fontWeight = FontWeight.Bold
-                                                ),
-                                                textAlign = TextAlign.Center
-                                            )
-                                        }
-                                    }
-                                }
-
+                            if (
+                                messages.isEmpty() &&
+                                !isThinking
+                            ) {
+                                AssistantEmptyState(
+                                    assistantMode = assistantMode,
+                                    isEnglish = isEnglish,
+                                    emptyStateText = emptyStateText
+                                )
                             } else if (showPremiumAnswerLayout) {
                                 val answerText =
                                     latestAssistantMessage
@@ -4799,9 +2852,13 @@ fun AiAssistantDialog(
                                                                 "יובל חושב",
                                                                 "Yuval is thinking"
                                                             ),
-                                                            fontSize = 11.sp,
-                                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                                            textAlign = textAlignPrimary
+                                                            style =
+                                                                KmiTypography.caption,
+                                                            color =
+                                                                MaterialTheme.colorScheme
+                                                                    .onSurfaceVariant,
+                                                            textAlign =
+                                                                textAlignPrimary
                                                         )
 
                                                         Spacer(Modifier.width(6.dp))
@@ -4947,10 +3004,9 @@ fun AiAssistantDialog(
                                                                             },
                                                                     modifier = Modifier.weight(1f),
                                                                     style =
-                                                                        MaterialTheme.typography.bodyLarge.copy(
-                                                                            fontSize = 14.sp,
-                                                                            lineHeight = 18.sp,
-                                                                            fontWeight = FontWeight.ExtraBold
+                                                                        KmiTypography.cardTitle.copy(
+                                                                            fontWeight =
+                                                                                FontWeight.ExtraBold
                                                                         ),
                                                                     color = Color(0xFF302553),
                                                                     textAlign = textAlignPrimary
@@ -5008,10 +3064,8 @@ fun AiAssistantDialog(
                                                                             Color(0xFF1D4ED8),
                                                                         textAlign =
                                                                             textAlignPrimary,
-                                                                        fontSize = 13.sp,
-                                                                        lineHeight = 18.sp,
-                                                                        fontWeight =
-                                                                            FontWeight.Bold
+                                                                        style =
+                                                                            KmiTypography.action
                                                                     )
 
                                                                     materialItems
@@ -5036,12 +3090,7 @@ fun AiAssistantDialog(
                                                                     modifier =
                                                                         Modifier.fillMaxWidth(),
                                                                     style =
-                                                                        KmiTypography.body.copy(
-                                                                            fontSize = 14.sp,
-                                                                            lineHeight = 21.sp,
-                                                                            fontWeight =
-                                                                                FontWeight.Normal
-                                                                        ),
+                                                                        KmiTypography.body,
                                                                     color =
                                                                         Color(0xFF232333),
                                                                     textAlign =
@@ -5106,8 +3155,8 @@ fun AiAssistantDialog(
                                                                         vertical = 8.dp
                                                                     ),
                                                                     color = Color(0xFF5B43B4),
-                                                                    fontSize = 12.sp,
-                                                                    fontWeight = FontWeight.Bold
+                                                                    style =
+                                                                        KmiTypography.action
                                                                 )
                                                             }
 
@@ -5143,8 +3192,8 @@ fun AiAssistantDialog(
                                                                         vertical = 8.dp
                                                                     ),
                                                                     color = Color(0xFF5B43B4),
-                                                                    fontSize = 12.sp,
-                                                                    fontWeight = FontWeight.Bold
+                                                                    style =
+                                                                        KmiTypography.action
                                                                 )
                                                             }
                                                         }
@@ -5157,8 +3206,11 @@ fun AiAssistantDialog(
                                                                 ),
                                                                 modifier = Modifier.fillMaxWidth(),
                                                                 color = Color(0xFF667085),
-                                                                fontSize = 11.sp,
-                                                                fontWeight = FontWeight.Bold,
+                                                                style =
+                                                                    KmiTypography.caption.copy(
+                                                                        fontWeight =
+                                                                            FontWeight.Bold
+                                                                    ),
                                                                 textAlign = textAlignPrimary
                                                             )
 
@@ -5222,10 +3274,11 @@ fun AiAssistantDialog(
                                                                                 Color(
                                                                                     0xFF4C3A80
                                                                                 ),
-                                                                            fontSize = 12.sp,
-                                                                            lineHeight = 16.sp,
-                                                                            fontWeight =
-                                                                                FontWeight.Bold
+                                                                            style =
+                                                                                KmiTypography.secondary.copy(
+                                                                                    fontWeight =
+                                                                                        FontWeight.Bold
+                                                                                )
                                                                         )
                                                                     }
                                                                 }
@@ -5426,15 +3479,10 @@ fun AiAssistantDialog(
                                                                         bottom = 2.dp
                                                                     ),
                                                             style =
-                                                                MaterialTheme
-                                                                    .typography
-                                                                    .bodyLarge
-                                                                    .copy(
-                                                                        fontSize = 15.sp,
-                                                                        lineHeight = 19.sp,
-                                                                        fontWeight =
-                                                                            FontWeight.ExtraBold
-                                                                    ),
+                                                                KmiTypography.cardTitle.copy(
+                                                                    fontWeight =
+                                                                        FontWeight.ExtraBold
+                                                                ),
                                                             color =
                                                                 Color(0xFF4C3A80),
                                                             textAlign =
@@ -5462,9 +3510,13 @@ fun AiAssistantDialog(
                                                                     "Trainings I found"
                                                                 ),
                                                                 color = Color(0xFF312E81),
-                                                                fontWeight = FontWeight.Black,
-                                                                fontSize = 16.sp,
-                                                                textAlign = textAlignPrimary,
+                                                                style =
+                                                                    KmiTypography.sectionTitle.copy(
+                                                                        fontWeight =
+                                                                            FontWeight.Black
+                                                                    ),
+                                                                textAlign =
+                                                                    textAlignPrimary,
                                                                 modifier =
                                                                     Modifier.fillMaxWidth()
                                                             )
@@ -5612,10 +3664,17 @@ fun AiAssistantDialog(
                                             verticalAlignment = Alignment.CenterVertically
                                         ) {
                                             Text(
-                                                text = tr("יובל חושב", "Yuval is thinking"),
-                                                fontSize = 12.sp,
-                                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                                textAlign = textAlignPrimary
+                                                text = tr(
+                                                    "יובל חושב",
+                                                    "Yuval is thinking"
+                                                ),
+                                                style =
+                                                    KmiTypography.caption,
+                                                color =
+                                                    MaterialTheme.colorScheme
+                                                        .onSurfaceVariant,
+                                                textAlign =
+                                                    textAlignPrimary
                                             )
 
                                             Spacer(Modifier.width(6.dp))
@@ -5718,10 +3777,16 @@ fun AiAssistantDialog(
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Text(
-                                text = tr("מדבר…", "Speaking…"),
-                                color = MaterialTheme.colorScheme.primary,
-                                fontSize = 12.sp,
-                                textAlign = textAlignPrimary
+                                text = tr(
+                                    "מדבר…",
+                                    "Speaking…"
+                                ),
+                                color =
+                                    MaterialTheme.colorScheme.primary,
+                                style =
+                                    KmiTypography.caption,
+                                textAlign =
+                                    textAlignPrimary
                             )
 
                             Spacer(Modifier.width(10.dp))
@@ -6015,10 +4080,13 @@ fun AiAssistantDialog(
                                                         vertical = 8.dp
                                                     ),
                                                     color = Color(0xFF4C3A80),
-                                                    fontSize = 12.sp,
-                                                    lineHeight = 16.sp,
-                                                    fontWeight = FontWeight.Bold,
-                                                    textAlign = textAlignPrimary
+                                                    style =
+                                                        KmiTypography.secondary.copy(
+                                                            fontWeight =
+                                                                FontWeight.Bold
+                                                        ),
+                                                    textAlign =
+                                                        textAlignPrimary
                                                 )
                                             }
                                         }
@@ -6062,8 +4130,8 @@ fun AiAssistantDialog(
                                                 vertical = 8.dp
                                             ),
                                             color = Color.White,
-                                            fontSize = 12.sp,
-                                            fontWeight = FontWeight.Bold
+                                            style =
+                                                KmiTypography.action
                                         )
                                     }
                                 }
@@ -6430,52 +4498,6 @@ fun AiAssistantDialog(
         }
     }
 } // ✅ סוגר את AiAssistantDialog
-
-private fun extractExerciseNameFromQuestion(question: String): String? {
-    val q = question.lowercase().trim()
-
-    val prefixes = listOf(
-        "תן הסבר על",
-        "תן הסבר ל",
-        "תני הסבר על",
-        "תני הסבר ל",
-        "מה זה",
-        "תסבירי לי את",
-        "תסבירי לי",
-        "תסבירי את",
-        "תסבירי",
-        "תסביר לי את",
-        "תסביר לי",
-        "תסביר את",
-        "תסביר",
-        "איך עושים את",
-        "איך עושים",
-        "איך מבצעים את",
-        "איך מבצעים",
-        "איך תבצעי את",
-        "איך תבצעי",
-        "הסבר על",
-        "explain the",
-        "explain",
-        "how to do the",
-        "how to do"
-    )
-
-    var cleaned = question.trim()
-
-    prefixes.forEach { prefix ->
-        if (q.startsWith(prefix)) {
-            cleaned = question.trim().substring(prefix.length).trim()
-            return@forEach
-        }
-    }
-
-    return cleaned
-        .removePrefix("את ")
-        .removeSuffix("?")
-        .trim()
-        .takeIf { it.length > 1 }
-}
 
 private fun detectIntent(question: String): String {
 

@@ -131,7 +131,29 @@ fun NavGraphBuilder.legacyNavGraph(
         sp = sp,
         kmiPrefs = kmiPrefs,
         themeMode = "system",
-        onThemeChange = { /* legacy path */ }
+        onThemeChange = {
+            /*
+             * Legacy path: שינוי הערכה נשמר
+             * במסך ההגדרות עצמו.
+             */
+        },
+        onFontSizeChange = { storageValue ->
+            /*
+             * שומרים גם במסלול הישן. MainApp
+             * מאזין ל־SharedPreferences ומחיל
+             * את השינוי הגלובלי.
+             */
+            kmiPrefs.fontSize =
+                storageValue
+
+            sp.edit()
+                .putString(
+                    il.kmi.app.ui.AppFontSize
+                        .PREFERENCE_KEY,
+                    storageValue
+                )
+                .apply()
+        }
     )
 
     legalNavGraph(nav = nav)

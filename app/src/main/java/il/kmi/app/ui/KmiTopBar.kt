@@ -1230,14 +1230,30 @@ fun KmiTopBar(
 
                                     VerticalQuickActionItem(
                                         icon = Icons.Filled.Settings,
-                                        label = if (isEnglish) "Settings" else "הגדרות",
+                                        label = if (isEnglish) {
+                                            "Settings"
+                                        } else {
+                                            "הגדרות"
+                                        },
                                         tint = Color(0xFFF59E0B),
                                         background = Color(0x1AF59E0B),
                                         enabled = showSettingsAllowed,
                                         onClick = {
                                             quickActionsExpanded = false
-                                            focusManager.clearFocus(force = true)
-                                            DrawerBridge.openSettings()
+                                            focusManager.clearFocus(
+                                                force = true
+                                            )
+
+                                            /*
+                                             * מסך שמארח את KmiTopBar יכול
+                                             * לסגור תחילה דיאלוג פעיל ורק
+                                             * לאחר מכן לפתוח את ההגדרות.
+                                             */
+                                            if (onSettings != null) {
+                                                onSettings()
+                                            } else {
+                                                DrawerBridge.openSettings()
+                                            }
                                         }
                                     )
 

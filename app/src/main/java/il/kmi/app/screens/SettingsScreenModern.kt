@@ -209,7 +209,8 @@ fun SettingsScreenModern(
     onOpenAccessibility: () -> Unit,
     onOpenProgress: () -> Unit = {},
     onOpenCoachBroadcast: () -> Unit = {},
-    onOpenRegistration: () -> Unit = {},         // 👈 כמו שהיה
+    onOpenRegistration: () -> Unit = {},
+    onFontSizeChange: (String) -> Unit = {},
     vm: StatsVm
 ) {
 
@@ -2195,8 +2196,11 @@ fun SettingsScreenModern(
                                     return
                                 }
 
-                                fontSizeModeLocal = newSize.storageValue
-                                kmiPrefs.fontSize = newSize.storageValue
+                                fontSizeModeLocal =
+                                    newSize.storageValue
+
+                                kmiPrefs.fontSize =
+                                    newSize.storageValue
 
                                 sp.edit()
                                     .putString(
@@ -2204,6 +2208,15 @@ fun SettingsScreenModern(
                                         newSize.storageValue
                                     )
                                     .apply()
+
+                                /*
+                                 * עדכון ישיר של MainApp.
+                                 * כך גם Dialog שכבר פתוח מקבל
+                                 * מיד LocalDensity חדש.
+                                 */
+                                onFontSizeChange(
+                                    newSize.storageValue
+                                )
                             }
 
                             val selectedFontSize =
