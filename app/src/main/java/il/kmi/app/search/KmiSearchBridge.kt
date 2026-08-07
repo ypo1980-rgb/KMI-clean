@@ -7,14 +7,44 @@ import il.kmi.shared.domain.ContentRepo as SharedContentRepo
 
 /* ===== Helpers (single copy, top-level) ================================== */
 
-private fun String.normHeb(): String = this
-    .replace("\u200F", "")
-    .replace("\u200E", "")
-    .replace("\u00A0", " ")
-    .replace(Regex("[\u0591-\u05C7]"), "")
-    .trim()
-    .replace(Regex("\\s+"), " ")
-    .lowercase()
+/**
+ * נרמול אחיד לשאילתות ולשמות התרגילים במאגר.
+ *
+ * הנרמול מטפל ב:
+ * 1. ניקוד וסימנים נסתרים.
+ * 2. צואר / צוואר.
+ * 3. כל סוגי המקפים.
+ * 4. רווחים כפולים.
+ */
+private fun String.normHeb(): String {
+    return this
+        .replace("\u200F", "")
+        .replace("\u200E", "")
+        .replace("\u00A0", " ")
+        .replace(
+            Regex("[\u0591-\u05C7]"),
+            ""
+        )
+        .lowercase()
+        .replace(
+            oldValue = "צואר",
+            newValue = "צוואר",
+            ignoreCase = true
+        )
+        .replace(
+            Regex("""\s*[-־–—]\s*"""),
+            " "
+        )
+        .replace(
+            Regex("""\s*/\s*"""),
+            " "
+        )
+        .replace(
+            Regex("\\s+"),
+            " "
+        )
+        .trim()
+}
 
 /**
  * יוצר וריאציות חיפוש מתוך טקסט שהוקלד או נאמר בקול.
@@ -189,52 +219,177 @@ object KmiSearchBridge {
     // ✅ NEW: search provider for top bar / global search
     // חייב להחזיר List<SearchHit> (כמו ש-KmiTopBar/BottomActionsBar מצפים)
     @JvmStatic
-    fun searchExercises(query: String): List<il.kmi.app.domain.ContentRepo.SearchHit> {
-        val q = query.trim()
-        if (q.isBlank()) return emptyList()
+    fun searchExercises(
+        query: String
+    ): List<il.kmi.app.domain.ContentRepo.SearchHit> {
+        val cleanQuery =
+            query
+                .trim()
+                .takeIf { it.isNotBlank() }
+                ?: return emptyList()
 
-        val repoObj: Any = il.kmi.app.domain.ContentRepo
+        val normalizedQuery =
+            cleanQuery.normHeb()
 
-        // שמות אפשריים לפונקציה קיימת אצלך ב-ContentRepo
-        val candidates = listOf(
-            "searchExercises",
-            "search",
-            "searchAll",
-            "searchItems",
-            "searchHits"
-        )
-
-        // 1) נסה להחזיר ישירות List<SearchHit> אם קיימת פונקציה כזאת
-        for (name in candidates) {
-            runCatching {
-                val m = repoObj.javaClass.methods.firstOrNull {
-                    it.name == name && it.parameterTypes.size == 1
-                } ?: return@runCatching
-
-                val res = m.invoke(repoObj, q)
-                when (res) {
-                    is List<*> -> {
-                        val asHits = res.mapNotNull { it as? il.kmi.app.domain.ContentRepo.SearchHit }
-                        if (asHits.isNotEmpty()) return asHits
-
-                        // 2) אם חזר List<String> – נעטוף ל-SearchHit
-                        val asStrings = res.mapNotNull { it as? String }
-                        if (asStrings.isNotEmpty()) {
-                            return asStrings.map { s ->
-                                il.kmi.app.domain.ContentRepo.SearchHit(
-                                    id = s,
-                                    title = s,
-                                    subtitle = null
-                                )
-                            }
-                        }
-                    }
+        val queryWords =
+            normalizedQuery
+                .split(" ")
+                .map { word ->
+                    word.trim()
                 }
+                .filter { word ->
+                    word.length >= 2
+                }
+                .distinct()
+
+        val repoObject: Any =
+            il.kmi.app.domain.ContentRepo
+
+        val candidateMethods =
+            listOf(
+                "searchExercises",
+                "search",
+                "searchAll",
+                "searchItems",
+                "searchHits"
+            )
+                .mapNotNull { methodName ->
+                    repoObject.javaClass.methods
+                        .firstOrNull { method ->
+                            method.name == methodName &&
+                                    method.parameterTypes.size == 1
+                        }
+                }
+                .distinctBy { method ->
+                    method.name
+                }
+
+        fun convertToHits(
+            result: Any?
+        ): List<il.kmi.app.domain.ContentRepo.SearchHit> {
+            val list =
+                result as? List<*>
+                    ?: return emptyList()
+
+            val directHits =
+                list.mapNotNull { value ->
+                    value as?
+                            il.kmi.app.domain.ContentRepo.SearchHit
+                }
+
+            if (directHits.isNotEmpty()) {
+                return directHits
+            }
+
+            return list
+                .mapNotNull { value ->
+                    value as? String
+                }
+                .map { value ->
+                    il.kmi.app.domain.ContentRepo.SearchHit(
+                        id = value,
+                        title = value,
+                        subtitle = null
+                    )
+                }
+        }
+
+        /*
+         * ניסיון ראשון: החיפוש הרגיל לפי המשפט המלא.
+         */
+        candidateMethods.forEach { method ->
+            val directHits =
+                runCatching {
+                    convertToHits(
+                        method.invoke(
+                            repoObject,
+                            cleanQuery
+                        )
+                    )
+                }
+                    .getOrElse {
+                        emptyList()
+                    }
+
+            if (directHits.isNotEmpty()) {
+                return directHits
             }
         }
 
-        // אם אין חיפוש מובנה — לא מפילים קומפילציה
-        return emptyList()
+        /*
+         * ניסיון שני: חיפוש כל מילה בנפרד.
+         *
+         * לאחר איסוף התוצאות משאירים רק תרגילים
+         * שכותרתם המנורמלת מכילה את כל מילות השאילתה.
+         * כך המקף אינו משפיע על ההתאמה.
+         */
+        val wordHits =
+            candidateMethods
+                .flatMap { method ->
+                    queryWords.flatMap { word ->
+                        runCatching {
+                            convertToHits(
+                                method.invoke(
+                                    repoObject,
+                                    word
+                                )
+                            )
+                        }
+                            .getOrElse {
+                                emptyList()
+                            }
+                    }
+                }
+                .distinctBy { hit ->
+                    hit.id ?: hit.title
+                }
+                .filter { hit ->
+                    val normalizedTitle =
+                        hit.title.normHeb()
+
+                    queryWords.isNotEmpty() &&
+                            queryWords.all { word ->
+                                normalizedTitle.contains(word)
+                            }
+                }
+
+        if (wordHits.isNotEmpty()) {
+            return wordHits
+        }
+
+        /*
+         * ניסיון שלישי: חיפוש ישיר במקור התוכן המשותף.
+         */
+        val localResults =
+            search(
+                query = cleanQuery,
+                beltFilter = null
+            )
+
+        return localResults
+            .mapNotNull { hit ->
+                val itemTitle =
+                    hit.item
+                        ?.trim()
+                        .orEmpty()
+
+                if (itemTitle.isBlank()) {
+                    null
+                } else {
+                    il.kmi.app.domain.ContentRepo.SearchHit(
+                        id =
+                            "${hit.belt.id}::" +
+                                    "${hit.topic}::" +
+                                    itemTitle,
+                        title = itemTitle,
+                        subtitle =
+                            "${hit.belt.heb} • ${hit.topic}"
+                    )
+                }
+            }
+            .distinctBy { hit ->
+                hit.id ?: hit.title
+            }
     }
 
     /* ====================== read from SHARED ContentRepo (source of truth) ====================== */

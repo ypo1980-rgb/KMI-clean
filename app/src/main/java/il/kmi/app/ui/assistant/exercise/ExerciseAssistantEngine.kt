@@ -552,6 +552,24 @@ object ExerciseAssistantEngine {
                 .replace(Regex("\\s+"), " ")
                 .trim()
 
+        /*
+         * זיהוי לפי שורשי המילים מאפשר לתפוס גם:
+         *
+         * "רשימת תרגילים"
+         * "רשימת התרגילים"
+         * "תן את רשימת התרגילים"
+         * "הצג רשימת תרגילי סכין"
+         *
+         * כך אין תלות בכל הטיה אפשרית של המילה תרגיל.
+         */
+        val hasHebrewExerciseListRequest =
+            "רשימ" in normalized &&
+                    "תרגיל" in normalized
+
+        if (hasHebrewExerciseListRequest) {
+            return true
+        }
+
         return listOf(
             "כל תרגיל",
             "כל התרגיל",
@@ -567,6 +585,10 @@ object ExerciseAssistantEngine {
             "מה הם התרגילים",
             "מה הן ההגנות",
             "רשימת תרגיל",
+            "רשימת התרגיל",
+            "רשימת תרגילים",
+            "רשימת התרגילים",
+            "רשימת תרגילי",
             "רשימת הגנות",
             "תרגילים יש",
             "הגנות יש",

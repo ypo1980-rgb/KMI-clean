@@ -116,8 +116,11 @@ fun GlobalExerciseSearchDialog(
         mutableStateOf<String?>(null)
     }
 
-    val results = remember(query, isEnglish) {
-        GlobalExerciseSearchEngine.search(
+    val results = remember(
+        query,
+        isEnglish
+    ) {
+        searchExercisesWithHebrewVariants(
             query = query,
             isEnglish = isEnglish
         )
@@ -146,33 +149,41 @@ fun GlobalExerciseSearchDialog(
         rememberExerciseSearchSpeechState(
             isEnglish = isEnglish,
             onPartialResult = { recognizedText ->
-                query = recognizedText
-                    .replace("\n", " ")
-                    .replace("\r", " ")
-                    .replace(
-                        Regex("""\s+"""),
-                        " "
-                    )
-                    .trim()
+                query =
+                    GlobalExerciseSearchEngine
+                        .normalizeSpokenQuery(
+                            recognizedText
+                        )
+                        .replace("\n", " ")
+                        .replace("\r", " ")
+                        .replace(
+                            Regex("""\s+"""),
+                            " "
+                        )
+                        .trim()
 
                 speechError = null
             },
             onResult = { recognizedText ->
-                val finalQuery = recognizedText
-                    .replace("\n", " ")
-                    .replace("\r", " ")
-                    .replace(
-                        Regex("""\s+"""),
-                        " "
-                    )
-                    .trim()
+                val finalQuery =
+                    GlobalExerciseSearchEngine
+                        .normalizeSpokenQuery(
+                            recognizedText
+                        )
+                        .replace("\n", " ")
+                        .replace("\r", " ")
+                        .replace(
+                            Regex("""\s+"""),
+                            " "
+                        )
+                        .trim()
 
                 query = finalQuery
                 speechError = null
                 finishTyping()
 
                 val finalResults =
-                    GlobalExerciseSearchEngine.search(
+                    searchExercisesWithHebrewVariants(
                         query = finalQuery,
                         isEnglish = isEnglish
                     )
@@ -780,6 +791,97 @@ private fun SearchResultRow(
             }
         }
     }
+}
+
+/**
+ * חיפוש תרגילים עם תמיכה בכתיבים עבריים חלופיים.
+ *
+ * החיפוש מתבצע גם לפי הטקסט המקורי וגם לפי
+ * החלפת "צואר" ו־"צוואר", בלי תלות בכתיב
+ * שבו נשמר שם התרגיל במאגר.
+ */
+private fun searchExercisesWithHebrewVariants(
+    query: String,
+    isEnglish: Boolean
+): List<GlobalExerciseSearchEngine.Result> {
+    val cleanQuery =
+        query
+            .replace("\n", " ")
+            .replace("\r", " ")
+            .replace(
+                Regex("""\s+"""),
+                " "
+            )
+            .trim()
+
+    if (cleanQuery.isBlank()) {
+        return emptyList()
+    }
+
+    /*
+     * תחילה יוצרים את שני הכתיבים האפשריים
+     * של "צואר" ו־"צוואר".
+     */
+    val neckSpellingVariants =
+        linkedSetOf(
+            cleanQuery,
+            cleanQuery.replace(
+                oldValue = "צוואר",
+                newValue = "צואר",
+                ignoreCase = true
+            ),
+            cleanQuery.replace(
+                oldValue = "צואר",
+                newValue = "צוואר",
+                ignoreCase = true
+            )
+        )
+
+    /*
+     * עבור כל כתיב יוצרים גם גרסה ללא מקפים.
+     *
+     * נתמכים:
+     * מקף רגיל: -
+     * מקף עברי: ־
+     * en dash: –
+     * em dash: —
+     */
+    val queryVariants =
+        linkedSetOf<String>().apply {
+            neckSpellingVariants.forEach { spellingVariant ->
+                add(spellingVariant)
+
+                add(
+                    spellingVariant
+                        .replace(
+                            Regex("""\s*[-־–—]\s*"""),
+                            " "
+                        )
+                        .replace(
+                            Regex("""\s+"""),
+                            " "
+                        )
+                        .trim()
+                )
+            }
+        }
+            .map { value ->
+                value.trim()
+            }
+            .filter { value ->
+                value.isNotBlank()
+            }
+
+    return queryVariants
+        .flatMap { queryVariant ->
+            GlobalExerciseSearchEngine.search(
+                query = queryVariant,
+                isEnglish = isEnglish
+            )
+        }
+        .distinctBy { result ->
+            result.id
+        }
 }
 
 private fun resultTitleColor(

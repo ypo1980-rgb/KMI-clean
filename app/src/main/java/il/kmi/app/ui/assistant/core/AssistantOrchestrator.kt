@@ -241,7 +241,7 @@ class AssistantOrchestrator(
                     intent =
                         AssistantIntent.LIST_EXERCISES,
                     source =
-                        AssistantKnowledgeSource.MATERIAL,
+                        AssistantKnowledgeSource.EXERCISES,
                     confidence =
                         maxOf(
                             detectedResolution.confidence,
@@ -436,6 +436,20 @@ class AssistantOrchestrator(
                 "תני את הרשימה",
                 "תן רשימה",
                 "תני רשימה",
+
+                "תן את רשימת התרגילים",
+                "תני את רשימת התרגילים",
+                "תן רשימת תרגילים",
+                "תני רשימת תרגילים",
+                "תציג את רשימת התרגילים",
+                "תציגי את רשימת התרגילים",
+                "הצג את רשימת התרגילים",
+                "הציגי את רשימת התרגילים",
+                "תראה את רשימת התרגילים",
+                "תראי את רשימת התרגילים",
+                "רשימת התרגילים",
+                "רשימת תרגילים",
+
                 "תציג את הרשימה",
                 "תציגי את הרשימה",
                 "הצג את הרשימה",
@@ -545,15 +559,15 @@ class AssistantOrchestrator(
             )
 
         /*
-         * משתמשים ב־EXERCISE ולא ב־LIST_EXERCISES,
-         * כדי שהבקשה תגיע ל־ExerciseAssistantEngine,
-         * שמבצע את סינון הנושא והחגורה בפועל.
+         * שאלת ההמשך מבקשת רשימה במפורש.
+         * המקור נשאר תרגילים, והנושא והחגורה
+         * נלקחים מהבקשה הקודמת.
          */
         val contextualResolution =
             detectedResolution.copy(
                 originalQuestion = question,
                 resolvedQuestion = contextualQuestion,
-                intent = AssistantIntent.EXERCISE,
+                intent = AssistantIntent.LIST_EXERCISES,
                 source = AssistantKnowledgeSource.EXERCISES,
                 confidence = 1f,
                 exerciseName =

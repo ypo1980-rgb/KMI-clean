@@ -81,10 +81,56 @@ object GlobalExerciseSearchEngine {
             }
     }
 
-    fun normalizeSpokenQuery(raw: String): String {
+    fun normalizeSpokenQuery(
+        raw: String
+    ): String {
         return raw
             .trim()
-            .replace(Regex("""\s+"""), " ")
+            .replace(
+                Regex("""\s+"""),
+                " "
+            )
+
+            /*
+             * תיקון שגיאות נפוצות של מנוע זיהוי הדיבור
+             * במונחים הקשורים לחניקות.
+             */
+            .replace(
+                Regex(
+                    pattern =
+                        """(?<![\p{L}])כניקה(?![\p{L}])""",
+                    option = RegexOption.IGNORE_CASE
+                ),
+                "חניקה"
+            )
+            .replace(
+                Regex(
+                    pattern =
+                        """(?<![\p{L}])כניקות(?![\p{L}])""",
+                    option = RegexOption.IGNORE_CASE
+                ),
+                "חניקות"
+            )
+            .replace(
+                Regex(
+                    pattern =
+                        """(?<![\p{L}])מכניקה(?![\p{L}])""",
+                    option = RegexOption.IGNORE_CASE
+                ),
+                "מחניקה"
+            )
+            .replace(
+                Regex(
+                    pattern =
+                        """(?<![\p{L}])מכניקות(?![\p{L}])""",
+                    option = RegexOption.IGNORE_CASE
+                ),
+                "מחניקות"
+            )
+
+            /*
+             * תיקון מונחי קוואלר.
+             */
             .replace(
                 Regex(
                     pattern =
@@ -516,11 +562,28 @@ object GlobalExerciseSearchEngine {
             .trim()
     }
 
-    private fun normalizeForMatch(value: String): String {
+    private fun normalizeForMatch(
+        value: String
+    ): String {
         return cleanVisibleText(value)
-            .replace("–", "-")
-            .replace("—", "-")
-            .replace("־", "-")
             .lowercase()
+            .replace(
+                oldValue = "צואר",
+                newValue = "צוואר",
+                ignoreCase = true
+            )
+            .replace(
+                Regex("""\s*[-־–—]\s*"""),
+                " "
+            )
+            .replace(
+                Regex("""\s*/\s*"""),
+                " "
+            )
+            .replace(
+                Regex("""\s+"""),
+                " "
+            )
+            .trim()
     }
 }
