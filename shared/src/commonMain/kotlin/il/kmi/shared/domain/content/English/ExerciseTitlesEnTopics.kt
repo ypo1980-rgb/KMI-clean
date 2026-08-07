@@ -30,7 +30,7 @@ object ExerciseTitlesEnTopics {
         "פיסת יד" to "Knife Hand",
         "אגרופים ישרים" to "Straight Punches",
         "מגל + סנוקרת" to "Hooks + Uppercuts",
-        "עבודת ידיים - מגל + סנוקרת" to "Hand Techniques - Hooks + Uppercuts",
+        "מגל + סנוקרת" to "Hooks + Uppercuts",
         "שחרורים מתפיסות ידיים" to "Releases from Hand Grabs",
         "שחרורים מחניקות" to "Releases from Chokes",
         "שחרור מתפיסות ידיים" to "Releases from Hand Grabs",

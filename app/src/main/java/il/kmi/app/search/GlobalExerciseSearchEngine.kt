@@ -129,6 +129,19 @@ object GlobalExerciseSearchEngine {
             )
 
             /*
+             * תיקון כתיבים חלופיים של גרגרת
+             * בתוצאת זיהוי הדיבור.
+             */
+            .replace(
+                Regex(
+                    pattern =
+                        """(?<![\p{L}])ג(?:ו)?רג(?:ו)?רת(?![\p{L}])""",
+                    option = RegexOption.IGNORE_CASE
+                ),
+                "גרגרת"
+            )
+
+            /*
              * תיקון מונחי קוואלר.
              */
             .replace(
@@ -571,6 +584,14 @@ object GlobalExerciseSearchEngine {
                 oldValue = "צואר",
                 newValue = "צוואר",
                 ignoreCase = true
+            )
+            .replace(
+                Regex(
+                    pattern =
+                        """(?<![\p{L}])ג(?:ו)?רג(?:ו)?רת(?![\p{L}])""",
+                    option = RegexOption.IGNORE_CASE
+                ),
+                "גרגרת"
             )
             .replace(
                 Regex("""\s*[-־–—]\s*"""),

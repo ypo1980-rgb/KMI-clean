@@ -432,12 +432,15 @@ fun MaterialsScreen(
     // ✅ NEW: נושא לתצוגה/קאנוניקליזציה — כדי ש"" יתנהג בדיוק כמו "כללי"
     val topicUi = remember(topic) { if (topic.isBlank()) "כללי" else topic }
 
-    fun decodeMaterialParam(value: String): String {
-        return try {
-            URLDecoder.decode(value, "UTF-8")
-        } catch (_: Exception) {
-            value
-        }.trim()
+    /*
+     * הפרמטר כבר פוענח ב־materialsNavGraph באמצעות
+     * Uri.decode. פענוח נוסף באמצעות URLDecoder
+     * הופך את הסימן + לרווח ופוגע בשם תת־הנושא.
+     */
+    fun decodeMaterialParam(
+        value: String
+    ): String {
+        return value.trim()
     }
 
     val decodedSubTopicFilter = remember(subTopicFilter) {
@@ -628,11 +631,19 @@ fun MaterialsScreen(
     ) {
         val key = itemsCacheKey()
 
-        // אם כבר בקאש — חוזרים מיד בלי חישוב
-        itemsCache[key]?.let {
-            value = it
-            return@produceState
-        }
+        /*
+         * משתמשים במטמון רק כאשר קיימת בו רשימה ממשית.
+         * תוצאה ריקה עשויה להיות תוצאה ישנה שנשמרה
+         * לפני שינוי שם הנושא או תת־הנושא.
+         */
+        itemsCache[key]
+            ?.takeIf { cachedItems ->
+                cachedItems.isNotEmpty()
+            }
+            ?.let { cachedItems ->
+                value = cachedItems
+                return@produceState
+            }
 
         value = withContext(Dispatchers.Default) {
             val topicTrim = materialRootTopic.trim()
@@ -686,10 +697,21 @@ fun MaterialsScreen(
                 }
             }
 
-            list.distinct()
+            list
+                .map { item ->
+                    item.trim()
+                }
+                .filter { item ->
+                    item.isNotBlank()
+                }
+                .distinct()
         }
 
-        itemsCache[key] = value
+        if (value.isNotEmpty()) {
+            itemsCache[key] = value
+        } else {
+            itemsCache.remove(key)
+        }
     }
 
     val nestedSectionTitleByItem = remember(
@@ -1368,28 +1390,34 @@ fun MaterialsScreen(
 
     Scaffold(
         topBar = {
+            /*
+             * הכותרת מציגה רק את הרמה הפעילה:
+             *
+             * נושא רגיל       -> שם הנושא
+             * תת־נושא         -> שם תת־הנושא
+             * תת־נושא פנימי   -> שם הרמה הפנימית
+             */
             val headerTitle =
                 when {
-                    decodedSubTopicFilter.isNullOrBlank() -> {
-                        topicTitleForUi(topic, currentLang)
+                    !openedNestedSubTopic.isNullOrBlank() -> {
+                        topicTitleForUi(
+                            openedNestedSubTopic.orEmpty(),
+                            currentLang
+                        )
                     }
 
-                    openedNestedSubTopic.isNullOrBlank() -> {
-                        "${topicTitleForUi(topic, currentLang)} - ${
-                            topicTitleForUi(
-                                decodedSubTopicFilter,
-                                currentLang
-                            )
-                        }"
+                    !decodedSubTopicFilter.isNullOrBlank() -> {
+                        topicTitleForUi(
+                            decodedSubTopicFilter,
+                            currentLang
+                        )
                     }
 
                     else -> {
-                        "${topicTitleForUi(decodedSubTopicFilter, currentLang)} - ${
-                            topicTitleForUi(
-                                openedNestedSubTopic ?: "",
-                                currentLang
-                            )
-                        }"
+                        topicTitleForUi(
+                            topic,
+                            currentLang
+                        )
                     }
                 }
 

@@ -31,6 +31,23 @@ private fun String.normHeb(): String {
             newValue = "צוואר",
             ignoreCase = true
         )
+
+        /*
+         * נרמול כל הכתיבים הנפוצים של גרגרת:
+         *
+         * גורגרת
+         * גורגורת
+         * גרגרת
+         * גרגורת
+         */
+        .replace(
+            Regex(
+                pattern =
+                    """(?<![\p{L}])ג(?:ו)?רג(?:ו)?רת(?![\p{L}])""",
+                option = RegexOption.IGNORE_CASE
+            ),
+            "גרגרת"
+        )
         .replace(
             Regex("""\s*[-־–—]\s*"""),
             " "

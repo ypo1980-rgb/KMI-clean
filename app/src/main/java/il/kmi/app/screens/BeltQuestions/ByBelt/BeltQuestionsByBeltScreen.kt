@@ -2130,8 +2130,8 @@ private fun TopicsCardForBelt(
                                         modifier = Modifier
                                             .fillMaxWidth()
                                             .padding(
-                                                start = 16.dp,
-                                                end = 16.dp,
+                                                start = 0.dp,
+                                                end = 0.dp,
                                                 top = 2.dp,
                                                 bottom = 6.dp
                                             ),
