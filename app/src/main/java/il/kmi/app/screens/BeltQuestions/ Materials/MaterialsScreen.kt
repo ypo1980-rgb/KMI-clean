@@ -6,8 +6,11 @@ import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Info
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.ui.AbsoluteAlignment
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
@@ -36,7 +39,6 @@ import androidx.compose.ui.unit.LayoutDirection
 import il.kmi.app.ui.ext.lightColor
 import il.kmi.shared.questions.model.util.ExerciseTitleFormatter
 import il.kmi.shared.domain.ContentRepo as SharedContentRepo
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import androidx.compose.foundation.Image
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -79,6 +81,7 @@ import il.kmi.shared.domain.content.ExerciseTitlesEn
 import il.kmi.shared.domain.content.ExerciseIdentityRegistry
 import il.kmi.app.subscription.KmiAccess
 import il.kmi.app.ui.KmiTopBar
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import java.net.URLDecoder
 import java.text.SimpleDateFormat
@@ -339,9 +342,8 @@ fun MaterialsScreen(
     DisposableEffect(rolePrefs) {
         val roleListener =
             android.content.SharedPreferences
-                .OnSharedPreferenceChangeListener {
-                        _,
-                        key ->
+                .OnSharedPreferenceChangeListener { _,
+                                                    key ->
 
                     if (
                         key == "user_role" ||
@@ -507,6 +509,22 @@ fun MaterialsScreen(
     }
 
     var openedNestedSubTopic by rememberSaveable(
+        belt.id,
+        materialRootTopic,
+        materialParentSubTopic
+    ) {
+        mutableStateOf<String?>(null)
+    }
+
+    var nestedGeneralNoteTitle by rememberSaveable(
+        belt.id,
+        materialRootTopic,
+        materialParentSubTopic
+    ) {
+        mutableStateOf<String?>(null)
+    }
+
+    var nestedGeneralNoteText by rememberSaveable(
         belt.id,
         materialRootTopic,
         materialParentSubTopic
@@ -1426,6 +1444,7 @@ fun MaterialsScreen(
 
             KmiTopBar(
                 title = headerTitle,
+                onBack = onBack,
                 onHome = onOpenHome,
                 // לא רוצים אייקון בית עליון כי הוא כבר קיים
                 showTopHome = false,
@@ -1535,12 +1554,20 @@ fun MaterialsScreen(
                             )
 
                             AnimatedButton(
-                                text = if (isEnglish) "Reset" else "איפוס",
+                                text =
+                                    if (isEnglish) {
+                                        "Reset"
+                                    } else {
+                                        "איפוס"
+                                    },
                                 modifier = Modifier.weight(1f),
                                 containerColor = Color(0xFFB3261E),
                                 onClick = {
-                                    scope.launch {
-                                        val keysToClear = if (subTopicFilter.isNullOrBlank()) {
+                                    val keysToClear =
+                                        if (
+                                            subTopicFilter
+                                                .isNullOrBlank()
+                                        ) {
                                             listOf(
                                                 topicKey,
                                                 topicUi,
@@ -1549,57 +1576,147 @@ fun MaterialsScreen(
                                         } else {
                                             listOf(topicKey)
                                         }
-                                            .map { it.trim() }
-                                            .filter { it.isNotBlank() }
+                                            .map { key ->
+                                                key.trim()
+                                            }
+                                            .filter { key ->
+                                                key.isNotBlank()
+                                            }
                                             .distinct()
 
-                                        // ✅ מנקה את כל המפתחות שבהם MaterialsScreen עשוי היה לשמור סימונים:
-                                        // topicKey / topicUi / כללי.
-                                        // כך סימונים ישנים לא חוזרים אחרי איפוס.
-                                        keysToClear.forEach { key ->
-                                            vm.clearTopic(belt, key)
+                                    /*
+                                     * ניקוי מיידי של המצב שמוצג במסך.
+                                     *
+                                     * הפעולות האלה אינן ממתינות ל־ViewModel,
+                                     * ולכן הכרטיסים והמונים מתאפסים מיד.
+                                     */
+                                    pendingItemStates.clear()
+
+                                    itemList.forEachIndexed { index,
+                                                              item ->
+
+                                        val statusId =
+                                            statusIdFor(
+                                                index = index,
+                                                item = item
+                                            )
+
+                                        val legacyStatusId =
+                                            legacyStatusIdFor(
+                                                index = index,
+                                                item = item
+                                            )
+
+                                        itemStates[statusId] = null
+                                        itemStates[legacyStatusId] = null
+                                    }
+
+                                    coachProgressStates.clear()
+                                    excludedItems.clear()
+
+                                    favorites = mutableSetOf()
+                                    masteredSet = mutableSetOf()
+                                    unknowns = mutableSetOf()
+
+                                    /*
+                                     * מחיקת כל הנתונים השמורים מקומית.
+                                     * apply מעדכן מיד את הזיכרון וכותב
+                                     * לדיסק ברקע.
+                                     */
+                                    val editor = sp.edit()
+                                        .remove(
+                                            "excluded_${belt.id}_$excludedKeySuffix"
+                                        )
+                                        .remove(
+                                            "fav_${belt.id}_$excludedKeySuffix"
+                                        )
+
+                                    keysToClear.forEach { key ->
+                                        editor
+                                            .remove(
+                                                "mastered_${belt.id}_$key"
+                                            )
+                                            .remove(
+                                                "unknown_${belt.id}_$key"
+                                            )
+                                    }
+
+                                    /*
+                                     * מחיקת סטטוסי המאמן:
+                                     * לא נלמד / נלמד / תורגל /
+                                     * נדרש חיזוק.
+                                     */
+                                    itemList.forEachIndexed { index,
+                                                              item ->
+
+                                        val statusId =
+                                            statusIdFor(
+                                                index = index,
+                                                item = item
+                                            )
+
+                                        val progressKey =
+                                            coachProgressKey(
+                                                statusId
+                                            )
+
+                                        editor
+                                            .remove(
+                                                "${progressKey}_status"
+                                            )
+                                            .remove(
+                                                "${progressKey}_updated_at"
+                                            )
+                                    }
+
+                                    editor.apply()
+
+                                    /*
+   * מאפשרים ל־Compose לצייר קודם את מצב
+   * האיפוס שכבר עודכן במפות המקומיות.
+   *
+   * לאחר מכן מבצעים את הניקוי הכבד
+   * מחוץ ל־Main Thread כדי לא לחסום
+   * את רענון המסך.
+   */
+                                    scope.launch {
+                                        delay(32L)
+
+                                        withContext(Dispatchers.IO) {
+                                            keysToClear.forEach { key ->
+                                                vm.clearTopic(
+                                                    belt = belt,
+                                                    topic = key
+                                                )
+                                            }
                                         }
-
-                                        itemList.forEachIndexed { index, item ->
-                                            val statusId = statusIdFor(index, item)
-                                            val legacyStatusId = legacyStatusIdFor(index, item)
-
-                                            itemStates[statusId] = null
-                                            itemStates[legacyStatusId] = null
-                                        }
-
-                                        excludedItems.clear()
-
-                                        val editor = sp.edit()
-                                            .remove("excluded_${belt.id}_$excludedKeySuffix")
-                                            .remove("fav_${belt.id}_$excludedKeySuffix")
-
-                                        keysToClear.forEach { key ->
-                                            editor
-                                                .remove("mastered_${belt.id}_$key")
-                                                .remove("unknown_${belt.id}_$key")
-                                        }
-
-                                        editor.apply()
-
-                                        favorites = mutableSetOf()
-                                        masteredSet = mutableSetOf()
-                                        unknowns = mutableSetOf()
                                     }
                                 }
                             )
                         }
 
                         AnimatedButton(
-                            text = if (isEnglish) "Summary Screen" else "מסך סיכום",
+                            text =
+                                if (isEnglish) {
+                                    "Summary Screen"
+                                } else {
+                                    "מסך סיכום"
+                                },
                             modifier = Modifier.fillMaxWidth(),
                             containerColor = Color(0xFF1F2937),
-                            onClick = { onSummary(belt, topicUi, subTopicFilter) }
+                            onClick = {
+                                onSummary(
+                                    belt,
+                                    topicUi,
+                                    subTopicFilter
+                                )
+                            }
                         )
                     }
                 }
             }
         }
+
     ) { innerPadding ->
         Surface(
             modifier = Modifier
@@ -1608,6 +1725,120 @@ fun MaterialsScreen(
             color = belt.lightColor,
             contentColor = MaterialTheme.colorScheme.onSurface
         ) {
+
+            nestedGeneralNoteText
+                ?.trim()
+                ?.takeIf { note ->
+                    note.isNotBlank()
+                }
+                ?.let { visibleNote ->
+                    AlertDialog(
+                        onDismissRequest = {
+                            nestedGeneralNoteTitle = null
+                            nestedGeneralNoteText = null
+                        },
+                        icon = {
+                            Surface(
+                                modifier = Modifier.size(38.dp),
+                                shape = CircleShape,
+                                color =
+                                    if (isDarkSurface) {
+                                        Color(0xFF2563EB)
+                                            .copy(alpha = 0.24f)
+                                    } else {
+                                        Color(0xFFE8F1FF)
+                                    },
+                                border = BorderStroke(
+                                    width = 1.dp,
+                                    color = Color(0xFF2563EB)
+                                        .copy(alpha = 0.40f)
+                                )
+                            ) {
+                                Box(
+                                    contentAlignment =
+                                        Alignment.Center
+                                ) {
+                                    Icon(
+                                        imageVector =
+                                            Icons.Filled.Info,
+                                        contentDescription = null,
+                                        tint =
+                                            if (isDarkSurface) {
+                                                Color(0xFF60A5FA)
+                                            } else {
+                                                Color(0xFF2563EB)
+                                            },
+                                        modifier =
+                                            Modifier.size(20.dp)
+                                    )
+                                }
+                            }
+                        },
+                        title = {
+                            Text(
+                                text =
+                                    nestedGeneralNoteTitle
+                                        .orEmpty(),
+                                modifier =
+                                    Modifier.fillMaxWidth(),
+                                textAlign = TextAlign.Center,
+                                style =
+                                    KmiTypography.sectionTitle,
+                                color =
+                                    MaterialTheme
+                                        .colorScheme
+                                        .onSurface
+                            )
+                        },
+                        text = {
+                            Text(
+                                text = visibleNote,
+                                modifier =
+                                    Modifier.fillMaxWidth(),
+                                textAlign =
+                                    if (isEnglish) {
+                                        TextAlign.Left
+                                    } else {
+                                        TextAlign.Right
+                                    },
+                                style =
+                                    KmiTypography.secondary.copy(
+                                        fontWeight =
+                                            FontWeight.Medium
+                                    ),
+                                color =
+                                    MaterialTheme
+                                        .colorScheme
+                                        .onSurfaceVariant
+                            )
+                        },
+                        confirmButton = {
+                            TextButton(
+                                onClick = {
+                                    nestedGeneralNoteTitle =
+                                        null
+                                    nestedGeneralNoteText =
+                                        null
+                                }
+                            ) {
+                                Text(
+                                    text =
+                                        if (isEnglish) {
+                                            "Close"
+                                        } else {
+                                            "סגור"
+                                        },
+                                    style =
+                                        KmiTypography.action,
+                                    color = Color(0xFF2563EB)
+                                )
+                            }
+                        },
+                        shape = RoundedCornerShape(26.dp),
+                        containerColor =
+                            MaterialTheme.colorScheme.surface
+                    )
+                }
 
             // ===== דיאלוג הסבר בעקבות חיפוש / מידע =====
             explainTriple?.let { (b, t, iRaw) ->
@@ -2050,42 +2281,167 @@ fun MaterialsScreen(
                                                 tonalElevation = 0.dp,
                                                 shadowElevation = 0.dp
                                             ) {
-                                                Text(
-                                                    text =
-                                                        topicTitleForUi(
-                                                            currentSectionTitle,
-                                                            currentLang
-                                                        ),
+                                                val displaySectionTitle =
+                                                    topicTitleForUi(
+                                                        currentSectionTitle,
+                                                        currentLang
+                                                    )
+
+                                                val sectionGeneralNote =
+                                                    remember(
+                                                        belt,
+                                                        materialRootTopic,
+                                                        materialParentSubTopic,
+                                                        currentSectionTitle
+                                                    ) {
+                                                        materialParentSubTopic
+                                                            ?.let { parent ->
+                                                                SharedContentRepo
+                                                                    .getNestedSubTopicGeneralNote(
+                                                                        belt = belt,
+                                                                        topicTitle =
+                                                                            materialRootTopic,
+                                                                        subTopicTitle =
+                                                                            parent,
+                                                                        nestedSubTopicTitle =
+                                                                            currentSectionTitle
+                                                                    )
+                                                            }
+                                                    }
+
+                                                Box(
                                                     modifier = Modifier
                                                         .fillMaxWidth()
                                                         .background(
                                                             if (isDarkSurface) {
-                                                                MaterialTheme.colorScheme.surface
+                                                                MaterialTheme
+                                                                    .colorScheme
+                                                                    .surface
                                                             } else {
                                                                 belt.lightColor
                                                             }
                                                         )
-                                                        .padding(
-                                                            start = 8.dp,
-                                                            end = 8.dp,
-                                                            top = 8.dp,
-                                                            bottom = 6.dp
-                                                        ),
-                                                    textAlign =
-                                                        if (isEnglish) {
-                                                            TextAlign.Left
-                                                        } else {
-                                                            TextAlign.Right
-                                                        },
-                                                    style =
-                                                        KmiTypography.cardTitle,
-                                                    color =
-                                                        if (isDarkSurface) {
-                                                            MaterialTheme.colorScheme.primary
-                                                        } else {
-                                                            belt.color
+                                                ) {
+                                                    Text(
+                                                        text =
+                                                            displaySectionTitle,
+                                                        modifier = Modifier
+                                                            .fillMaxWidth()
+                                                            .absolutePadding(
+                                                                left = 48.dp,
+                                                                right = 8.dp,
+                                                                top = 8.dp,
+                                                                bottom = 6.dp
+                                                            ),
+                                                        textAlign =
+                                                            if (isEnglish) {
+                                                                TextAlign.Left
+                                                            } else {
+                                                                TextAlign.Right
+                                                            },
+                                                        style =
+                                                            KmiTypography
+                                                                .cardTitle,
+                                                        color =
+                                                            if (isDarkSurface) {
+                                                                MaterialTheme
+                                                                    .colorScheme
+                                                                    .primary
+                                                            } else {
+                                                                belt.color
+                                                            }
+                                                    )
+
+                                                    if (
+                                                        !sectionGeneralNote
+                                                            .isNullOrBlank()
+                                                    ) {
+                                                        Surface(
+                                                            modifier = Modifier
+                                                                .align(
+                                                                    AbsoluteAlignment
+                                                                        .CenterLeft
+                                                                )
+                                                                .padding(
+                                                                    start = 12.dp
+                                                                )
+                                                                .size(30.dp)
+                                                                .clickable {
+                                                                    nestedGeneralNoteTitle =
+                                                                        displaySectionTitle
+
+                                                                    nestedGeneralNoteText =
+                                                                        sectionGeneralNote
+                                                                },
+                                                            shape = CircleShape,
+                                                            color =
+                                                                if (
+                                                                    isDarkSurface
+                                                                ) {
+                                                                    Color(
+                                                                        0xFF2563EB
+                                                                    )
+                                                                        .copy(
+                                                                            alpha =
+                                                                                0.24f
+                                                                        )
+                                                                } else {
+                                                                    Color(
+                                                                        0xFFE8F1FF
+                                                                    )
+                                                                },
+                                                            border =
+                                                                BorderStroke(
+                                                                    width = 1.dp,
+                                                                    color =
+                                                                        Color(
+                                                                            0xFF2563EB
+                                                                        )
+                                                                            .copy(
+                                                                                alpha =
+                                                                                    0.45f
+                                                                            )
+                                                                ),
+                                                            tonalElevation = 0.dp,
+                                                            shadowElevation = 0.dp
+                                                        ) {
+                                                            Box(
+                                                                contentAlignment =
+                                                                    Alignment.Center
+                                                            ) {
+                                                                Icon(
+                                                                    imageVector =
+                                                                        Icons.Filled
+                                                                            .Info,
+                                                                    contentDescription =
+                                                                        if (
+                                                                            isEnglish
+                                                                        ) {
+                                                                            "General note"
+                                                                        } else {
+                                                                            "הערה כללית"
+                                                                        },
+                                                                    tint =
+                                                                        if (
+                                                                            isDarkSurface
+                                                                        ) {
+                                                                            Color(
+                                                                                0xFF60A5FA
+                                                                            )
+                                                                        } else {
+                                                                            Color(
+                                                                                0xFF2563EB
+                                                                            )
+                                                                        },
+                                                                    modifier =
+                                                                        Modifier.size(
+                                                                            18.dp
+                                                                        )
+                                                                )
+                                                            }
                                                         }
-                                                )
+                                                    }
+                                                }
                                             }
                                         }
                                     }
@@ -2275,7 +2631,9 @@ fun MaterialsScreen(
                                                                     } else {
                                                                         "מועדף"
                                                                     },
-                                                                    containerColor = Color(0xFFF9D9B8),
+                                                                    containerColor = Color(
+                                                                        0xFFF9D9B8
+                                                                    ),
                                                                     contentColor = Color(0xFF9A5A00)
                                                                 )
 

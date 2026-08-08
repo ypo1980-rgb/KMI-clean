@@ -33,6 +33,7 @@ import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.HelpOutline
 import androidx.compose.material.icons.filled.Lightbulb
 import androidx.compose.material.icons.filled.Mic
+import androidx.compose.material.icons.filled.Replay
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Share
@@ -850,35 +851,30 @@ fun KmiTopBar(
                         .fillMaxHeight()
                         .padding(start = 8.dp),
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    horizontalArrangement =
+                        Arrangement.spacedBy(8.dp)
                 ) {
                     if (showMenu) {
                         Box(
-                            modifier = Modifier.offset(x = (-6).dp),
-                            contentAlignment = Alignment.Center
+                            modifier =
+                                Modifier.offset(x = (-6).dp),
+                            contentAlignment =
+                                Alignment.Center
                         ) {
                             PremiumMenuImageIcon(
                                 contentDescription =
-                                    if (isEnglish) "Menu" else "תפריט",
-                                onClick = { openDrawerClick() }
+                                    if (isEnglish) {
+                                        "Menu"
+                                    } else {
+                                        "תפריט"
+                                    },
+                                onClick = {
+                                    openDrawerClick()
+                                }
                             )
                         }
                     } else {
                         Spacer(Modifier.width(8.dp))
-                    }
-
-                    if (onBack != null) {
-                        PremiumActionIcon(
-                            icon = if (useCloseIcon) {
-                                Icons.Filled.Close
-                            } else {
-                                Icons.AutoMirrored.Filled.ArrowBack
-                            },
-                            tint = Color(0xFF2563EB),
-                            background = Color(0x1A2563EB),
-                            contentDescription = if (useCloseIcon) "סגור" else "חזור",
-                            onClick = { performBackSafe() }
-                        )
                     }
                 }
             },
@@ -963,6 +959,51 @@ fun KmiTopBar(
                                     -6f
                                 }
                         }
+                )
+            }
+        }
+
+        /*
+         * חזרה ממוקמת בפינה הנגדית לתפריט,
+         * מעל תג מצב מאמן / מתאמן.
+         *
+         * היא אינה חלק משורת הכותרת ולכן אינה
+         * מזיזה את הכותרת ואינה מצמצמת את מקומה.
+         */
+        if (onBack != null) {
+            val backIconAlignment =
+                if (isEnglish) {
+                    AbsoluteAlignment.TopRight
+                } else {
+                    AbsoluteAlignment.TopLeft
+                }
+
+            Box(
+                modifier = Modifier
+                    .align(backIconAlignment)
+                    .padding(
+                        start =
+                            if (isEnglish) {
+                                0.dp
+                            } else {
+                                7.dp
+                            },
+                        end =
+                            if (isEnglish) {
+                                7.dp
+                            } else {
+                                0.dp
+                            },
+                        top = 6.dp
+                    )
+                    .zIndex(40f)
+            ) {
+                PremiumColorfulBackIcon(
+                    isEnglish = isEnglish,
+                    useCloseIcon = useCloseIcon,
+                    onClick = {
+                        performBackSafe()
+                    }
                 )
             }
         }
@@ -1719,6 +1760,139 @@ fun KmiTopBar(
 
             Spacer(Modifier.height(8.dp))
         }
+    }
+}
+
+/**
+ * אייקון חזרה צבעוני ללא רקע אפור.
+ *
+ * האייקון החזותי קטן ונקי, אך אזור הלחיצה נשאר
+ * בגודל נגיש של 42dp.
+ */
+@Composable
+private fun PremiumColorfulBackIcon(
+    isEnglish: Boolean,
+    useCloseIcon: Boolean,
+    onClick: () -> Unit
+) {
+    var pressed by remember {
+        mutableStateOf(false)
+    }
+
+    LaunchedEffect(pressed) {
+        if (pressed) {
+            kotlinx.coroutines.delay(120)
+            pressed = false
+        }
+    }
+
+    val scale by animateFloatAsState(
+        targetValue =
+            if (pressed) {
+                0.82f
+            } else {
+                1f
+            },
+        animationSpec = spring(
+            dampingRatio = 0.42f,
+            stiffness = Spring.StiffnessMediumLow
+        ),
+        label = "premiumColorfulBackScale"
+    )
+
+    val rotation by animateFloatAsState(
+        targetValue =
+            if (pressed && !useCloseIcon) {
+                -16f
+            } else {
+                0f
+            },
+        animationSpec = spring(
+            dampingRatio = 0.50f,
+            stiffness = Spring.StiffnessMediumLow
+        ),
+        label = "premiumColorfulBackRotation"
+    )
+
+    val interactionSource = remember {
+        MutableInteractionSource()
+    }
+
+    Box(
+        modifier = Modifier
+            .size(42.dp)
+            .graphicsLayer {
+                scaleX = scale
+                scaleY = scale
+                rotationZ = rotation
+            }
+            .clip(CircleShape)
+            .clickable(
+                interactionSource = interactionSource,
+                indication = null
+            ) {
+                pressed = true
+                onClick()
+            }
+            .drawBehind {
+                /*
+                 * הילה צבעונית שקופה בלבד.
+                 * אין משטח אפור או כרטיס מאחורי האייקון.
+                 */
+                drawCircle(
+                    brush = Brush.radialGradient(
+                        colors = listOf(
+                            Color(0x3360A5FA),
+                            Color(0x1A06B6D4),
+                            Color.Transparent
+                        ),
+                        center = center,
+                        radius = size.minDimension * 0.54f
+                    ),
+                    radius = size.minDimension * 0.54f,
+                    center = center
+                )
+            },
+        contentAlignment = Alignment.Center
+    ) {
+        /*
+         * שכבת צל צבעונית עדינה המעניקה עומק,
+         * בלי ליצור רקע אטום.
+         */
+        Icon(
+            imageVector =
+                if (useCloseIcon) {
+                    Icons.Filled.Close
+                } else {
+                    Icons.Filled.Replay
+                },
+            contentDescription = null,
+            tint = Color(0xFF7C3AED).copy(alpha = 0.34f),
+            modifier = Modifier
+                .size(31.dp)
+                .offset(
+                    x = 1.dp,
+                    y = 1.5.dp
+                )
+        )
+
+        Icon(
+            imageVector =
+                if (useCloseIcon) {
+                    Icons.Filled.Close
+                } else {
+                    Icons.Filled.Replay
+                },
+            contentDescription =
+                when {
+                    useCloseIcon && isEnglish -> "Close"
+                    useCloseIcon -> "סגור"
+                    isEnglish -> "Back"
+                    else -> "חזור"
+                },
+            tint = Color(0xFF0891B2),
+            modifier = Modifier.size(30.dp)
+        )
     }
 }
 

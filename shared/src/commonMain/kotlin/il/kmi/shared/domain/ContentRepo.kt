@@ -86,6 +86,7 @@ object ContentRepo {
         }
         return null
     }
+
     // ---------------------------------------------------------
 // מודלים פנימיים לתוכן
 // ---------------------------------------------------------
@@ -223,7 +224,40 @@ object ContentRepo {
         topicTitle: String,
         subTopicTitle: String
     ): List<String> =
-        getNestedSubTopicsFor(belt, topicTitle, subTopicTitle).map { it.title }
+        getNestedSubTopicsFor(
+            belt = belt,
+            topicTitle = topicTitle,
+            subTopicTitle = subTopicTitle
+        )
+            .map { nestedSubTopic ->
+                nestedSubTopic.title
+            }
+
+    /**
+     * מחזיר הערה כללית של תת־נושא פנימי.
+     */
+    fun getNestedSubTopicGeneralNote(
+        belt: Belt,
+        topicTitle: String,
+        subTopicTitle: String,
+        nestedSubTopicTitle: String
+    ): String? {
+        val wantedTitle = nestedSubTopicTitle.normHeb()
+
+        return getNestedSubTopicsFor(
+            belt = belt,
+            topicTitle = topicTitle,
+            subTopicTitle = subTopicTitle
+        )
+            .firstOrNull { nestedSubTopic ->
+                nestedSubTopic.title.normHeb() == wantedTitle
+            }
+            ?.generalNote
+            ?.trim()
+            ?.takeIf { note ->
+                note.isNotBlank()
+            }
+    }
 
     fun getNestedItemsFor(
         belt: Belt,
@@ -441,13 +475,13 @@ object ContentRepo {
     // לכן עושים lazy כדי שכל ה-topics כבר יהיו מאותחלים בזמן הגישה הראשונה ל-data.
     val data: Map<Belt, BeltContent> by lazy {
         mapOf(
-            Belt.WHITE  to BeltContent(Belt.WHITE,  emptyList()),
+            Belt.WHITE to BeltContent(Belt.WHITE, emptyList()),
             Belt.YELLOW to BeltContent(Belt.YELLOW, yellowBeltTopics),
             Belt.ORANGE to BeltContent(Belt.ORANGE, orangeBeltTopics),
-            Belt.GREEN  to BeltContent(Belt.GREEN,  greenBeltTopics),
-            Belt.BLUE   to BeltContent(Belt.BLUE,   blueBeltTopics),
-            Belt.BROWN  to BeltContent(Belt.BROWN,  brownBeltTopics),
-            Belt.BLACK  to BeltContent(Belt.BLACK,  blackBeltTopics)
+            Belt.GREEN to BeltContent(Belt.GREEN, greenBeltTopics),
+            Belt.BLUE to BeltContent(Belt.BLUE, blueBeltTopics),
+            Belt.BROWN to BeltContent(Belt.BROWN, brownBeltTopics),
+            Belt.BLACK to BeltContent(Belt.BLACK, blackBeltTopics)
         )
     }
 
@@ -664,12 +698,11 @@ object ContentRepo {
     // ---------------- חגורה כתומה ----------------
     private val orangeBeltTopics = listOf(
         Topic(
-            "כללי",
+            "בלימות וגלגולים",
             listOf(
                 "בלימה לצד - ימין/שמאל",
                 "גלגול לפנים - שמאל",
                 "גלגול לאחור - ימין/שמאל",
-                "שילובי ידיים ורגליים"
             )
         ),
         Topic(
@@ -781,15 +814,18 @@ object ContentRepo {
                             )
                         ),
                         SubTopic(
-                            "הגנות חיצוניות נגד מכות מהצד",
-                            listOf(
+                            title = "הגנות חיצוניות נגד מכות מהצד",
+                            items = listOf(
                                 "הגנה נגד מכה גבוהה מהצד - התוקף בצד שמאל",
                                 "הגנה נגד מכה מהצד לעורף - התוקף בצד שמאל",
                                 "הגנה נגד מכה מהצד לגב - התוקף בצד שמאל",
                                 "הגנה נגד מכה גבוהה מהצד - התוקף בצד ימין",
                                 "הגנה נגד מכה מהצד לגרון - התוקף בצד ימין",
                                 "הגנה נגד מכה מהצד לבטן - התוקף בצד ימין"
-                            )
+                            ),
+                            generalNote = """
+        התוקף עומד מהצד ובניצב למגן.
+    """.trimIndent()
                         ),
                         SubTopic(
                             "הגנות פנימיות נגד מכות",
@@ -1403,7 +1439,7 @@ object ContentRepo {
                         "הגנה פנימית נגד אגרוף שמאל – בעיטת מגל לפנים",
                         "הגנה פנימית נגד אגרוף שמאל – גזיזה קדמית",
 
-                                      )
+                        )
                 ),
                 SubTopic(
                     "הגנות נגד בעיטות",
@@ -1415,7 +1451,7 @@ object ContentRepo {
                         "הגנה נגד בעיטת סטירה – גזיזה"
                     )
                 ),
-                        SubTopic(
+                SubTopic(
                     "הגנות נגד מקל",
                     listOf(
                         "הגנה נגד מקל ארוך – התקפה לצד ימין מגן",

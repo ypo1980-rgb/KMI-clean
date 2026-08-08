@@ -1027,7 +1027,7 @@ object ExerciseIdentityRegistry {
                 "topic_breakfalls_rolls"
             ),
             aliases = setOf(
-                "גלגול לפנים צד שמאל",
+                "גלגול לפנים - שמאל",
                 "גלגול לפנים - צד שמאל"
             )
         ),
@@ -6192,6 +6192,7 @@ object ExerciseIdentityRegistry {
             .lowercase()
     }
 }
+
 /**
  * נרמול שמיועד לחיפוש ולהשוואת שמות בלבד.
  *
