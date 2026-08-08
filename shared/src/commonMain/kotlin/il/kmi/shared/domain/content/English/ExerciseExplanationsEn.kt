@@ -277,9 +277,6 @@ object ExerciseExplanationsEn {
             "מכת פטיש מהצד" ->
                 "Clench your left fist, and horizontally strike to the side with the bottom part of your fist."
 
-            "מכת פטיש יד שמאל" ->
-                "Clench your left fist, and horizontally strike to the side with the bottom part of your fist."
-
             // ─────────── Kicks ───────────
 
             "בעיטה רגילה בעקב לסנטר" ->

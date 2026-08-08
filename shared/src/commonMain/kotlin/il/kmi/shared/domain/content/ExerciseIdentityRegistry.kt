@@ -1095,7 +1095,7 @@ object ExerciseIdentityRegistry {
         ExerciseIdentity(
             id = "ex_078",
             belt = Belt.ORANGE,
-            hebrewTitle = "מכת פטיש יד שמאל",
+            hebrewTitle = "מכת פטיש",
             topicKeys = setOf(
                 "עבודת ידיים",
                 "hands_all",

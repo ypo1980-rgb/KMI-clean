@@ -27,7 +27,7 @@ object ExerciseTitlesEnAliases {
         "שילובי ידיים רגליים" to "Hand and Leg Combinations",
         "שילובי ידיים ורגליים" to "Hand and Leg Combinations",
 
-        "מכת פטיש יד שמאל" to "Left Hammerfist Strike",
+        "מכת פטיש" to "Left Hammerfist Strike",
 
         "שחרור מחביקת צואר מהצד בשכיבה" to "Release from Side Neck Hold on the Ground",
         "שחרור מחביקת צואר מהצד בשכיבה" to "Release from Side Neck Hold on the Ground",

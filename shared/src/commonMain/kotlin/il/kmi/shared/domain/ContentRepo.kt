@@ -86,20 +86,21 @@ object ContentRepo {
         }
         return null
     }
-
     // ---------------------------------------------------------
-    // מודלים פנימיים לתוכן
-    // ---------------------------------------------------------
+// מודלים פנימיים לתוכן
+// ---------------------------------------------------------
     data class SubTopic(
         val title: String,
         val items: List<String> = emptyList(),
-        val subTopics: List<SubTopic> = emptyList()
+        val subTopics: List<SubTopic> = emptyList(),
+        val generalNote: String? = null
     )
 
     data class Topic(
         val title: String,
         val items: List<String> = emptyList(),
-        val subTopics: List<SubTopic> = emptyList()
+        val subTopics: List<SubTopic> = emptyList(),
+        val generalNote: String? = null
     )
 
     data class BeltContent(
@@ -117,12 +118,56 @@ object ContentRepo {
     // ---------------------------------------------------------
     // שליפה בטוחה של Topic לפי חגורה וכותרת (קשיח: התאמה מדויקת בלבד)
     // ---------------------------------------------------------
-    private fun findTopicSafe(belt: Belt, topicTitle: String): Topic? {
+    private fun findTopicSafe(
+        belt: Belt,
+        topicTitle: String
+    ): Topic? {
         val topics = data[belt]?.topics ?: return null
         val wn = topicTitle.normHeb()
 
         // ✅ קשיח: התאמה מדויקת בלבד אחרי נרמול
-        return topics.firstOrNull { it.title.normHeb() == wn }
+        return topics.firstOrNull {
+            it.title.normHeb() == wn
+        }
+    }
+
+    /**
+     * הערה כללית המוגדרת עבור נושא שלם.
+     */
+    fun getTopicGeneralNote(
+        belt: Belt,
+        topicTitle: String
+    ): String? {
+        return findTopicSafe(
+            belt = belt,
+            topicTitle = topicTitle
+        )
+            ?.generalNote
+            ?.trim()
+            ?.takeIf { it.isNotBlank() }
+    }
+
+    /**
+     * הערה כללית המוגדרת עבור תת־נושא מסוים.
+     */
+    fun getSubTopicGeneralNote(
+        belt: Belt,
+        topicTitle: String,
+        subTopicTitle: String
+    ): String? {
+        val wantedSubTopic = subTopicTitle.normHeb()
+
+        return findTopicSafe(
+            belt = belt,
+            topicTitle = topicTitle
+        )
+            ?.subTopics
+            ?.firstOrNull { subTopic ->
+                subTopic.title.normHeb() == wantedSubTopic
+            }
+            ?.generalNote
+            ?.trim()
+            ?.takeIf { it.isNotBlank() }
     }
 
     // ---------------------------------------------------------
@@ -140,8 +185,20 @@ object ContentRepo {
         val cleanedSubs = topic.subTopics
             .filter { st -> st.title.trim().isNotBlank() && st.title.trim() != reqTitleTrim }
 
-        if (cleanedSubs.isNotEmpty()) return cleanedSubs
-        if (topic.items.isNotEmpty()) return listOf(SubTopic(title = topic.title, items = topic.items))
+        if (cleanedSubs.isNotEmpty()) {
+            return cleanedSubs
+        }
+
+        if (topic.items.isNotEmpty()) {
+            return listOf(
+                SubTopic(
+                    title = topic.title,
+                    items = topic.items,
+                    generalNote = topic.generalNote
+                )
+            )
+        }
+
         return emptyList()
     }
 
@@ -405,8 +462,8 @@ object ContentRepo {
             )
         ),
         Topic(
-            "עמידת מוצא",
-            listOf(
+            title = "עמידת מוצא",
+            items = listOf(
                 "עמידת מוצא רגילה",
                 "עמידת מוצא להגנות פנימיות",
                 "עמידת מוצא להגנות חיצוניות",
@@ -415,7 +472,14 @@ object ContentRepo {
                 "עמידת מוצא צידית",
                 "תזוזות",
                 "צל בוקס"
-            )
+            ),
+            generalNote = """
+        כל עמידות המוצא מעמידת פיסוק קלה. רגל ימין לאחור.
+        עקב ימין מעט מעל הקרקע.
+        אצבעות רגל שמאל פונות מעט ימינה.
+        הברכיים משוחררות והמשקל במרכז.
+        יש ללמד עמידות מוצא תוך הדגמת מהות ההגנה הפנימית וההגנה החיצונית.
+    """.trimIndent()
         ),
         Topic(
             "מניעת התקרבות התוקף",
@@ -477,8 +541,8 @@ object ContentRepo {
                     )
                 ),
                 SubTopic(
-                    "מרפק",
-                    listOf(
+                    title = "מרפק",
+                    items = listOf(
                         "מכת מרפק אופקית לפנים",
                         "מכת מרפק אנכי למטה",
                         "מכת מרפק אנכי למעלה",
@@ -486,13 +550,29 @@ object ContentRepo {
                         "מכת מרפק לאחור למעלה",
                         "מכת מרפק אופקית לאחור",
                         "מכת מרפק אופקית לצד"
-                    )
+                    ),
+                    generalNote = """
+                מכות המרפק מבוצעות מעמידת מוצא.
+                המבט אל התוקף.
+                יד אחת מכה והיד השנייה שומרת פנים.
+                היד המכה מכווצת והאגרוף סגור כולו.
+            """.trimIndent()
                 )
-            )
+            ),
+            generalNote = """
+        כל המכות מבוצעות מעמידת מוצא.
+        היד המכה חוזרת מיד לעמידת המוצא.
+        היד שאינה מכה שומרת על הפנים.
+        במכות ישרות, המרפק פונה כלפי מטה לכל אורך התנועה.
+        גב כף היד נמצא בגובה האמה.
+        הפגיעה במטרה מתבצעת במפרק האצבע והאמה, כשהמרפק מכופף מעט.
+        האגרוף מסתובב למצב אופקי עם הפגיעה במטרה.
+        בכל מכה ביד ימין מעמידת מוצא יש לסובב את עקב ימין ואת אגן ימין, להארכת התנועה ולהגברת עוצמתה.
+    """.trimIndent()
         ),
         Topic(
-            "בעיטות",
-            listOf(
+            title = "בעיטות",
+            items = listOf(
                 "בעיטה רגילה למפסעה",
                 "בעיטה רגילה לסנטר",
                 "בעיטת ברך נמוכה למפסעה",
@@ -503,29 +583,44 @@ object ContentRepo {
                 "בעיטת מגל בהטעיה",
                 "בעיטת מגל נמוכה",
                 "בעיטה לצד מעמידת פיסוק"
-            )
+            ),
+            generalNote = """
+        כל הבעיטות מעמידת מוצא.
+        גובה הברך קובע את גובה הבעיטה.
+        אצבעות כף הרגל הבועטת משוכות כלפי מעלה.
+        הידיים שומרות פנים.
+        לאחר הבעיטה: חזרה לברך מכופפת והורדת הרגל בשליטה.
+    """.trimIndent()
         ),
         Topic(
             title = "הגנות",
             items = emptyList(),
             subTopics = listOf(
                 SubTopic(
-                    "הגנות חיצוניות נגד מכות",
-                    listOf(
+                    title = "הגנות חיצוניות נגד מכות",
+                    items = listOf(
                         "הגנה חיצונית רפלקסיבית 360 מעלות"
-                    )
+                    ),
+                    generalNote = """
+                ההגנות מבוצעות עם ראיית ההתקפה ורחוק מגוף המגן.
+                ההגנות מבוצעות כנגד אמת ידו של התוקף.
+            """.trimIndent()
                 ),
                 SubTopic(
-                    "הגנות פנימיות נגד מכות",
-                    listOf(
+                    title = "הגנות פנימיות נגד מכות",
+                    items = listOf(
                         "הגנה פנימית רפלקסיבית",
                         "הגנה פנימית נגד ימין בכף יד שמאל",
                         "הגנה פנימית נגד שמאל בכף יד ימין"
-                    )
+                    ),
+                    generalNote = """
+                ההגנות מבוצעות עם ראיית ההתקפה ורחוק מגוף המגן.
+                ההגנות מבוצעות כנגד שורש כף ידו של התוקף, קרוב לנקודת יציאת ההתקפה.
+            """.trimIndent()
                 ),
                 SubTopic(
-                    "הגנות נגד בעיטות רגילות",
-                    listOf(
+                    title = "הגנות נגד בעיטות רגילות",
+                    items = listOf(
                         "הגנה פנימית נגד בעיטה רגילה למפסעה"
                     )
                 )
@@ -536,13 +631,16 @@ object ContentRepo {
             items = emptyList(),
             subTopics = listOf(
                 SubTopic(
-                    "שחרורים מתפיסות ידיים",
-                    listOf(
+                    title = "שחרורים מתפיסות ידיים",
+                    items = listOf(
                         "שחרור מתפיסת יד מול יד",
                         "שחרור מתפיסת יד נגדית",
                         "שחרור מתפיסת שתי ידיים למטה",
                         "שחרור מתפיסת שתי ידיים למעלה"
-                    )
+                    ),
+                    generalNote = """
+                יש לתרגל את השחרורים בשתי הידיים.
+            """.trimIndent()
                 ),
                 SubTopic(
                     "שחרורים מחביקות צואר",
@@ -579,7 +677,7 @@ object ContentRepo {
             listOf(
                 "מכת גב יד בהצלפה",
                 "מכת גב יד בהצלפה בסיבוב",
-                "מכת פטיש יד שמאל",
+                "מכת פטיש",
                 "מכת פטיש מהצד"
             )
         ),

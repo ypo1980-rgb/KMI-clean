@@ -97,6 +97,8 @@ import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.unit.LayoutDirection
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import androidx.core.content.FileProvider
 import il.kmi.app.screens.BeltQuestions.ByTopic.TopicDetails
 import il.kmi.app.ui.KmiTopBar
@@ -1839,7 +1841,18 @@ private fun TopicsCardForBelt(
         sorted
     }
 
-    var expandedTopic by rememberSaveable(belt.id) { mutableStateOf<String?>(null) }
+    var expandedTopic by rememberSaveable(belt.id) {
+        mutableStateOf<String?>(null)
+    }
+
+    var generalNoteTitle by rememberSaveable(belt.id) {
+        mutableStateOf<String?>(null)
+    }
+
+    var generalNoteText by rememberSaveable(belt.id) {
+        mutableStateOf<String?>(null)
+    }
+
     val rowMinHeight = 54.dp
 
     // ✅ מגדיל את גובה כרטיסיית הנושאים,
@@ -1853,6 +1866,329 @@ private fun TopicsCardForBelt(
     // משאירים רק בערך שליש גובה כדי שהכרטיס יירד יותר למטה.
     val desiredOverlap = fabSize * 0.34f
     val fabClearance = desiredOverlap
+
+    val visibleGeneralNote = generalNoteText
+        ?.trim()
+        ?.takeIf { it.isNotBlank() }
+
+    if (visibleGeneralNote != null) {
+        val noteAccent = Color(0xFF2563EB)
+
+        val noteCardBackground =
+            if (isDarkTheme) {
+                Brush.verticalGradient(
+                    colors = listOf(
+                        Color(0xFF172033),
+                        Color(0xFF101827),
+                        Color(0xFF0D1422)
+                    )
+                )
+            } else {
+                Brush.verticalGradient(
+                    colors = listOf(
+                        Color(0xFFFDFEFF),
+                        Color(0xFFF5F8FF),
+                        Color(0xFFFFFFFF)
+                    )
+                )
+            }
+
+        val noteBorderColor =
+            if (isDarkTheme) {
+                Color(0xFF60A5FA).copy(alpha = 0.34f)
+            } else {
+                noteAccent.copy(alpha = 0.20f)
+            }
+
+        val noteTitleColor =
+            if (isDarkTheme) {
+                Color(0xFFF8FAFC)
+            } else {
+                Color(0xFF182235)
+            }
+
+        val noteBodyColor =
+            if (isDarkTheme) {
+                Color(0xFFD5DEEB)
+            } else {
+                Color(0xFF334155)
+            }
+
+        Dialog(
+            onDismissRequest = {
+                generalNoteTitle = null
+                generalNoteText = null
+            },
+            properties = DialogProperties(
+                dismissOnBackPress = true,
+                dismissOnClickOutside = true,
+                usePlatformDefaultWidth = false
+            )
+        ) {
+            CompositionLocalProvider(
+                LocalLayoutDirection provides
+                        if (isEnglish) {
+                            LayoutDirection.Ltr
+                        } else {
+                            LayoutDirection.Rtl
+                        }
+            ) {
+                Surface(
+                    modifier = Modifier
+                        .fillMaxWidth(0.90f)
+                        .widthIn(max = 430.dp)
+                        .padding(vertical = 6.dp),
+                    shape = RoundedCornerShape(30.dp),
+                    color = Color.Transparent,
+                    border = BorderStroke(
+                        width = 1.dp,
+                        color = noteBorderColor
+                    ),
+                    shadowElevation =
+                        if (isDarkTheme) {
+                            14.dp
+                        } else {
+                            24.dp
+                        },
+                    tonalElevation = 0.dp
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .background(noteCardBackground)
+                    ) {
+                        /*
+                         * פס כחול עליון ועדין שמעניק לכרטיס
+                         * זהות ברורה של הערת מידע.
+                         */
+                        Box(
+                            modifier = Modifier
+                                .align(Alignment.TopCenter)
+                                .fillMaxWidth(0.32f)
+                                .height(4.dp)
+                                .clip(
+                                    RoundedCornerShape(
+                                        bottomStart = 999.dp,
+                                        bottomEnd = 999.dp
+                                    )
+                                )
+                                .background(
+                                    Brush.horizontalGradient(
+                                        colors = listOf(
+                                            Color(0xFF60A5FA),
+                                            Color(0xFF2563EB),
+                                            Color(0xFF7C3AED)
+                                        )
+                                    )
+                                )
+                        )
+
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(
+                                    start = 22.dp,
+                                    end = 22.dp,
+                                    top = 14.dp,
+                                    bottom = 12.dp
+                                ),
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            /*
+                             * אייקון מובחן בצבע כחול.
+                             * אינו דומה למנעול הכתום של תוכן נעול.
+                             */
+                            Surface(
+                                modifier = Modifier.size(36.dp),
+                                shape = CircleShape,
+                                color =
+                                    if (isDarkTheme) {
+                                        noteAccent.copy(alpha = 0.22f)
+                                    } else {
+                                        Color(0xFFE8F1FF)
+                                    },
+                                border = BorderStroke(
+                                    width = 1.dp,
+                                    color = noteAccent.copy(alpha = 0.28f)
+                                ),
+                                tonalElevation = 0.dp,
+                                shadowElevation = 0.dp
+                            ) {
+                                Box(
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Filled.Info,
+                                        contentDescription = null,
+                                        tint =
+                                            if (isDarkTheme) {
+                                                Color(0xFF60A5FA)
+                                            } else {
+                                                noteAccent
+                                            },
+                                        modifier = Modifier.size(19.dp)
+                                    )
+                                }
+                            }
+
+                            Spacer(Modifier.height(6.dp))
+
+                            Text(
+                                text =
+                                    if (isEnglish) {
+                                        "PROFESSIONAL GUIDANCE"
+                                    } else {
+                                        "דגשים מקצועיים"
+                                    },
+                                style = KmiTypography.caption.copy(
+                                    fontWeight = FontWeight.ExtraBold
+                                ),
+                                color =
+                                    if (isDarkTheme) {
+                                        Color(0xFF93C5FD)
+                                    } else {
+                                        noteAccent
+                                    },
+                                textAlign = TextAlign.Center
+                            )
+
+                            Spacer(Modifier.height(2.dp))
+
+                            Text(
+                                text = generalNoteTitle.orEmpty(),
+                                style = KmiTypography.sectionTitle.copy(
+                                    fontWeight = FontWeight.ExtraBold
+                                ),
+                                color = noteTitleColor,
+                                textAlign = TextAlign.Center,
+                                modifier = Modifier.fillMaxWidth()
+                            )
+
+                            Spacer(Modifier.height(8.dp))
+
+                            HorizontalDivider(
+                                modifier = Modifier.fillMaxWidth(),
+                                thickness = 1.dp,
+                                color =
+                                    if (isDarkTheme) {
+                                        Color.White.copy(alpha = 0.10f)
+                                    } else {
+                                        noteAccent.copy(alpha = 0.12f)
+                                    }
+                            )
+
+                            Spacer(Modifier.height(8.dp))
+
+                            /*
+                             * אזור נגלל: גם הערה ארוכה לא תחרוג
+                             * מגובה המסך ולא תסתיר את כפתור הסגירה.
+                             */
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .heightIn(max = 360.dp)
+                                    .clip(RoundedCornerShape(18.dp))
+                                    .background(
+                                        if (isDarkTheme) {
+                                            Color.White.copy(alpha = 0.035f)
+                                        } else {
+                                            Color.White.copy(alpha = 0.72f)
+                                        }
+                                    )
+                                    .border(
+                                        width = 1.dp,
+                                        color =
+                                            if (isDarkTheme) {
+                                                Color.White.copy(alpha = 0.07f)
+                                            } else {
+                                                noteAccent.copy(alpha = 0.08f)
+                                            },
+                                        shape = RoundedCornerShape(18.dp)
+                                    )
+                                    .verticalScroll(
+                                        rememberScrollState()
+                                    )
+                                    .padding(
+                                        horizontal = 16.dp,
+                                        vertical = 14.dp
+                                    )
+                            ) {
+                                Text(
+                                    text = visibleGeneralNote,
+                                    /*
+                                     * secondary קטן יותר מ־body,
+                                     * ועדיין מותאם להגדרת גודל הכתב הגלובלית.
+                                     */
+                                    style = KmiTypography.secondary.copy(
+                                        fontWeight = FontWeight.Medium
+                                    ),
+                                    color = noteBodyColor,
+                                    textAlign =
+                                        if (isEnglish) {
+                                            TextAlign.Left
+                                        } else {
+                                            TextAlign.Right
+                                        },
+                                    modifier = Modifier.fillMaxWidth()
+                                )
+                            }
+
+                            Spacer(Modifier.height(10.dp))
+
+                            Surface(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .heightIn(min = 48.dp)
+                                    .clip(RoundedCornerShape(16.dp))
+                                    .clickable {
+                                        clickSound()
+                                        generalNoteTitle = null
+                                        generalNoteText = null
+                                    },
+                                shape = RoundedCornerShape(16.dp),
+                                color = noteAccent,
+                                tonalElevation = 0.dp,
+                                shadowElevation =
+                                    if (isDarkTheme) {
+                                        0.dp
+                                    } else {
+                                        5.dp
+                                    }
+                            ) {
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(
+                                            horizontal = 18.dp,
+                                            vertical = 12.dp
+                                        ),
+                                    horizontalArrangement =
+                                        Arrangement.Center,
+                                    verticalAlignment =
+                                        Alignment.CenterVertically
+                                ) {
+                                    Text(
+                                        text =
+                                            if (isEnglish) {
+                                                "Close"
+                                            } else {
+                                                "סגור"
+                                            },
+                                        style = KmiTypography.action.copy(
+                                            fontWeight = FontWeight.ExtraBold
+                                        ),
+                                        color = Color.White
+                                    )
+
+                                    Spacer(Modifier.width(7.dp))
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
 
     Surface(
         tonalElevation = if (isDarkTheme) 0.dp else 1.dp,
@@ -1925,6 +2261,16 @@ private fun TopicsCardForBelt(
                             ?: TopicDetails(itemCount = 0, subTitles = emptyList())
 
                         val displayTitle = topicTitleForUi(title, lang)
+
+                        val topicGeneralNote = remember(
+                            belt,
+                            title
+                        ) {
+                            SharedContentRepo.getTopicGeneralNote(
+                                belt = belt,
+                                topicTitle = title
+                            )
+                        }
 
                         val subTitles: List<String> = details.subTitles
                             .asSequence()
@@ -2086,36 +2432,134 @@ private fun TopicsCardForBelt(
                                             )
                                         }
 
-                                        if (parentLocked) {
-                                            Spacer(Modifier.width(5.dp))
+                                        /*
+                                         * שומרים אזור פעולות קבוע רק כאשר
+                                         * באמת קיימת לפחות פעולה אחת.
+                                         *
+                                         * נושא רגיל ללא הערה, מנעול או
+                                         * תתי־נושאים מקבל את מלוא רוחב השורה.
+                                         */
+                                        val hasTopicGeneralNote =
+                                            !topicGeneralNote.isNullOrBlank()
 
-                                            PremiumPulsingLockBadge(
-                                                modifier = Modifier.size(16.dp),
-                                                isDarkTheme = isDarkTheme
-                                            )
-                                        }
+                                        val showTopicActions =
+                                            hasTopicGeneralNote ||
+                                                    parentLocked ||
+                                                    hasSubs
 
-                                        if (hasSubs) {
-                                            Spacer(Modifier.width(5.dp))
-
-                                            Icon(
-                                                imageVector = if (isExpanded) {
-                                                    Icons.Filled.KeyboardArrowUp
-                                                } else {
-                                                    Icons.Filled.KeyboardArrowDown
-                                                },
-                                                contentDescription = null,
-                                                tint = belt.color.copy(alpha = 0.85f),
-                                                modifier = Modifier.size(20.dp)
-                                            )
-                                        } else if (parentLocked) {
-                                            // ✅ כאשר נושא נעול בלי תתי־נושאים, למשל שחרורים בחגורה חומה,
-                                            // שומרים מקום של חץ כדי שהמנעול יהיה מיושר מתחת למנעול של הגנות.
-                                            Spacer(Modifier.width(5.dp))
+                                        if (showTopicActions) {
+                                            Spacer(Modifier.width(4.dp))
 
                                             Box(
-                                                modifier = Modifier.size(20.dp)
-                                            )
+                                                modifier =
+                                                    Modifier.size(30.dp),
+                                            contentAlignment = Alignment.Center
+                                        ) {
+                                                if (hasTopicGeneralNote) {
+                                                Surface(
+                                                    modifier = Modifier
+                                                        .size(26.dp)
+                                                        .clickable {
+                                                            clickSound()
+                                                            haptic(false)
+
+                                                            generalNoteTitle =
+                                                                if (isEnglish) {
+                                                                    "General note: $displayTitle"
+                                                                } else {
+                                                                    "הערה כללית: $displayTitle"
+                                                                }
+
+                                                            generalNoteText =
+                                                                topicGeneralNote
+                                                        },
+                                                    shape = CircleShape,
+                                                    color =
+                                                        if (isDarkTheme) {
+                                                            Color(0xFF2563EB)
+                                                                .copy(alpha = 0.24f)
+                                                        } else {
+                                                            Color(0xFFE8F1FF)
+                                                        },
+                                                    border = BorderStroke(
+                                                        width = 1.dp,
+                                                        color =
+                                                            Color(0xFF2563EB)
+                                                                .copy(alpha = 0.45f)
+                                                    ),
+                                                    tonalElevation = 0.dp,
+                                                    shadowElevation = 0.dp
+                                                ) {
+                                                    Box(
+                                                        contentAlignment =
+                                                            Alignment.Center
+                                                    ) {
+                                                        Icon(
+                                                            imageVector =
+                                                                Icons.Filled.Info,
+                                                            contentDescription =
+                                                                if (isEnglish) {
+                                                                    "General note"
+                                                                } else {
+                                                                    "הערה כללית"
+                                                                },
+                                                            tint =
+                                                                if (isDarkTheme) {
+                                                                    Color(0xFF60A5FA)
+                                                                } else {
+                                                                    Color(0xFF2563EB)
+                                                                },
+                                                            modifier =
+                                                                Modifier.size(17.dp)
+                                                        )
+                                                    }
+                                                }
+                                            }
+                                        }
+
+                                        Spacer(Modifier.width(4.dp))
+
+                                        Box(
+                                            modifier = Modifier.size(20.dp),
+                                            contentAlignment = Alignment.Center
+                                        ) {
+                                            if (parentLocked) {
+                                                PremiumPulsingLockBadge(
+                                                    modifier =
+                                                        Modifier.size(16.dp),
+                                                    isDarkTheme =
+                                                        isDarkTheme
+                                                )
+                                            }
+                                        }
+
+                                        Spacer(Modifier.width(4.dp))
+
+                                            Box(
+                                                modifier =
+                                                    Modifier.size(20.dp),
+                                                contentAlignment =
+                                                    Alignment.Center
+                                            ) {
+                                                if (hasSubs) {
+                                                    Icon(
+                                                        imageVector =
+                                                            if (isExpanded) {
+                                                                Icons.Filled
+                                                                    .KeyboardArrowUp
+                                                            } else {
+                                                                Icons.Filled
+                                                                    .KeyboardArrowDown
+                                                            },
+                                                        contentDescription =
+                                                            null,
+                                                        tint =
+                                                            readableBeltAccent,
+                                                        modifier =
+                                                            Modifier.size(20.dp)
+                                                    )
+                                                }
+                                            }
                                         }
                                     }
                                 }
@@ -2153,7 +2597,22 @@ private fun TopicsCardForBelt(
                                             horizontalAlignment = horizontalByLang
                                         ) {
                                             subTitles.forEachIndexed { subIndex, sub ->
-                                                val displaySub = topicTitleForUi(sub, lang)
+                                                val displaySub =
+                                                    topicTitleForUi(sub, lang)
+
+                                                val subTopicGeneralNote =
+                                                    remember(
+                                                        belt,
+                                                        title,
+                                                        sub
+                                                    ) {
+                                                        SharedContentRepo
+                                                            .getSubTopicGeneralNote(
+                                                                belt = belt,
+                                                                topicTitle = title,
+                                                                subTopicTitle = sub
+                                                            )
+                                                    }
 
                                                 val subTopicStatsLine =
                                                     remember(belt, title, sub, lang) {
@@ -2235,8 +2694,7 @@ private fun TopicsCardForBelt(
                                                                 text = subTopicStatsLine,
                                                                 modifier = Modifier.fillMaxWidth(),
                                                                 textAlign = titleTextAlignByLang,
-                                                                color =
-                                                                    readableBeltAccent,
+                                                                color = readableBeltAccent,
                                                                 style =
                                                                     KmiTypography.caption.copy(
                                                                         fontWeight =
@@ -2249,11 +2707,108 @@ private fun TopicsCardForBelt(
                                                         }
                                                     }
 
+                                                    if (
+                                                        !subTopicGeneralNote
+                                                            .isNullOrBlank()
+                                                    ) {
+                                                        Spacer(
+                                                            Modifier.width(4.dp)
+                                                        )
+
+                                                        Box(
+                                                            modifier =
+                                                                Modifier.size(30.dp),
+                                                            contentAlignment =
+                                                                Alignment.Center
+                                                        ) {
+                                                            Surface(
+                                                                modifier = Modifier
+                                                                    .size(26.dp)
+                                                                    .clickable {
+                                                                        clickSound()
+                                                                        haptic(false)
+
+                                                                        generalNoteTitle =
+                                                                            if (isEnglish) {
+                                                                                "General note: $displaySub"
+                                                                            } else {
+                                                                                "הערה כללית: $displaySub"
+                                                                            }
+
+                                                                        generalNoteText =
+                                                                            subTopicGeneralNote
+                                                                    },
+                                                                shape = CircleShape,
+                                                                color =
+                                                                    if (isDarkTheme) {
+                                                                        Color(0xFF2563EB)
+                                                                            .copy(
+                                                                                alpha =
+                                                                                    0.24f
+                                                                            )
+                                                                    } else {
+                                                                        Color(0xFFE8F1FF)
+                                                                    },
+                                                                border =
+                                                                    BorderStroke(
+                                                                        width = 1.dp,
+                                                                        color =
+                                                                            Color(
+                                                                                0xFF2563EB
+                                                                            )
+                                                                                .copy(
+                                                                                    alpha =
+                                                                                        0.45f
+                                                                                )
+                                                                    ),
+                                                                tonalElevation = 0.dp,
+                                                                shadowElevation = 0.dp
+                                                            ) {
+                                                                Box(
+                                                                    contentAlignment =
+                                                                        Alignment.Center
+                                                                ) {
+                                                                    Icon(
+                                                                        imageVector =
+                                                                            Icons.Filled.Info,
+                                                                        contentDescription =
+                                                                            if (isEnglish) {
+                                                                                "General note"
+                                                                            } else {
+                                                                                "הערה כללית"
+                                                                            },
+                                                                        tint =
+                                                                            if (
+                                                                                isDarkTheme
+                                                                            ) {
+                                                                                Color(
+                                                                                    0xFF60A5FA
+                                                                                )
+                                                                            } else {
+                                                                                Color(
+                                                                                    0xFF2563EB
+                                                                                )
+                                                                            },
+                                                                        modifier =
+                                                                            Modifier.size(
+                                                                                17.dp
+                                                                            )
+                                                                    )
+                                                                }
+                                                            }
+                                                        }
+                                                    }
+
                                                     if (parentLockedForSubTopics) {
-                                                        Spacer(Modifier.width(8.dp))
+                                                        Spacer(
+                                                            Modifier.width(8.dp)
+                                                        )
+
                                                         PremiumPulsingLockBadge(
-                                                            modifier = Modifier.size(16.dp),
-                                                            isDarkTheme = isDarkTheme
+                                                            modifier =
+                                                                Modifier.size(16.dp),
+                                                            isDarkTheme =
+                                                                isDarkTheme
                                                         )
                                                     }
                                                 }
