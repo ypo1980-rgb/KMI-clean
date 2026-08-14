@@ -1,5 +1,9 @@
 package il.kmi.app.ui.assistant.core
 
+import com.google.firebase.auth.ktx.auth
+import com.google.firebase.firestore.FieldValue
+import com.google.firebase.firestore.ktx.firestore
+import com.google.firebase.ktx.Firebase
 import il.kmi.shared.domain.Belt
 
 /**
@@ -13,6 +17,156 @@ data class AssistantOrchestratorResponse(
     val resolution: AssistantIntentResolution,
     val context: AssistantConversationContext
 )
+
+/**
+ * שומר במרכז הבקרה רק בקשות שהעוזר לא הצליח לבצע.
+ *
+ * הכתיבה מתבצעת באופן אסינכרוני ואינה מעכבת את התשובה
+ * המוצגת למשתמש.
+ */
+private object AssistantUnhandledRequestLogger {
+
+    fun logIfUnhandled(
+        originalQuestion: String,
+        resolution: AssistantIntentResolution,
+        result: AssistantResult,
+        isEnglish: Boolean
+    ) {
+        val failureDetails =
+            when (result) {
+                is AssistantResult.NotFound ->
+                    FailureDetails(
+                        type = "assistant_request_unhandled",
+                        title = "בקשה לעוזר לא נמצאה",
+                        reason = "not_found",
+                        message = result.message,
+                        severity = "warning"
+                    )
+
+                is AssistantResult.MissingInformation ->
+                    FailureDetails(
+                        type = "assistant_request_unhandled",
+                        title = "בקשת עוזר שלא בוצעה – חסר מידע",
+                        reason = "missing_information",
+                        message = result.message,
+                        severity = "warning"
+                    )
+
+                is AssistantResult.Error ->
+                    FailureDetails(
+                        type = "assistant_request_error",
+                        title = "בקשת עוזר נכשלה",
+                        reason =
+                            if (result.recoverable) {
+                                "recoverable_error"
+                            } else {
+                                "non_recoverable_error"
+                            },
+                        message = buildString {
+                            append(result.userMessage)
+
+                            result.technicalMessage
+                                ?.takeIf {
+                                    it.isNotBlank()
+                                }
+                                ?.let { technicalMessage ->
+                                    append("\ntechnicalMessage=")
+                                    append(technicalMessage)
+                                }
+                        },
+                        severity = "error"
+                    )
+
+                is AssistantResult.Answer,
+                is AssistantResult.ResultList,
+                is AssistantResult.Clarification ->
+                    null
+            }
+                ?: return
+
+        val cleanQuestion =
+            originalQuestion
+                .trim()
+                .take(1_500)
+
+        val resolvedQuestion =
+            resolution.resolvedQuestion
+                .trim()
+                .take(1_500)
+
+        val currentUser =
+            Firebase.auth.currentUser
+
+        val logData =
+            hashMapOf<String, Any?>(
+                "type" to failureDetails.type,
+                "title" to failureDetails.title,
+                "message" to buildString {
+                    append("request=")
+                    append(
+                        cleanQuestion.ifBlank {
+                            "[empty request]"
+                        }
+                    )
+
+                    if (
+                        resolvedQuestion.isNotBlank() &&
+                        resolvedQuestion != cleanQuestion
+                    ) {
+                        append("\nresolvedRequest=")
+                        append(resolvedQuestion)
+                    }
+
+                    append("\nreason=")
+                    append(failureDetails.reason)
+
+                    if (failureDetails.message.isNotBlank()) {
+                        append("\nresult=")
+                        append(
+                            failureDetails.message
+                                .trim()
+                                .take(2_000)
+                        )
+                    }
+                },
+                "area" to "ai_assistant",
+                "source" to "assistant_orchestrator",
+                "severity" to failureDetails.severity,
+                "reason" to failureDetails.reason,
+                "requestText" to
+                        cleanQuestion.ifBlank {
+                            "[empty request]"
+                        },
+                "resolvedRequestText" to resolvedQuestion,
+                "detectedIntent" to resolution.intent.name,
+                "knowledgeSource" to resolution.source.name,
+                "confidence" to resolution.confidence.toDouble(),
+                "requiresClarification" to
+                        resolution.requiresClarification,
+                "language" to
+                        if (isEnglish) {
+                            "en"
+                        } else {
+                            "he"
+                        },
+                "userId" to currentUser?.uid.orEmpty(),
+                "userEmail" to currentUser?.email.orEmpty(),
+                "createdAt" to FieldValue.serverTimestamp()
+            )
+
+        Firebase.firestore
+            .collection("adminLogs")
+            .add(logData)
+    }
+
+    private data class FailureDetails(
+        val type: String,
+        val title: String,
+        val reason: String,
+        val message: String,
+        val severity: String
+    )
+}
 
 /**
  * מנהל השיחה המרכזי של יובל.
@@ -58,6 +212,13 @@ class AssistantOrchestrator(
                 ),
                 technicalMessage = "Empty orchestrator request",
                 recoverable = true
+            )
+
+            AssistantUnhandledRequestLogger.logIfUnhandled(
+                originalQuestion = cleanQuestion,
+                resolution = resolution,
+                result = result,
+                isEnglish = isEnglish
             )
 
             return AssistantOrchestratorResponse(
@@ -395,6 +556,13 @@ class AssistantOrchestrator(
                 context = conversationContext,
                 result = result
             )
+
+        AssistantUnhandledRequestLogger.logIfUnhandled(
+            originalQuestion = originalQuestion,
+            resolution = resolution,
+            result = result,
+            isEnglish = isEnglish
+        )
 
         return AssistantOrchestratorResponse(
             result = result,

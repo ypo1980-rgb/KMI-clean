@@ -35,6 +35,13 @@ class PushToTalkVoiceController(
     private var currentState = PushToTalkState.IDLE
     private var destroyed = false
 
+    /*
+     * שומר את התמלול החלקי האחרון כדי שגם במקרה
+     * של שגיאה או תוצאה ריקה יהיה אפשר לראות בלוג
+     * מה המשתמש ניסה לומר.
+     */
+    private var lastPartialTranscript: String = ""
+
     private val silenceHandler =
         Handler(Looper.getMainLooper())
 
@@ -52,6 +59,7 @@ class PushToTalkVoiceController(
         if (destroyed) return
         if (currentState != PushToTalkState.IDLE) return
 
+        lastPartialTranscript = ""
         onPartialTranscript("")
 
         if (!isRecognitionAvailable()) {
@@ -308,6 +316,10 @@ class PushToTalkVoiceController(
                         context = appContext,
                         source = "push_to_talk",
                         reason = "empty_recognition_results",
+                        spokenText =
+                            lastPartialTranscript.takeIf {
+                                it.isNotBlank()
+                            },
                         screenName = currentScreenName()
                     )
 
@@ -378,6 +390,10 @@ class PushToTalkVoiceController(
                     context = appContext,
                     source = "push_to_talk",
                     reason = "recognition_error",
+                    spokenText =
+                        lastPartialTranscript.takeIf {
+                            it.isNotBlank()
+                        },
                     errorCode = error,
                     screenName = currentScreenName()
                 )
@@ -438,6 +454,7 @@ class PushToTalkVoiceController(
                     .orEmpty()
 
                 if (partial.isNotBlank()) {
+                    lastPartialTranscript = partial
                     restartSilenceTimer()
                     onPartialTranscript(partial)
                 }

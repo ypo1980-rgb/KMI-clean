@@ -15,7 +15,28 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.tasks.await
 import java.security.MessageDigest
+import java.time.Instant
 import java.time.LocalDate
+import java.time.ZoneId
+
+/**
+ * אימון שהתקיים בפועל ונכלל בחישוב האישי.
+ *
+ * אם לא נמצאה למתאמן רשומה באימון שנשמר,
+ * הסטטוס מוחזר כ־ABSENT.
+ */
+data class MemberAttendanceSession(
+    val date: LocalDate,
+    val status: AttendanceStatus
+)
+
+/**
+ * היסטוריית הנוכחות של מתאמן ממועד הצטרפותו.
+ */
+data class MemberAttendanceHistory(
+    val memberStartDate: LocalDate,
+    val sessions: List<MemberAttendanceSession>
+)
 
 class AttendanceRepository private constructor(
     private val app: Application
@@ -316,6 +337,186 @@ class AttendanceRepository private constructor(
         awaitClose {
             registration.remove()
         }
+    }
+
+    /**
+     * מחזיר את כל האימונים שהתקיימו בפועל עבור מתאמן
+     * בטווח המבוקש, אך לעולם לא לפני מועד הצטרפותו.
+     *
+     * מקור האמת לאימון שהתקיים הוא reports:
+     * רק לאחר שמירת הנוכחות נוצר דו"ח לאותו תאריך.
+     *
+     * אם קיים דו"ח אך אין למתאמן רשומה באותו אימון,
+     * הוא נחשב כמי שלא הגיע.
+     */
+    suspend fun memberAttendanceHistory(
+        branch: String,
+        groupKey: String,
+        memberId: Long,
+        requestedFrom: LocalDate,
+        to: LocalDate
+    ): MemberAttendanceHistory {
+        if (
+            branch.isBlank() ||
+            groupKey.isBlank() ||
+            memberId <= 0L ||
+            requestedFrom.isAfter(to)
+        ) {
+            return MemberAttendanceHistory(
+                memberStartDate = requestedFrom,
+                sessions = emptyList()
+            )
+        }
+
+        /*
+         * sessions הוא מקור האמת לכל האימונים הקיימים.
+         * reports אינו מתאים לכך, משום שלא לכל אימון
+         * היסטורי בהכרח נשמר דו"ח.
+         */
+        val sessionDocuments =
+            sessionsRef(
+                branch = branch,
+                groupKey = groupKey
+            )
+                .whereGreaterThanOrEqualTo(
+                    "date",
+                    requestedFrom.toString()
+                )
+                .whereLessThanOrEqualTo(
+                    "date",
+                    to.toString()
+                )
+                .get()
+                .await()
+                .documents
+
+        data class SessionWithExplicitRecord(
+            val date: LocalDate,
+            val explicitStatus: AttendanceStatus?
+        )
+
+        val sessionsWithRecords =
+            sessionDocuments
+                .mapNotNull { sessionDocument ->
+                    val date =
+                        sessionDocument
+                            .getString("date")
+                            ?.let { rawDate ->
+                                runCatching {
+                                    LocalDate.parse(rawDate)
+                                }.getOrNull()
+                            }
+                            ?: runCatching {
+                                LocalDate.parse(sessionDocument.id)
+                            }.getOrNull()
+                            ?: return@mapNotNull null
+
+                    val recordDocument =
+                        sessionDocument.reference
+                            .collection("records")
+                            .document(memberId.toString())
+                            .get()
+                            .await()
+
+                    val explicitStatus =
+                        if (recordDocument.exists()) {
+                            recordDocument
+                                .getString("status")
+                                ?.let { rawStatus ->
+                                    runCatching {
+                                        AttendanceStatus.valueOf(
+                                            rawStatus
+                                        )
+                                    }.getOrNull()
+                                }
+                                ?: AttendanceStatus.ABSENT
+                        } else {
+                            null
+                        }
+
+                    SessionWithExplicitRecord(
+                        date = date,
+                        explicitStatus = explicitStatus
+                    )
+                }
+                .distinctBy { it.date }
+                .sortedBy { it.date }
+
+        val memberDocument =
+            membersRef(
+                branch = branch,
+                groupKey = groupKey
+            )
+                .document(memberId.toString())
+                .get()
+                .await()
+
+        val documentStartDate =
+            memberDocument
+                .getLong("createdAtMillis")
+                ?.takeIf { it > 0L }
+                ?.let { createdAtMillis ->
+                    Instant
+                        .ofEpochMilli(createdAtMillis)
+                        .atZone(
+                            ZoneId.of("Asia/Jerusalem")
+                        )
+                        .toLocalDate()
+                }
+
+        /*
+         * נתונים שיובאו למערכת עשויים להיות ישנים
+         * מ-createdAtMillis. במקרה כזה הרשומה ההיסטורית
+         * הראשונה של המתאמן היא מועד ההתחלה האמין יותר.
+         */
+        val earliestRecordedDate =
+            sessionsWithRecords
+                .firstOrNull {
+                    it.explicitStatus != null
+                }
+                ?.date
+
+        val detectedStartDate =
+            listOfNotNull(
+                documentStartDate,
+                earliestRecordedDate
+            )
+                .minOrNull()
+                ?: requestedFrom
+
+        val memberStartDate =
+            if (detectedStartDate.isBefore(requestedFrom)) {
+                requestedFrom
+            } else {
+                detectedStartDate
+            }
+
+        /*
+         * מהאימון הראשון של המתאמן:
+         * רשומה מפורשת נשמרת כמות שהיא;
+         * היעדר רשומה באימון קיים נחשב ABSENT.
+         */
+        val sessions =
+            sessionsWithRecords
+                .asSequence()
+                .filter { session ->
+                    !session.date.isBefore(memberStartDate)
+                }
+                .map { session ->
+                    MemberAttendanceSession(
+                        date = session.date,
+                        status =
+                            session.explicitStatus
+                                ?: AttendanceStatus.ABSENT
+                    )
+                }
+                .sortedByDescending { it.date }
+                .toList()
+
+        return MemberAttendanceHistory(
+            memberStartDate = memberStartDate,
+            sessions = sessions
+        )
     }
 
     /**

@@ -189,8 +189,20 @@ object VoiceCommandDiagnosticsLogger {
             "recognition_error" ->
                 "Speech recognition failed"
 
+            "recognition_timeout" ->
+                "Voice recognition timed out"
+
+            "microphone_permission_denied" ->
+                "Microphone permission denied"
+
             "command_execution_failed" ->
                 "Voice command execution failed"
+
+            "voice_feature_not_implemented" ->
+                "Recognized voice feature is not implemented"
+
+            "belt_has_no_exercises" ->
+                "Requested belt has no exercises"
 
             else ->
                 "Voice command failure"

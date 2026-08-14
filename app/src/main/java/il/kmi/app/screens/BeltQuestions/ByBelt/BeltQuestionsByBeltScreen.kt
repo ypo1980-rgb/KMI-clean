@@ -1202,13 +1202,18 @@ internal fun BeltPangoLayout(
     // state לתפריט הצף במסך לפי חגורה
     var quickMenuExpanded by rememberSaveable { mutableStateOf(false) }
 
+    /*
+     * כל החגורות מוצגות, כולל חגורה לבנה.
+     * בחירה שהגיעה מפקודה קולית חייבת להישאר זמינה
+     * ברשימה ולא ליפול לברירת מחדל של חגורה אחרת.
+     */
     val belts = remember {
-        Belt.order.filter { it != Belt.WHITE }
+        Belt.order
     }
 
     /*
      * חגורה שנבחרה לפני פתיחת המסך, למשל באמצעות
-     * הפקודה הקולית "חגורה שחורה".
+     * הפקודה הקולית "פתח חגורה לבנה".
      */
     val requestedBelt by vm.selectedBelt.collectAsState()
 

@@ -87,6 +87,13 @@ class KmiViewModel(
         _selectedBelt.value = belt
 
         /*
+         * בכל שינוי חגורה טוענים מחדש את מוני הנושאים
+         * לפי החגורה שנבחרה בפועל. הדבר חשוב במיוחד
+         * כאשר הבחירה בוצעה באמצעות פקודה קולית.
+         */
+        preloadTopicsBySubjectCounts()
+
+        /*
          * השמירה הקבועה מתבצעת ברקע ואינה מעכבת ניווט.
          */
         viewModelScope.launch {
@@ -616,6 +623,7 @@ class KmiViewModel(
         val newProgress = mutableMapOf<Belt, Int>()
 
         val beltsInOrder: List<Belt> = listOf(
+            Belt.WHITE,
             Belt.YELLOW,
             Belt.ORANGE,
             Belt.GREEN,
@@ -680,7 +688,6 @@ class KmiViewModel(
 
                 val beltForCounts =
                     selectedBelt.value
-                        ?.takeUnless { it == Belt.WHITE }
                         ?: Belt.GREEN
 
                 SubjectTopicsUiLogic

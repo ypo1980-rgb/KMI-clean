@@ -251,16 +251,42 @@ object TrainingCatalog {
         return if (isEnglish) regionEn else region
     }
 
-    private fun branchCanonicalKey(branch: String): String {
-        val clean = branch.trim()
+    private fun branchCanonicalKey(
+        branch: String
+    ): String {
+        val clean =
+            branch.trim()
 
-        BRANCH_INFO.entries.firstOrNull { (_, info) ->
-            info.branch.he == clean || info.branch.en.equals(clean, ignoreCase = true)
-        }?.let { return it.key }
+        /*
+         * cleanLabel מנטרל הבדלים בין:
+         * מקף רגיל, מקף ארוך, רווחים וגרשיים.
+         *
+         * כך "נתניה - מרכז קהילתי אופק" תואם גם
+         * ל־"נתניה – מרכז קהילתי אופק".
+         */
+        val cleanKey =
+            cleanLabel(clean)
 
-        return BRANCHES_BY_REGION_RAW.values
+        BRANCH_INFO.entries
+            .firstOrNull { (key, info) ->
+                cleanLabel(key) == cleanKey ||
+                        cleanLabel(
+                            info.branch.he
+                        ) == cleanKey ||
+                        cleanLabel(
+                            info.branch.en
+                        ) == cleanKey
+            }
+            ?.let { entry ->
+                return entry.key
+            }
+
+        return BRANCHES_BY_REGION_RAW
+            .values
             .flatten()
-            .firstOrNull { it == clean }
+            .firstOrNull { candidate ->
+                cleanLabel(candidate) == cleanKey
+            }
             ?: clean
     }
 

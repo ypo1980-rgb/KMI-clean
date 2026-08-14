@@ -256,7 +256,27 @@ fun NavGraphBuilder.attendanceNavGraph(
             groupKey = groupKey,
             memberId = memberId,
             memberName = memberName,
-            onBack = { nav.popBackStack() }
+            onBack = {
+                nav.popBackStack()
+            },
+            onHome = {
+                nav.navigate(
+                    Route.Home.route
+                ) {
+                    launchSingleTop = true
+                    restoreState = false
+
+                    /*
+                     * מסיר את מסכי הנוכחות והסטטיסטיקה
+                     * מהמחסנית ולא יוצר מסך בית נוסף.
+                     */
+                    popUpTo(
+                        nav.graph.startDestinationId
+                    ) {
+                        inclusive = false
+                    }
+                }
+            }
         )
     }
 

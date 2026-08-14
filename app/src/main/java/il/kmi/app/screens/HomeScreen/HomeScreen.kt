@@ -120,6 +120,7 @@ import java.util.Date
 import java.util.Locale
 import java.util.TimeZone
 import androidx.compose.ui.graphics.luminance
+import androidx.compose.ui.window.Dialog
 
 //=================================================================================
 
@@ -2121,7 +2122,7 @@ fun HomeScreen(
 
                 LaunchedEffect(Unit) {
                     while (true) {
-                        delay(30_000L)
+                        delay(5_000L)
 
                         trainingStatusNowMillis =
                             System.currentTimeMillis()
@@ -2976,6 +2977,7 @@ fun HomeScreen(
                                 isCoach = isCoach,
                                 isEnglish = isEnglish,
                                 status = item.status,
+                                nowMillis = trainingStatusNowMillis,
                                 activeOverride =
                                     item.activeOverride,
                                 onManageTraining = {
@@ -3125,11 +3127,16 @@ fun HomeScreen(
                                 .fillMaxWidth()
                                 .padding(horizontal = 16.dp),
                             shape = RoundedCornerShape(20.dp),
-                            color = Color.White.copy(alpha = 0.95f),
+                            color = MaterialTheme.colorScheme.surface.copy(
+                                alpha = 0.96f
+                            ),
+                            tonalElevation = 2.dp,
                             shadowElevation = 6.dp,
                             border = BorderStroke(
-                                1.dp,
-                                Color(0xFF7DD3FC)
+                                width = 1.dp,
+                                color = MaterialTheme.colorScheme.primary.copy(
+                                    alpha = 0.45f
+                                )
                             )
                         ) {
                             Row(
@@ -3141,13 +3148,21 @@ fun HomeScreen(
                             ) {
                                 Surface(
                                     shape = CircleShape,
-                                    color = Color(0xFFE0F2FE),
+                                    color = MaterialTheme.colorScheme.primary.copy(
+                                        alpha = 0.14f
+                                    ),
+                                    border = BorderStroke(
+                                        width = 1.dp,
+                                        color = MaterialTheme.colorScheme.primary.copy(
+                                            alpha = 0.35f
+                                        )
+                                    ),
                                     modifier = Modifier.size(38.dp)
                                 ) {
                                     Icon(
                                         imageVector = Icons.Default.Person,
                                         contentDescription = null,
-                                        tint = Color(0xFF0369A1),
+                                        tint = MaterialTheme.colorScheme.primary,
                                         modifier = Modifier.padding(8.dp)
                                     )
                                 }
@@ -3165,7 +3180,7 @@ fun HomeScreen(
                                                     "הודעות ואירועים"
                                                 },
                                             style = KmiTypography.cardTitle,
-                                            color = Color(0xFF0C4A6E),
+                                            color = MaterialTheme.colorScheme.onSurface,
                                             maxLines = 1,
                                             overflow = TextOverflow.Ellipsis,
                                             modifier = Modifier.weight(1f)
@@ -3177,10 +3192,14 @@ fun HomeScreen(
                                                     showCoachMessagesDialog = true
                                                 },
                                                 shape = CircleShape,
-                                                color = Color(0xFFE0F2FE),
+                                                color = MaterialTheme.colorScheme.primary.copy(
+                                                    alpha = 0.14f
+                                                ),
                                                 border = BorderStroke(
-                                                    1.dp,
-                                                    Color(0xFF7DD3FC)
+                                                    width = 1.dp,
+                                                    color = MaterialTheme.colorScheme.primary.copy(
+                                                        alpha = 0.40f
+                                                    )
                                                 ),
                                                 modifier = Modifier.size(32.dp)
                                             ) {
@@ -3195,7 +3214,7 @@ fun HomeScreen(
                                                             } else {
                                                                 "הודעות ואירועים"
                                                             },
-                                                        tint = Color(0xFF0369A1),
+                                                        tint = MaterialTheme.colorScheme.primary,
                                                         modifier = Modifier.size(17.dp)
                                                     )
                                                 }
@@ -3213,13 +3232,13 @@ fun HomeScreen(
                                                 "אין הודעות חדשות כרגע"
                                             },
                                             style = KmiTypography.body,
-                                            color = Color(0xFF64748B)
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
                                         )
                                     } else {
                                         Text(
                                             text = msg,
                                             style = KmiTypography.body,
-                                            color = Color(0xFF1E293B),
+                                            color = MaterialTheme.colorScheme.onSurface,
                                             maxLines = 2,
                                             overflow = TextOverflow.Ellipsis
                                         )
@@ -3254,7 +3273,7 @@ fun HomeScreen(
                                             Text(
                                                 text = branchGroupLine,
                                                 style = KmiTypography.secondary,
-                                                color = Color(0xFF475569),
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant,
                                                 maxLines = 2,
                                                 overflow = TextOverflow.Ellipsis
                                             )
@@ -3293,7 +3312,7 @@ fun HomeScreen(
                                                 Text(
                                                     text = timeText,
                                                     style = KmiTypography.caption,
-                                                    color = Color(0xFF64748B),
+                                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                                                     textAlign =
                                                         if (isEnglish) {
                                                             TextAlign.Left
@@ -3314,7 +3333,7 @@ fun HomeScreen(
                                                     style = KmiTypography.caption.copy(
                                                         fontWeight = FontWeight.Bold
                                                     ),
-                                                    color = Color(0xFF0369A1),
+                                                    color = MaterialTheme.colorScheme.primary,
                                                     textAlign =
                                                         if (isEnglish) {
                                                             TextAlign.Right
@@ -4733,6 +4752,7 @@ private fun TrainingCardCompact(
     isCoach: Boolean,
     isEnglish: Boolean,
     status: TrainingStatusEngine.Status,
+    nowMillis: Long,
     activeOverride: TrainingOverride?,
     onManageTraining: () -> Unit
 ) {
@@ -4874,6 +4894,42 @@ private fun TrainingCardCompact(
             ?: training.endMillis
             ?: training.startMillis
 
+    val isTrainingCancelled =
+        activeOverride?.isCancelled == true ||
+                status.state ==
+                TrainingStatusEngine.State.CANCELLED_BY_HOLIDAY
+
+    val millisUntilTraining =
+        effectiveStartMillis - nowMillis
+
+    val countdownMinutes =
+        if (
+            !isTrainingCancelled &&
+            millisUntilTraining > 0L &&
+            millisUntilTraining <= 30L * 60L * 1_000L
+        ) {
+            (
+                    (millisUntilTraining + 59_999L) /
+                            60_000L
+                    )
+                .toInt()
+                .coerceIn(1, 30)
+        } else {
+            null
+        }
+
+    val isTrainingOngoing =
+        !isTrainingCancelled &&
+                nowMillis >= effectiveStartMillis &&
+                nowMillis < effectiveEndMillis
+
+    val visualStatusState =
+        if (isTrainingOngoing) {
+            TrainingStatusEngine.State.ONGOING
+        } else {
+            status.state
+        }
+
     val effectiveStartDate =
         remember(effectiveStartMillis) {
             Date(effectiveStartMillis)
@@ -4982,7 +5038,7 @@ private fun TrainingCardCompact(
     }
 
     val trainingCardBorderColor =
-        when (status.state) {
+        when (visualStatusState) {
             TrainingStatusEngine.State.ONGOING ->
                 Color(0xFF047857)
 
@@ -5000,14 +5056,6 @@ private fun TrainingCardCompact(
         }
 
     Surface(
-        onClick = {
-            if (isCoach) {
-                clickSound()
-                haptic(true)
-                onManageTraining()
-            }
-        },
-        enabled = isCoach,
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 16.dp)
@@ -5040,38 +5088,67 @@ private fun TrainingCardCompact(
                 )
             }
 
-            Text(
-                text = branchLine,
-                style = KmiTypography.cardTitle,
-                color = MaterialTheme.colorScheme.onSurface,
-                textAlign = TextAlign.Center,
-                modifier = Modifier.fillMaxWidth(),
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
-
-            Text(
-                text = dateTimeText,
-                style = KmiTypography.secondary.copy(
-                    fontWeight = FontWeight.Bold
-                ),
-                color = MaterialTheme.colorScheme.onSurface,
-                textAlign = TextAlign.Center,
-                maxLines = 2,
-                softWrap = true,
-                overflow = TextOverflow.Ellipsis,
+            Box(
                 modifier = Modifier.fillMaxWidth()
-            )
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = if (isCoach) 44.dp else 0.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Text(
+                        text = branchLine,
+                        style = KmiTypography.cardTitle,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.fillMaxWidth(),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+
+                    Text(
+                        text = dateTimeText,
+                        style = KmiTypography.secondary.copy(
+                            fontWeight = FontWeight.Bold
+                        ),
+                        color = MaterialTheme.colorScheme.onSurface,
+                        textAlign = TextAlign.Center,
+                        maxLines = 2,
+                        softWrap = true,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+
+                if (isCoach) {
+                    IconButton(
+                        onClick = {
+                            clickSound()
+                            haptic(true)
+                            onManageTraining()
+                        },
+                        modifier = Modifier
+                            .align(Alignment.CenterEnd)
+                            .size(40.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.EditNote,
+                            contentDescription =
+                                if (isEnglish) {
+                                    "Change or cancel training"
+                                } else {
+                                    "שינוי או ביטול אימון"
+                                },
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(23.dp)
+                        )
+                    }
+                }
+            }
 
             val statusMessage =
                 when {
-                    activeOverride?.hasChangedTime == true ->
-                        if (isEnglish) {
-                            "Training time changed"
-                        } else {
-                            "שעת האימון שונתה"
-                        }
-
                     activeOverride?.isCancelled == true ->
                         if (isEnglish) {
                             "Cancelled by coach"
@@ -5079,45 +5156,126 @@ private fun TrainingCardCompact(
                             "בוטל על ידי המאמן"
                         }
 
+                    isTrainingOngoing ->
+                        if (isEnglish) {
+                            "Training in progress"
+                        } else {
+                            "האימון מתקיים עכשיו"
+                        }
+
+                    countdownMinutes != null ->
+                        if (isEnglish) {
+                            if (countdownMinutes == 1) {
+                                "Training starts in 1 minute"
+                            } else {
+                                "Training starts in $countdownMinutes minutes"
+                            }
+                        } else {
+                            if (countdownMinutes == 1) {
+                                "עוד דקה האימון מתחיל"
+                            } else {
+                                "עוד $countdownMinutes דקות האימון מתחיל"
+                            }
+                        }
+
+                    activeOverride?.hasChangedTime == true ->
+                        if (isEnglish) {
+                            "Training time changed"
+                        } else {
+                            "שעת האימון שונתה"
+                        }
+
                     else ->
                         status.displayText(isEnglish)
                 }
 
+            val ongoingPulseTransition =
+                rememberInfiniteTransition(
+                    label = "ongoingTrainingStatusPulse"
+                )
+
+            val ongoingStatusAlpha by
+            ongoingPulseTransition.animateFloat(
+                initialValue = 1f,
+                targetValue = 0.38f,
+                animationSpec = infiniteRepeatable(
+                    animation = tween(
+                        durationMillis = 720
+                    ),
+                    repeatMode = RepeatMode.Reverse
+                ),
+                label = "ongoingTrainingStatusAlpha"
+            )
+
+            val statusAlpha =
+                if (isTrainingOngoing) {
+                    ongoingStatusAlpha
+                } else {
+                    1f
+                }
+
             if (!statusMessage.isNullOrBlank()) {
-                val statusBackgroundColor =
-                    when (status.state) {
-                        TrainingStatusEngine.State.ONGOING ->
-                            Color(0xFFECFDF5)
-
-                        TrainingStatusEngine.State.COMPLETED ->
-                            Color(0xFFF1F5F9)
-
-                        TrainingStatusEngine.State.CANCELLED_BY_HOLIDAY ->
-                            Color(0xFFFFF7ED)
-
-                        TrainingStatusEngine.State.INVALID ->
-                            Color(0xFFFEF2F2)
-
-                        TrainingStatusEngine.State.SCHEDULED ->
-                            Color(0xFFEFF6FF)
-                    }
+                val isDarkMode =
+                    MaterialTheme.colorScheme.surface.luminance() < 0.5f
 
                 val statusContentColor =
-                    when (status.state) {
+                    when (visualStatusState) {
                         TrainingStatusEngine.State.ONGOING ->
-                            Color(0xFF047857)
+                            if (isDarkMode) {
+                                Color(0xFF6EE7B7)
+                            } else {
+                                Color(0xFF047857)
+                            }
 
                         TrainingStatusEngine.State.COMPLETED ->
-                            Color(0xFF475569)
+                            if (isDarkMode) {
+                                Color(0xFFCBD5E1)
+                            } else {
+                                Color(0xFF475569)
+                            }
 
                         TrainingStatusEngine.State.CANCELLED_BY_HOLIDAY ->
-                            Color(0xFF9A3412)
+                            if (isDarkMode) {
+                                Color(0xFFFDBA74)
+                            } else {
+                                Color(0xFF9A3412)
+                            }
 
                         TrainingStatusEngine.State.INVALID ->
-                            Color(0xFFB91C1C)
+                            if (isDarkMode) {
+                                Color(0xFFFCA5A5)
+                            } else {
+                                Color(0xFFB91C1C)
+                            }
 
                         TrainingStatusEngine.State.SCHEDULED ->
-                            Color(0xFF1D4ED8)
+                            if (isDarkMode) {
+                                Color(0xFF93C5FD)
+                            } else {
+                                Color(0xFF1D4ED8)
+                            }
+                    }
+
+                val statusBackgroundColor =
+                    if (isDarkMode) {
+                        statusContentColor.copy(alpha = 0.14f)
+                    } else {
+                        when (visualStatusState) {
+                            TrainingStatusEngine.State.ONGOING ->
+                                Color(0xFFECFDF5)
+
+                            TrainingStatusEngine.State.COMPLETED ->
+                                Color(0xFFF1F5F9)
+
+                            TrainingStatusEngine.State.CANCELLED_BY_HOLIDAY ->
+                                Color(0xFFFFF7ED)
+
+                            TrainingStatusEngine.State.INVALID ->
+                                Color(0xFFFEF2F2)
+
+                            TrainingStatusEngine.State.SCHEDULED ->
+                                Color(0xFFEFF6FF)
+                        }
                     }
 
                 Spacer(Modifier.height(4.dp))
@@ -5134,7 +5292,10 @@ private fun TrainingCardCompact(
                             color = statusContentColor.copy(
                                 alpha = 0.18f
                             )
-                        )
+                        ),
+                        modifier = Modifier.graphicsLayer {
+                            alpha = statusAlpha
+                        }
                     ) {
                         Text(
                             text = statusMessage,
@@ -5193,7 +5354,24 @@ private fun NavigationChip(
     var showPicker by rememberSaveable(address) { mutableStateOf(false) }
     var rememberChoice by rememberSaveable(address) { mutableStateOf(true) }
 
-    val safeAddress = address?.trim().orEmpty()
+    val safeAddress =
+        address
+            ?.trim()
+            .orEmpty()
+
+    val isDarkNavigationCard =
+        MaterialTheme.colorScheme.background
+            .luminance() < 0.5f
+
+    /*
+     * גוון גרניט מותאם למצב בהיר וכהה.
+     */
+    val graniteCardColor =
+        if (isDarkNavigationCard) {
+            Color(0xFF2B2930)
+        } else {
+            Color(0xFFE8E5E1)
+        }
 
     fun open(choice: NavChoice) {
         if (safeAddress.isBlank()) return
@@ -5207,16 +5385,37 @@ private fun NavigationChip(
         onClick = {
             clickSound()
             haptic(true)
-            if (safeAddress.isNotBlank()) showPicker = true
+
+            if (safeAddress.isNotBlank()) {
+                showPicker = true
+            }
         },
-        shape = RoundedCornerShape(14.dp),
-        color = Color.White.copy(alpha = 0.92f),
-        tonalElevation = 2.dp,
-        shadowElevation = 3.dp,
+        shape = RoundedCornerShape(18.dp),
+
+        /*
+         * רקע גרניט במקום הרקע הלבן.
+         */
+        color = graniteCardColor,
+
+        tonalElevation = 0.dp,
+        shadowElevation = 1.dp,
+
+        /*
+         * קו מתאר עדין באותו סגנון של כרטיס האימון.
+         */
         border = BorderStroke(
-            1.dp,
-            Color.Black.copy(alpha = 0.06f)
+            width = 0.75.dp,
+            color =
+                MaterialTheme.colorScheme.primary.copy(
+                    alpha =
+                        if (isDarkNavigationCard) {
+                            0.28f
+                        } else {
+                            0.20f
+                        }
+                )
         ),
+
         modifier = modifier
             .heightIn(min = 62.dp)
     ) {
@@ -5229,8 +5428,14 @@ private fun NavigationChip(
             // אייקון
             Surface(
                 shape = CircleShape,
-                color = MaterialTheme.colorScheme.primary.copy(alpha = 0.10f),
-                modifier = Modifier.size(30.dp)
+                color =
+                    MaterialTheme.colorScheme.primaryContainer.copy(
+                        alpha = 0.52f
+                    ),
+                border = null,
+                tonalElevation = 0.dp,
+                shadowElevation = 0.dp,
+                modifier = Modifier.size(32.dp)
             ) {
                 Box(contentAlignment = Alignment.Center) {
                     Icon(
@@ -5251,8 +5456,7 @@ private fun NavigationChip(
                 Text(
                     text = if (isEnglish) "Navigate" else "ניווט",
                     style = KmiTypography.action,
-                    // ✅ הכרטיס לבן גם במצב כהה, לכן צבע קבוע וכהה
-                    color = Color(0xFF0B1220),
+                    color = MaterialTheme.colorScheme.onSurface,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
@@ -5264,9 +5468,7 @@ private fun NavigationChip(
                         safeAddress
                     },
                     style = KmiTypography.secondary,
-                    // ✅ לא להשתמש כאן ב-onSurfaceVariant,
-                    // כי במצב כהה הוא יוצא בהיר מדי על כרטיס לבן.
-                    color = Color(0xFF475569),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 2,
                     softWrap = true,
                     overflow = TextOverflow.Ellipsis
@@ -5280,6 +5482,7 @@ private fun NavigationChip(
     if (showPicker) {
         NavPickerDialog(
             address = safeAddress,
+            isEnglish = isEnglish,
             rememberChoice = rememberChoice,
             onRememberChoiceChange = { rememberChoice = it },
             onPick = { picked ->
@@ -5295,158 +5498,315 @@ private fun NavigationChip(
 @Composable
 private fun NavPickerDialog(
     address: String,
+    isEnglish: Boolean,
     rememberChoice: Boolean,
     onRememberChoiceChange: (Boolean) -> Unit,
     onPick: (NavChoice) -> Unit,
     onDismiss: () -> Unit
 ) {
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = {
-            Column(Modifier.fillMaxWidth()) {
-                Text(
-                    text = "ניווט באמצעות",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.ExtraBold,
-                    textAlign = TextAlign.Right,
-                    modifier = Modifier.fillMaxWidth()
-                )
-                Spacer(Modifier.height(6.dp))
-                Text(
-                    text = address,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    textAlign = TextAlign.Right,
-                    modifier = Modifier.fillMaxWidth(),
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis
-                )
-            }
-        },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+    fun tr(
+        he: String,
+        en: String
+    ): String {
+        return if (isEnglish) en else he
+    }
 
+    val isDarkMode =
+        MaterialTheme.colorScheme.background
+            .luminance() < 0.5f
+
+    /*
+     * אותו גוון גרניט של כרטיס הניווט.
+     */
+    val graniteCardColor =
+        if (isDarkMode) {
+            Color(0xFF2B2930)
+        } else {
+            Color(0xFFE8E5E1)
+        }
+
+    val innerCardColor =
+        if (isDarkMode) {
+            Color(0xFF343238)
+        } else {
+            Color(0xFFF0EEEB)
+        }
+
+    Dialog(
+        onDismissRequest = onDismiss
+    ) {
+        Surface(
+            modifier = Modifier
+                .fillMaxWidth()
+                .widthIn(max = 430.dp),
+            shape = RoundedCornerShape(28.dp),
+            color = graniteCardColor,
+
+            /*
+             * ללא הצל העבה שהיה ב־AlertDialog.
+             */
+            tonalElevation = 0.dp,
+            shadowElevation = 1.dp,
+
+            /*
+             * קו מתאר עדין בלבד.
+             */
+            border = BorderStroke(
+                width = 0.75.dp,
+                color =
+                    MaterialTheme.colorScheme.primary.copy(
+                        alpha =
+                            if (isDarkMode) {
+                                0.28f
+                            } else {
+                                0.20f
+                            }
+                    )
+            )
+        ) {
+            Column(
+                modifier = Modifier.padding(
+                    horizontal = 20.dp,
+                    vertical = 20.dp
+                ),
+                verticalArrangement =
+                    Arrangement.spacedBy(16.dp)
+            ) {
+                /*
+                 * כותרת וכתובת.
+                 */
+                Column(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalArrangement =
+                        Arrangement.spacedBy(6.dp)
+                ) {
+                    Text(
+                        text = tr(
+                            "ניווט באמצעות",
+                            "Navigate with"
+                        ),
+                        style = KmiTypography.sectionTitle,
+                        fontWeight = FontWeight.ExtraBold,
+                        color =
+                            MaterialTheme.colorScheme.onSurface,
+                        textAlign =
+                            if (isEnglish) {
+                                TextAlign.Left
+                            } else {
+                                TextAlign.Right
+                            },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+
+                    Text(
+                        text = address,
+                        style = KmiTypography.secondary,
+                        color =
+                            MaterialTheme.colorScheme.onSurfaceVariant,
+                        textAlign =
+                            if (isEnglish) {
+                                TextAlign.Left
+                            } else {
+                                TextAlign.Right
+                            },
+                        modifier = Modifier.fillMaxWidth(),
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+
+                /*
+                 * בחירת שמירת ברירת המחדל.
+                 */
                 Surface(
-                    shape = RoundedCornerShape(14.dp),
-                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f),
-                    modifier = Modifier.fillMaxWidth()
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(16.dp),
+                    color = innerCardColor,
+                    tonalElevation = 0.dp,
+                    shadowElevation = 0.dp,
+                    border = BorderStroke(
+                        width = 0.5.dp,
+                        color =
+                            MaterialTheme.colorScheme.outlineVariant
+                                .copy(alpha = 0.35f)
+                    )
                 ) {
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(horizontal = 9.dp, vertical = 6.dp),
-                        verticalAlignment = Alignment.CenterVertically
+                            .padding(
+                                horizontal = 14.dp,
+                                vertical = 8.dp
+                            ),
+                        verticalAlignment =
+                            Alignment.CenterVertically
                     ) {
                         Text(
-                            text = "זכור בחירה",
-                            style = MaterialTheme.typography.bodyMedium,
+                            text = tr(
+                                "זכור בחירה",
+                                "Remember selection"
+                            ),
+                            style = KmiTypography.body,
+                            color =
+                                MaterialTheme.colorScheme.onSurface,
+                            fontWeight = FontWeight.SemiBold,
                             modifier = Modifier.weight(1f),
-                            textAlign = TextAlign.Right
+                            textAlign =
+                                if (isEnglish) {
+                                    TextAlign.Left
+                                } else {
+                                    TextAlign.Right
+                                }
                         )
+
                         Switch(
                             checked = rememberChoice,
-                            onCheckedChange = onRememberChoiceChange
+                            onCheckedChange =
+                                onRememberChoiceChange
                         )
                     }
                 }
 
+                /*
+                 * אפליקציות הניווט.
+                 */
                 Row(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    horizontalArrangement =
+                        Arrangement.spacedBy(10.dp)
                 ) {
+                    NavigationAppChoiceCard(
+                        label = "Waze",
+                        iconRes = R.drawable.ic_waze,
+                        containerColor = innerCardColor,
+                        onClick = {
+                            onPick(
+                                NavChoice.WAZE
+                            )
+                        },
+                        modifier = Modifier.weight(1f)
+                    )
 
-                    val btnHeight = 52.dp
-
-                    // Waze
-                    Surface(
-                        onClick = { onPick(NavChoice.WAZE) },
-                        shape = RoundedCornerShape(14.dp),
-                        color = Color.White.copy(alpha = 0.95f),
-                        tonalElevation = 2.dp,
-                        shadowElevation = 2.dp,
-                        border = BorderStroke(
-                            1.dp,
-                            Color.Black.copy(alpha = 0.06f)
+                    NavigationAppChoiceCard(
+                        label = tr(
+                            "Google Maps",
+                            "Google Maps"
                         ),
-                        modifier = Modifier
-                            .weight(1f)
-                            .height(btnHeight)
-                    ) {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .padding(horizontal = 12.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.Center
-                        ) {
-                            Icon(
-                                painter = painterResource(id = R.drawable.ic_waze),
-                                contentDescription = null,
-                                tint = Color.Unspecified,
-                                modifier = Modifier.size(22.dp)
+                        iconRes =
+                            R.drawable.ic_google_maps,
+                        containerColor = innerCardColor,
+                        onClick = {
+                            onPick(
+                                NavChoice.GOOGLE_MAPS
                             )
-                            Spacer(Modifier.width(8.dp))
-                            Text(
-                                "Waze",
-                                fontWeight = FontWeight.Bold,
-                                maxLines = 1
-                            )
-                        }
-                    }
-
-                    // Google Maps
-                    Surface(
-                        onClick = { onPick(NavChoice.GOOGLE_MAPS) },
-                        shape = RoundedCornerShape(14.dp),
-                        color = Color.White.copy(alpha = 0.95f),
-                        tonalElevation = 2.dp,
-                        shadowElevation = 2.dp,
-                        border = BorderStroke(
-                            1.dp,
-                            Color.Black.copy(alpha = 0.06f)
-                        ),
-                        modifier = Modifier
-                            .weight(1f)
-                            .height(btnHeight)
-                    ) {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .padding(horizontal = 12.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.Center
-                        ) {
-                            Icon(
-                                painter = painterResource(id = R.drawable.ic_google_maps),
-                                contentDescription = null,
-                                tint = Color.Unspecified,
-                                modifier = Modifier.size(22.dp)
-                            )
-                            Spacer(Modifier.width(8.dp))
-                            Text(
-                                text = "גוגל מפות",
-                                fontWeight = FontWeight.Bold,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis
-                            )
-                        }
-                    }
+                        },
+                        modifier = Modifier.weight(1f)
+                    )
                 }
 
                 Text(
-                    text = "אפשר לשמור בחירה כברירת מחדל (בהמשך נחבר את זה להגדרות).",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    textAlign = TextAlign.Right,
+                    text = tr(
+                        "ניתן לשמור את הבחירה כברירת מחדל.",
+                        "You can save this selection as the default."
+                    ),
+                    style = KmiTypography.caption,
+                    color =
+                        MaterialTheme.colorScheme.onSurfaceVariant,
+                    textAlign =
+                        if (isEnglish) {
+                            TextAlign.Left
+                        } else {
+                            TextAlign.Right
+                        },
                     modifier = Modifier.fillMaxWidth()
                 )
+
+                TextButton(
+                    onClick = onDismiss,
+                    modifier =
+                        if (isEnglish) {
+                            Modifier.align(Alignment.End)
+                        } else {
+                            Modifier.align(Alignment.Start)
+                        }
+                ) {
+                    Text(
+                        text = tr(
+                            "סגור",
+                            "Close"
+                        ),
+                        style = KmiTypography.action,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
             }
-        },
-        confirmButton = {
-            TextButton(onClick = onDismiss) { Text("סגור") }
         }
-    )
+    }
 }
+
+@Composable
+private fun NavigationAppChoiceCard(
+    label: String,
+    iconRes: Int,
+    containerColor: Color,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Surface(
+        onClick = onClick,
+        modifier = modifier.height(56.dp),
+        shape = RoundedCornerShape(16.dp),
+        color = containerColor,
+
+        /*
+         * ללא צל חיצוני עבה.
+         */
+        tonalElevation = 0.dp,
+        shadowElevation = 0.dp,
+
+        border = BorderStroke(
+            width = 0.6.dp,
+            color =
+                MaterialTheme.colorScheme.primary.copy(
+                    alpha = 0.16f
+                )
+        )
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(horizontal = 10.dp),
+            verticalAlignment =
+                Alignment.CenterVertically,
+            horizontalArrangement =
+                Arrangement.Center
+        ) {
+            Icon(
+                painter = painterResource(
+                    id = iconRes
+                ),
+                contentDescription = null,
+                tint = Color.Unspecified,
+                modifier = Modifier.size(23.dp)
+            )
+
+            Spacer(
+                Modifier.width(8.dp)
+            )
+
+            Text(
+                text = label,
+                style = KmiTypography.action,
+                color =
+                    MaterialTheme.colorScheme.onSurface,
+                fontWeight = FontWeight.Bold,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
+    }
+}
+
 
 // ===== העדפת ניווט (Google Maps / Waze / Ask) =====
 

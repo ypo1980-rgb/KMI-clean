@@ -149,6 +149,13 @@ fun VoiceCommandListener(
                 errorMessage = null
                 controller.startListening()
             } else {
+                VoiceCommandDiagnosticsLogger.logFailure(
+                    context = context,
+                    source = "voice_command_listener",
+                    reason = "microphone_permission_denied",
+                    screenName = "voice_command_listener"
+                )
+
                 Toast.makeText(
                     context,
                     if (isEnglish) {
@@ -207,6 +214,13 @@ fun VoiceCommandListener(
                 state == PushToTalkState.STARTING ||
                 state == PushToTalkState.LISTENING
             ) {
+                VoiceCommandDiagnosticsLogger.logFailure(
+                    context = context,
+                    source = "voice_command_listener",
+                    reason = "recognition_timeout",
+                    screenName = "voice_command_listener"
+                )
+
                 currentOnDismiss()
             }
         }

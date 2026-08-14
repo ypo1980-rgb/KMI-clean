@@ -109,6 +109,7 @@ private enum class AdminDiagnosticsType(
     All("all", "הכל", "All"),
     Errors("error", "שגיאות", "Errors"),
     Voice("voice", "פקודות קוליות", "Voice commands"),
+    Assistant("assistant", "העוזר האישי", "Assistant"),
     Login("login", "כניסות", "Login"),
     Search("search", "חיפוש", "Search"),
     Payments("payment", "תשלומים", "Payments"),
@@ -1111,7 +1112,7 @@ fun AdminDiagnosticsScreen(
         val adminRegistration = Firebase.firestore
             .collection("adminLogs")
             .orderBy("createdAt", Query.Direction.DESCENDING)
-            .limit(120)
+            .limit(500)
             .addSnapshotListener { snapshot, error ->
                 loadingAdminLogs = false
 
@@ -1143,6 +1144,9 @@ fun AdminDiagnosticsScreen(
                         appVersion = doc.getString("appVersion").orEmpty(),
                         deviceModel = doc.getString("deviceModel").orEmpty(),
                         language = doc.getString("language").orEmpty(),
+                        attemptId = doc.getString("attemptId")
+                            ?: doc.getString("attempt_id")
+                            ?: "",
                         createdAt = doc.getTimestamp("createdAt")
                     )
                 }
@@ -1353,8 +1357,21 @@ fun AdminDiagnosticsScreen(
     val resetCutoffsByGroup = remember(resetVersion) {
         mapOf(
             "errors" to resetSp.getLong(resetKeyForGroup("errors"), 0L),
+            "assistant_requests" to
+                    resetSp.getLong(
+                        resetKeyForGroup("assistant_requests"),
+                        0L
+                    ),
             "voice_commands" to
-                    resetSp.getLong(resetKeyForGroup("voice_commands"), 0L),
+                    resetSp.getLong(
+                        resetKeyForGroup("voice_commands"),
+                        0L
+                    ),
+            "voice_activity" to
+                    resetSp.getLong(
+                        resetKeyForGroup("voice_activity"),
+                        0L
+                    ),
             "google_auth" to resetSp.getLong(resetKeyForGroup("google_auth"), 0L),
             "login" to resetSp.getLong(resetKeyForGroup("login"), 0L),
             "search" to resetSp.getLong(resetKeyForGroup("search"), 0L),
@@ -1374,11 +1391,67 @@ fun AdminDiagnosticsScreen(
             append(log.message)
         }
 
+        val isAssistantRequest =
+            log.area.equals(
+                "ai_assistant",
+                ignoreCase = true
+            ) ||
+                    log.type.contains(
+                        "assistant_request",
+                        ignoreCase = true
+                    ) ||
+                    diagnosticText.contains(
+                        "assistant_orchestrator",
+                        ignoreCase = true
+                    )
+
+        val isVoiceEvent =
+            log.area.equals(
+                "voice_commands",
+                ignoreCase = true
+            ) ||
+                    diagnosticText.contains(
+                        "voice_command",
+                        ignoreCase = true
+                    ) ||
+                    diagnosticText.contains(
+                        "speech_recognition",
+                        ignoreCase = true
+                    )
+
+        val isVoiceFailure =
+            isVoiceEvent && (
+                    log.severity.equals(
+                        "warning",
+                        ignoreCase = true
+                    ) ||
+                            log.severity.equals(
+                                "error",
+                                ignoreCase = true
+                            ) ||
+                            log.type.contains(
+                                "failed",
+                                ignoreCase = true
+                            ) ||
+                            log.type.contains(
+                                "failure",
+                                ignoreCase = true
+                            ) ||
+                            log.type.contains(
+                                "unhandled",
+                                ignoreCase = true
+                            )
+                    )
+
         return when {
-            diagnosticText.contains("voice_command", ignoreCase = true) ||
-                    diagnosticText.contains("voice_assistant", ignoreCase = true) ||
-                    diagnosticText.contains("speech_recognition", ignoreCase = true) ->
+            isAssistantRequest ->
+                "assistant_requests"
+
+            isVoiceFailure ->
                 "voice_commands"
+
+            isVoiceEvent ->
+                "voice_activity"
 
             log.severity.equals("error", ignoreCase = true) ||
                     log.type.contains("error", ignoreCase = true) ||
@@ -1407,22 +1480,51 @@ fun AdminDiagnosticsScreen(
 
     fun logGroupTitle(key: String): String {
         return when (key) {
-            "screen_views" -> tr("צפיות במסכים", "Screen views")
+            "screen_views" ->
+                tr("צפיות במסכים", "Screen views")
+
+            "assistant_requests" ->
+                tr(
+                    "בקשות לעוזר שלא נענו",
+                    "Unresolved assistant requests"
+                )
+
             "voice_commands" ->
-                tr("פקודות קוליות שלא בוצעו", "Unresolved voice commands")
-            "google_auth" -> tr("אירועי אבחון Google", "Google diagnostics")
-            "login" -> tr("אירועי כניסה", "Login events")
-            "errors" -> tr("שגיאות ותקלות", "Errors and issues")
-            "search" -> tr("אירועי חיפוש", "Search events")
-            else -> tr("אירועים נוספים", "Other events")
+                tr(
+                    "פקודות קוליות שלא בוצעו",
+                    "Unresolved voice commands"
+                )
+
+            "voice_activity" ->
+                tr(
+                    "פעילות פקודות קוליות",
+                    "Voice command activity"
+                )
+
+            "google_auth" ->
+                tr("אירועי אבחון Google", "Google diagnostics")
+
+            "login" ->
+                tr("אירועי כניסה", "Login events")
+
+            "errors" ->
+                tr("שגיאות ותקלות", "Errors and issues")
+
+            "search" ->
+                tr("אירועי חיפוש", "Search events")
+
+            else ->
+                tr("אירועים נוספים", "Other events")
         }
     }
 
     fun logGroupColor(key: String): Color {
         return when (key) {
             "screen_views" -> Color(0xFF0284C7)
+            "assistant_requests" -> Color(0xFF7C3AED)
             "voice_commands" -> Color(0xFFEA580C)
-            "google_auth" -> Color(0xFF7C3AED)
+            "voice_activity" -> Color(0xFF0891B2)
+            "google_auth" -> Color(0xFF6D28D9)
             "login" -> Color(0xFF16A34A)
             "errors" -> Color(0xFFE11D48)
             "search" -> Color(0xFFD97706)
@@ -1442,12 +1544,14 @@ fun AdminDiagnosticsScreen(
 
     val groupedLogs = remember(visibleLogs) {
         val order = listOf(
+            "assistant_requests",
             "voice_commands",
             "errors",
             "google_auth",
             "login",
             "search",
             "screen_views",
+            "voice_activity",
             "other"
         )
 

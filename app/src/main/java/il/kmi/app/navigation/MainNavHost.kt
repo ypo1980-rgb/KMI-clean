@@ -437,6 +437,72 @@ private fun resolveExistingVoiceTopicForBelt(
 }
 
 /**
+ * בודק אם קיימים בפועל תרגילים בחגורה.
+ *
+ * עצם קיומה של חגורה או כותרת נושא אינו מספיק:
+ * לפחות נושא אחד חייב להכיל תרגיל ישיר או תרגיל
+ * בתוך אחד מתתי־הנושאים שלו.
+ */
+private fun hasExercisesForVoiceBelt(
+    belt: Belt
+): Boolean {
+    val topicTitles =
+        runCatching {
+            TopicsEngine.topicTitlesFor(
+                belt
+            )
+        }.getOrDefault(
+            emptyList()
+        )
+
+    if (topicTitles.isEmpty()) {
+        return false
+    }
+
+    return topicTitles.any { topicTitle ->
+        val directItems =
+            runCatching {
+                ContentRepo.listItemTitles(
+                    belt = belt,
+                    topicTitle = topicTitle,
+                    subTopicTitle = null
+                )
+            }.getOrDefault(
+                emptyList()
+            )
+
+        if (directItems.isNotEmpty()) {
+            true
+        } else {
+            val subTopics =
+                runCatching {
+                    ContentRepo.listSubTopicTitles(
+                        belt = belt,
+                        topicTitle = topicTitle
+                    )
+                }.getOrDefault(
+                    emptyList()
+                )
+
+            subTopics.any { subTopicTitle ->
+                runCatching {
+                    ContentRepo.listItemTitles(
+                        belt = belt,
+                        topicTitle = topicTitle,
+                        subTopicTitle =
+                            subTopicTitle
+                    )
+                }
+                    .getOrDefault(
+                        emptyList()
+                    )
+                    .isNotEmpty()
+            }
+        }
+    }
+}
+
+/**
  * NavHost הראשי של האפליקציה.
  */
 @Composable
@@ -2017,12 +2083,51 @@ fun MainNavHost(
                         }
 
                         VoiceAppCommand.GoBack -> {
-                            speakVoiceCommandFeedback(
-                                hebrewText = "חוזר למסך הקודם",
-                                englishText = "Going back"
-                            )
+                            val previousRoute =
+                                nav.currentBackStackEntry
+                                    ?.destination
+                                    ?.route
 
-                            nav.popBackStack()
+                            val didGoBack =
+                                nav.popBackStack()
+
+                            if (didGoBack) {
+                                speakVoiceCommandFeedback(
+                                    hebrewText = "חוזר למסך הקודם",
+                                    englishText = "Going back"
+                                )
+
+                                VoiceCommandDiagnosticsLogger.logTrace(
+                                    context = ctx,
+                                    stage = "navigation_completed",
+                                    spokenText = spokenText,
+                                    resolvedCommand = "GoBack",
+                                    target = previousRoute,
+                                    screenName =
+                                        nav.currentBackStackEntry
+                                            ?.destination
+                                            ?.route
+                                )
+                            } else {
+                                VoiceCommandDiagnosticsLogger.logFailure(
+                                    context = ctx,
+                                    source = "main_navigation",
+                                    reason = "command_execution_failed",
+                                    spokenText = spokenText,
+                                    alternatives = listOf(
+                                        "command=GoBack",
+                                        "reason=no_previous_screen"
+                                    ),
+                                    screenName = previousRoute
+                                )
+
+                                speakVoiceCommandFeedback(
+                                    hebrewText =
+                                        "אין מסך קודם שאפשר לחזור אליו",
+                                    englishText =
+                                        "There is no previous screen to return to"
+                                )
+                            }
                         }
 
                         VoiceAppCommand.OpenSettings -> {
@@ -2271,8 +2376,6 @@ fun MainNavHost(
                             )
 
                             if (belt != null) {
-                                vm.setSelectedBelt(belt)
-
                                 val beltDisplayName =
                                     if (isEnglish) {
                                         belt.name
@@ -2282,6 +2385,47 @@ fun MainNavHost(
                                         belt.heb
                                     }
 
+                                /*
+                                 * לפני שינוי החגורה ולפני ניווט,
+                                 * מוודאים שקיים לפחות תרגיל אחד.
+                                 */
+                                val hasExercises =
+                                    hasExercisesForVoiceBelt(
+                                        belt
+                                    )
+
+                                if (!hasExercises) {
+                                    VoiceCommandDiagnosticsLogger.logFailure(
+                                        context = ctx,
+                                        source = "main_navigation",
+                                        reason =
+                                            "belt_has_no_exercises",
+                                        spokenText = spokenText,
+                                        alternatives = listOf(
+                                            "command=OpenBelt",
+                                            "beltId=${belt.id}",
+                                            "beltName=$beltDisplayName"
+                                        ),
+                                        screenName =
+                                            nav.currentBackStackEntry
+                                                ?.destination
+                                                ?.route
+                                    )
+
+                                    speakVoiceCommandFeedback(
+                                        hebrewText =
+                                            "אין תרגילים ב$beltDisplayName",
+                                        englishText =
+                                            "There are no exercises in the $beltDisplayName belt"
+                                    )
+
+                                    return@commandHandler
+                                }
+
+                                vm.setSelectedBelt(
+                                    belt
+                                )
+
                                 speakVoiceCommandFeedback(
                                     hebrewText =
                                         "פותח את $beltDisplayName",
@@ -2289,7 +2433,8 @@ fun MainNavHost(
                                         "Opening the $beltDisplayName belt"
                                 )
 
-                                val targetRoute = Route.BeltQ.route
+                                val targetRoute =
+                                    Route.BeltQ.route
 
                                 VoiceCommandDiagnosticsLogger.logTrace(
                                     context = ctx,
@@ -3070,15 +3215,27 @@ fun MainNavHost(
                         }
 
                         VoiceAppCommand.OpenSearch -> {
-                            Toast.makeText(
-                                ctx,
-                                if (isEnglish) {
-                                    "Voice search will be connected in the next step"
-                                } else {
-                                    "החיפוש הקולי יחובר בשלב הבא"
-                                },
-                                Toast.LENGTH_SHORT
-                            ).show()
+                            VoiceCommandDiagnosticsLogger.logFailure(
+                                context = ctx,
+                                source = "main_navigation",
+                                reason = "voice_feature_not_implemented",
+                                spokenText = spokenText,
+                                alternatives = listOf(
+                                    "command=OpenSearch",
+                                    "target=voice_search"
+                                ),
+                                screenName =
+                                    nav.currentBackStackEntry
+                                        ?.destination
+                                        ?.route
+                            )
+
+                            speakVoiceCommandFeedback(
+                                hebrewText =
+                                    "החיפוש הקולי עדיין אינו מחובר",
+                                englishText =
+                                    "Voice search is not connected yet"
+                            )
                         }
 
                         is VoiceAppCommand.ExplainExercise -> {
@@ -3150,15 +3307,39 @@ fun MainNavHost(
 
                         is VoiceAppCommand.FindAndOpen,
                         is VoiceAppCommand.Search -> {
-                            Toast.makeText(
-                                ctx,
-                                if (isEnglish) {
-                                    "Recognized: $spokenText"
-                                } else {
-                                    "זוהתה הפקודה: $spokenText"
-                                },
-                                Toast.LENGTH_SHORT
-                            ).show()
+                            val unresolvedCommandName =
+                                when (command) {
+                                    is VoiceAppCommand.FindAndOpen ->
+                                        "FindAndOpen"
+
+                                    is VoiceAppCommand.Search ->
+                                        "Search"
+
+                                    else ->
+                                        "UnknownSearchCommand"
+                                }
+
+                            VoiceCommandDiagnosticsLogger.logFailure(
+                                context = ctx,
+                                source = "main_navigation",
+                                reason = "voice_feature_not_implemented",
+                                spokenText = spokenText,
+                                alternatives = listOf(
+                                    "command=$unresolvedCommandName",
+                                    "reason=recognized_but_not_executed"
+                                ),
+                                screenName =
+                                    nav.currentBackStackEntry
+                                        ?.destination
+                                        ?.route
+                            )
+
+                            speakVoiceCommandFeedback(
+                                hebrewText =
+                                    "זיהיתי את הבקשה, אך הפעולה עדיין אינה מחוברת",
+                                englishText =
+                                    "I recognized the request, but this action is not connected yet"
+                            )
                         }
 
                         is VoiceAppCommand.Unknown -> {

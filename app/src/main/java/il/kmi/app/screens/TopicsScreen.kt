@@ -465,10 +465,16 @@ fun TopicsScreen(
     val screenTextAlign = topicsTextAlign(isEnglish)
     val screenHorizontalAlignment = topicsHorizontalAlignment(isEnglish)
 
-    val belt = vm.selectedBelt.collectAsState().value ?: Belt.WHITE
+    /*
+     * משתמשים בחגורה שנבחרה בפועל, כולל חגורה לבנה.
+     * אין להחליף Belt.WHITE בחגורה ירוקה.
+     */
+    val belt =
+        vm.selectedBelt.collectAsState().value
+            ?: Belt.WHITE
 
-// ✅ לעולם לא עובדים עם WHITE במסך הזה
-    val effectiveBelt: Belt = belt.takeUnless { it == Belt.WHITE } ?: Belt.GREEN
+    val effectiveBelt: Belt =
+        belt
 
     val topicTitles: List<String> = remember(effectiveBelt) {
         val viaBridge = runCatching {
@@ -571,9 +577,18 @@ fun TopicsScreen(
 
     LaunchedEffect(isCoach) {
         if (isCoach) {
-            val cur = vm.selectedBelt.value
-            if (cur == null || cur == Belt.WHITE) {
-                vm.setSelectedBelt(Belt.GREEN)
+            val cur =
+                vm.selectedBelt.value
+
+            /*
+             * מגדירים ברירת מחדל רק אם לא נבחרה חגורה.
+             * חגורה לבנה היא בחירה חוקית ואסור להחליף
+             * אותה בירוקה.
+             */
+            if (cur == null) {
+                vm.setSelectedBelt(
+                    Belt.GREEN
+                )
             }
         }
     }
@@ -606,8 +621,11 @@ fun TopicsScreen(
             PracticeMenuDialog(
                 canUseExtras = canUseExtras,
 
-                // ✅ לא מעבירים WHITE כדיפולט (גם אם לא מסומן בפועל)
-                defaultBelt = effectiveBelt.takeUnless { it == Belt.WHITE } ?: Belt.GREEN,
+                /*
+                 * מעבירים לתפריט התרגול את החגורה
+                 * שנבחרה בפועל, כולל חגורה לבנה.
+                 */
+                defaultBelt = effectiveBelt,
 
                 onDismiss = { showPracticeMenu = false },
 
