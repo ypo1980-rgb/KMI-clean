@@ -1479,9 +1479,17 @@ fun CoachTraineesScreen(
 
             KmiTopBar(
                 title = if (showStatsSheet) {
-                    coachTr(isEnglish, "סטטיסטיקת קבוצה", "Group statistics")
+                    coachTr(
+                        isEnglish,
+                        "סטטיסטיקה",
+                        "Statistics"
+                    )
                 } else {
-                    coachTr(isEnglish, "רשימת מתאמנים", "Trainees list")
+                    coachTr(
+                        isEnglish,
+                        "רשימת מתאמנים",
+                        "Trainees list"
+                    )
                 },
                 onOpenDrawer = onOpenDrawer,
                 onHome = onOpenHome,
@@ -1641,7 +1649,7 @@ fun CoachTraineesScreen(
                                     Spacer(Modifier.width(6.dp))
 
                                     Text(
-                                        text = coachTr(isEnglish, "סטטיסטיקה לקבוצה", "Group statistics"),
+                                        text = coachTr(isEnglish, "סטטיסטיקה", "statistics"),
                                         fontWeight = FontWeight.ExtraBold,
                                         color = Color.White,
                                         style = MaterialTheme.typography.labelLarge.copy(

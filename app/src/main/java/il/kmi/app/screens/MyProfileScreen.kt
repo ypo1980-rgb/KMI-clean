@@ -131,29 +131,77 @@ private fun profileLayoutDirection(isEnglish: Boolean): LayoutDirection {
     return if (isEnglish) LayoutDirection.Ltr else LayoutDirection.Rtl
 }
 
-private fun profileBeltDrawableForRawId(rawId: String?): Int {
-    return when (rawId?.trim().orEmpty()) {
-        "white", "לבנה" -> R.drawable.belt_white
-        "yellow", "צהובה" -> R.drawable.belt_yellow
-        "orange", "כתומה" -> R.drawable.belt_orange
-        "green", "ירוקה" -> R.drawable.belt_green
-        "blue", "כחולה" -> R.drawable.belt_blue
-        "brown", "חומה" -> R.drawable.belt_brown
+private fun profileBeltDrawableForRawId(
+    rawId: String?
+): Int {
+    return when (
+        rawId
+            ?.trim()
+            ?.lowercase()
+            .orEmpty()
+    ) {
+        "white",
+        "לבנה" ->
+            R.drawable.intro_belt_white
+
+        "yellow",
+        "צהובה" ->
+            R.drawable.intro_belt_yellow
+
+        "orange",
+        "כתומה" ->
+            R.drawable.intro_belt_orange
+
+        "green",
+        "ירוקה" ->
+            R.drawable.intro_belt_green
+
+        "blue",
+        "כחולה" ->
+            R.drawable.intro_belt_blue
+
+        "brown",
+        "חומה" ->
+            R.drawable.intro_belt_brown
 
         "black",
+        "black_dan_1",
         "שחורה",
-        "שחורה דאן 1",
+        "שחורה דאן 1" ->
+            R.drawable.intro_belt_black
+
         "black_dan_2",
+        "שחורה דאן 2" ->
+            R.drawable.intro_belt_black_dan_2
+
         "black_dan_3",
+        "שחורה דאן 3" ->
+            R.drawable.intro_belt_black_dan_3
+
         "black_dan_4",
+        "שחורה דאן 4" ->
+            R.drawable.intro_belt_black_dan_4
+
         "black_dan_5",
+        "שחורה דאן 5" ->
+            R.drawable.intro_belt_black_dan_5
+
         "black_dan_6",
         "black_dan_7",
         "black_dan_8",
-        "black_dan_9",
-        "black_dan_10" -> R.drawable.belt_black
+        "שחורה דאן 6",
+        "שחורה דאן 7",
+        "שחורה דאן 8" ->
+            R.drawable.intro_belt_red_white_dan_6_7_8
 
-        else -> R.drawable.belt_white
+        "black_dan_9",
+        "black_dan_10",
+        "שחורה דאן 9",
+        "שחורה דאן 10" ->
+            R.drawable.intro_belt_red_dan_9_10
+
+        else ->
+            R.drawable.intro_belt_white
     }
 }
 
@@ -1478,8 +1526,18 @@ private fun UserProfileCard(
                 isEnglish = isEnglish
             )
 
-            // --- פרטי חשבון ---
+            // --- פרטי אימון וחשבון ---
             Spacer(Modifier.height(6.dp))
+
+            LabeledValueBlock(
+                label = profileTr(
+                    isEnglish,
+                    "האימון הבא:",
+                    "Next training:"
+                ),
+                value = info.nextTraining,
+                isEnglish = isEnglish
+            )
 
             LabeledValueBlock(
                 label = profileTr(isEnglish, "מייל:", "Email:"),

@@ -46,6 +46,7 @@ import il.kmi.app.ui.ext.color
 import il.kmi.app.ui.rememberClickSound
 import il.kmi.app.ui.rememberHapticsGlobal
 import il.kmi.shared.prefs.KmiPrefs
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import kotlin.math.PI
 import kotlin.math.cos
@@ -1203,18 +1204,15 @@ internal fun BeltPangoLayout(
     var quickMenuExpanded by rememberSaveable { mutableStateOf(false) }
 
     /*
-     * כל החגורות מוצגות, כולל חגורה לבנה.
-     * בחירה שהגיעה מפקודה קולית חייבת להישאר זמינה
-     * ברשימה ולא ליפול לברירת מחדל של חגורה אחרת.
+     * הקרוסלה מציגה רק חגורות שיש בהן תרגילים.
+     * חגורה לבנה אינה מוצגת משום שאין בה חומר לימוד.
      */
     val belts = remember {
-        Belt.order
+        Belt.order.filterNot { belt ->
+            belt == Belt.WHITE
+        }
     }
 
-    /*
-     * חגורה שנבחרה לפני פתיחת המסך, למשל באמצעות
-     * הפקודה הקולית "פתח חגורה לבנה".
-     */
     val requestedBelt by vm.selectedBelt.collectAsState()
 
     val initialBelt: Belt = remember(
@@ -1223,10 +1221,6 @@ internal fun BeltPangoLayout(
         userSp,
         requestedBelt
     ) {
-        /*
-         * בחירה מפורשת מה־ViewModel מקבלת קדימות על פני
-         * חגורת הרישום וברירות המחדל של המסך.
-         */
         requestedBelt
             ?.takeIf { it in belts }
             ?: run {
@@ -1351,6 +1345,7 @@ internal fun BeltPangoLayout(
                 showBottomActions = true,
                 centerTitle = true,
                 showTopHome = false,
+                showBackNavigation = false,
                 showTopBeltIcon = true,
                 topBeltIconRes = null,
                 currentLang =
@@ -1447,7 +1442,7 @@ internal fun BeltPangoLayout(
                     onCenterTap = onNext,
                     haptic = haptic,
                     clickSound = clickSound,
-                    inputEnabled = false,
+                    inputEnabled = true,
                     reverseSwipeDirection = true
                 )
             }
@@ -2942,16 +2937,29 @@ private fun BeltArcPicker(
     val density = LocalDensity.current
     val stepPx = with(density) { step.toPx() }
 
-    val center = remember { Animatable(currentIndex.toFloat()) }
-    LaunchedEffect(currentIndex) {
-        if (currentIndex.toFloat() != center.targetValue) {
-            center.animateTo(
-                targetValue = currentIndex.toFloat(),
-                animationSpec = tween(220, easing = FastOutSlowInEasing)
-            )
-        }
+    /*
+     * אובייקט האנימציה נשמר לאורך המעבר בין החגורות.
+     * currentIndex מסנכרן אותו בלי ליצור אותו מחדש.
+     */
+    val center = remember(belts) {
+        Animatable(
+            currentIndex
+                .coerceIn(0, belts.lastIndex)
+                .toFloat()
+        )
     }
-    LaunchedEffect(center.value) { onCenterProgress(center.value) }
+
+    LaunchedEffect(currentIndex, belts) {
+        center.snapTo(
+            currentIndex
+                .coerceIn(0, belts.lastIndex)
+                .toFloat()
+        )
+    }
+
+    LaunchedEffect(center.value) {
+        onCenterProgress(center.value)
+    }
 
     val scope = rememberCoroutineScope()
 
@@ -2996,55 +3004,132 @@ private fun BeltArcPicker(
                 .alpha(alpha)
                 .zIndex(if (isCenter) 2f else 1f)
 
-            val gestures = Modifier
-                .pointerInput(belts, index, reverseSwipeDirection) {
-                    detectHorizontalDragGestures(
-                        onDragEnd = {
-                            val prevIndex = currentIndex
-                            val snap = center.value.roundToInt().coerceIn(0, belts.lastIndex)
+            val gestures =
+                if (!inputEnabled) {
+                    Modifier
+                } else {
+                    Modifier
+                        .pointerInput(
+                            belts,
+                            index,
+                            currentIndex,
+                            reverseSwipeDirection
+                        ) {
+                            var dragUpdateJob: Job? = null
 
-                            scope.launch {
-                                center.animateTo(
-                                    targetValue = snap.toFloat(),
-                                    animationSpec = tween(180, easing = FastOutSlowInEasing)
-                                )
-                                onIndexChange(snap)
+                            detectHorizontalDragGestures(
+                                onDragEnd = {
+                                    /*
+                                     * מבטל עדכון ישן שטרם הסתיים,
+                                     * כדי שלא יחזיר את הקרוסלה אחורה.
+                                     */
+                                    dragUpdateJob?.cancel()
+                                    dragUpdateJob = null
 
-                                if (snap != prevIndex) {
+                                    val previousIndex = currentIndex
+                                    val selectedIndex =
+                                        center.value
+                                            .roundToInt()
+                                            .coerceIn(
+                                                0,
+                                                belts.lastIndex
+                                            )
+
+                                    scope.launch {
+                                        /*
+                                         * קודם מצמידים את העיגול למיקום
+                                         * המדויק ורק לאחר מכן מעדכנים
+                                         * את הכותרת ותוכן החגורה.
+                                         */
+                                        center.snapTo(
+                                            selectedIndex.toFloat()
+                                        )
+
+                                        onIndexChange(selectedIndex)
+
+                                        if (
+                                            selectedIndex !=
+                                            previousIndex
+                                        ) {
+                                            clickSound()
+                                            haptic(true)
+                                        }
+                                    }
+                                },
+                                onDragCancel = {
+                                    /*
+                                     * אם המחווה בוטלה, חוזרים לחגורה
+                                     * שמוצגת בכותרת ולא נשארים בין חגורות.
+                                     */
+                                    dragUpdateJob?.cancel()
+                                    dragUpdateJob = null
+
+                                    scope.launch {
+                                        center.snapTo(
+                                            currentIndex
+                                                .coerceIn(
+                                                    0,
+                                                    belts.lastIndex
+                                                )
+                                                .toFloat()
+                                        )
+                                    }
+                                }
+                            ) { _, dragAmount ->
+                                val direction =
+                                    if (reverseSwipeDirection) {
+                                        -1f
+                                    } else {
+                                        1f
+                                    }
+
+                                val delta =
+                                    (dragAmount / stepPx) *
+                                            direction
+
+                                val nextPosition =
+                                    (center.value + delta)
+                                        .coerceIn(
+                                            0f,
+                                            belts.lastIndex.toFloat()
+                                        )
+
+                                /*
+                                 * בכל תנועה נשמרת רק הפעולה האחרונה.
+                                 */
+                                dragUpdateJob?.cancel()
+                                dragUpdateJob = scope.launch {
+                                    center.snapTo(nextPosition)
+                                }
+                            }
+                        }
+                        .noRippleClickable {
+                            if (isCenter) {
+                                clickSound()
+                                haptic(true)
+                                onCenterTap()
+                            } else {
+                                val selectedIndex =
+                                    index.coerceIn(
+                                        0,
+                                        belts.lastIndex
+                                    )
+
+                                /*
+                                 * לחיצה על חגורה צדדית מעדכנת מיד
+                                 * את מקור האמת המשותף לכל המסך.
+                                 */
+                                scope.launch {
+                                    center.snapTo(
+                                        selectedIndex.toFloat()
+                                    )
+                                    onIndexChange(selectedIndex)
                                     clickSound()
                                     haptic(true)
                                 }
                             }
                         }
-                    ) { _, drag ->
-                        val direction = if (reverseSwipeDirection) -1f else 1f
-                        val rawDelta = (drag / stepPx) * direction
-
-                        val next = (center.value + rawDelta)
-                            .coerceIn(0f, belts.lastIndex.toFloat())
-
-                        scope.launch { center.snapTo(next) }
-                    }
                 }
-                .then(
-                    if (!inputEnabled) Modifier
-                    else Modifier.noRippleClickable {
-                        if (isCenter) {
-                            clickSound(); haptic(true)
-                            onCenterTap()
-                        } else {
-                            clickSound(); haptic(true)
-                            val snap = index.coerceIn(0, belts.lastIndex)
-                            scope.launch {
-                                center.animateTo(
-                                    targetValue = snap.toFloat(),
-                                    animationSpec = tween(220, easing = FastOutSlowInEasing)
-                                )
-                                onIndexChange(snap)
-                            }
-                        }
-                    }
-                )
 
             Box(
                 modifier = base.then(gestures),
@@ -3130,28 +3215,83 @@ private fun RotatingOrbitRing(
         initialValue = 0f,
         targetValue = 360f,
         animationSpec = infiniteRepeatable(
-            animation = tween(durationMillis = 1600, easing = LinearEasing)
+            animation = tween(
+                durationMillis = 1600,
+                easing = LinearEasing
+            )
         ),
         label = "ring-angle"
     )
 
+    /*
+     * הטבעת משתמשת רק בגוונים של צבע החגורה שבמרכז.
+     * השינוי בעוצמת הגוונים מאפשר לראות את תנועת הסיבוב,
+     * בלי להציג צבעים שאינם קשורים לחגורה.
+     */
+    val ringColors = remember(base) {
+        val opaqueBase = base.copy(alpha = 1f)
+
+        fun darker(factor: Float): Color {
+            return Color(
+                red = opaqueBase.red * factor,
+                green = opaqueBase.green * factor,
+                blue = opaqueBase.blue * factor,
+                alpha = 1f
+            )
+        }
+
+        when {
+            /*
+             * בצבעים כהים מאוד אי אפשר ליצור גוון כהה נוסף
+             * שעדיין יהיה נראה, ולכן משתמשים באפור־שחור.
+             */
+            opaqueBase.luminance() < 0.05f -> {
+                listOf(
+                    Color(0xFF111827),
+                    Color(0xFF374151),
+                    Color(0xFF1F2937),
+                    Color(0xFF4B5563),
+                    Color(0xFF111827)
+                )
+            }
+
+            /*
+             * אם חגורה לבנה תוחזר בעתיד לקרוסלה,
+             * הטבעת שלה תוצג בגוונים אפורים.
+             */
+            opaqueBase.luminance() > 0.88f -> {
+                listOf(
+                    Color(0xFF9CA3AF),
+                    Color(0xFF6B7280),
+                    Color(0xFF4B5563),
+                    Color(0xFF6B7280),
+                    Color(0xFF9CA3AF)
+                )
+            }
+
+            else -> {
+                listOf(
+                    darker(0.78f),
+                    darker(0.48f),
+                    darker(0.68f),
+                    darker(0.38f),
+                    darker(0.78f)
+                )
+            }
+        }
+    }
+
     val sweep = Brush.sweepGradient(
-        colors = listOf(
-            Color(0xFF22D3EE), // cyan
-            Color(0xFFA78BFA), // purple
-            Color(0xFFF472B6), // pink
-            Color(0xFFFBBF24), // amber
-            Color(0xFF22D3EE)
-        )
+        colors = ringColors
     )
 
     Canvas(modifier = modifier) {
         val strokePx = ringStroke.toPx()
         val inset = strokePx / 2f
 
-        // שכבת "צל" דקה כדי להיראות יותר מודרני
+        // שכבת בסיס עדינה מתחת לטבעת המסתובבת
         drawArc(
-            color = base.copy(alpha = 0.16f),
+            color = ringColors.first().copy(alpha = 0.22f),
             startAngle = 0f,
             sweepAngle = 360f,
             useCenter = false,
@@ -3160,10 +3300,12 @@ private fun RotatingOrbitRing(
                 size.width - inset * 2,
                 size.height - inset * 2
             ),
-            style = Stroke(width = gapStroke.toPx())
+            style = Stroke(
+                width = gapStroke.toPx()
+            )
         )
 
-        // הטבעת המסתובבת (צבעונית)
+        // טבעת מסתובבת בגוונים של צבע החגורה בלבד
         rotate(degrees = angle) {
             drawArc(
                 brush = sweep,
@@ -3175,7 +3317,10 @@ private fun RotatingOrbitRing(
                     size.width - inset * 2,
                     size.height - inset * 2
                 ),
-                style = Stroke(width = strokePx, cap = StrokeCap.Round)
+                style = Stroke(
+                    width = strokePx,
+                    cap = StrokeCap.Round
+                )
             )
         }
     }

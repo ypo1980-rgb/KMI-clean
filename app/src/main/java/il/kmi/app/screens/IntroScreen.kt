@@ -80,29 +80,58 @@ private fun beltColor(belt: Belt): Color = when (belt) {
  * מחזיר את תמונת החגורה המעוצבת למסך הפתיחה.
  */
 private fun introBeltDrawableRes(
-    belt: Belt
+    rank: IntroRankDisplay
 ): Int {
-    return when (belt) {
-        Belt.WHITE ->
-            R.drawable.belt_white
+    return when (
+        rank.id
+            .trim()
+            .lowercase()
+    ) {
+        "black_dan_2" ->
+            R.drawable.intro_belt_black_dan_2
 
-        Belt.YELLOW ->
-            R.drawable.belt_yellow
+        "black_dan_3" ->
+            R.drawable.intro_belt_black_dan_3
 
-        Belt.ORANGE ->
-            R.drawable.belt_orange
+        "black_dan_4" ->
+            R.drawable.intro_belt_black_dan_4
 
-        Belt.GREEN ->
-            R.drawable.belt_green
+        "black_dan_5" ->
+            R.drawable.intro_belt_black_dan_5
 
-        Belt.BLUE ->
-            R.drawable.belt_blue
+        "black_dan_6",
+        "black_dan_7",
+        "black_dan_8" ->
+            R.drawable.intro_belt_red_white_dan_6_7_8
 
-        Belt.BROWN ->
-            R.drawable.belt_brown
+        "black_dan_9",
+        "black_dan_10" ->
+            R.drawable.intro_belt_red_dan_9_10
 
-        Belt.BLACK ->
-            R.drawable.belt_black
+        else -> {
+            when (rank.baseBelt) {
+                Belt.WHITE ->
+                    R.drawable.intro_belt_white
+
+                Belt.YELLOW ->
+                    R.drawable.intro_belt_yellow
+
+                Belt.ORANGE ->
+                    R.drawable.intro_belt_orange
+
+                Belt.GREEN ->
+                    R.drawable.intro_belt_green
+
+                Belt.BLUE ->
+                    R.drawable.intro_belt_blue
+
+                Belt.BROWN ->
+                    R.drawable.intro_belt_brown
+
+                Belt.BLACK ->
+                    R.drawable.intro_belt_black
+            }
+        }
     }
 }
 
@@ -356,13 +385,13 @@ private fun BeltBadge(
     }
 
     fun beltDrawableResOrNull(b: Belt): Int? = when (b) {
-        Belt.WHITE  -> R.drawable.belt_white
-        Belt.YELLOW -> R.drawable.belt_yellow
-        Belt.ORANGE -> R.drawable.belt_orange
-        Belt.GREEN  -> R.drawable.belt_green
-        Belt.BLUE   -> R.drawable.belt_blue
-        Belt.BROWN  -> R.drawable.belt_brown
-        Belt.BLACK  -> R.drawable.belt_black
+        Belt.WHITE  -> R.drawable.intro_belt_white
+        Belt.YELLOW -> R.drawable.intro_belt_yellow
+        Belt.ORANGE -> R.drawable.intro_belt_orange
+        Belt.GREEN  -> R.drawable.intro_belt_green
+        Belt.BLUE   -> R.drawable.intro_belt_blue
+        Belt.BROWN  -> R.drawable.intro_belt_brown
+        Belt.BLACK  -> R.drawable.intro_belt_black
     }
 
     val res = beltDrawableResOrNull(belt)
@@ -565,10 +594,18 @@ private fun IntroWelcomeImageScreen(
         val beltTopSpace = maxHeight * 0.455f
 
         val beltRowHeight =
-            if (isCompactHeight) 72.dp else 82.dp
+            if (isCompactHeight) {
+                84.dp
+            } else {
+                98.dp
+            }
 
         val beltImageHeight =
-            if (isCompactHeight) 30.dp else 36.dp
+            if (isCompactHeight) {
+                45.dp
+            } else {
+                54.dp
+            }
 
         val beltVerticalOffset =
             -(maxHeight * 0.015f)
@@ -685,16 +722,16 @@ private fun IntroWelcomeImageScreen(
 
                     Image(
                         painter = painterResource(
-                            id = introBeltDrawableRes(rank.baseBelt)
+                            id = introBeltDrawableRes(rank)
                         ),
                         contentDescription =
                             if (isEnglish) rank.en else rank.he,
                         modifier = Modifier
                             .width(
                                 if (isCompactHeight) {
-                                    130.dp
+                                    195.dp
                                 } else {
-                                    150.dp
+                                    225.dp
                                 }
                             )
                             .height(beltImageHeight),

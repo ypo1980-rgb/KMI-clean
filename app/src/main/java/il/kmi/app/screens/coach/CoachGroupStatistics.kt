@@ -55,6 +55,10 @@ internal fun CoachGroupStatsPremiumScreen(
         mutableStateOf(false)
     }
 
+    /*
+     * כאשר הטאב הארצי פתוח, חזור מחזיר תחילה
+     * לטאב הקבוצה ולא יוצא מהמסך כולו.
+     */
     androidx.activity.compose.BackHandler(
         enabled = showNationalStatistics
     ) {
@@ -62,18 +66,55 @@ internal fun CoachGroupStatsPremiumScreen(
     }
 
     if (showNationalStatistics) {
-        NationalStatisticsScreen(
-            isEnglish = isEnglish,
-            onBack = {
-                showNationalStatistics = false
-            },
-            onOpenDrawer = onOpenDrawer,
-            onOpenHome = onOpenHome
-        )
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(
+                    Brush.verticalGradient(
+                        colors = listOf(
+                            Color(0xFFF8FBFF),
+                            Color(0xFFEAF4FF),
+                            Color(0xFFB7DDF7),
+                            Color(0xFF1F78B4),
+                            Color(0xFF062B4A)
+                        )
+                    )
+                )
+                .padding(
+                    horizontal = 14.dp,
+                    vertical = 12.dp
+                )
+        ) {
+            StatisticsTabsSelector(
+                isEnglish = isEnglish,
+                nationalSelected = true,
+                onGroupClick = {
+                    showNationalStatistics = false
+                },
+                onNationalClick = {}
+            )
+
+            Spacer(
+                Modifier.height(10.dp)
+            )
+
+            NationalStatisticsScreen(
+                isEnglish = isEnglish,
+                embedded = true,
+                modifier = Modifier.weight(1f),
+                onBack = {
+                    showNationalStatistics = false
+                },
+                onOpenDrawer = onOpenDrawer,
+                onOpenHome = onOpenHome
+            )
+        }
+
         return
     }
 
-    val statsTextAlign = coachTextAlign(isEnglish)
+    val statsTextAlign =
+        coachTextAlign(isEnglish)
     val statsHorizontalAlignment = coachHorizontalAlignment(isEnglish)
 
     val statsAccent = Color(0xFF4F46E5)
@@ -144,12 +185,31 @@ internal fun CoachGroupStatsPremiumScreen(
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(horizontal = 14.dp, vertical = 12.dp)
+                .padding(
+                    horizontal = 14.dp,
+                    vertical = 12.dp
+                )
         ) {
+            StatisticsTabsSelector(
+                isEnglish = isEnglish,
+                nationalSelected = false,
+                onGroupClick = {},
+                onNationalClick = {
+                    showNationalStatistics = true
+                }
+            )
+
+            Spacer(
+                Modifier.height(10.dp)
+            )
+
             Column(
                 modifier = Modifier
-                    .fillMaxSize()
-                    .verticalScroll(rememberScrollState())
+                    .weight(1f)
+                    .fillMaxWidth()
+                    .verticalScroll(
+                        rememberScrollState()
+                    )
                     .padding(bottom = 12.dp),
                 verticalArrangement = Arrangement.spacedBy(9.dp)
             ) {
@@ -158,12 +218,6 @@ internal fun CoachGroupStatsPremiumScreen(
                     modifier = Modifier.fillMaxWidth(),
                     verticalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
-                    NationalStatisticsEntryCard(
-                        isEnglish = isEnglish,
-                        onClick = {
-                            showNationalStatistics = true
-                        }
-                    )
 
                     Surface(
                         color = Color(0xFFFCFDFF),
@@ -191,49 +245,15 @@ internal fun CoachGroupStatsPremiumScreen(
                                 .padding(horizontal = 16.dp, vertical = 16.dp),
                             verticalArrangement = Arrangement.spacedBy(14.dp)
                         ) {
-                            Column(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalAlignment = statsHorizontalAlignment,
-                                verticalArrangement = Arrangement.spacedBy(4.dp)
-                            ) {
-                                Text(
-                                    text = coachTr(isEnglish, "מידע על הקבוצה", "Group information"),
-                                    modifier = Modifier.fillMaxWidth(),
-                                    textAlign = statsTextAlign,
-                                    style = MaterialTheme.typography.titleLarge.copy(
-                                        fontSize = 22.sp,
-                                        lineHeight = 25.sp,
-                                        fontWeight = FontWeight.Black,
-                                        color = Color(0xFF0F172A)
-                                    )
-                                )
-
-                                Text(
-                                    text = coachTr(
-                                        isEnglish,
-                                        "סיכום נוכחות, גיל, ותק וחגורות",
-                                        "Attendance, age, seniority and belt summary"
-                                    ),
-                                    modifier = Modifier.fillMaxWidth(),
-                                    textAlign = statsTextAlign,
-                                    style = MaterialTheme.typography.bodySmall.copy(
-                                        fontSize = 12.sp,
-                                        lineHeight = 15.sp,
-                                        fontWeight = FontWeight.Medium,
-                                        color = Color(0xFF64748B)
-                                    )
-                                )
-                            }
-
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.spacedBy(10.dp),
-                                verticalAlignment = Alignment.CenterVertically
+                                horizontalArrangement =
+                                    Arrangement.spacedBy(10.dp),
+                                verticalAlignment =
+                                    Alignment.CenterVertically
                             ) {
-
-                            }
-                            Surface(
-                                color = Color(0xFFFCFDFF),
+                                Surface(
+                                    color = Color(0xFFFCFDFF),
                                 shape = RoundedCornerShape(24.dp),
                                 shadowElevation = 5.dp,
                                 tonalElevation = 0.dp,
@@ -348,19 +368,31 @@ internal fun CoachGroupStatsPremiumScreen(
                                     Spacer(Modifier.height(6.dp))
 
                                     Text(
-                                        text = coachTr(isEnglish, "נוכחות ממוצעת", "Average attendance"),
-                                        modifier = Modifier.fillMaxWidth(),
-                                        textAlign = TextAlign.Center,
+                                        text = coachTr(
+                                            isEnglish,
+                                            "נוכחות ממוצעת",
+                                            "Average attendance"
+                                        ),
+                                        modifier =
+                                            Modifier.fillMaxWidth(),
+                                        textAlign =
+                                            TextAlign.Center,
                                         maxLines = 1,
-                                        style = MaterialTheme.typography.bodySmall.copy(
-                                            fontSize = 12.sp,
-                                            lineHeight = 14.sp,
-                                            fontWeight = FontWeight.Bold,
-                                            color = Color(0xFF64748B)
-                                        )
+                                        style =
+                                            MaterialTheme.typography
+                                                .bodySmall.copy(
+                                                    fontSize = 12.sp,
+                                                    lineHeight = 14.sp,
+                                                    fontWeight =
+                                                        FontWeight.Bold,
+                                                    color =
+                                                        Color(0xFF64748B)
+                                                )
                                     )
                                 }
                             }
+                            }
+
                         }
 
                         AttendanceSparkline(
@@ -448,19 +480,27 @@ internal fun CoachGroupStatsPremiumScreen(
                     )
 
                     PremiumMiniPill(
-                        title = coachTr(isEnglish, "חגורות שונות", "Belt types"),
-                        value = stats.beltCounts.size.toString(),
+                        title = coachTr(
+                            isEnglish,
+                            "חגורות שונות",
+                            "Belt types"
+                        ),
+                        value =
+                            stats.beltCounts.size.toString(),
                         icon = "🥋",
                         accent = Color(0xFF0891B2),
                         isEnglish = isEnglish,
                         modifier = Modifier.weight(1f)
                     )
                 }
-            }
 
-            Surface(
-                color = Color(0xFFFCFDFF),
-                shape = RoundedCornerShape(28.dp),
+                /*
+                 * גם התפלגות החגורות היא חלק
+                 * מאותו תוכן גלול.
+                 */
+                Surface(
+                    color = Color(0xFFFCFDFF),
+                    shape = RoundedCornerShape(28.dp),
                 shadowElevation = 7.dp,
                 tonalElevation = 0.dp,
                 border = BorderStroke(
@@ -578,11 +618,242 @@ internal fun CoachGroupStatsPremiumScreen(
                         }
                     }
                 }
+                }
             }
         }
     }
 }
 
+@Composable
+private fun StatisticsTabsSelector(
+    isEnglish: Boolean,
+    nationalSelected: Boolean,
+    onGroupClick: () -> Unit,
+    onNationalClick: () -> Unit
+) {
+    /*
+     * מעטפת זכוכית נקייה:
+     * ללא מסגרת וללא צל חיצוני כבד.
+     */
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(72.dp),
+        shape = RoundedCornerShape(22.dp),
+        color =
+            MaterialTheme.colorScheme.surface.copy(
+                alpha = 0.76f
+            ),
+        tonalElevation = 0.dp,
+        shadowElevation = 0.dp,
+        border = null
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(5.dp),
+            horizontalArrangement =
+                Arrangement.spacedBy(6.dp),
+            verticalAlignment =
+                Alignment.CenterVertically
+        ) {
+            StatisticsTabButton(
+                title = coachTr(
+                    isEnglish,
+                    "סטטיסטיקת הקבוצה",
+                    "Group statistics"
+                ),
+                selected = !nationalSelected,
+                onClick = onGroupClick,
+                modifier = Modifier.weight(1f)
+            )
+
+            StatisticsTabButton(
+                title = coachTr(
+                    isEnglish,
+                    "סטטיסטיקה ארצית",
+                    "National statistics"
+                ),
+                selected = nationalSelected,
+                onClick = onNationalClick,
+                modifier = Modifier.weight(1f)
+            )
+        }
+    }
+}
+
+@Composable
+private fun StatisticsTabButton(
+    title: String,
+    selected: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val selectedProgress by animateFloatAsState(
+        targetValue =
+            if (selected) {
+                1f
+            } else {
+                0f
+            },
+        animationSpec = tween(
+            durationMillis = 280,
+            easing = FastOutSlowInEasing
+        ),
+        label = "statistics_tab_progress"
+    )
+
+    val scale by animateFloatAsState(
+        targetValue =
+            if (selected) {
+                1f
+            } else {
+                0.975f
+            },
+        animationSpec = tween(
+            durationMillis = 280,
+            easing = FastOutSlowInEasing
+        ),
+        label = "statistics_tab_scale"
+    )
+
+    val selectedGradient =
+        Brush.linearGradient(
+            colors = listOf(
+                Color(0xFF4338CA),
+                Color(0xFF6D28D9),
+                Color(0xFF0284C7)
+            )
+        )
+
+    val transparentGradient =
+        Brush.linearGradient(
+            colors = listOf(
+                Color.Transparent,
+                Color.Transparent
+            )
+        )
+
+    Surface(
+        onClick = onClick,
+        modifier = modifier
+            .fillMaxHeight()
+            .graphicsLayer {
+                scaleX = scale
+                scaleY = scale
+            },
+        shape = RoundedCornerShape(18.dp),
+        color = Color.Transparent,
+        tonalElevation = 0.dp,
+        shadowElevation = 0.dp,
+        border = null
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(
+                    brush =
+                        if (selected) {
+                            selectedGradient
+                        } else {
+                            transparentGradient
+                        },
+                    shape = RoundedCornerShape(18.dp)
+                )
+                .padding(
+                    horizontal = 10.dp,
+                    vertical = 6.dp
+                ),
+            contentAlignment = Alignment.Center
+        ) {
+            /*
+             * שכבת אור עדינה בחלק העליון של
+             * הטאב הפעיל.
+             */
+            if (selected) {
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.TopCenter)
+                        .fillMaxWidth(0.72f)
+                        .height(1.dp)
+                        .background(
+                            color = Color.White.copy(
+                                alpha =
+                                    0.26f *
+                                            selectedProgress
+                            ),
+                            shape =
+                                RoundedCornerShape(
+                                    999.dp
+                                )
+                        )
+                )
+            }
+
+            Column(
+                horizontalAlignment =
+                    Alignment.CenterHorizontally,
+                verticalArrangement =
+                    Arrangement.spacedBy(5.dp)
+            ) {
+                Text(
+                    text = title,
+                    textAlign = TextAlign.Center,
+                    style =
+                        MaterialTheme.typography.labelLarge,
+                    fontWeight =
+                        if (selected) {
+                            FontWeight.ExtraBold
+                        } else {
+                            FontWeight.SemiBold
+                        },
+                    color =
+                        if (selected) {
+                            Color.White
+                        } else {
+                            MaterialTheme
+                                .colorScheme
+                                .onSurfaceVariant
+                        },
+                    maxLines = 2
+                )
+
+                /*
+                 * נקודת חיווי מינימליסטית במקום
+                 * מסגרת סביב הטאב.
+                 */
+                Box(
+                    modifier = Modifier
+                        .width(
+                            if (selected) {
+                                22.dp
+                            } else {
+                                5.dp
+                            }
+                        )
+                        .height(3.dp)
+                        .background(
+                            color =
+                                if (selected) {
+                                    Color.White.copy(
+                                        alpha = 0.88f
+                                    )
+                                } else {
+                                    MaterialTheme
+                                        .colorScheme
+                                        .onSurfaceVariant
+                                        .copy(alpha = 0.18f)
+                                },
+                            shape =
+                                RoundedCornerShape(
+                                    999.dp
+                                )
+                        )
+                )
+            }
+        }
+    }
+}
 
 @Composable
 private fun NationalStatisticsEntryCard(

@@ -9,6 +9,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.ExpandLess
+import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.Insights
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.*
@@ -26,6 +28,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.compositeOver
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
@@ -1213,10 +1216,14 @@ fun SummaryScreen(
         summaryColors.surface
     )
 
-    // צבעים נפרדים ליצירת היררכיה ברורה:
-    // נושא, תת־נושא ותרגילים.
+    /*
+   * צבעי רשימת הנושאים.
+   *
+   * רקע כל שורה משלב את צבע החגורה עם צבע המשטח
+   * של ערכת הנושא, ולכן מתאים גם למצב בהיר וגם לכהה.
+   */
     val summaryTopicTitleColor =
-        summaryColors.primary
+        summaryColors.onSurface
 
     val summarySubTopicTitleColor =
         summaryColors.tertiary
@@ -1226,6 +1233,16 @@ fun SummaryScreen(
 
     val summarySecondaryText =
         summaryColors.onSurfaceVariant
+
+    val summaryTopicRowColor =
+        belt.color
+            .copy(alpha = 0.16f)
+            .compositeOver(summaryColors.surface)
+
+    val summaryTopicDividerColor =
+        belt.color
+            .copy(alpha = 0.42f)
+            .compositeOver(summaryColors.outlineVariant)
 
     val scroll = rememberScrollState()
     val focusManager = LocalFocusManager.current
@@ -1257,6 +1274,19 @@ fun SummaryScreen(
     var showProgress by rememberSaveable { mutableStateOf(false) }
     var showComparison by rememberSaveable { mutableStateOf(false) }
     var loadError by remember { mutableStateOf<String?>(null) }
+
+    /*
+  * מצב פתוח או סגור נשמר בנפרד לכל נושא.
+  * כל הנושאים מתחילים סגורים, והמשתמש פותח
+  * רק את הנושא שהוא מעוניין לראות.
+  */
+    val topicExpandedState = remember(
+        belt,
+        topic,
+        subTopicFilter
+    ) {
+        mutableStateMapOf<String, Boolean>()
+    }
 
     /*
      * כל עוד רשימת התרגילים והסימונים לא מוכנה,
@@ -1881,13 +1911,13 @@ fun SummaryScreen(
 
             val beltRes = remember(belt) {
                 when (belt) {
-                    Belt.WHITE  -> il.kmi.app.R.drawable.belt_white
-                    Belt.YELLOW -> il.kmi.app.R.drawable.belt_yellow
-                    Belt.ORANGE -> il.kmi.app.R.drawable.belt_orange
-                    Belt.GREEN  -> il.kmi.app.R.drawable.belt_green
-                    Belt.BLUE   -> il.kmi.app.R.drawable.belt_blue
-                    Belt.BROWN  -> il.kmi.app.R.drawable.belt_brown
-                    Belt.BLACK  -> il.kmi.app.R.drawable.belt_black
+                    Belt.WHITE  -> il.kmi.app.R.drawable.intro_belt_white
+                    Belt.YELLOW -> il.kmi.app.R.drawable.intro_belt_yellow
+                    Belt.ORANGE -> il.kmi.app.R.drawable.intro_belt_orange
+                    Belt.GREEN  -> il.kmi.app.R.drawable.intro_belt_green
+                    Belt.BLUE   -> il.kmi.app.R.drawable.intro_belt_blue
+                    Belt.BROWN  -> il.kmi.app.R.drawable.intro_belt_brown
+                    Belt.BLACK  -> il.kmi.app.R.drawable.intro_belt_black
                 }
             }
 
@@ -1910,9 +1940,9 @@ fun SummaryScreen(
                     extraActions = { },
                     centerTitle = false,
                     showTopHome = false,
+                    showBackNavigation = false,
+                    alignTitleEnd = true,
 
-                    // ✅ בכוונה "he" רק לסידור הכותרת, כדי לא להזיז את התפריט לשמאל באנגלית.
-                    // הכותרת עצמה נשארת באנגלית לפי isEnglish.
                     currentLang = "he",
 
                     onToggleLanguage = {
@@ -2233,13 +2263,13 @@ fun SummaryScreen(
                     verticalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
                     val beltRes = when (belt) {
-                        Belt.WHITE  -> il.kmi.app.R.drawable.belt_white
-                        Belt.YELLOW -> il.kmi.app.R.drawable.belt_yellow
-                        Belt.ORANGE -> il.kmi.app.R.drawable.belt_orange
-                        Belt.GREEN  -> il.kmi.app.R.drawable.belt_green
-                        Belt.BLUE   -> il.kmi.app.R.drawable.belt_blue
-                        Belt.BROWN  -> il.kmi.app.R.drawable.belt_brown
-                        Belt.BLACK  -> il.kmi.app.R.drawable.belt_black
+                        Belt.WHITE  -> il.kmi.app.R.drawable.intro_belt_white
+                        Belt.YELLOW -> il.kmi.app.R.drawable.intro_belt_yellow
+                        Belt.ORANGE -> il.kmi.app.R.drawable.intro_belt_orange
+                        Belt.GREEN  -> il.kmi.app.R.drawable.intro_belt_green
+                        Belt.BLUE   -> il.kmi.app.R.drawable.intro_belt_blue
+                        Belt.BROWN  -> il.kmi.app.R.drawable.intro_belt_brown
+                        Belt.BLACK  -> il.kmi.app.R.drawable.intro_belt_black
                     }
 
                     val beltLabel = if (isEnglish) {
@@ -2539,7 +2569,7 @@ fun SummaryScreen(
                         .weight(1f)
                         .verticalScroll(scroll)
                         .padding(bottom = 88.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                    verticalArrangement = Arrangement.spacedBy(0.dp)
                 ) {
                     if (itemsByTopic.isEmpty()) {
                         Card(
@@ -2576,6 +2606,9 @@ fun SummaryScreen(
                             val (done, total) = topicStats[topicTitle] ?: (0 to 0)
                             val pct = if (total > 0) (done * 100 / total) else 0
 
+                            val isTopicExpanded =
+                                topicExpandedState[topicTitle] ?: false
+
                             val rowsBySubTopic = items
                                 .groupBy { row ->
                                     row.subTopicTitle?.trim().orEmpty()
@@ -2587,21 +2620,20 @@ fun SummaryScreen(
                             Card(
                                 modifier = Modifier.fillMaxWidth(),
                                 colors = CardDefaults.cardColors(
-                                    containerColor = summaryCardColor
+                                    containerColor = summaryTopicRowColor
                                 ),
-                                elevation = CardDefaults.cardElevation(defaultElevation = 4.dp),
-                                shape = RoundedCornerShape(18.dp)
+                                elevation = CardDefaults.cardElevation(
+                                    defaultElevation = 0.dp
+                                ),
+                                shape = RoundedCornerShape(0.dp)
                             ) {
                                 Column(
                                     modifier = Modifier
                                         .fillMaxWidth()
-                                        .background(
-                                            brush = Brush.verticalGradient(
-                                                colors = summaryCardGradient
-                                            ),
-                                            shape = RoundedCornerShape(18.dp)
-                                        )
-                                        .padding(horizontal = 12.dp, vertical = 12.dp),
+                                        .padding(
+                                            horizontal = 12.dp,
+                                            vertical = 8.dp
+                                        ),
                                     verticalArrangement = Arrangement.spacedBy(8.dp)
                                 ) {
                                     Row(
@@ -2631,9 +2663,42 @@ fun SummaryScreen(
                                             color =
                                                 summaryTopicTitleColor
                                         )
+
+                                        IconButton(
+                                            onClick = {
+                                                topicExpandedState[topicTitle] =
+                                                    !isTopicExpanded
+                                            },
+                                            modifier = Modifier.size(40.dp)
+                                        ) {
+                                            Icon(
+                                                imageVector =
+                                                    if (isTopicExpanded) {
+                                                        Icons.Filled.ExpandLess
+                                                    } else {
+                                                        Icons.Filled.ExpandMore
+                                                    },
+                                                contentDescription =
+                                                    if (isTopicExpanded) {
+                                                        tr(
+                                                            "סגירת כרטיס הנושא",
+                                                            "Collapse topic card"
+                                                        )
+                                                    } else {
+                                                        tr(
+                                                            "פתיחת כרטיס הנושא",
+                                                            "Expand topic card"
+                                                        )
+                                                    },
+                                                tint = belt.color,
+                                                modifier = Modifier.size(26.dp)
+                                            )
+                                        }
                                     }
 
-                                    if (items.isEmpty()) {
+                                    if (!isTopicExpanded) {
+                                        // במצב סגור מוצגת רק כותרת הנושא.
+                                    } else if (items.isEmpty()) {
                                         Text(
                                             text = tr(
                                                 "אין פריטים בנושא הזה.",
@@ -3074,6 +3139,12 @@ fun SummaryScreen(
                                             }
                                         }
                                     }
+
+                                    HorizontalDivider(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        thickness = 1.dp,
+                                        color = summaryTopicDividerColor
+                                    )
                                 }
                             }
                         }

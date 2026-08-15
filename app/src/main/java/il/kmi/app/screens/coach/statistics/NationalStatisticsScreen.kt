@@ -70,6 +70,8 @@ import java.util.Locale
 fun NationalStatisticsScreen(
     isEnglish: Boolean,
     onBack: () -> Unit,
+    modifier: Modifier = Modifier,
+    embedded: Boolean = false,
     onOpenDrawer: () -> Unit = {
         il.kmi.app.ui.DrawerBridge.open()
     },
@@ -163,68 +165,73 @@ fun NationalStatisticsScreen(
         LocalLayoutDirection provides screenDirection
     ) {
         Scaffold(
+            modifier = modifier,
             topBar = {
-                val topBarContext = LocalContext.current
+                /*
+                 * כאשר המסך מוצג בתוך הטאב, הכותרת
+                 * הגלובלית כבר מוצגת על ידי המסך המארח.
+                 */
+                if (!embedded) {
+                    val topBarContext =
+                        LocalContext.current
 
-                val topBarLanguageManager = remember(
-                    topBarContext
-                ) {
-                    AppLanguageManager(topBarContext)
-                }
+                    val topBarLanguageManager =
+                        remember(topBarContext) {
+                            AppLanguageManager(
+                                topBarContext
+                            )
+                        }
 
-                KmiTopBar(
-                    title = tr(
-                        isEnglish,
-                        "סטטיסטיקה ארצית",
-                        "National statistics"
-                    ),
-                    onOpenDrawer = onOpenDrawer,
-                    onHome = onOpenHome,
-                    showTopShare = false,
-                    onShare = {},
-                    showTopHome = false,
-                    showRoleStatus = false,
-                    lockSearch = false,
+                    KmiTopBar(
+                        title = tr(
+                            isEnglish,
+                            "סטטיסטיקה",
+                            "Statistics"
+                        ),
+                        onOpenDrawer = onOpenDrawer,
+                        onHome = onOpenHome,
+                        showTopShare = false,
+                        onShare = {},
+                        showTopHome = false,
+                        showRoleStatus = false,
+                        lockSearch = false,
+                        showBottomActions = true,
 
-                    /*
-                     * מפעיל את סרגל הפעולות הגלובלי,
-                     * כולל המיקרופון והפקודות הקוליות.
-                     */
-                    showBottomActions = true,
-
-                    currentLang =
-                        if (
-                            topBarLanguageManager
-                                .getCurrentLanguage() ==
-                            AppLanguage.ENGLISH
-                        ) {
-                            "en"
-                        } else {
-                            "he"
-                        },
-
-                    onToggleLanguage = {
-                        val newLanguage =
+                        currentLang =
                             if (
                                 topBarLanguageManager
                                     .getCurrentLanguage() ==
-                                AppLanguage.HEBREW
-                            ) {
                                 AppLanguage.ENGLISH
+                            ) {
+                                "en"
                             } else {
-                                AppLanguage.HEBREW
-                            }
+                                "he"
+                            },
 
-                        topBarLanguageManager.setLanguage(
-                            newLanguage
-                        )
+                        onToggleLanguage = {
+                            val newLanguage =
+                                if (
+                                    topBarLanguageManager
+                                        .getCurrentLanguage() ==
+                                    AppLanguage.HEBREW
+                                ) {
+                                    AppLanguage.ENGLISH
+                                } else {
+                                    AppLanguage.HEBREW
+                                }
 
-                        (topBarContext as? Activity)
-                            ?.recreate()
-                    }
-                )
+                            topBarLanguageManager
+                                .setLanguage(
+                                    newLanguage
+                                )
+
+                            (topBarContext as? Activity)
+                                ?.recreate()
+                        }
+                    )
+                }
             },
-            containerColor = Color(0xFFF3F7FC)
+            containerColor = Color.Transparent
         ) { innerPadding ->
             Box(
                 modifier = Modifier

@@ -125,25 +125,25 @@ private fun BeltPill(
     ): Int {
         return when (beltValue) {
             Belt.WHITE ->
-                R.drawable.belt_white
+                R.drawable.intro_belt_white
 
             Belt.YELLOW ->
-                R.drawable.belt_yellow
+                R.drawable.intro_belt_yellow
 
             Belt.ORANGE ->
-                R.drawable.belt_orange
+                R.drawable.intro_belt_orange
 
             Belt.GREEN ->
-                R.drawable.belt_green
+                R.drawable.intro_belt_green
 
             Belt.BLUE ->
-                R.drawable.belt_blue
+                R.drawable.intro_belt_blue
 
             Belt.BROWN ->
-                R.drawable.belt_brown
+                R.drawable.intro_belt_brown
 
             Belt.BLACK ->
-                R.drawable.belt_black
+                R.drawable.intro_belt_black
         }
     }
 

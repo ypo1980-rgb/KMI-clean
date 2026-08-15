@@ -1,4 +1,7 @@
-@file:OptIn(ExperimentalMaterial3Api::class)
+@file:OptIn(
+    ExperimentalMaterial3Api::class,
+    androidx.compose.foundation.ExperimentalFoundationApi::class
+)
 
 package il.kmi.app.ui
 
@@ -18,6 +21,7 @@ import androidx.compose.animation.core.spring
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.basicMarquee
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -25,7 +29,6 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.BarChart
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.History
@@ -221,6 +224,7 @@ fun KmiTopBar(
     showRoleBadge: Boolean = true,
     lockSearch: Boolean = false,
     lockHome: Boolean = false,
+    showBackNavigation: Boolean = true,
     homeDisabledToast: String? = null,
     showCoachBroadcastFab: Boolean = true,
     requireRegistrationForCoachBroadcast: Boolean = true,
@@ -231,9 +235,6 @@ fun KmiTopBar(
     alignTitleEnd: Boolean = false,
     showTopHome: Boolean = true,
     showTopSearch: Boolean = true,
-
-    // ברירת מחדל: לא מציגים אייקון שיתוף בכותרת העליונה.
-    // השיתוף עדיין קיים בסרגל האייקונים התחתון.
     showTopShare: Boolean = false,
 
     isInsideAssistant: Boolean = false,
@@ -276,9 +277,8 @@ fun KmiTopBar(
     /*
      * תמונת חגורה אוטומטית לפי כותרת המסך.
      *
-     * משתמשים רק במשאבי belt_* בעלי רקע שקוף.
-     * אין להשתמש במשאבי intro_belt_* משום שהרקע
-     * הלבן מוטמע בתוך קובצי התמונה שלהם.
+     * כל תמונות החגורות נלקחות מהסדרה החדשה
+     * והאחידה intro_belt_*.
      */
     val resolvedTopBeltIconRes =
         remember(
@@ -292,49 +292,49 @@ fun KmiTopBar(
                                 "White",
                                 ignoreCase = true
                             ) ->
-                        R.drawable.belt_white
+                        R.drawable.intro_belt_white
 
                     title.contains("צהובה") ||
                             title.contains(
                                 "Yellow",
                                 ignoreCase = true
                             ) ->
-                        R.drawable.belt_yellow
+                        R.drawable.intro_belt_yellow
 
                     title.contains("כתומה") ||
                             title.contains(
                                 "Orange",
                                 ignoreCase = true
                             ) ->
-                        R.drawable.belt_orange
+                        R.drawable.intro_belt_orange
 
                     title.contains("ירוקה") ||
                             title.contains(
                                 "Green",
                                 ignoreCase = true
                             ) ->
-                        R.drawable.belt_green
+                        R.drawable.intro_belt_green
 
                     title.contains("כחולה") ||
                             title.contains(
                                 "Blue",
                                 ignoreCase = true
                             ) ->
-                        R.drawable.belt_blue
+                        R.drawable.intro_belt_blue
 
                     title.contains("חומה") ||
                             title.contains(
                                 "Brown",
                                 ignoreCase = true
                             ) ->
-                        R.drawable.belt_brown
+                        R.drawable.intro_belt_brown
 
                     title.contains("שחורה") ||
                             title.contains(
                                 "Black",
                                 ignoreCase = true
                             ) ->
-                        R.drawable.belt_black
+                        R.drawable.intro_belt_black
 
                     else ->
                         null
@@ -774,8 +774,31 @@ fun KmiTopBar(
     val quickActionsWidth = 68.dp
 
     // Back בטוח
-    val backDispatcher = LocalOnBackPressedDispatcherOwner.current?.onBackPressedDispatcher
-    val activity: Activity? = remember(ctx) { ctx.safeFindActivity() }
+    val backDispatcher =
+        LocalOnBackPressedDispatcherOwner
+            .current
+            ?.onBackPressedDispatcher
+
+    val activity: Activity? =
+        remember(ctx) {
+            ctx.safeFindActivity()
+        }
+
+    /*
+     * במסך הבית lockHome הוא true ולכן לא מציגים
+     * חזרה שעלולה לסגור או למזער את האפליקציה.
+     *
+     * בכל מסך אחר מספיק שקיים onBack מקומי או
+     * OnBackPressedDispatcher גלובלי.
+     */
+    val shouldShowGlobalBack =
+        showBackNavigation &&
+                !lockHome &&
+                (
+                        onBack != null ||
+                                backDispatcher != null
+                        )
+
     fun performBackSafe() {
         when {
             onBack != null -> onBack.invoke()
@@ -902,29 +925,76 @@ fun KmiTopBar(
             )
         )
 
-        // ✅ כותרת Overlay ממורכזת לפי כל רוחב הסרגל,
-        // ללא תלות באייקון התפריט או באייקונים בצדדים.
+        /*
+        * הכותרת ממורכזת כברירת מחדל.
+        *
+        * כאשר alignTitleEnd פעיל, משאירים יותר מקום בצד
+        * השמאלי של תמונת החגורה ומעבירים את הכותרת
+        * פיזית ימינה — לפני אייקון התפריט.
+        */
         Box(
             modifier = Modifier
                 .align(Alignment.TopCenter)
                 .fillMaxWidth()
                 .height(topBarHeight)
+                .then(
+                    if (alignTitleEnd) {
+                        Modifier.absolutePadding(
+                            left = 104.dp,
+                            right = 58.dp
+                        )
+                    } else {
+                        Modifier.padding(
+                            start = 58.dp,
+                            end = 58.dp
+                        )
+                    }
+                )
                 .padding(
-                    start = 58.dp,
-                    end = 58.dp,
-                    bottom = if (shouldShowRolePillBelowTitle) 4.dp else 0.dp
+                    bottom =
+                        if (shouldShowRolePillBelowTitle) {
+                            4.dp
+                        } else {
+                            0.dp
+                        }
                 )
                 .zIndex(12f),
-            contentAlignment = Alignment.Center
+            contentAlignment =
+                if (alignTitleEnd) {
+                    AbsoluteAlignment.CenterRight
+                } else {
+                    Alignment.Center
+                }
         ) {
             Text(
                 text = title,
                 style = KmiTypography.screenTitle,
                 maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                textAlign = TextAlign.Center,
+                softWrap = false,
+                overflow =
+                    if (alignTitleEnd) {
+                        TextOverflow.Clip
+                    } else {
+                        TextOverflow.Ellipsis
+                    },
+                textAlign =
+                    if (alignTitleEnd) {
+                        TextAlign.Right
+                    } else {
+                        TextAlign.Center
+                    },
                 color = topBarTitleColor,
-                modifier = Modifier.fillMaxWidth()
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .then(
+                        if (alignTitleEnd) {
+                            Modifier.basicMarquee(
+                                iterations = Int.MAX_VALUE
+                            )
+                        } else {
+                            Modifier
+                        }
+                    )
             )
         }
 
@@ -942,6 +1012,10 @@ fun KmiTopBar(
                     )
                     .zIndex(30f)
             ) {
+                val isYellowBeltIcon =
+                    resolvedTopBeltIconRes ==
+                            R.drawable.intro_belt_yellow
+
                 Image(
                     painter = painterResource(
                         id = resolvedTopBeltIconRes
@@ -952,25 +1026,30 @@ fun KmiTopBar(
                         .width(82.dp)
                         .height(38.dp)
                         .graphicsLayer {
+                            /*
+                             * בקובץ החגורה הצהובה יש יותר שטח
+                             * שקוף בצדדים, ולכן היא נראית קטנה
+                             * יותר משאר תמונות הסדרה.
+                             */
+                            scaleX =
+                                if (isYellowBeltIcon) {
+                                    1.55f
+                                } else {
+                                    1f
+                                }
+
                             rotationZ =
                                 if (isEnglish) {
-                                    6f
+                                    20f
                                 } else {
-                                    -6f
+                                    -20f
                                 }
                         }
                 )
             }
         }
 
-        /*
-         * חזרה ממוקמת בפינה הנגדית לתפריט,
-         * מעל תג מצב מאמן / מתאמן.
-         *
-         * היא אינה חלק משורת הכותרת ולכן אינה
-         * מזיזה את הכותרת ואינה מצמצמת את מקומה.
-         */
-        if (onBack != null) {
+        if (shouldShowGlobalBack) {
             val backIconAlignment =
                 if (isEnglish) {
                     AbsoluteAlignment.TopRight
@@ -1002,6 +1081,11 @@ fun KmiTopBar(
                     isEnglish = isEnglish,
                     useCloseIcon = useCloseIcon,
                     onClick = {
+                        /*
+                         * סוגרים קודם את סרגל הפעולות,
+                         * ורק לאחר מכן חוזרים ליעד הקודם.
+                         */
+                        quickActionsExpanded = false
                         performBackSafe()
                     }
                 )
