@@ -187,7 +187,6 @@ fun AttendanceGroupStatsScreen(
                                 date = report.date.toString(),
                                 total = report.totalMembers,
                                 present = report.presentCount,
-                                excused = report.excusedCount,
                                 absent = report.absentCount,
                                 pct = report.percentPresent
                             )
@@ -469,13 +468,13 @@ fun AttendanceGroupStatsScreen(
                                         dateText = r.date.toString(),
                                         total = r.totalMembers,
                                         present = r.presentCount,
-                                        excused = r.excusedCount,
                                         absent = r.absentCount,
                                         pct = r.percentPresent,
                                         isEnglish = isEnglish,
                                         isDetailsExpanded = detailsExpanded,
                                         onToggleDetails = {
-                                            expandedReportDetails[r.id] = !detailsExpanded
+                                            expandedReportDetails[r.id] =
+                                                !detailsExpanded
                                         },
                                         modifier = Modifier.weight(1f)
                                     )
@@ -726,7 +725,6 @@ private data class AttendanceStatsPdfReport(
     val date: String,
     val total: Int,
     val present: Int,
-    val excused: Int,
     val absent: Int,
     val pct: Int
 )
@@ -1059,8 +1057,16 @@ private fun createAttendanceStatsPdf(
         )
 
         valuePaint.textAlign = Paint.Align.RIGHT
-        canvas.drawText(tr("סה״כ מתאמנים: ${report.total}", "Total trainees: ${report.total}"), mid - 22f, top + 36f, valuePaint)
-        canvas.drawText(tr("מוצדקים: ${report.excused}", "Excused: ${report.excused}"), mid - 22f, top + 60f, valuePaint)
+
+        canvas.drawText(
+            tr(
+                "סה״כ מתאמנים: ${report.total}",
+                "Total trainees: ${report.total}"
+            ),
+            mid - 22f,
+            top + 48f,
+            valuePaint
+        )
 
         return bottom + 8f
     }
@@ -1609,7 +1615,6 @@ private fun ReportRowCard(
     dateText: String,
     total: Int,
     present: Int,
-    excused: Int,
     absent: Int,
     pct: Int,
     isEnglish: Boolean,
@@ -1695,16 +1700,13 @@ private fun ReportRowCard(
                     value = total.toString(),
                     modifier = Modifier.weight(1f)
                 )
+
                 MiniReportStat(
                     label = tr("הגיעו", "Present"),
                     value = present.toString(),
                     modifier = Modifier.weight(1f)
                 )
-                MiniReportStat(
-                    label = tr("מוצדקים", "Excused"),
-                    value = excused.toString(),
-                    modifier = Modifier.weight(1f)
-                )
+
                 MiniReportStat(
                     label = tr("נעדרו", "Absent"),
                     value = absent.toString(),
@@ -1858,18 +1860,26 @@ private fun ReportAttendanceDetailsCard(
         records.associate { it.memberId to it.status }
     }
 
-    val presentMembers = remember(realMembers, statusByMemberId) {
-        realMembers.filter { statusByMemberId[it.id] == AttendanceStatus.PRESENT }
+    val presentMembers = remember(
+        realMembers,
+        statusByMemberId
+    ) {
+        realMembers.filter { member ->
+            statusByMemberId[member.id] ==
+                    AttendanceStatus.PRESENT
+        }
     }
 
-    val excusedMembers = remember(realMembers, statusByMemberId) {
-        realMembers.filter { statusByMemberId[it.id] == AttendanceStatus.EXCUSED }
-    }
-
-    val absentMembers = remember(realMembers, statusByMemberId) {
+    val absentMembers = remember(
+        realMembers,
+        statusByMemberId
+    ) {
         realMembers.filter { member ->
             val status = statusByMemberId[member.id]
-            status == AttendanceStatus.ABSENT || status == null
+
+            status == AttendanceStatus.ABSENT ||
+                    status == AttendanceStatus.EXCUSED ||
+                    status == null
         }
     }
 
@@ -1925,23 +1935,21 @@ private fun ReportAttendanceDetailsCard(
             AttendanceStatusSection(
                 title = tr("הגיעו", "Present"),
                 names = presentMembers.map { it.displayName },
-                emptyText = tr("אין מתאמנים שסומנו הגיעו", "No trainees marked present"),
+                emptyText = tr(
+                    "אין מתאמנים שסומנו הגיעו",
+                    "No trainees marked present"
+                ),
                 color = Color(0xFF22C55E),
-                isEnglish = isEnglish
-            )
-
-            AttendanceStatusSection(
-                title = tr("מוצדקים", "Excused"),
-                names = excusedMembers.map { it.displayName },
-                emptyText = tr("אין מתאמנים שסומנו מוצדקים", "No trainees marked excused"),
-                color = Color(0xFFF59E0B),
                 isEnglish = isEnglish
             )
 
             AttendanceStatusSection(
                 title = tr("לא הגיעו", "Absent"),
                 names = absentMembers.map { it.displayName },
-                emptyText = tr("אין מתאמנים שלא הגיעו", "No absent trainees"),
+                emptyText = tr(
+                    "אין מתאמנים שלא הגיעו",
+                    "No absent trainees"
+                ),
                 color = Color(0xFFEF4444),
                 isEnglish = isEnglish
             )

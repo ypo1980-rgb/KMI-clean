@@ -60,6 +60,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import il.kmi.app.attendance.data.GroupMember
+import il.kmi.app.training.TrainingCatalog
 import il.kmi.shared.localization.AppLanguage
 import il.kmi.shared.localization.AppLanguageManager
 import java.time.YearMonth
@@ -99,16 +100,34 @@ fun AttendanceScreen(
     val isDarkMode =
         MaterialTheme.colorScheme.background.luminance() < 0.5f
 
+    /*
+     * לאחר שמירת הדיווח מסתירים את רשימת השמות
+     * ואת כפתורי הסימון, אך נשארים באותו מסך.
+     *
+     * שינוי תאריך, סניף או קבוצה פותח אוטומטית
+     * מצב רישום חדש.
+     */
+    var isReportSaved by rememberSaveable(
+        date,
+        branch,
+        groupKey
+    ) {
+        mutableStateOf(false)
+    }
+
     LaunchedEffect(vm) {
         vm.events.collect { ev ->
             when (ev) {
-                is UiEvent.ReportSaved -> onOpenGroupStats(ev.branch, ev.groupKey)
-                is UiEvent.ReportSaveFailed -> Unit
+                is UiEvent.ReportSaved -> {
+                    isReportSaved = true
+                }
+
+                is UiEvent.ReportSaveFailed -> {
+                    isReportSaved = false
+                }
             }
         }
     }
-
-
 
     // ✅ מקור אמת למסך: הבחירה הפעילה מתוך ה-ViewModel
     // לא חותכים יותר CSV ולא לוקחים אוטומטית רק את הסניף הראשון.
@@ -268,13 +287,6 @@ fun AttendanceScreen(
         }
     }
 
-    val hebDate = remember(date, isEnglish) {
-        val locale = if (isEnglish) Locale.ENGLISH else Locale("he", "IL")
-        date.format(
-            DateTimeFormatter.ofPattern("EEEE · d.M.yyyy", locale)
-        )
-    }
-
     // תרגיל שנבחר מהחיפוש (לפתיחת דיאלוג ההסבר)
     var pickedKey by rememberSaveable { mutableStateOf<String?>(null) }
 
@@ -303,12 +315,55 @@ fun AttendanceScreen(
 
     val hasRealMembers = displayMembers.isNotEmpty()
 
+    /*
+     * group = null בודק אם בסניף מתקיים אימון
+     * כלשהו בתאריך הנבחר, ללא תלות בקבוצה.
+     */
+    val hasBranchTrainingOnSelectedDate =
+        remember(
+            state.date,
+            selectedBranch
+        ) {
+            TrainingCatalog.hasTrainingOn(
+                date = state.date,
+                branch = selectedBranch,
+                group = null
+            )
+        }
+
+    val branchFieldText =
+        if (hasBranchTrainingOnSelectedDate) {
+            selectedBranch
+        } else {
+            tr(
+                "אין סניף פעיל בתאריך הנבחר",
+                "No active branch on the selected date"
+            )
+        }
+
+    val groupFieldText =
+        if (hasBranchTrainingOnSelectedDate) {
+            selectedGroup
+        } else {
+            tr(
+                "אין קבוצה פעילה בתאריך הנבחר",
+                "No active group on the selected date"
+            )
+        }
+
     val totalMembers = displayMembers.size
-    val presentCount = displayMembers.count { statusById[it.id] == AttendanceStatus.PRESENT }
-    val absentCount  = displayMembers.count { statusById[it.id] == AttendanceStatus.ABSENT }
-    val excusedCount = displayMembers.count { statusById[it.id] == AttendanceStatus.EXCUSED }
+    val presentCount = displayMembers.count {
+        statusById[it.id] == AttendanceStatus.PRESENT
+    }
+    val absentCount = displayMembers.count {
+        statusById[it.id] == AttendanceStatus.ABSENT
+    }
     val attendancePct: Double =
-        if (totalMembers > 0) presentCount * 100.0 / totalMembers else 0.0
+        if (totalMembers > 0) {
+            presentCount * 100.0 / totalMembers
+        } else {
+            0.0
+        }
 
     Scaffold(
         topBar = {
@@ -356,26 +411,30 @@ fun AttendanceScreen(
             )
                  },
         floatingActionButton = {
-            FloatingActionButton(
-                onClick = { addDialog = true },
-                containerColor = Color(0xFF0EA5E9),
-                contentColor = Color.White,
-                shape = CircleShape,
-                modifier = Modifier
-                    .navigationBarsPadding()
-                    .padding(bottom = 8.dp)
-                    .offset(y = (-28).dp) // ✅ מרים עוד למעלה (אפשר לשחק עם -24/-32)
-            ) {
-                Icon(
-                    imageVector = Icons.Filled.Add,
-                    contentDescription = tr(
-                        "הוספת מתאמן",
-                        "Add trainee"
-                    ),
-                    modifier = Modifier.size(
-                        KmiIconSize.large
+            if (!isReportSaved) {
+                FloatingActionButton(
+                    onClick = {
+                        addDialog = true
+                    },
+                    containerColor = Color(0xFF0EA5E9),
+                    contentColor = Color.White,
+                    shape = CircleShape,
+                    modifier = Modifier
+                        .navigationBarsPadding()
+                        .padding(bottom = 8.dp)
+                        .offset(y = (-28).dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.Add,
+                        contentDescription = tr(
+                            "הוספת מתאמן",
+                            "Add trainee"
+                        ),
+                        modifier = Modifier.size(
+                            KmiIconSize.large
+                        )
                     )
-                )
+                }
             }
         },
         containerColor = Color.Transparent,
@@ -413,32 +472,40 @@ fun AttendanceScreen(
                 modifier = Modifier
                     .padding(p)
                     .fillMaxSize()
-                    .padding(horizontal = 16.dp, vertical = 8.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-                contentPadding = PaddingValues(bottom = 120.dp) // ✅ מקום ל-FAB + כפתור שמירה
+                    .padding(
+                        start = 16.dp,
+                        top = 36.dp,
+                        end = 16.dp,
+                        bottom = 8.dp
+                    ),
+                verticalArrangement =
+                    Arrangement.spacedBy(8.dp),
+                contentPadding = PaddingValues(
+                    bottom = 120.dp
+                )
             ) {
                 item {
                     AttendanceSelectionCard(
                         selectedDate = state.date,
                         selectedBranch = selectedBranch,
+                        branchDisplayText = branchFieldText,
                         selectedGroup = selectedGroup,
+                        groupDisplayText = groupFieldText,
+                        hasBranchTrainingOnSelectedDate =
+                            hasBranchTrainingOnSelectedDate,
                         availableBranches = state.availableBranches,
                         availableGroups = state.availableGroups,
-                        isEnglish = isEnglish,
-                        onDateClick = { showDatePicker = true },
-                        onBranchSelected = { vm.selectBranch(it) },
-                        onGroupSelected = { vm.selectGroup(it) }
-                    )
-                }
-
-                item {
-                    AttendanceHeroCard(
-                        branch = state.branch,
-                        groupKey = state.groupKey,
-                        hebDate = hebDate,
-                        totalMembers = totalMembers,
                         attendancePct = attendancePct,
-                        isEnglish = isEnglish
+                        isEnglish = isEnglish,
+                        onDateClick = {
+                            showDatePicker = true
+                        },
+                        onBranchSelected = { selectedBranch ->
+                            vm.selectBranch(selectedBranch)
+                        },
+                        onGroupSelected = { selectedGroup ->
+                            vm.selectGroup(selectedGroup)
+                        }
                     )
                 }
 
@@ -446,20 +513,20 @@ fun AttendanceScreen(
                     AttendanceSummaryCard(
                         totalMembers = totalMembers,
                         presentCount = presentCount,
-                        excusedCount = excusedCount,
                         absentCount = absentCount,
                         attendancePct = attendancePct,
                         isEnglish = isEnglish
                     )
                 }
 
-                item {
-                    Text(
-                        text = tr(
-                            "סימון נוכחות למתאמנים",
-                            "Mark trainee attendance"
-                        ),
-                        style = KmiTypography.sectionTitle.copy(
+                if (!isReportSaved) {
+                    item {
+                        Text(
+                            text = tr(
+                                "סימון נוכחות למתאמנים",
+                                "Mark trainee attendance"
+                            ),
+                            style = KmiTypography.sectionTitle.copy(
                             fontWeight = FontWeight.ExtraBold
                         ),
                         color =
@@ -638,7 +705,12 @@ fun AttendanceScreen(
                                                     "סטטיסטיקה",
                                                     "Statistics"
                                                 ),
-                                                tint = Color(0xFF38BDF8),
+                                                tint =
+                                                    if (isDarkMode) {
+                                                        Color(0xFFF0ABFC)
+                                                    } else {
+                                                        Color(0xFFA21CAF)
+                                                    },
                                                 modifier = Modifier.size(
                                                     KmiIconSize.medium
                                                 )
@@ -684,6 +756,85 @@ fun AttendanceScreen(
                         }
                     }
                 }
+                } else {
+                    item {
+                        Surface(
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(22.dp),
+                            color =
+                                if (isDarkMode) {
+                                    MaterialTheme.colorScheme.surface
+                                } else {
+                                    Color(0xFFEAF2FF)
+                                },
+                            border = BorderStroke(
+                                width = 1.dp,
+                                color =
+                                    if (isDarkMode) {
+                                        MaterialTheme.colorScheme.outline
+                                    } else {
+                                        Color(0xFF93C5FD)
+                                    }
+                            ),
+                            tonalElevation = 0.dp
+                        ) {
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(18.dp),
+                                horizontalAlignment =
+                                    Alignment.CenterHorizontally,
+                                verticalArrangement =
+                                    Arrangement.spacedBy(12.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Filled.Check,
+                                    contentDescription = null,
+                                    tint = Color(0xFF22C55E),
+                                    modifier = Modifier.size(
+                                        KmiIconSize.large
+                                    )
+                                )
+
+                                Text(
+                                    text = tr(
+                                        "דיווח הנוכחות נשמר בהצלחה",
+                                        "Attendance report saved successfully"
+                                    ),
+                                    style = KmiTypography.cardTitle.copy(
+                                        fontWeight =
+                                            FontWeight.ExtraBold
+                                    ),
+                                    color =
+                                        if (isDarkMode) {
+                                            MaterialTheme.colorScheme.onSurface
+                                        } else {
+                                            Color(0xFF1E2A3D)
+                                        },
+                                    textAlign = TextAlign.Center,
+                                    modifier = Modifier.fillMaxWidth()
+                                )
+
+                                Text(
+                                    text = tr(
+                                        "ניתן לפתוח את הדיווח מחדש לצורך עריכה.",
+                                        "You can reopen the report to edit it."
+                                    ),
+                                    style = KmiTypography.secondary,
+                                    color =
+                                        if (isDarkMode) {
+                                            MaterialTheme.colorScheme
+                                                .onSurfaceVariant
+                                        } else {
+                                            Color(0xFF475569)
+                                        },
+                                    textAlign = TextAlign.Center,
+                                    modifier = Modifier.fillMaxWidth()
+                                )
+                            }
+                        }
+                    }
+                }
 
                 item {
                     Row(
@@ -719,34 +870,72 @@ fun AttendanceScreen(
 
                         Button(
                             onClick = {
-                                if (hasRealMembers) {
+                                if (isReportSaved) {
+                                    /*
+                                     * מחזירים את השמות ואת הסימונים
+                                     * שכבר נמצאים ב־ViewModel.
+                                     */
+                                    isReportSaved = false
+                                } else if (hasRealMembers) {
                                     vm.saveTodayReport()
                                 }
                             },
-                            enabled = hasRealMembers,
+                            enabled =
+                                isReportSaved ||
+                                        hasRealMembers,
                             modifier = Modifier
                                 .weight(1f)
                                 .heightIn(min = 52.dp),
                             shape = RoundedCornerShape(20.dp),
                             contentPadding = compactPadding,
                             colors = ButtonDefaults.buttonColors(
-                                containerColor = Color(0xFF16A34A),
+                                containerColor =
+                                    if (isReportSaved) {
+                                        Color(0xFF0284C7)
+                                    } else {
+                                        Color(0xFF16A34A)
+                                    },
                                 contentColor = Color.White,
-                                disabledContainerColor = Color(0xFF475569),
-                                disabledContentColor = Color(0xFFCBD5E1)
+                                disabledContainerColor =
+                                    Color(0xFF475569),
+                                disabledContentColor =
+                                    Color(0xFFCBD5E1)
                             )
                         ) {
-                            CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) {
+                            CompositionLocalProvider(
+                                LocalLayoutDirection provides
+                                        LayoutDirection.Rtl
+                            ) {
                                 Icon(
-                                    imageVector = Icons.Filled.Save,
+                                    imageVector =
+                                        if (isReportSaved) {
+                                            Icons.Filled.Check
+                                        } else {
+                                            Icons.Filled.Save
+                                        },
+
                                     contentDescription = null,
                                     modifier = Modifier.size(
                                         KmiIconSize.small
                                     ),
                                     tint = LocalContentColor.current
                                 )
+
                                 Spacer(Modifier.width(6.dp))
-                                BtnText(tr("שמור", "Save"))
+
+                                BtnText(
+                                    if (isReportSaved) {
+                                        tr(
+                                            "עריכת דיווח",
+                                            "Edit report"
+                                        )
+                                    } else {
+                                        tr(
+                                            "שמור",
+                                            "Save"
+                                        )
+                                    }
+                                )
                             }
                         }
 
@@ -962,8 +1151,21 @@ fun AttendanceScreen(
                                             overflow = TextOverflow.Ellipsis
                                         )
 
+                                        val canMoveToNextMonth =
+                                            visibleMonth <
+                                                    YearMonth.from(
+                                                        LocalDate.now()
+                                                    )
+
                                         IconButton(
-                                            onClick = { visibleMonth = visibleMonth.plusMonths(1) }
+                                            onClick = {
+                                                if (canMoveToNextMonth) {
+                                                    visibleMonth =
+                                                        visibleMonth.plusMonths(1)
+                                                }
+                                            },
+                                            enabled =
+                                                canMoveToNextMonth
                                         ) {
                                             Text(
                                                 text =
@@ -972,11 +1174,19 @@ fun AttendanceScreen(
                                                     } else {
                                                         "‹"
                                                     },
-                                                style = KmiTypography.metric.copy(
-                                                    fontWeight =
-                                                        FontWeight.Bold
-                                                ),
-                                                color = Color.White
+                                                style =
+                                                    KmiTypography.metric.copy(
+                                                        fontWeight =
+                                                            FontWeight.Bold
+                                                    ),
+                                                color =
+                                                    if (canMoveToNextMonth) {
+                                                        Color.White
+                                                    } else {
+                                                        Color.White.copy(
+                                                            alpha = 0.25f
+                                                        )
+                                                    }
                                             )
                                         }
                                     }
@@ -1033,9 +1243,23 @@ fun AttendanceScreen(
                                                 horizontalArrangement = Arrangement.SpaceBetween
                                             ) {
                                                 week.forEach { day ->
-                                                    val cellDate = day?.let { visibleMonth.atDay(it) }
-                                                    val isSelected = cellDate == selectedDate
-                                                    val isToday = cellDate == LocalDate.now()
+                                                    val cellDate =
+                                                        day?.let {
+                                                            visibleMonth.atDay(it)
+                                                        }
+
+                                                    val today =
+                                                        LocalDate.now()
+
+                                                    val isSelected =
+                                                        cellDate == selectedDate
+
+                                                    val isToday =
+                                                        cellDate == today
+
+                                                    val isFuture =
+                                                        cellDate?.isAfter(today) ==
+                                                                true
 
                                                     Box(
                                                         modifier = Modifier
@@ -1052,16 +1276,33 @@ fun AttendanceScreen(
                                                                     .size(
                                                                         KmiIconSize.extraLarge
                                                                     )
-                                                                    .clickable {
-                                                                        vm.selectAttendanceDate(cellDate)
-                                                                        showDatePicker = false
+                                                                    .clickable(
+                                                                        enabled =
+                                                                            !isFuture
+                                                                    ) {
+                                                                        vm.selectAttendanceDate(
+                                                                            cellDate
+                                                                        )
+                                                                        showDatePicker =
+                                                                            false
                                                                     },
                                                                 shape = CircleShape,
-                                                                color = when {
-                                                                    isSelected -> Color(0xFF22D3EE)
-                                                                    isToday -> Color.White.copy(alpha = 0.14f)
-                                                                    else -> Color.Transparent
-                                                                },
+                                                                color =
+                                                                    when {
+                                                                        isFuture ->
+                                                                            Color.Transparent
+
+                                                                        isSelected ->
+                                                                            Color(0xFF22D3EE)
+
+                                                                        isToday ->
+                                                                            Color.White.copy(
+                                                                                alpha = 0.14f
+                                                                            )
+
+                                                                        else ->
+                                                                            Color.Transparent
+                                                                    },
                                                                 border = when {
                                                                     isSelected -> null
                                                                     isToday -> BorderStroke(1.dp, Color(0xFF22D3EE))
@@ -1081,10 +1322,17 @@ fun AttendanceScreen(
                                                                                     FontWeight.Black
                                                                             ),
                                                                         color =
-                                                                            if (isSelected) {
-                                                                                Color(0xFF020617)
-                                                                            } else {
-                                                                                Color.White
+                                                                            when {
+                                                                                isFuture ->
+                                                                                    Color.White.copy(
+                                                                                        alpha = 0.25f
+                                                                                    )
+
+                                                                                isSelected ->
+                                                                                    Color(0xFF020617)
+
+                                                                                else ->
+                                                                                    Color.White
                                                                             },
                                                                         textAlign =
                                                                             TextAlign.Center
@@ -1324,9 +1572,13 @@ fun AttendanceScreen(
 private fun AttendanceSelectionCard(
     selectedDate: LocalDate,
     selectedBranch: String,
+    branchDisplayText: String,
     selectedGroup: String,
+    groupDisplayText: String,
+    hasBranchTrainingOnSelectedDate: Boolean,
     availableBranches: List<String>,
     availableGroups: List<String>,
+    attendancePct: Double,
     isEnglish: Boolean,
     onDateClick: () -> Unit,
     onBranchSelected: (String) -> Unit,
@@ -1377,10 +1629,25 @@ private fun AttendanceSelectionCard(
             Color(0xFF1E2A3D)
         }
 
-    val dateText = remember(selectedDate, isEnglish) {
-        val locale = if (isEnglish) Locale.ENGLISH else Locale("he", "IL")
-        selectedDate.format(DateTimeFormatter.ofPattern("d.M.yy", locale))
-    }
+    val dateText =
+        remember(
+            selectedDate,
+            isEnglish
+        ) {
+            val locale =
+                if (isEnglish) {
+                    Locale.ENGLISH
+                } else {
+                    Locale("he", "IL")
+                }
+
+            selectedDate.format(
+                DateTimeFormatter.ofPattern(
+                    "EEEE · d.M.yy",
+                    locale
+                )
+            )
+        }
 
     fun compactChoiceText(raw: String, maxChars: Int = 12): String {
         val clean = raw
@@ -1499,6 +1766,7 @@ private fun AttendanceSelectionCard(
         label: String,
         selected: String,
         options: List<String>,
+        displayText: String = selected,
         onSelected: (String) -> Unit
     ) {
         var expanded by rememberSaveable { mutableStateOf(false) }
@@ -1557,8 +1825,11 @@ private fun AttendanceSelectionCard(
                         )
 
                         Text(
-                            text = compactChoiceText(selected),
-                            style = KmiTypography.caption.copy(
+                            text =
+                                displayText
+                                    .trim()
+                                    .ifBlank { "—" },
+                            style = KmiTypography.secondary.copy(
                                 fontWeight = FontWeight.ExtraBold
                             ),
                             color = valueColor,
@@ -1685,53 +1956,81 @@ private fun AttendanceSelectionCard(
                     modifier = Modifier.fillMaxWidth()
                 )
 
-                Row(
+                Column(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
-                    verticalAlignment = Alignment.CenterVertically
+                    verticalArrangement =
+                        Arrangement.spacedBy(6.dp)
                 ) {
-                    Box(modifier = Modifier.weight(1f)) {
-                        CompactReadonlyRow(
-                            label = tr("תאריך", "Date"),
-                            value = dateText,
-                            onClick = onDateClick
-                        )
-                    }
+                    CompactReadonlyRow(
+                        label = tr("תאריך", "Date"),
+                        value = dateText,
+                        onClick = onDateClick
+                    )
 
-                    Box(modifier = Modifier.weight(1f)) {
-                        CompactDropdownRow(
-                            label = tr("סניף", "Branch"),
-                            selected = selectedBranch,
-                            options = availableBranches.ifEmpty {
-                                listOfNotNull(selectedBranch.takeIf { it.isNotBlank() })
+                    CompactDropdownRow(
+                        label = tr("סניף", "Branch"),
+                        selected = selectedBranch,
+                        options =
+                            availableBranches.ifEmpty {
+                                listOfNotNull(
+                                    selectedBranch.takeIf {
+                                        it.isNotBlank()
+                                    }
+                                )
                             },
-                            onSelected = onBranchSelected
-                        )
-                    }
+                        displayText = branchDisplayText,
+                        onSelected = onBranchSelected
+                    )
 
-                    Box(modifier = Modifier.weight(1f)) {
-                        CompactDropdownRow(
-                            label = tr("קבוצה", "Group"),
-                            selected = selectedGroup,
-                            options = availableGroups.ifEmpty {
-                                listOfNotNull(selectedGroup.takeIf { it.isNotBlank() })
+                    CompactDropdownRow(
+                        label = tr("קבוצה", "Group"),
+                        selected = selectedGroup,
+                        options =
+                            if (hasBranchTrainingOnSelectedDate) {
+                                availableGroups.ifEmpty {
+                                    listOfNotNull(
+                                        selectedGroup.takeIf {
+                                            it.isNotBlank()
+                                        }
+                                    )
+                                }
+                            } else {
+                                emptyList()
                             },
-                            onSelected = onGroupSelected
-                        )
-                    }
+                        displayText = groupDisplayText,
+                        onSelected = onGroupSelected
+                    )
                 }
 
+                val formattedAttendancePct =
+                    String.format(
+                        if (isEnglish) {
+                            Locale.ENGLISH
+                        } else {
+                            Locale("he", "IL")
+                        },
+                        "%.1f",
+                        attendancePct
+                    )
+
                 Text(
-                    text = tr(
-                        "הרשימה תיטען לפי תאריך, סניף וקבוצה",
-                        "The list loads by date, branch and group"
+                    text =
+                        if (isEnglish) {
+                            "Attendance: $formattedAttendancePct%"
+                        } else {
+                            "נוכחות: $formattedAttendancePct%"
+                        },
+                    style = KmiTypography.secondary.copy(
+                        fontWeight = FontWeight.ExtraBold
                     ),
-                    style = KmiTypography.caption.copy(
-                        fontWeight = FontWeight.SemiBold
-                    ),
-                    color = labelColor,
+                    color =
+                        if (isDarkMode) {
+                            Color(0xFF67E8F9)
+                        } else {
+                            Color(0xFF0891B2)
+                        },
                     textAlign = align,
-                    maxLines = 2,
+                    maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.fillMaxWidth()
                 )
@@ -1928,39 +2227,125 @@ private fun EmptyAttendanceMembersCard(
     groupKey: String,
     isEnglish: Boolean
 ) {
-    fun tr(he: String, en: String): String = if (isEnglish) en else he
+    fun tr(
+        he: String,
+        en: String
+    ): String = if (isEnglish) en else he
 
-    val align = if (isEnglish) TextAlign.Left else TextAlign.Right
-    val horizontal = if (isEnglish) Alignment.Start else Alignment.End
-    val direction = if (isEnglish) TextDirection.Ltr else TextDirection.Rtl
-    val layoutDirection = if (isEnglish) LayoutDirection.Ltr else LayoutDirection.Rtl
+    val align =
+        if (isEnglish) {
+            TextAlign.Left
+        } else {
+            TextAlign.Right
+        }
+
+    val horizontal =
+        if (isEnglish) {
+            Alignment.Start
+        } else {
+            Alignment.End
+        }
+
+    val direction =
+        if (isEnglish) {
+            TextDirection.Ltr
+        } else {
+            TextDirection.Rtl
+        }
+
+    val layoutDirection =
+        if (isEnglish) {
+            LayoutDirection.Ltr
+        } else {
+            LayoutDirection.Rtl
+        }
+
+    val isDarkMode =
+        MaterialTheme.colorScheme.surface.luminance() <
+                0.5f
+
+    val cardColor =
+        if (isDarkMode) {
+            MaterialTheme.colorScheme.surface
+        } else {
+            Color(0xFFEAF2FF)
+        }
+
+    val cardBorderColor =
+        if (isDarkMode) {
+            MaterialTheme.colorScheme.outline.copy(
+                alpha = 0.65f
+            )
+        } else {
+            Color(0xFF93C5FD)
+        }
+
+    val titleColor =
+        if (isDarkMode) {
+            MaterialTheme.colorScheme.onSurface
+        } else {
+            Color(0xFF0F172A)
+        }
+
+    val bodyColor =
+        if (isDarkMode) {
+            MaterialTheme.colorScheme.onSurfaceVariant
+        } else {
+            Color(0xFF334155)
+        }
 
     Surface(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(24.dp),
-        color = Color.White.copy(alpha = 0.10f),
-        border = BorderStroke(1.dp, Color.White.copy(alpha = 0.18f)),
-        tonalElevation = 0.dp
+        color = cardColor,
+        border = BorderStroke(
+            width = 1.dp,
+            color = cardBorderColor
+        ),
+        tonalElevation = 0.dp,
+        shadowElevation = 0.dp
     ) {
-        CompositionLocalProvider(LocalLayoutDirection provides layoutDirection) {
+        CompositionLocalProvider(
+            LocalLayoutDirection provides
+                    layoutDirection
+        ) {
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
                     .background(
                         Brush.linearGradient(
-                            listOf(
-                                Color.White.copy(alpha = 0.08f),
-                                Color(0xFF1D4ED8).copy(alpha = 0.18f)
-                            )
+                            colors =
+                                if (isDarkMode) {
+                                    listOf(
+                                        MaterialTheme.colorScheme.surface,
+                                        Color(0xFF0C4A6E).copy(
+                                            alpha = 0.38f
+                                        )
+                                    )
+                                } else {
+                                    listOf(
+                                        Color(0xFFF8FBFF),
+                                        Color(0xFFDCEEFF)
+                                    )
+                                }
                         )
                     )
-                    .padding(horizontal = 16.dp, vertical = 16.dp),
-                verticalAlignment = Alignment.CenterVertically
+                    .padding(
+                        horizontal = 16.dp,
+                        vertical = 16.dp
+                    ),
+                verticalAlignment =
+                    Alignment.CenterVertically
             ) {
                 Icon(
                     imageVector = Icons.Filled.Info,
                     contentDescription = null,
-                    tint = Color(0xFF38BDF8),
+                    tint =
+                        if (isDarkMode) {
+                            Color(0xFF38BDF8)
+                        } else {
+                            Color(0xFF0284C7)
+                        },
                     modifier = Modifier.size(32.dp)
                 )
 
@@ -1969,49 +2354,39 @@ private fun EmptyAttendanceMembersCard(
                 Column(
                     modifier = Modifier.weight(1f),
                     horizontalAlignment = horizontal,
-                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                    verticalArrangement =
+                        Arrangement.spacedBy(8.dp)
                 ) {
                     Text(
                         text = tr(
-                            "אין מתאמנים אמיתיים בקבוצה הזו עדיין",
-                            "No real trainees in this group yet"
+                            "לא נמצאו מתאמנים בקבוצה שנבחרה",
+                            "No trainees were found in the selected group"
                         ),
-                        color = Color.White,
-                        fontWeight = FontWeight.Bold,
-                        style = MaterialTheme.typography.titleSmall.merge(
-                            TextStyle(textDirection = direction)
-                        ),
+                        color = titleColor,
+                        fontWeight = FontWeight.ExtraBold,
+                        style =
+                            KmiTypography.cardTitle.merge(
+                                TextStyle(
+                                    textDirection = direction
+                                )
+                            ),
                         textAlign = align,
                         modifier = Modifier.fillMaxWidth()
                     )
 
                     Text(
                         text = tr(
-                            "המסך מחובר לשרת. אם קיימים משתמשים רשומים בסניף ובקבוצה, הם ייטענו אוטומטית. אפשר גם להוסיף מתאמן ידנית עם כפתור הפלוס.",
-                            "This screen is connected to the server. Registered users in this branch and group will load automatically. You can also add a trainee manually using the plus button."
+                            "רשימת המתאמנים נטענת אוטומטית לפי הסניף והקבוצה. אם חסר מתאמן, ניתן להוסיף אותו באמצעות כפתור הפלוס.",
+                            "The trainee list loads automatically for the selected branch and group. If a trainee is missing, you can add them using the plus button."
                         ),
-                        color = Color(0xFFBFDBFE),
-                        style = MaterialTheme.typography.bodySmall.merge(
-                            TextStyle(textDirection = direction)
-                        ),
+                        color = bodyColor,
+                        style =
+                            KmiTypography.body.merge(
+                                TextStyle(
+                                    textDirection = direction
+                                )
+                            ),
                         textAlign = align,
-                        lineHeight = 17.dp.value.sp,
-                        modifier = Modifier.fillMaxWidth()
-                    )
-
-                    Text(
-                        text = tr(
-                            "סניף: ${branch.ifBlank { "—" }} · קבוצה: ${groupKey.ifBlank { "—" }}",
-                            "Branch: ${branch.ifBlank { "—" }} · Group: ${groupKey.ifBlank { "—" }}"
-                        ),
-                        color = Color(0xFFE0F2FE),
-                        fontWeight = FontWeight.SemiBold,
-                        style = MaterialTheme.typography.labelSmall.merge(
-                            TextStyle(textDirection = direction)
-                        ),
-                        textAlign = align,
-                        maxLines = 2,
-                        overflow = TextOverflow.Ellipsis,
                         modifier = Modifier.fillMaxWidth()
                     )
                 }
@@ -2187,27 +2562,53 @@ private fun AttendanceHeroCard(
 private fun AttendanceSummaryCard(
     totalMembers: Int,
     presentCount: Int,
-    excusedCount: Int,
     absentCount: Int,
     attendancePct: Double,
     isEnglish: Boolean = false
 ) {
-    val align = if (isEnglish) TextAlign.Left else TextAlign.Right
-    fun trLocal(he: String, en: String): String = if (isEnglish) en else he
+    val align =
+        if (isEnglish) {
+            TextAlign.Left
+        } else {
+            TextAlign.Right
+        }
+
+    fun trLocal(
+        he: String,
+        en: String
+    ): String = if (isEnglish) en else he
+
+    val formattedAttendancePct = String.format(
+        if (isEnglish) {
+            Locale.ENGLISH
+        } else {
+            Locale("he", "IL")
+        },
+        "%.1f",
+        attendancePct
+    )
 
     Surface(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(24.dp),
         color = Color(0xFFEAF2FF),
         tonalElevation = 0.dp,
-        border = BorderStroke(1.dp, Color(0xFFD8E3F5))
+        border = BorderStroke(
+            width = 1.dp,
+            color = Color(0xFFD8E3F5)
+        )
     ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp),
-            horizontalAlignment = if (isEnglish) Alignment.Start else Alignment.End
+            horizontalAlignment =
+                if (isEnglish) {
+                    Alignment.Start
+                } else {
+                    Alignment.End
+                }
         ) {
             Text(
                 text = trLocal(
@@ -2223,26 +2624,38 @@ private fun AttendanceSummaryCard(
 
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
+                horizontalArrangement =
+                    Arrangement.SpaceEvenly,
+                verticalAlignment =
+                    Alignment.CenterVertically
             ) {
                 AttendanceStatBox(
-                    label = trLocal("סה\"כ", "Total"),
+                    label = trLocal("סה״כ", "Total"),
                     value = totalMembers.toString()
                 )
+
                 AttendanceStatBox(
                     label = trLocal("הגיעו", "Present"),
                     value = presentCount.toString()
                 )
+
                 AttendanceStatBox(
-                    label = trLocal("נוכחות %", "Attendance %"),
-                    value = String.format(
-                        if (isEnglish) Locale.ENGLISH else Locale("he", "IL"),
-                        "%.1f",
-                        attendancePct
-                    )
+                    label = trLocal("נעדרו", "Absent"),
+                    value = absentCount.toString()
                 )
             }
+
+            Text(
+                text = trLocal(
+                    "נוכחות: $formattedAttendancePct%",
+                    "Attendance: $formattedAttendancePct%"
+                ),
+                style = KmiTypography.secondary,
+                fontWeight = FontWeight.ExtraBold,
+                color = Color(0xFF0891B2),
+                textAlign = align,
+                modifier = Modifier.fillMaxWidth()
+            )
         }
     }
 }

@@ -8,6 +8,7 @@ import il.kmi.app.attendance.data.AttendanceRecord
 import il.kmi.app.attendance.data.AttendanceStatus
 import il.kmi.app.attendance.data.GroupMember
 import il.kmi.app.attendance.data.AttendanceRepository
+import il.kmi.app.training.TrainingCatalog
 import kotlinx.coroutines.Job
 import java.time.LocalDate
 import kotlinx.coroutines.flow.*
@@ -25,6 +26,7 @@ data class AttendanceUiState(
     val groupKey: String = "",
     val availableBranches: List<String> = emptyList(),
     val availableGroups: List<String> = emptyList(),
+    val hasScheduledTraining: Boolean = false,
     val sessionId: Long? = null,
     val members: List<GroupMember> = emptyList(),
     val records: List<AttendanceRecord> = emptyList(),
@@ -99,34 +101,120 @@ class AttendanceViewModel(app: Application) : AndroidViewModel(app) {
     private var lastBootstrapKey: String? = null
     private var lastCleanupKey: String? = null
 
-    private val _date = MutableStateFlow(LocalDate.now())
-    private val _branch = MutableStateFlow("")
-    private val _groupKey = MutableStateFlow("")
-    private val _availableBranches = MutableStateFlow<List<String>>(emptyList())
-    private val _availableGroups = MutableStateFlow<List<String>>(emptyList())
-    private val _sessionId = MutableStateFlow<Long?>(null)
+    private val _date =
+        MutableStateFlow(LocalDate.now())
+
+    private val _branch =
+        MutableStateFlow("")
+
+    private val _groupKey =
+        MutableStateFlow("")
+
+    /*
+     * כל הסניפים המשויכים למאמן, ללא סינון תאריך.
+     * הרשימה נשמרת כדי שאפשר יהיה לסנן אותה מחדש
+     * בכל החלפת תאריך.
+     */
+    private val _allAvailableBranches =
+        MutableStateFlow<List<String>>(emptyList())
+
+    /*
+     * הרשימות שמוצגות בפועל במסך לאחר סינון
+     * לפי התאריך הנבחר.
+     */
+    private val _availableBranches =
+        MutableStateFlow<List<String>>(emptyList())
+
+    private val _availableGroups =
+        MutableStateFlow<List<String>>(emptyList())
+
+    private val _sessionId =
+        MutableStateFlow<Long?>(null)
 
     // 🔄 טיקט רענון – כשמעלים אותו, זורם חדש מתחבר למקורות (ועושה re-query)
     private val _refreshTick = MutableStateFlow(0)
 
+    private data class AttendanceContext(
+        val branch: String,
+        val groupKey: String,
+        val date: LocalDate
+    )
+
     private val membersFlow: Flow<List<GroupMember>> =
-        combine(_branch, _groupKey, _refreshTick) { b, g, tick -> Triple(b, g, tick) }
-            .flatMapLatest { (b, g, _) ->
-                if (b.isBlank() || g.isBlank()) {
-                    flowOf(emptyList())
-                } else {
-                    repo.members(branch = b, groupKey = g)
-                }
+        combine(
+            _branch,
+            _groupKey,
+            _date,
+            _refreshTick
+        ) { branch, groupKey, date, _ ->
+            AttendanceContext(
+                branch = branch,
+                groupKey = groupKey,
+                date = date
+            )
+        }.flatMapLatest { context ->
+            val hasTraining =
+                TrainingCatalog.hasTrainingOn(
+                    date = context.date,
+                    branch = context.branch,
+                    group = context.groupKey
+                )
+
+            if (
+                context.branch.isBlank() ||
+                context.groupKey.isBlank() ||
+                !hasTraining
+            ) {
+                flowOf(emptyList())
+            } else {
+                repo.members(
+                    branch = context.branch,
+                    groupKey = context.groupKey
+                )
             }
+        }
 
     private val recordsFlow: Flow<List<AttendanceRecord>> =
-        combine(_branch, _groupKey, _date, _refreshTick) { b, g, d, _ -> Triple(b, g, d) }
-            .flatMapLatest { (b, g, d) ->
-                if (b.isBlank() || g.isBlank()) flowOf(emptyList())
-                else repo.attendanceForDay(branch = b, groupKey = g, date = d)
-            }
+        combine(
+            _branch,
+            _groupKey,
+            _date,
+            _refreshTick
+        ) { branch, groupKey, date, _ ->
+            AttendanceContext(
+                branch = branch,
+                groupKey = groupKey,
+                date = date
+            )
+        }.flatMapLatest { context ->
+            val hasTraining =
+                TrainingCatalog.hasTrainingOn(
+                    date = context.date,
+                    branch = context.branch,
+                    group = context.groupKey
+                )
 
-    private data class Quad<A, B, C, D>(val first: A, val second: B, val third: C, val fourth: D)
+            if (
+                context.branch.isBlank() ||
+                context.groupKey.isBlank() ||
+                !hasTraining
+            ) {
+                flowOf(emptyList())
+            } else {
+                repo.attendanceForDay(
+                    branch = context.branch,
+                    groupKey = context.groupKey,
+                    date = context.date
+                )
+            }
+        }
+
+    private data class Quad<A, B, C, D>(
+        val first: A,
+        val second: B,
+        val third: C,
+        val fourth: D
+    )
     private val headerFlow =
         combine(_date, _branch, _groupKey, _sessionId) { d, b, g, s -> Quad(d, b, g, s) }
 
@@ -139,8 +227,31 @@ class AttendanceViewModel(app: Application) : AndroidViewModel(app) {
             _availableGroups
         ) { h, members, records, availableBranches, availableGroups ->
 
+            val hasScheduledTraining =
+                TrainingCatalog.hasTrainingOn(
+                    date = h.first,
+                    branch = h.second,
+                    group = h.third
+                )
+
+            val visibleMembers =
+                if (hasScheduledTraining) {
+                    members
+                } else {
+                    emptyList()
+                }
+
+            val visibleRecords =
+                if (hasScheduledTraining) {
+                    records
+                } else {
+                    emptyList()
+                }
+
             val map: Map<Long, AttendanceStatus> =
-                records.associate { it.memberId to it.status }
+                visibleRecords.associate { record ->
+                    record.memberId to record.status
+                }
 
             AttendanceUiState(
                 date = h.first,
@@ -148,9 +259,15 @@ class AttendanceViewModel(app: Application) : AndroidViewModel(app) {
                 groupKey = h.third,
                 availableBranches = availableBranches,
                 availableGroups = availableGroups,
-                sessionId = h.fourth,
-                members = members,
-                records = records,
+                hasScheduledTraining = hasScheduledTraining,
+                sessionId =
+                    if (hasScheduledTraining) {
+                        h.fourth
+                    } else {
+                        null
+                    },
+                members = visibleMembers,
+                records = visibleRecords,
                 statusByMemberId = map
             )
         }.stateIn(
@@ -190,64 +307,86 @@ class AttendanceViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    fun setContext(date: LocalDate, branch: String, groupKey: String) {
-        val branches = collectAttendanceOptions(
-            incoming = branch,
-            prefKeys = listOf(
+    fun setContext(
+        date: LocalDate,
+        branch: String,
+        groupKey: String
+    ) {
+        val allBranches =
+            collectAttendanceOptions(
+                incoming = branch,
+                prefKeys = listOf(
+                    "active_branch",
+                    "branch",
+                    "branches",
+                    "coach_branch",
+                    "coach_branches",
+                    "coachBranches"
+                )
+            )
+                .map { branchName ->
+                    branchName.normAttendanceOption()
+                }
+                .filter { branchName ->
+                    branchName.isNotBlank()
+                }
+                .distinct()
+
+        val sp =
+            getApplication<Application>()
+                .getSharedPreferences(
+                    "kmi_user",
+                    Context.MODE_PRIVATE
+                )
+
+        val activeBranch =
+            sp.getString(
                 "active_branch",
-                "branch",
-                "branches",
-                "coach_branch",
-                "coach_branches",
-                "coachBranches"
+                ""
             )
-        )
+                ?.normAttendanceOption()
+                .orEmpty()
 
-        val groups = collectAttendanceOptions(
-            incoming = groupKey,
-            prefKeys = listOf(
+        val activeGroup =
+            sp.getString(
                 "active_group",
-                "group",
-                "groupKey",
-                "groups",
-                "coach_group",
-                "coach_groups",
-                "coachGroups"
+                ""
             )
+                ?.normAttendanceOption()
+                .orEmpty()
+
+        _allAvailableBranches.value =
+            allBranches
+
+        val preferredBranch =
+            when {
+                _branch.value.isNotBlank() ->
+                    _branch.value
+
+                activeBranch.isNotBlank() ->
+                    activeBranch
+
+                else ->
+                    branch.normAttendanceOption()
+            }
+
+        val preferredGroup =
+            when {
+                _groupKey.value.isNotBlank() ->
+                    _groupKey.value
+
+                activeGroup.isNotBlank() ->
+                    activeGroup
+
+                else ->
+                    groupKey.normAttendanceOption()
+            }
+
+        refreshScheduleOptionsForDate(
+            date = date,
+            preferredBranch = preferredBranch,
+            preferredGroup = preferredGroup
         )
-
-        val sp = getApplication<Application>()
-            .getSharedPreferences("kmi_user", Context.MODE_PRIVATE)
-
-        val activeBranch = sp.getString("active_branch", "")?.normAttendanceOption().orEmpty()
-        val activeGroup = sp.getString("active_group", "")?.normAttendanceOption().orEmpty()
-
-        val selectedBranch = when {
-            _branch.value.isNotBlank() && branches.contains(_branch.value) -> _branch.value
-            activeBranch.isNotBlank() && branches.contains(activeBranch) -> activeBranch
-            branches.isNotEmpty() -> branches.first()
-            else -> branch.normAttendanceOption()
-        }
-
-        val selectedGroup = when {
-            _groupKey.value.isNotBlank() && groups.contains(_groupKey.value) -> _groupKey.value
-            activeGroup.isNotBlank() && groups.contains(activeGroup) -> activeGroup
-            groups.isNotEmpty() -> groups.first()
-            else -> groupKey.normAttendanceOption()
-        }
-
-        _availableBranches.value = branches.ifEmpty {
-            listOfNotNull(selectedBranch.takeIf { it.isNotBlank() })
-        }
-
-        _availableGroups.value = groups.ifEmpty {
-            listOfNotNull(selectedGroup.takeIf { it.isNotBlank() })
-        }
-
-        _date.value = date
-        _branch.value = selectedBranch
-        _groupKey.value = selectedGroup
-        _sessionId.value = null
 
         ensureSession()
         _refreshTick.update { it + 1 }
@@ -317,25 +456,191 @@ class AttendanceViewModel(app: Application) : AndroidViewModel(app) {
             .distinct()
     }
 
-    fun selectAttendanceDate(date: LocalDate) {
+    /**
+     * מסנן את הסניפים והקבוצות לפי התאריך.
+     *
+     * availableBranches יכיל רק סניפים שיש בהם
+     * לפחות אימון אחד בתאריך המבוקש.
+     *
+     * availableGroups יכיל רק קבוצות שיש להן
+     * אימון בסניף ובתאריך שנבחרו.
+     */
+    private fun refreshScheduleOptionsForDate(
+        date: LocalDate,
+        preferredBranch: String = _branch.value,
+        preferredGroup: String = _groupKey.value
+    ) {
+        val activeBranches =
+            _allAvailableBranches.value
+                .asSequence()
+                .map { branch ->
+                    branch.normAttendanceOption()
+                }
+                .filter { branch ->
+                    branch.isNotBlank()
+                }
+                .filter { branch ->
+                    TrainingCatalog.hasTrainingOn(
+                        date = date,
+                        branch = branch,
+                        group = null
+                    )
+                }
+                .distinct()
+                .toList()
+
+        val cleanPreferredBranch =
+            preferredBranch.normAttendanceOption()
+
+        val selectedBranch =
+            activeBranches.firstOrNull { branch ->
+                branch == cleanPreferredBranch
+            }
+                ?: activeBranches.firstOrNull()
+                    .orEmpty()
+
+        val activeGroups =
+            if (selectedBranch.isBlank()) {
+                emptyList()
+            } else {
+                TrainingCatalog.groupsForBranch(
+                    branch = selectedBranch,
+                    isEnglish = false
+                )
+                    .asSequence()
+                    .map { group ->
+                        group.normAttendanceOption()
+                    }
+                    .filter { group ->
+                        group.isNotBlank()
+                    }
+                    .filter { group ->
+                        TrainingCatalog.hasTrainingOn(
+                            date = date,
+                            branch = selectedBranch,
+                            group = group
+                        )
+                    }
+                    .distinct()
+                    .toList()
+            }
+
+        val cleanPreferredGroup =
+            preferredGroup.normAttendanceOption()
+
+        val preferredGroupNormalized =
+            TrainingCatalog.normalizeGroupName(
+                cleanPreferredGroup
+            )
+
+        val selectedGroup =
+            activeGroups.firstOrNull { group ->
+                group == cleanPreferredGroup ||
+                        TrainingCatalog.normalizeGroupName(group) ==
+                        preferredGroupNormalized
+            }
+                ?: activeGroups.firstOrNull()
+                    .orEmpty()
+
         _date.value = date
+        _availableBranches.value = activeBranches
+        _branch.value = selectedBranch
+        _availableGroups.value = activeGroups
+        _groupKey.value = selectedGroup
         _sessionId.value = null
+    }
+
+    fun selectAttendanceDate(date: LocalDate) {
+        val today =
+            LocalDate.now()
+
+        val safeDate =
+            if (date.isAfter(today)) {
+                today
+            } else {
+                date
+            }
+
+        refreshScheduleOptionsForDate(
+            date = safeDate,
+            preferredBranch = _branch.value,
+            preferredGroup = _groupKey.value
+        )
+
         ensureSession()
         _refreshTick.update { it + 1 }
     }
 
     fun selectBranch(branch: String) {
-        val clean = branch.normAttendanceOption()
-        if (clean.isBlank()) return
-        if (_branch.value == clean) return
+        val cleanBranch =
+            branch.normAttendanceOption()
 
-        _branch.value = clean
+        /*
+         * ניתן לבחור רק סניף שנמצא פעיל
+         * בתאריך הנבחר.
+         */
+        val selectedBranch =
+            _availableBranches.value
+                .firstOrNull { activeBranch ->
+                    activeBranch == cleanBranch
+                }
+                ?: return
+
+        val activeGroups =
+            TrainingCatalog.groupsForBranch(
+                branch = selectedBranch,
+                isEnglish = false
+            )
+                .asSequence()
+                .map { group ->
+                    group.normAttendanceOption()
+                }
+                .filter { group ->
+                    group.isNotBlank()
+                }
+                .filter { group ->
+                    TrainingCatalog.hasTrainingOn(
+                        date = _date.value,
+                        branch = selectedBranch,
+                        group = group
+                    )
+                }
+                .distinct()
+                .toList()
+
+        val currentGroupNormalized =
+            TrainingCatalog.normalizeGroupName(
+                _groupKey.value
+            )
+
+        val selectedGroup =
+            activeGroups.firstOrNull { group ->
+                group == _groupKey.value ||
+                        TrainingCatalog.normalizeGroupName(group) ==
+                        currentGroupNormalized
+            }
+                ?: activeGroups.firstOrNull()
+                    .orEmpty()
+
+        _branch.value = selectedBranch
+        _availableGroups.value = activeGroups
+        _groupKey.value = selectedGroup
         _sessionId.value = null
 
         getApplication<Application>()
-            .getSharedPreferences("kmi_user", Context.MODE_PRIVATE)
+            .getSharedPreferences(
+                "kmi_user",
+                Context.MODE_PRIVATE
+            )
             .edit()
-            .putString("active_branch", clean)
+            .putString(
+                "active_branch",
+                selectedBranch
+            )
+            .putString(
+                "active_group",
+                selectedGroup
+            )
             .apply()
 
         ensureSession()
@@ -343,11 +648,22 @@ class AttendanceViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun selectGroup(groupKey: String) {
-        val clean = groupKey.normAttendanceOption()
-        if (clean.isBlank()) return
-        if (_groupKey.value == clean) return
+        val clean =
+            groupKey.normAttendanceOption()
 
-        _groupKey.value = clean
+        val relevantGroup =
+            _availableGroups.value.firstOrNull { group ->
+                group == clean ||
+                        TrainingCatalog.normalizeGroupName(group) ==
+                        TrainingCatalog.normalizeGroupName(clean)
+            }
+                ?: return
+
+        if (_groupKey.value == relevantGroup) {
+            return
+        }
+
+        _groupKey.value = relevantGroup
         _sessionId.value = null
 
         getApplication<Application>()
@@ -364,7 +680,22 @@ class AttendanceViewModel(app: Application) : AndroidViewModel(app) {
         val d = _date.value
         val b = _branch.value
         val g = _groupKey.value
-        if (b.isBlank() || g.isBlank()) return
+
+        val hasTraining =
+            TrainingCatalog.hasTrainingOn(
+                date = d,
+                branch = b,
+                group = g
+            )
+
+        if (
+            b.isBlank() ||
+            g.isBlank() ||
+            !hasTraining
+        ) {
+            _sessionId.value = null
+            return
+        }
 
         viewModelScope.launch {
             val result = runCatching {
@@ -479,7 +810,27 @@ class AttendanceViewModel(app: Application) : AndroidViewModel(app) {
         val d = _date.value
         val b = _branch.value
         val g = _groupKey.value
-        if (b.isBlank() || g.isBlank()) return
+
+        val hasTraining =
+            TrainingCatalog.hasTrainingOn(
+                date = d,
+                branch = b,
+                group = g
+            )
+
+        if (
+            b.isBlank() ||
+            g.isBlank() ||
+            !hasTraining
+        ) {
+            _events.tryEmit(
+                UiEvent.ReportSaveFailed(
+                    message =
+                        "No scheduled training for the selected date"
+                )
+            )
+            return
+        }
 
         viewModelScope.launch {
             runCatching {
@@ -504,12 +855,32 @@ class AttendanceViewModel(app: Application) : AndroidViewModel(app) {
      * ✅ טעינת מתאמנים אוטומטית מתוך collection "users" לפי סניף + קבוצה.
      * רץ ב-viewModelScope כדי שלא יתבטל בגלל יציאה מהקומפוזיציה.
      */
-    fun bootstrapMembersFromUsers(branchBase: String, groupBase: String) {
+    fun bootstrapMembersFromUsers(
+        branchBase: String,
+        groupBase: String
+    ) {
         val b0 = branchBase.trim()
         val g0 = groupBase.trim()
-        if (b0.isBlank()) return
+        val selectedDate = _date.value
 
-        val key = "$b0|$g0"
+        val hasTraining =
+            TrainingCatalog.hasTrainingOn(
+                date = selectedDate,
+                branch = b0,
+                group = g0
+            )
+
+        if (
+            b0.isBlank() ||
+            g0.isBlank() ||
+            !hasTraining
+        ) {
+            bootstrapJob?.cancel()
+            bootstrapJob = null
+            return
+        }
+
+        val key = "$selectedDate|$b0|$g0"
 
         if (lastBootstrapKey == key && bootstrapJob?.isActive == true) {
             return

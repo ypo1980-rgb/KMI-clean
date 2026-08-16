@@ -1,5 +1,6 @@
 package il.kmi.app.training
 
+import java.time.LocalDate
 import java.util.Calendar
 import java.util.Locale
 
@@ -731,19 +732,6 @@ object TrainingCatalog {
             )
         )
 
-        add(
-            TrainingSlot(
-                branch = "נתניה – מרכז קהילתי סוקולוב",
-                groups = listOf("ילדים"),
-                dayOfWeek = Calendar.WEDNESDAY, // 19:00–20:00
-                startHour = 20, startMinute = 0,
-                durationMinutes = 90,
-                place = placeFor("נתניה – מרכז קהילתי סוקולוב"),
-                address = addressFor("רחוב נחום סוקולוב 25, נתניה"),
-                coach = "אדם הולצמן"
-            )
-        )
-
         // ========= נתניה – מרכז קהילתי אופק =========
         addAll(
             listOf(
@@ -1117,8 +1105,102 @@ object TrainingCatalog {
         return branch in branches
     }
 
+    /**
+     * בודק אם בתאריך המבוקש מתקיים אימון שבועי קבוע
+     * התואם גם לסניף וגם לקבוצה שנבחרו.
+     *
+     * הבדיקה משתמשת באותו מקור אמת של trainingsFor,
+     * ולכן כוללת גם את נרמול שמות הסניפים והקבוצות.
+     */
+    /**
+     * מחזיר רק את הקבוצות שמוגדרות בלוח האימונים
+     * של הסניף המבוקש.
+     *
+     * הסדר נשמר לפי סדר הופעת הקבוצות בקטלוג,
+     * ללא כפילויות וללא קבוצות מסניפים אחרים.
+     */
+    fun groupsForBranch(
+        branch: String,
+        isEnglish: Boolean = false
+    ): List<String> {
+        val branchKey =
+            branchCanonicalKey(branch)
+
+        return slots
+            .asSequence()
+            .filter { slot ->
+                slot.branch == branchKey
+            }
+            .flatMap { slot ->
+                slot.groups.asSequence()
+            }
+            .map { group ->
+                group.trim()
+            }
+            .filter { group ->
+                group.isNotBlank()
+            }
+            .distinct()
+            .map { group ->
+                groupDisplayName(
+                    group = group,
+                    isEnglish = isEnglish
+                )
+            }
+            .toList()
+    }
+
+    fun hasTrainingOn(
+        date: LocalDate,
+        branch: String,
+        group: String?
+    ): Boolean {
+        val cleanBranch = branch.trim()
+        val cleanGroup = group?.trim()
+
+        if (cleanBranch.isBlank()) {
+            return false
+        }
+
+        val calendarDayOfWeek =
+            when (date.dayOfWeek) {
+                java.time.DayOfWeek.SUNDAY ->
+                    Calendar.SUNDAY
+
+                java.time.DayOfWeek.MONDAY ->
+                    Calendar.MONDAY
+
+                java.time.DayOfWeek.TUESDAY ->
+                    Calendar.TUESDAY
+
+                java.time.DayOfWeek.WEDNESDAY ->
+                    Calendar.WEDNESDAY
+
+                java.time.DayOfWeek.THURSDAY ->
+                    Calendar.THURSDAY
+
+                java.time.DayOfWeek.FRIDAY ->
+                    Calendar.FRIDAY
+
+                java.time.DayOfWeek.SATURDAY ->
+                    Calendar.SATURDAY
+            }
+
+        return trainingsFor(
+            branch = cleanBranch,
+            group = cleanGroup,
+            isEnglish = false
+        ).any { training ->
+            training.cal.get(Calendar.DAY_OF_WEEK) ==
+                    calendarDayOfWeek
+        }
+    }
+
     /** אימונים שבועיים קבועים עבור סניף/קבוצה — תאימות ישנה בעברית */
-    fun trainingsFor(branch: String, group: String?): List<TrainingData> {
+    fun trainingsFor(
+        branch: String,
+        group: String?
+    ): List<TrainingData> {
         return trainingsFor(
             branch = branch,
             group = group,
