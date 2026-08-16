@@ -33,6 +33,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
@@ -41,6 +42,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import il.kmi.app.screens.coach.statistics.NationalStatisticsScreen
+import il.kmi.app.ui.KmiTypography
 
 @Composable
 internal fun CoachGroupStatsPremiumScreen(
@@ -631,48 +633,73 @@ private fun StatisticsTabsSelector(
     onGroupClick: () -> Unit,
     onNationalClick: () -> Unit
 ) {
-    /*
-     * מעטפת זכוכית נקייה:
-     * ללא מסגרת וללא צל חיצוני כבד.
-     */
+    val isDarkMode =
+        MaterialTheme.colorScheme.surface
+            .luminance() < 0.5f
+
+    val containerColor =
+        if (isDarkMode) {
+            MaterialTheme.colorScheme.surface
+        } else {
+            Color(0xFFF8FAFF)
+        }
+
+    val borderColor =
+        if (isDarkMode) {
+            MaterialTheme.colorScheme.outline.copy(
+                alpha = 0.45f
+            )
+        } else {
+            Color(0xFFC7D7F2)
+        }
+
     Surface(
         modifier = Modifier
             .fillMaxWidth()
-            .height(72.dp),
-        shape = RoundedCornerShape(22.dp),
-        color =
-            MaterialTheme.colorScheme.surface.copy(
-                alpha = 0.76f
-            ),
+            .height(58.dp),
+        shape = RoundedCornerShape(18.dp),
+        color = containerColor,
         tonalElevation = 0.dp,
         shadowElevation = 0.dp,
-        border = null
+        border = BorderStroke(
+            width = 1.dp,
+            color = borderColor
+        )
     ) {
         Row(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(5.dp),
-            horizontalArrangement =
-                Arrangement.spacedBy(6.dp),
+                .padding(3.dp),
             verticalAlignment =
                 Alignment.CenterVertically
         ) {
             StatisticsTabButton(
                 title = coachTr(
                     isEnglish,
-                    "סטטיסטיקת הקבוצה",
-                    "Group statistics"
+                    "סטטיסטיקת\nהקבוצה",
+                    "Group\nstatistics"
                 ),
                 selected = !nationalSelected,
                 onClick = onGroupClick,
                 modifier = Modifier.weight(1f)
             )
 
+            Box(
+                modifier = Modifier
+                    .width(1.dp)
+                    .height(30.dp)
+                    .background(
+                        color = borderColor.copy(
+                            alpha = 0.72f
+                        )
+                    )
+            )
+
             StatisticsTabButton(
                 title = coachTr(
                     isEnglish,
-                    "סטטיסטיקה ארצית",
-                    "National statistics"
+                    "סטטיסטיקה\nארצית",
+                    "National\nstatistics"
                 ),
                 selected = nationalSelected,
                 onClick = onNationalClick,
@@ -689,7 +716,7 @@ private fun StatisticsTabButton(
     onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val selectedProgress by animateFloatAsState(
+    val selectionProgress by animateFloatAsState(
         targetValue =
             if (selected) {
                 1f
@@ -697,37 +724,49 @@ private fun StatisticsTabButton(
                 0f
             },
         animationSpec = tween(
-            durationMillis = 280,
+            durationMillis = 240,
             easing = FastOutSlowInEasing
         ),
-        label = "statistics_tab_progress"
+        label = "statistics_tab_selection"
     )
 
-    val scale by animateFloatAsState(
-        targetValue =
-            if (selected) {
-                1f
-            } else {
-                0.975f
-            },
-        animationSpec = tween(
-            durationMillis = 280,
-            easing = FastOutSlowInEasing
-        ),
-        label = "statistics_tab_scale"
-    )
+    val isDarkMode =
+        MaterialTheme.colorScheme.surface
+            .luminance() < 0.5f
 
-    val selectedGradient =
-        Brush.linearGradient(
-            colors = listOf(
-                Color(0xFF4338CA),
-                Color(0xFF6D28D9),
-                Color(0xFF0284C7)
-            )
+    val selectedTextColor =
+        if (isDarkMode) {
+            Color(0xFFA5B4FC)
+        } else {
+            Color(0xFF4338CA)
+        }
+
+    val unselectedTextColor =
+        MaterialTheme.colorScheme
+            .onSurfaceVariant
+
+    val selectedBackground =
+        Brush.horizontalGradient(
+            colors =
+                if (isDarkMode) {
+                    listOf(
+                        Color(0xFF4338CA).copy(
+                            alpha = 0.25f
+                        ),
+                        Color(0xFF0284C7).copy(
+                            alpha = 0.18f
+                        )
+                    )
+                } else {
+                    listOf(
+                        Color(0xFFEDE9FE),
+                        Color(0xFFE0F2FE)
+                    )
+                }
         )
 
-    val transparentGradient =
-        Brush.linearGradient(
+    val transparentBackground =
+        Brush.horizontalGradient(
             colors = listOf(
                 Color.Transparent,
                 Color.Transparent
@@ -736,13 +775,8 @@ private fun StatisticsTabButton(
 
     Surface(
         onClick = onClick,
-        modifier = modifier
-            .fillMaxHeight()
-            .graphicsLayer {
-                scaleX = scale
-                scaleY = scale
-            },
-        shape = RoundedCornerShape(18.dp),
+        modifier = modifier.fillMaxHeight(),
+        shape = RoundedCornerShape(14.dp),
         color = Color.Transparent,
         tonalElevation = 0.dp,
         shadowElevation = 0.dp,
@@ -754,103 +788,57 @@ private fun StatisticsTabButton(
                 .background(
                     brush =
                         if (selected) {
-                            selectedGradient
+                            selectedBackground
                         } else {
-                            transparentGradient
+                            transparentBackground
                         },
-                    shape = RoundedCornerShape(18.dp)
+                    shape = RoundedCornerShape(14.dp)
                 )
                 .padding(
-                    horizontal = 10.dp,
+                    horizontal = 8.dp,
                     vertical = 6.dp
                 ),
             contentAlignment = Alignment.Center
         ) {
-            /*
-             * שכבת אור עדינה בחלק העליון של
-             * הטאב הפעיל.
-             */
-            if (selected) {
-                Box(
-                    modifier = Modifier
-                        .align(Alignment.TopCenter)
-                        .fillMaxWidth(0.72f)
-                        .height(1.dp)
-                        .background(
-                            color = Color.White.copy(
-                                alpha =
-                                    0.26f *
-                                            selectedProgress
-                            ),
-                            shape =
-                                RoundedCornerShape(
-                                    999.dp
-                                )
-                        )
-                )
-            }
-
-            Column(
-                horizontalAlignment =
-                    Alignment.CenterHorizontally,
-                verticalArrangement =
-                    Arrangement.spacedBy(5.dp)
-            ) {
-                Text(
-                    text = title,
-                    textAlign = TextAlign.Center,
-                    style =
-                        MaterialTheme.typography.labelLarge,
-                    fontWeight =
-                        if (selected) {
-                            FontWeight.ExtraBold
-                        } else {
-                            FontWeight.SemiBold
-                        },
-                    color =
-                        if (selected) {
-                            Color.White
-                        } else {
-                            MaterialTheme
-                                .colorScheme
-                                .onSurfaceVariant
-                        },
-                    maxLines = 2
-                )
-
-                /*
-                 * נקודת חיווי מינימליסטית במקום
-                 * מסגרת סביב הטאב.
-                 */
-                Box(
-                    modifier = Modifier
-                        .width(
+            Text(
+                text = title,
+                style =
+                    KmiTypography.secondary.copy(
+                        fontWeight =
                             if (selected) {
-                                22.dp
+                                FontWeight.ExtraBold
                             } else {
-                                5.dp
+                                FontWeight.SemiBold
                             }
-                        )
-                        .height(3.dp)
-                        .background(
-                            color =
-                                if (selected) {
-                                    Color.White.copy(
-                                        alpha = 0.88f
-                                    )
-                                } else {
-                                    MaterialTheme
-                                        .colorScheme
-                                        .onSurfaceVariant
-                                        .copy(alpha = 0.18f)
-                                },
-                            shape =
-                                RoundedCornerShape(
-                                    999.dp
-                                )
-                        )
-                )
-            }
+                    ),
+                color =
+                    if (selected) {
+                        selectedTextColor
+                    } else {
+                        unselectedTextColor
+                    },
+                textAlign = TextAlign.Center,
+                maxLines = 2,
+                modifier = Modifier.fillMaxWidth()
+            )
+
+            Box(
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .width(
+                        38.dp * selectionProgress
+                    )
+                    .height(3.dp)
+                    .background(
+                        brush = Brush.horizontalGradient(
+                            colors = listOf(
+                                Color(0xFF7C3AED),
+                                Color(0xFF0284C7)
+                            )
+                        ),
+                        shape = RoundedCornerShape(999.dp)
+                    )
+            )
         }
     }
 }

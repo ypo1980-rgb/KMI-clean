@@ -77,8 +77,11 @@ import il.kmi.app.ui.AppFontSize
 import il.kmi.app.ui.KmiIconSize
 import il.kmi.app.ui.KmiTypography
 import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.window.Dialog
+import il.kmi.app.privacy.DemoPrivacy
+import il.kmi.app.screens.admin.AdminAccess
 
 //======================================================================================
 
@@ -230,7 +233,33 @@ fun SettingsScreenModern(
         if (isEnglish) Alignment.Start else Alignment.End
 
     val isDarkMode =
-        MaterialTheme.colorScheme.background.luminance() < 0.5f
+        MaterialTheme.colorScheme.background
+            .luminance() < 0.5f
+
+    /*
+     * מצב ההדגמה נשמר במכשיר, אך המתג
+     * שמפעיל אותו מוצג רק למנהל האפליקציה.
+     */
+    DemoPrivacy.initialize(
+        appCtxLang.applicationContext
+    )
+
+    var isAppAdmin by rememberSaveable {
+        mutableStateOf(false)
+    }
+
+    var demoPrivacyEnabled by rememberSaveable {
+        mutableStateOf(
+            DemoPrivacy.isEnabled()
+        )
+    }
+
+    LaunchedEffect(Unit) {
+        isAppAdmin =
+            runCatching {
+                AdminAccess.isCurrentUserAdmin()
+            }.getOrDefault(false)
+    }
 
     fun tr(he: String, en: String): String =
         if (isEnglish) en else he
@@ -2456,6 +2485,185 @@ fun SettingsScreenModern(
                             }
                         }
                     }
+
+                if (isAppAdmin) {
+                    SettingsListSection(
+                        title = tr(
+                            "כלי מנהל",
+                            "Administrator tools"
+                        ),
+                        subtitle = tr(
+                            "כלי פרטיות והצגת האפליקציה",
+                            "Privacy and app presentation tools"
+                        ),
+                        icon = Icons.Filled.Lock,
+                        iconTint = Color(0xFF7C3AED)
+                    ) {
+                        SettingsListItem(
+                            title = tr(
+                                "מצב הדגמה",
+                                "Demo mode"
+                            ),
+                            value =
+                                if (demoPrivacyEnabled) {
+                                    tr(
+                                        "שמות DEMO פעילים",
+                                        "DEMO names enabled"
+                                    )
+                                } else {
+                                    tr(
+                                        "שמות אמיתיים מוצגים",
+                                        "Real names displayed"
+                                    )
+                                },
+                            icon = Icons.Filled.Visibility,
+                            iconTint =
+                                if (demoPrivacyEnabled) {
+                                    Color(0xFF7C3AED)
+                                } else {
+                                    Color(0xFF64748B)
+                                },
+                            topRounded = true,
+                            bottomRounded = true
+                        ) {
+                            Column(
+                                modifier =
+                                    Modifier.fillMaxWidth(),
+                                verticalArrangement =
+                                    Arrangement.spacedBy(10.dp)
+                            ) {
+                                Row(
+                                    modifier =
+                                        Modifier.fillMaxWidth(),
+                                    verticalAlignment =
+                                        Alignment.CenterVertically,
+                                    horizontalArrangement =
+                                        Arrangement.SpaceBetween
+                                ) {
+                                    Text(
+                                        text =
+                                            if (
+                                                demoPrivacyEnabled
+                                            ) {
+                                                tr(
+                                                    "השמות האמיתיים מוסתרים במכשיר זה",
+                                                    "Real names are hidden on this device"
+                                                )
+                                            } else {
+                                                tr(
+                                                    "הפעל לפני הצגת האפליקציה",
+                                                    "Enable before presenting the app"
+                                                )
+                                            },
+                                        style =
+                                            KmiTypography.body,
+                                        color =
+                                            MaterialTheme
+                                                .colorScheme
+                                                .onSurface,
+                                        textAlign =
+                                            textAlignPrimary,
+                                        modifier =
+                                            Modifier.weight(1f)
+                                    )
+
+                                    Spacer(
+                                        Modifier.width(12.dp)
+                                    )
+
+                                    Switch(
+                                        checked =
+                                            demoPrivacyEnabled,
+                                        onCheckedChange = {
+                                                enabled ->
+
+                                            DemoPrivacy.setEnabled(
+                                                context =
+                                                    appCtxLang,
+                                                value = enabled
+                                            )
+
+                                            demoPrivacyEnabled =
+                                                enabled
+
+                                            toast(
+                                                if (enabled) {
+                                                    tr(
+                                                        "מצב הדגמה הופעל",
+                                                        "Demo mode enabled"
+                                                    )
+                                                } else {
+                                                    tr(
+                                                        "השמות האמיתיים הוחזרו",
+                                                        "Real names restored"
+                                                    )
+                                                }
+                                            )
+                                        }
+                                    )
+                                }
+
+                                if (demoPrivacyEnabled) {
+                                    Surface(
+                                        modifier =
+                                            Modifier.fillMaxWidth(),
+                                        shape =
+                                            RoundedCornerShape(
+                                                14.dp
+                                            ),
+                                        color =
+                                            Color(0xFF7C3AED)
+                                                .copy(
+                                                    alpha =
+                                                        if (
+                                                            isDarkMode
+                                                        ) {
+                                                            0.22f
+                                                        } else {
+                                                            0.10f
+                                                        }
+                                                ),
+                                        border = BorderStroke(
+                                            width = 1.dp,
+                                            color =
+                                                Color(0xFF7C3AED)
+                                                    .copy(
+                                                        alpha =
+                                                            0.35f
+                                                    )
+                                        ),
+                                        tonalElevation = 0.dp,
+                                        shadowElevation = 0.dp
+                                    ) {
+                                        Text(
+                                            text = tr(
+                                                "מצב הדגמה פעיל — שמות המתאמנים יוצגו כשמות DEMO. הנתונים האמיתיים לא משתנים.",
+                                                "Demo mode is active — trainee names will appear as DEMO names. Real data is unchanged."
+                                            ),
+                                            style =
+                                                KmiTypography
+                                                    .secondary,
+                                            color =
+                                                MaterialTheme
+                                                    .colorScheme
+                                                    .onSurface,
+                                            textAlign =
+                                                textAlignPrimary,
+                                            modifier =
+                                                Modifier.padding(
+                                                    horizontal =
+                                                        12.dp,
+                                                    vertical =
+                                                        10.dp
+                                                )
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
 
                     SettingsListSection(
                         title = tr("מידע וניהול", "Info and management"),

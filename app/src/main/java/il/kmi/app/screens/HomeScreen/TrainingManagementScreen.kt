@@ -842,9 +842,10 @@ private fun TrainingDetailsCard(
         Column(
             modifier = Modifier.padding(
                 horizontal = 16.dp,
-                vertical = 13.dp
+                vertical = 10.dp
             ),
-            verticalArrangement = Arrangement.spacedBy(4.dp)
+            verticalArrangement =
+                Arrangement.spacedBy(3.dp)
         ) {
             Text(
                 text = training.place.ifBlank { training.branch },
@@ -962,47 +963,29 @@ private fun TrainingDetailsCard(
                     rawEndTime
                 }
 
-            Column(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalAlignment =
+            /*
+             * סימוני LTR בלתי נראים שומרים על הסדר הנכון
+             * של התאריך והשעות גם בתוך מסך עברי.
+             */
+            val dateAndTimeText =
+                "\u200E$cleanDate · " +
+                        "$displayedStartTime–$displayedEndTime\u200E"
+
+            Text(
+                text = dateAndTimeText,
+                style = KmiTypography.cardTitle,
+                color = accent,
+                textAlign =
                     if (isEnglish) {
-                        Alignment.Start
+                        TextAlign.Left
                     } else {
-                        Alignment.End
-                    }
-            ) {
-
-                Text(
-                    text = cleanDate,
-                    style = KmiTypography.cardTitle,
-                    color = accent,
-                    textAlign =
-                        if (isEnglish) {
-                            TextAlign.Left
-                        } else {
-                            TextAlign.Right
-                        },
-                    modifier = Modifier.fillMaxWidth()
-                )
-
-                Spacer(
-                    modifier = Modifier.height(2.dp)
-                )
-
-                Text(
-                    text =
-                        "$displayedStartTime–$displayedEndTime",
-                    style = KmiTypography.cardTitle,
-                    color = accent,
-                    textAlign =
-                        if (isEnglish) {
-                            TextAlign.Left
-                        } else {
-                            TextAlign.Right
-                        },
-                    modifier = Modifier.fillMaxWidth()
-                )
-            }
+                        TextAlign.Right
+                    },
+                maxLines = 1,
+                softWrap = false,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.fillMaxWidth()
+            )
         }
     }
 }

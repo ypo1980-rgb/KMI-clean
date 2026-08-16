@@ -73,6 +73,7 @@ import com.google.firebase.firestore.SetOptions
 import com.google.firebase.firestore.ktx.firestore
 import com.google.firebase.ktx.Firebase
 import il.kmi.app.ui.KmiTopBar
+import il.kmi.app.privacy.TraineeDisplayNameMapper
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
 import java.text.SimpleDateFormat
@@ -135,6 +136,15 @@ private fun String?.cleanPaymentText(): String {
         ?.trim()
         ?.takeIf { it.isNotBlank() }
         .orEmpty()
+}
+
+private fun PaymentReportItem.demoSafeName(isEnglish: Boolean): String {
+    return TraineeDisplayNameMapper.displayName(
+        realName = fullName,
+        stableKey = traineeId
+    ).ifBlank {
+        if (isEnglish) "Unnamed trainee" else "מתאמן ללא שם"
+    }
 }
 
 private fun String.looksLikeTechnicalId(): Boolean {
@@ -1082,45 +1092,45 @@ fun PaymentsReportScreen(
                 }
             }
 
-                manualDialogItem?.let { selected ->
-                    ManualPaymentDialog(
-                        isEnglish = isEnglish,
-                        item = selected,
-                        onDismiss = { manualDialogItem = null },
-                        onSave = { amount, method, notes ->
-                            screenScope.launch {
-                                runCatching {
-                                    saveManualMembershipPaymentToFirestore(
-                                        item = selected,
-                                        amountToAdd = amount,
-                                        method = method,
-                                        notes = notes
-                                    )
-                                }.onSuccess { updatedItem ->
-                                    items = items.map { current ->
-                                        if (current.traineeId == selected.traineeId) {
-                                            updatedItem
-                                        } else {
-                                            current
-                                        }
+            manualDialogItem?.let { selected ->
+                ManualPaymentDialog(
+                    isEnglish = isEnglish,
+                    item = selected,
+                    onDismiss = { manualDialogItem = null },
+                    onSave = { amount, method, notes ->
+                        screenScope.launch {
+                            runCatching {
+                                saveManualMembershipPaymentToFirestore(
+                                    item = selected,
+                                    amountToAdd = amount,
+                                    method = method,
+                                    notes = notes
+                                )
+                            }.onSuccess { updatedItem ->
+                                items = items.map { current ->
+                                    if (current.traineeId == selected.traineeId) {
+                                        updatedItem
+                                    } else {
+                                        current
                                     }
-
-                                    onSaveManualPayment(
-                                        selected.traineeId,
-                                        amount,
-                                        method,
-                                        notes
-                                    )
-
-                                    manualDialogItem = null
-                                }.onFailure { error ->
-                                    paymentsError = error.localizedMessage ?: "Failed saving payment"
-                                    manualDialogItem = null
                                 }
+
+                                onSaveManualPayment(
+                                    selected.traineeId,
+                                    amount,
+                                    method,
+                                    notes
+                                )
+
+                                manualDialogItem = null
+                            }.onFailure { error ->
+                                paymentsError = error.localizedMessage ?: "Failed saving payment"
+                                manualDialogItem = null
                             }
                         }
-                    )
-                }
+                    }
+                )
+            }
         }
     }
 }
@@ -1407,7 +1417,7 @@ private fun PaymentReportRow(
                         horizontalAlignment = if (isEnglish) Alignment.Start else Alignment.End
                     ) {
                         Text(
-                            text = item.fullName,
+                            text = item.demoSafeName(isEnglish),
                             color = Color.White,
                             style = MaterialTheme.typography.titleSmall.copy(
                                 fontSize = 14.sp,
@@ -1543,7 +1553,7 @@ private fun ManualPaymentDialog(
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 Text(
-                    text = item.fullName,
+                    text = item.demoSafeName(isEnglish),
                     color = Color.White.copy(alpha = 0.9f),
                     textAlign = if (isEnglish) TextAlign.Start else TextAlign.End,
                     modifier = Modifier.fillMaxWidth()
@@ -2149,7 +2159,7 @@ private fun createPaymentsReportPdf(
         }
 
         val values = listOf(
-            item.fullName.take(22),
+            item.demoSafeName(isEnglish).take(22),
             item.branchName.ifBlank { "—" }.take(12),
             "₪${"%.0f".format(item.requiredAmount)}",
             "₪${"%.0f".format(item.paidAmount)}",

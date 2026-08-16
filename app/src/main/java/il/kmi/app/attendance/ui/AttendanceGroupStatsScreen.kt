@@ -56,6 +56,7 @@ import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import il.kmi.app.attendance.data.AttendanceRepository
 import il.kmi.app.attendance.data.AttendanceStatus
+import il.kmi.app.privacy.TraineeDisplayNameMapper
 import il.kmi.app.ui.KmiIconSize
 import il.kmi.app.ui.KmiTopBar
 import il.kmi.app.ui.KmiTypography
@@ -195,7 +196,7 @@ fun AttendanceGroupStatsScreen(
                     )
                 }
             )
-                 },
+        },
         containerColor = Color.Transparent,
         contentWindowInsets = WindowInsets(left = 0)
     ) { p ->
@@ -1883,6 +1884,15 @@ private fun ReportAttendanceDetailsCard(
         }
     }
 
+    fun demoSafeName(member: il.kmi.app.attendance.data.GroupMember): String {
+        return TraineeDisplayNameMapper.displayName(
+            realName = member.displayName,
+            stableKey = member.id.toString()
+        ).ifBlank {
+            tr("מתאמן ללא שם", "Unnamed trainee")
+        }
+    }
+
     Surface(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(22.dp),
@@ -1934,7 +1944,7 @@ private fun ReportAttendanceDetailsCard(
 
             AttendanceStatusSection(
                 title = tr("הגיעו", "Present"),
-                names = presentMembers.map { it.displayName },
+                names = presentMembers.map(::demoSafeName),
                 emptyText = tr(
                     "אין מתאמנים שסומנו הגיעו",
                     "No trainees marked present"
@@ -1945,7 +1955,7 @@ private fun ReportAttendanceDetailsCard(
 
             AttendanceStatusSection(
                 title = tr("לא הגיעו", "Absent"),
-                names = absentMembers.map { it.displayName },
+                names = absentMembers.map(::demoSafeName),
                 emptyText = tr(
                     "אין מתאמנים שלא הגיעו",
                     "No absent trainees"

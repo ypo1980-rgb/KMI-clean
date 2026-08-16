@@ -121,6 +121,7 @@ import java.util.Locale
 import java.util.TimeZone
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.zIndex
 
 //=================================================================================
 
@@ -5055,23 +5056,31 @@ private fun TrainingCardCompact(
                 Color(0xFF1D4ED8)
         }
 
-    Surface(
+    Box(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 16.dp)
-            .heightIn(min = 78.dp),
-        color = MaterialTheme.colorScheme.surface,
-        tonalElevation = 1.dp,
-        shadowElevation = 3.dp,
-        shape = RoundedCornerShape(16.dp),
-        border = BorderStroke(
-            width = 1.dp,
-            color = trainingCardBorderColor.copy(
-                alpha = 0.35f
+            .padding(
+                start = 16.dp,
+                top = 12.dp,
+                end = 16.dp
             )
-        )
     ) {
-        Column(
+        Surface(
+            modifier = Modifier
+                .fillMaxWidth()
+                .heightIn(min = 78.dp),
+            color = MaterialTheme.colorScheme.surface,
+            tonalElevation = 1.dp,
+            shadowElevation = 3.dp,
+            shape = RoundedCornerShape(16.dp),
+            border = BorderStroke(
+                width = 1.dp,
+                color = trainingCardBorderColor.copy(
+                    alpha = 0.35f
+                )
+            )
+        ) {
+            Column(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(horizontal = 10.dp, vertical = 8.dp)
@@ -5088,63 +5097,35 @@ private fun TrainingCardCompact(
                 )
             }
 
-            Box(
-                modifier = Modifier.fillMaxWidth()
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalAlignment =
+                    Alignment.CenterHorizontally
             ) {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = if (isCoach) 44.dp else 0.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally
-                ) {
-                    Text(
-                        text = branchLine,
-                        style = KmiTypography.cardTitle,
-                        color = MaterialTheme.colorScheme.onSurface,
-                        textAlign = TextAlign.Center,
-                        modifier = Modifier.fillMaxWidth(),
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
+                Text(
+                    text = branchLine,
+                    style = KmiTypography.cardTitle,
+                    color =
+                        MaterialTheme.colorScheme.onSurface,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.fillMaxWidth(),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
 
-                    Text(
-                        text = dateTimeText,
-                        style = KmiTypography.secondary.copy(
-                            fontWeight = FontWeight.Bold
-                        ),
-                        color = MaterialTheme.colorScheme.onSurface,
-                        textAlign = TextAlign.Center,
-                        maxLines = 2,
-                        softWrap = true,
-                        overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                }
-
-                if (isCoach) {
-                    IconButton(
-                        onClick = {
-                            clickSound()
-                            haptic(true)
-                            onManageTraining()
-                        },
-                        modifier = Modifier
-                            .align(Alignment.CenterEnd)
-                            .size(40.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Filled.EditNote,
-                            contentDescription =
-                                if (isEnglish) {
-                                    "Change or cancel training"
-                                } else {
-                                    "שינוי או ביטול אימון"
-                                },
-                            tint = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.size(23.dp)
-                        )
-                    }
-                }
+                Text(
+                    text = dateTimeText,
+                    style = KmiTypography.secondary.copy(
+                        fontWeight = FontWeight.Bold
+                    ),
+                    color =
+                        MaterialTheme.colorScheme.onSurface,
+                    textAlign = TextAlign.Center,
+                    maxLines = 1,
+                    softWrap = false,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.fillMaxWidth()
+                )
             }
 
             val statusMessage =
@@ -5318,20 +5299,104 @@ private fun TrainingCardCompact(
 
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(10.dp),
-                verticalAlignment = Alignment.CenterVertically
+                horizontalArrangement =
+                    Arrangement.spacedBy(8.dp),
+                verticalAlignment =
+                    Alignment.CenterVertically
             ) {
                 NavigationChip(
-                    address = TrainingCatalog.addressDisplayName(
-                        training.address.orEmpty(),
-                        isEnglish
-                    ),
+                    address =
+                        TrainingCatalog.addressDisplayName(
+                            training.address.orEmpty(),
+                            isEnglish
+                        ),
                     isEnglish = isEnglish,
                     modifier = Modifier.weight(1f)
                 )
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement =
+                        Arrangement.spacedBy(8.dp),
+                    verticalAlignment =
+                        Alignment.CenterVertically
+                ) {
+                    NavigationChip(
+                        address =
+                            TrainingCatalog.addressDisplayName(
+                                training.address.orEmpty(),
+                                isEnglish
+                            ),
+                        isEnglish = isEnglish,
+                        modifier = Modifier.weight(1f)
+                    )
+                }
             }
 
-            Spacer(Modifier.weight(1f))
+                Spacer(Modifier.weight(1f))
+            }
+        }
+
+        if (isCoach) {
+            /*
+             * האייקון ממוקם בפינה השמאלית הפיזית
+             * גם בעברית וגם באנגלית.
+             *
+             * ההזזה גורמת לכך שחלק מהעיגול נמצא
+             * בתוך הכרטיס וחלקו מחוץ לכרטיס.
+             */
+            val editButtonAlignment =
+                if (isEnglish) {
+                    Alignment.TopStart
+                } else {
+                    Alignment.TopEnd
+                }
+
+            Surface(
+                modifier = Modifier
+                    .align(editButtonAlignment)
+                    .absoluteOffset(
+                        x = (-10).dp,
+                        y = (-10).dp
+                    )
+                    .size(46.dp)
+                    .zIndex(3f),
+                shape = CircleShape,
+                color =
+                    MaterialTheme.colorScheme
+                        .primaryContainer,
+                border = BorderStroke(
+                    width = 1.dp,
+                    color =
+                        MaterialTheme.colorScheme.primary
+                            .copy(alpha = 0.55f)
+                ),
+                tonalElevation = 2.dp,
+                shadowElevation = 5.dp
+            ) {
+                IconButton(
+                    onClick = {
+                        clickSound()
+                        haptic(true)
+                        onManageTraining()
+                    },
+                    modifier = Modifier.fillMaxSize()
+                ) {
+                    Icon(
+                        imageVector =
+                            Icons.Filled.EditNote,
+                        contentDescription =
+                            if (isEnglish) {
+                                "Change or cancel training"
+                            } else {
+                                "שינוי או ביטול אימון"
+                            },
+                        tint =
+                            MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(23.dp)
+                    )
+                }
+            }
         }
     }
 }

@@ -61,6 +61,7 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import il.kmi.app.attendance.data.GroupMember
 import il.kmi.app.training.TrainingCatalog
+import il.kmi.app.privacy.TraineeDisplayNameMapper
 import il.kmi.shared.localization.AppLanguage
 import il.kmi.shared.localization.AppLanguageManager
 import java.time.YearMonth
@@ -239,7 +240,11 @@ fun AttendanceScreen(
                 AttendanceStatus.EXCUSED -> tr("מוצדק", "Excused")
                 else                     -> tr("לא סומן", "Not marked")
             }
-            "• ${m.displayName} - $st"
+            val reportName = TraineeDisplayNameMapper.displayName(
+                realName = m.displayName,
+                stableKey = m.id.toString()
+            ).ifBlank { tr("מתאמן ללא שם", "Unnamed trainee") }
+            "• $reportName - $st"
         }
 
         return header + stats + "\n" + lines
@@ -409,7 +414,7 @@ fun AttendanceScreen(
                     (contextLang as? Activity)?.recreate()
                 }
             )
-                 },
+        },
         floatingActionButton = {
             if (!isReportSaved) {
                 FloatingActionButton(
@@ -527,235 +532,244 @@ fun AttendanceScreen(
                                 "Mark trainee attendance"
                             ),
                             style = KmiTypography.sectionTitle.copy(
-                            fontWeight = FontWeight.ExtraBold
-                        ),
-                        color =
-                            if (isDarkMode) {
-                                MaterialTheme.colorScheme.onBackground
-                            } else {
-                                Color(0xFF1E2A3D)
-                            },
-                        modifier = Modifier.fillMaxWidth(),
-                        textAlign = screenTextAlign
-                    )
-                }
-
-                if (!hasRealMembers) {
-                    item {
-                        EmptyAttendanceMembersCard(
-                            branch = selectedBranch,
-                            groupKey = effectiveGroupRaw,
-                            isEnglish = isEnglish
+                                fontWeight = FontWeight.ExtraBold
+                            ),
+                            color =
+                                if (isDarkMode) {
+                                    MaterialTheme.colorScheme.onBackground
+                                } else {
+                                    Color(0xFF1E2A3D)
+                                },
+                            modifier = Modifier.fillMaxWidth(),
+                            textAlign = screenTextAlign
                         )
                     }
-                }
 
-                items(displayMembers, key = { it.id }) { m ->
-                    CompositionLocalProvider(LocalLayoutDirection provides screenLayoutDirection) {
-                        Column(Modifier.fillMaxWidth()) {
-
-                            val uiName = m.displayName.ifBlank {
-                                tr("מתאמן ללא שם", "Unnamed trainee")
-                            }
-
-                            Text(
-                                text = uiName,
-                                modifier = Modifier.fillMaxWidth(),
-                                textAlign = TextAlign.Start,
-                                style = KmiTypography.cardTitle.copy(
-                                    fontWeight = FontWeight.ExtraBold
-                                ),
-                                color =
-                                    if (isDarkMode) {
-                                        MaterialTheme.colorScheme.onBackground
-                                    } else {
-                                        Color(0xFF1E2A3D)
-                                    },
-                                maxLines = 2,
-                                overflow = TextOverflow.Ellipsis
+                    if (!hasRealMembers) {
+                        item {
+                            EmptyAttendanceMembersCard(
+                                branch = selectedBranch,
+                                groupKey = effectiveGroupRaw,
+                                isEnglish = isEnglish
                             )
+                        }
+                    }
 
-                            Spacer(Modifier.height(6.dp))
+                    items(displayMembers, key = { it.id }) { m ->
+                        CompositionLocalProvider(LocalLayoutDirection provides screenLayoutDirection) {
+                            Column(Modifier.fillMaxWidth()) {
 
-                            val curr = statusById[m.id]
+                                val uiName = TraineeDisplayNameMapper.displayName(
+                                    realName = m.displayName,
+                                    stableKey = m.id.toString()
+                                ).ifBlank {
+                                    tr("מתאמן ללא שם", "Unnamed trainee")
+                                }
 
-                            @Composable
-                            fun StatusPill(
-                                text: String,
-                                selected: Boolean,
-                                selectedColor: Color,
-                                onClick: () -> Unit,
-                                modifier: Modifier = Modifier
-                            ) {
-                                val bg = if (selected) selectedColor else Color(0xFF0B1220)
-                                val fg = if (selected) Color.White else Color(0xFFE5E7EB)
-                                val brd = if (selected) null else BorderStroke(1.dp, Color(0xFF334155))
+                                Text(
+                                    text = uiName,
+                                    modifier = Modifier.fillMaxWidth(),
+                                    textAlign = TextAlign.Start,
+                                    style = KmiTypography.cardTitle.copy(
+                                        fontWeight = FontWeight.ExtraBold
+                                    ),
+                                    color =
+                                        if (isDarkMode) {
+                                            MaterialTheme.colorScheme.onBackground
+                                        } else {
+                                            Color(0xFF1E2A3D)
+                                        },
+                                    maxLines = 2,
+                                    overflow = TextOverflow.Ellipsis
+                                )
 
-                                Surface(
-                                    color = bg,
-                                    contentColor = fg,
-                                    shape = RoundedCornerShape(999.dp),
-                                    tonalElevation =
-                                        if (selected) 2.dp else 0.dp,
-                                    shadowElevation = 0.dp,
-                                    border = brd,
-                                    modifier = modifier
-                                        .heightIn(min = 36.dp)
-                                        .clickable {
-                                            onClick()
-                                        }
+                                Spacer(Modifier.height(6.dp))
+
+                                val curr = statusById[m.id]
+
+                                @Composable
+                                fun StatusPill(
+                                    text: String,
+                                    selected: Boolean,
+                                    selectedColor: Color,
+                                    onClick: () -> Unit,
+                                    modifier: Modifier = Modifier
                                 ) {
-                                    Row(
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .padding(
-                                                horizontal = 10.dp,
-                                                vertical = 8.dp
-                                            ),
-                                        horizontalArrangement =
-                                            Arrangement.Center,
-                                        verticalAlignment =
-                                            Alignment.CenterVertically
+                                    val bg = if (selected) selectedColor else Color(0xFF0B1220)
+                                    val fg = if (selected) Color.White else Color(0xFFE5E7EB)
+                                    val brd = if (selected) null else BorderStroke(1.dp, Color(0xFF334155))
+
+                                    Surface(
+                                        color = bg,
+                                        contentColor = fg,
+                                        shape = RoundedCornerShape(999.dp),
+                                        tonalElevation =
+                                            if (selected) 2.dp else 0.dp,
+                                        shadowElevation = 0.dp,
+                                        border = brd,
+                                        modifier = modifier
+                                            .heightIn(min = 36.dp)
+                                            .clickable {
+                                                onClick()
+                                            }
                                     ) {
-                                        Box(
-                                            modifier = Modifier.size(
-                                                KmiIconSize.tiny
-                                            )
+                                        Row(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .padding(
+                                                    horizontal = 10.dp,
+                                                    vertical = 8.dp
+                                                ),
+                                            horizontalArrangement =
+                                                Arrangement.Center,
+                                            verticalAlignment =
+                                                Alignment.CenterVertically
                                         ) {
-                                            if (selected) {
+                                            Box(
+                                                modifier = Modifier.size(
+                                                    KmiIconSize.tiny
+                                                )
+                                            ) {
+                                                if (selected) {
+                                                    Icon(
+                                                        imageVector =
+                                                            Icons.Filled.Check,
+                                                        contentDescription = null,
+                                                        modifier = Modifier.size(
+                                                            KmiIconSize.tiny
+                                                        )
+                                                    )
+                                                }
+                                            }
+
+                                            Spacer(Modifier.width(4.dp))
+
+                                            Text(
+                                                text = text,
+                                                style = KmiTypography.caption.copy(
+                                                    fontWeight =
+                                                        FontWeight.ExtraBold
+                                                ),
+                                                maxLines = 2,
+                                                overflow = TextOverflow.Ellipsis
+                                            )
+                                        }
+                                    }
+                                }
+
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement =
+                                        Arrangement.spacedBy(12.dp),
+                                    verticalAlignment =
+                                        Alignment.CenterVertically
+                                ) {
+                                    Column(
+                                        modifier = Modifier
+                                            .weight(1f)
+                                            .padding(start = 8.dp),
+                                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                                        horizontalAlignment = Alignment.CenterHorizontally
+                                    ) {
+                                        StatusPill(
+                                            text = tr("הגיע", "Present"),
+                                            selected = curr == AttendanceStatus.PRESENT,
+                                            selectedColor = Color(0xFF22C55E),
+                                            onClick = {
+                                                val mid = m.id
+                                                scope.launch { vm.mark(mid, AttendanceStatus.PRESENT) }
+                                            },
+                                            modifier = Modifier.fillMaxWidth()
+                                        )
+
+                                        StatusPill(
+                                            text = tr("לא הגיע", "Absent"),
+                                            selected = curr == AttendanceStatus.ABSENT,
+                                            selectedColor = Color(0xFFEF4444),
+                                            onClick = {
+                                                val mid = m.id
+                                                scope.launch { vm.mark(mid, AttendanceStatus.ABSENT) }
+                                            },
+                                            modifier = Modifier.fillMaxWidth()
+                                        )
+                                    }
+
+                                    CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
+                                        Row(
+                                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            IconButton(onClick = {
+                                                val mid: Long? = (m.id as? Long) ?: (m.id as? String)?.toLongOrNull()
+                                                val uiName = TraineeDisplayNameMapper.displayName(
+                                                    realName = m.displayName,
+                                                    stableKey = m.id.toString()
+                                                ).ifBlank {
+                                                    tr("מתאמן ללא שם", "Unnamed trainee")
+                                                }
+                                                onOpenMemberStats(mid, uiName)
+                                            }) {
                                                 Icon(
                                                     imageVector =
-                                                        Icons.Filled.Check,
-                                                    contentDescription = null,
+                                                        Icons.Filled.Assessment,
+                                                    contentDescription = tr(
+                                                        "סטטיסטיקה",
+                                                        "Statistics"
+                                                    ),
+                                                    tint =
+                                                        if (isDarkMode) {
+                                                            Color(0xFFF0ABFC)
+                                                        } else {
+                                                            Color(0xFFA21CAF)
+                                                        },
                                                     modifier = Modifier.size(
-                                                        KmiIconSize.tiny
+                                                        KmiIconSize.medium
+                                                    )
+                                                )
+                                            }
+
+                                            IconButton(onClick = {
+                                                val id = (m.id as? Long) ?: (m.id as? String)?.toLongOrNull() ?: return@IconButton
+                                                val uiName = TraineeDisplayNameMapper.displayName(
+                                                    realName = m.displayName,
+                                                    stableKey = m.id.toString()
+                                                ).ifBlank {
+                                                    tr("מתאמן ללא שם", "Unnamed trainee")
+                                                }
+                                                pendingDelete = id to uiName
+                                            }) {
+                                                Icon(
+                                                    imageVector =
+                                                        Icons.Filled.Delete,
+                                                    contentDescription = tr(
+                                                        "הסר מתאמן",
+                                                        "Remove trainee"
+                                                    ),
+                                                    tint = Color(0xFFF97316),
+                                                    modifier = Modifier.size(
+                                                        KmiIconSize.medium
                                                     )
                                                 )
                                             }
                                         }
-
-                                        Spacer(Modifier.width(4.dp))
-
-                                        Text(
-                                            text = text,
-                                            style = KmiTypography.caption.copy(
-                                                fontWeight =
-                                                    FontWeight.ExtraBold
-                                            ),
-                                            maxLines = 2,
-                                            overflow = TextOverflow.Ellipsis
-                                        )
                                     }
                                 }
-                            }
 
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement =
-                                    Arrangement.spacedBy(12.dp),
-                                verticalAlignment =
-                                    Alignment.CenterVertically
-                            ) {
-                                Column(
-                                    modifier = Modifier
-                                        .weight(1f)
-                                        .padding(start = 8.dp),
-                                    verticalArrangement = Arrangement.spacedBy(8.dp),
-                                    horizontalAlignment = Alignment.CenterHorizontally
-                                ) {
-                                    StatusPill(
-                                        text = tr("הגיע", "Present"),
-                                        selected = curr == AttendanceStatus.PRESENT,
-                                        selectedColor = Color(0xFF22C55E),
-                                        onClick = {
-                                            val mid = m.id
-                                            scope.launch { vm.mark(mid, AttendanceStatus.PRESENT) }
-                                        },
-                                        modifier = Modifier.fillMaxWidth()
-                                    )
-
-                                    StatusPill(
-                                        text = tr("לא הגיע", "Absent"),
-                                        selected = curr == AttendanceStatus.ABSENT,
-                                        selectedColor = Color(0xFFEF4444),
-                                        onClick = {
-                                            val mid = m.id
-                                            scope.launch { vm.mark(mid, AttendanceStatus.ABSENT) }
-                                        },
-                                        modifier = Modifier.fillMaxWidth()
-                                    )
-                                }
-
-                                CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
-                                    Row(
-                                        horizontalArrangement = Arrangement.spacedBy(6.dp),
-                                        verticalAlignment = Alignment.CenterVertically
-                                    ) {
-                                        IconButton(onClick = {
-                                            val mid: Long? = (m.id as? Long) ?: (m.id as? String)?.toLongOrNull()
-                                            val uiName = m.displayName.ifBlank {
-                                                tr("מתאמן ללא שם", "Unnamed trainee")
-                                            }
-                                            onOpenMemberStats(mid, uiName)
-                                        }) {
-                                            Icon(
-                                                imageVector =
-                                                    Icons.Filled.Assessment,
-                                                contentDescription = tr(
-                                                    "סטטיסטיקה",
-                                                    "Statistics"
-                                                ),
-                                                tint =
-                                                    if (isDarkMode) {
-                                                        Color(0xFFF0ABFC)
-                                                    } else {
-                                                        Color(0xFFA21CAF)
-                                                    },
-                                                modifier = Modifier.size(
-                                                    KmiIconSize.medium
-                                                )
-                                            )
+                                HorizontalDivider(
+                                    modifier = Modifier.padding(
+                                        vertical = 10.dp
+                                    ),
+                                    color =
+                                        if (isDarkMode) {
+                                            MaterialTheme.colorScheme.outline
+                                                .copy(alpha = 0.45f)
+                                        } else {
+                                            Color(0xFF1F2937)
                                         }
-
-                                        IconButton(onClick = {
-                                            val id = (m.id as? Long) ?: (m.id as? String)?.toLongOrNull() ?: return@IconButton
-                                            val uiName = m.displayName.ifBlank {
-                                                tr("מתאמן ללא שם", "Unnamed trainee")
-                                            }
-                                            pendingDelete = id to uiName
-                                        }) {
-                                            Icon(
-                                                imageVector =
-                                                    Icons.Filled.Delete,
-                                                contentDescription = tr(
-                                                    "הסר מתאמן",
-                                                    "Remove trainee"
-                                                ),
-                                                tint = Color(0xFFF97316),
-                                                modifier = Modifier.size(
-                                                    KmiIconSize.medium
-                                                )
-                                            )
-                                        }
-                                    }
-                                }
+                                )
                             }
-
-                            HorizontalDivider(
-                                modifier = Modifier.padding(
-                                    vertical = 10.dp
-                                ),
-                                color =
-                                    if (isDarkMode) {
-                                        MaterialTheme.colorScheme.outline
-                                            .copy(alpha = 0.45f)
-                                    } else {
-                                        Color(0xFF1F2937)
-                                    }
-                            )
                         }
                     }
-                }
                 } else {
                     item {
                         Surface(
@@ -3097,8 +3111,13 @@ private fun createAttendancePdf(
 
         paint.color = android.graphics.Color.rgb(15, 23, 42)
         paint.textAlign = if (isEnglish) Paint.Align.LEFT else Paint.Align.RIGHT
+        val pdfDisplayName = TraineeDisplayNameMapper.displayName(
+            realName = member.displayName,
+            stableKey = member.id.toString()
+        ).ifBlank { tr("מתאמן ללא שם", "Unnamed trainee") }
+
         canvas.drawText(
-            member.displayName.ifBlank { tr("מתאמן ללא שם", "Unnamed trainee") }.take(38),
+            pdfDisplayName.take(38),
             if (isEnglish) margin + 16f else pageWidth - margin - 16f,
             y,
             paint

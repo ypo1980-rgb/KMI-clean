@@ -2842,19 +2842,81 @@ private fun HardBeltGroupsStickyContent(
             statusId = statusId
         )
 
-        return CoachMaterialProgress(
-            status =
+        val selectableStatuses = listOf(
+            CoachMaterialStatus.TAUGHT,
+            CoachMaterialStatus.PRACTICED,
+            CoachMaterialStatus.NEEDS_REINFORCEMENT
+        )
+
+        val selectedStatuses =
+            selectableStatuses
+                .filter { status ->
+                    prefs.getBoolean(
+                        "${key}_${status.storageValue}_selected",
+                        false
+                    )
+                }
+                .toSet()
+
+        val updatedAtByStatus =
+            selectableStatuses
+                .mapNotNull { status ->
+                    val updatedAt =
+                        prefs.getLong(
+                            "${key}_${status.storageValue}_updated_at",
+                            0L
+                        )
+
+                    if (updatedAt > 0L) {
+                        status to updatedAt
+                    } else {
+                        null
+                    }
+                }
+                .toMap()
+
+        /*
+         * תאימות לנתונים שנשמרו במבנה הישן:
+         * status אחד + updatedAt אחד.
+         */
+        if (selectedStatuses.isEmpty()) {
+            val legacyStatus =
                 CoachMaterialStatus.fromStorage(
                     prefs.getString(
                         "${key}_status",
                         null
                     )
-                ),
-            updatedAt =
+                )
+
+            val legacyUpdatedAt =
                 prefs.getLong(
                     "${key}_updated_at",
                     0L
                 )
+
+            if (
+                legacyStatus !=
+                CoachMaterialStatus.NOT_TAUGHT
+            ) {
+                return CoachMaterialProgress(
+                    selectedStatuses =
+                        setOf(legacyStatus),
+                    updatedAtByStatus =
+                        if (legacyUpdatedAt > 0L) {
+                            mapOf(
+                                legacyStatus to
+                                        legacyUpdatedAt
+                            )
+                        } else {
+                            emptyMap()
+                        }
+                )
+            }
+        }
+
+        return CoachMaterialProgress(
+            selectedStatuses = selectedStatuses,
+            updatedAtByStatus = updatedAtByStatus
         )
     }
 
@@ -2863,29 +2925,148 @@ private fun HardBeltGroupsStickyContent(
         statusId: String,
         status: CoachMaterialStatus
     ) {
-        val updatedAt = System.currentTimeMillis()
-
-        coachProgressStates[
-            coachMapKey(belt, statusId)
-        ] = CoachMaterialProgress(
-            status = status,
-            updatedAt = updatedAt
-        )
-
-        val key = coachProgressKey(
-            belt = belt,
-            statusId = statusId
-        )
-
-        prefs.edit()
-            .putString(
-                "${key}_status",
-                status.storageValue
+        val mapKey =
+            coachMapKey(
+                belt = belt,
+                statusId = statusId
             )
-            .putLong(
-                "${key}_updated_at",
-                updatedAt
+
+        val key =
+            coachProgressKey(
+                belt = belt,
+                statusId = statusId
             )
+
+        val currentProgress =
+            coachProgressStates[mapKey]
+                ?: loadCoachProgress(
+                    belt = belt,
+                    statusId = statusId
+                )
+
+        /*
+         * לא נלמד = אין אף אחד משלושת
+         * הסטטוסים הפעילים.
+         */
+        if (
+            status ==
+            CoachMaterialStatus.NOT_TAUGHT
+        ) {
+            coachProgressStates[mapKey] =
+                CoachMaterialProgress()
+
+            prefs.edit()
+                .remove(
+                    "${key}_${CoachMaterialStatus.TAUGHT.storageValue}_selected"
+                )
+                .remove(
+                    "${key}_${CoachMaterialStatus.TAUGHT.storageValue}_updated_at"
+                )
+                .remove(
+                    "${key}_${CoachMaterialStatus.PRACTICED.storageValue}_selected"
+                )
+                .remove(
+                    "${key}_${CoachMaterialStatus.PRACTICED.storageValue}_updated_at"
+                )
+                .remove(
+                    "${key}_${CoachMaterialStatus.NEEDS_REINFORCEMENT.storageValue}_selected"
+                )
+                .remove(
+                    "${key}_${CoachMaterialStatus.NEEDS_REINFORCEMENT.storageValue}_updated_at"
+                )
+                .remove("${key}_status")
+                .remove("${key}_updated_at")
+                .apply()
+
+            return
+        }
+
+        val nextSelectedStatuses =
+            currentProgress
+                .selectedStatuses
+                .toMutableSet()
+
+        val nextUpdatedAtByStatus =
+            currentProgress
+                .updatedAtByStatus
+                .toMutableMap()
+
+        if (
+            nextSelectedStatuses.contains(status)
+        ) {
+            /*
+             * לחיצה חוזרת על סטטוס פעיל
+             * מבטלת רק אותו.
+             */
+            nextSelectedStatuses.remove(status)
+            nextUpdatedAtByStatus.remove(status)
+        } else {
+            /*
+             * קיימים 3 סטטוסים אפשריים,
+             * אבל ניתן לבחור עד 2 במקביל.
+             */
+            if (nextSelectedStatuses.size >= 2) {
+                return
+            }
+
+            nextSelectedStatuses.add(status)
+
+            nextUpdatedAtByStatus[status] =
+                System.currentTimeMillis()
+        }
+
+        val nextProgress =
+            CoachMaterialProgress(
+                selectedStatuses =
+                    nextSelectedStatuses,
+                updatedAtByStatus =
+                    nextUpdatedAtByStatus
+            )
+
+        coachProgressStates[mapKey] =
+            nextProgress
+
+        val editor = prefs.edit()
+
+        listOf(
+            CoachMaterialStatus.TAUGHT,
+            CoachMaterialStatus.PRACTICED,
+            CoachMaterialStatus.NEEDS_REINFORCEMENT
+        ).forEach { selectableStatus ->
+
+            if (
+                nextSelectedStatuses.contains(
+                    selectableStatus
+                )
+            ) {
+                editor.putBoolean(
+                    "${key}_${selectableStatus.storageValue}_selected",
+                    true
+                )
+
+                editor.putLong(
+                    "${key}_${selectableStatus.storageValue}_updated_at",
+                    nextUpdatedAtByStatus[
+                        selectableStatus
+                    ] ?: 0L
+                )
+            } else {
+                editor.remove(
+                    "${key}_${selectableStatus.storageValue}_selected"
+                )
+
+                editor.remove(
+                    "${key}_${selectableStatus.storageValue}_updated_at"
+                )
+            }
+        }
+
+        /*
+         * המבנה החדש הוא מקור האמת.
+         */
+        editor
+            .remove("${key}_status")
+            .remove("${key}_updated_at")
             .apply()
     }
 
@@ -3362,11 +3543,7 @@ private fun HardBeltGroupsStickyContent(
                                 row.belt,
                                 statusId
                             )
-                        ] ?: CoachMaterialProgress(
-                            status =
-                                CoachMaterialStatus.NOT_TAUGHT,
-                            updatedAt = 0L
-                        ),
+                        ] ?: CoachMaterialProgress(),
                     onCoachStatusSelect = {
                             selectedStatus ->
                         saveCoachProgress(
@@ -4363,10 +4540,7 @@ private fun HardExerciseLegacyRow(
     mastered: Boolean?,
     isCoach: Boolean = false,
     coachProgress: CoachMaterialProgress =
-        CoachMaterialProgress(
-            status = CoachMaterialStatus.NOT_TAUGHT,
-            updatedAt = 0L
-        ),
+        CoachMaterialProgress(),
     onCoachStatusSelect:
         (CoachMaterialStatus) -> Unit = {},
     isDarkMode: Boolean = false,
@@ -4561,6 +4735,7 @@ private fun HardExerciseLegacyRow(
                         CoachMaterialStatusSelector(
                             progress = coachProgress,
                             isEnglish = isEnglish,
+                            onInfo = onInfoClick,
                             onSelect = onCoachStatusSelect
                         )
                     } else {
@@ -4589,6 +4764,7 @@ private fun HardExerciseLegacyRow(
                         CoachMaterialStatusSelector(
                             progress = coachProgress,
                             isEnglish = isEnglish,
+                            onInfo = onInfoClick,
                             onSelect = onCoachStatusSelect
                         )
                     } else {

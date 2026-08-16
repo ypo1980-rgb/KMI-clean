@@ -67,6 +67,7 @@ import il.kmi.app.analytics.KmiUsageTracker
 import il.kmi.app.onboarding.OnboardingPreferences
 import il.kmi.app.onboarding.onboardingNavGraph
 import il.kmi.app.onboarding.OnboardingRoute
+import il.kmi.app.privacy.DemoPrivacy
 import il.kmi.app.ui.OnboardingBridge
 import il.kmi.app.ui.VoiceExerciseExplanationBridge
 import il.kmi.app.voicecommands.VoiceCommandListener
@@ -518,6 +519,17 @@ fun MainNavHost(
     startDestination: String = Route.Splash.route
 ) {
     val ctx = LocalContext.current
+
+    /*
+     * טעינת מצב ההדגמה השמור מיד עם פתיחת
+     * האפליקציה, לפני הצגת שמות מתאמנים.
+     */
+    remember(ctx) {
+        DemoPrivacy.initialize(
+            ctx.applicationContext
+        )
+        true
+    }
 
     val forumPushSp = remember(ctx) {
         ctx.applicationContext.getSharedPreferences(
