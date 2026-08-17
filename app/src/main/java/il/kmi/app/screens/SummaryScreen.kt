@@ -1522,17 +1522,29 @@ fun SummaryScreen(
         mutableStateOf<Map<Pair<String, String>, MarkState>>(emptyMap())
     }
 
+    /*
+     * במסך המאמן ניתן לבחור עד 2 מתוך 3:
+     * נלמד / תורגל / נדרש חיזוק.
+     *
+     * לכן גם מסך הסיכום שומר רשימה של סטטוסים
+     * לכל תרגיל ולא סטטוס יחיד.
+     */
     var coachStatusMap by remember(
         belt,
         itemsByTopic,
         isCoach
     ) {
-        mutableStateOf<Map<Pair<String, String>, CoachSummaryStatus>>(
+        mutableStateOf<
+                Map<
+                        Pair<String, String>,
+                        List<CoachSummaryStatus>
+                        >
+                >(
             emptyMap()
         )
     }
 
-    fun coachStatusPreferenceKey(
+    fun coachProgressBaseKey(
         row: SummaryExerciseRow,
         statusId: String
     ): String {
@@ -1543,7 +1555,64 @@ fun SummaryScreen(
             append(row.statusTopicKey)
             append("_")
             append(statusId)
-            append("_status")
+        }
+    }
+
+    fun loadCoachSummaryStatuses(
+        row: SummaryExerciseRow,
+        statusId: String
+    ): List<CoachSummaryStatus> {
+
+        val key =
+            coachProgressBaseKey(
+                row = row,
+                statusId = statusId
+            )
+
+        val selectableStatuses =
+            listOf(
+                CoachSummaryStatus.TAUGHT,
+                CoachSummaryStatus.PRACTICED,
+                CoachSummaryStatus.NEEDS_REINFORCEMENT
+            )
+
+        val selectedStatuses =
+            selectableStatuses
+                .filter { status ->
+                    notesSp.getBoolean(
+                        "${key}_${status.storageValue}_selected",
+                        false
+                    )
+                }
+                .take(2)
+
+        /*
+         * המבנה החדש קיים — מחזירים את כל
+         * הסימונים שנבחרו, עד שניים.
+         */
+        if (selectedStatuses.isNotEmpty()) {
+            return selectedStatuses
+        }
+
+        /*
+         * תאימות לסימונים הישנים שנשמרו
+         * לפני המעבר ל־2 מתוך 3.
+         */
+        val legacyStatus =
+            CoachSummaryStatus.fromStorage(
+                notesSp.getString(
+                    "${key}_status",
+                    null
+                )
+            )
+
+        return if (
+            legacyStatus ==
+            CoachSummaryStatus.NOT_TAUGHT
+        ) {
+            emptyList()
+        } else {
+            listOf(legacyStatus)
         }
     }
 
@@ -1558,28 +1627,30 @@ fun SummaryScreen(
         }
 
         val loadedStatuses =
-            mutableMapOf<Pair<String, String>, CoachSummaryStatus>()
+            mutableMapOf<
+                    Pair<String, String>,
+                    List<CoachSummaryStatus>
+                    >()
 
         itemsByTopic.forEach { (topicTitle, rows) ->
             rows.forEach { row ->
-                val statusId = summaryExerciseIdentityIdFor(
-                    belt = belt,
-                    topicKey = row.statusTopicKey,
-                    topicTitle = row.sourceTopicTitle,
-                    index = row.indexInStatusGroup,
-                    item = row.itemRaw
-                )
 
-                val savedValue = notesSp.getString(
-                    coachStatusPreferenceKey(
+                val statusId =
+                    summaryExerciseIdentityIdFor(
+                        belt = belt,
+                        topicKey = row.statusTopicKey,
+                        topicTitle = row.sourceTopicTitle,
+                        index = row.indexInStatusGroup,
+                        item = row.itemRaw
+                    )
+
+                loadedStatuses[
+                    topicTitle to statusId
+                ] =
+                    loadCoachSummaryStatuses(
                         row = row,
                         statusId = statusId
-                    ),
-                    null
-                )
-
-                loadedStatuses[topicTitle to statusId] =
-                    CoachSummaryStatus.fromStorage(savedValue)
+                    )
             }
         }
 
@@ -1731,14 +1802,11 @@ fun SummaryScreen(
                 )
 
                 if (isCoach) {
-                    when (coachStatusMap[topicTitle to statusId]) {
-                        CoachSummaryStatus.TAUGHT,
-                        CoachSummaryStatus.PRACTICED,
-                        CoachSummaryStatus.NEEDS_REINFORCEMENT -> true
-
-                        CoachSummaryStatus.NOT_TAUGHT,
-                        null -> false
-                    }
+                    coachStatusMap[
+                        topicTitle to statusId
+                    ]
+                        .orEmpty()
+                        .isNotEmpty()
                 } else {
                     masteredMap[topicTitle to statusId] ==
                             MarkState.YES
@@ -2602,9 +2670,53 @@ fun SummaryScreen(
                             )
                         }
                     } else {
-                        itemsByTopic.forEach { (topicTitle, items) ->
-                            val (done, total) = topicStats[topicTitle] ?: (0 to 0)
-                            val pct = if (total > 0) (done * 100 / total) else 0
+                        val topicEntries =
+                            itemsByTopic.entries.toList()
+
+                        topicEntries.forEachIndexed { index, entry ->
+                            val topicTitle = entry.key
+                            val items = entry.value
+
+                            val isFirstTopic =
+                                index == 0
+
+                            val isLastTopic =
+                                index == topicEntries.lastIndex
+
+                            val topicCardShape =
+                                when {
+                                    isFirstTopic && isLastTopic ->
+                                        RoundedCornerShape(18.dp)
+
+                                    isFirstTopic ->
+                                        RoundedCornerShape(
+                                            topStart = 18.dp,
+                                            topEnd = 18.dp,
+                                            bottomStart = 0.dp,
+                                            bottomEnd = 0.dp
+                                        )
+
+                                    isLastTopic ->
+                                        RoundedCornerShape(
+                                            topStart = 0.dp,
+                                            topEnd = 0.dp,
+                                            bottomStart = 18.dp,
+                                            bottomEnd = 18.dp
+                                        )
+
+                                    else ->
+                                        RoundedCornerShape(0.dp)
+                                }
+
+                            val (done, total) =
+                                topicStats[topicTitle] ?: (0 to 0)
+
+                            val pct =
+                                if (total > 0) {
+                                    done * 100 / total
+                                } else {
+                                    0
+                                }
 
                             val isTopicExpanded =
                                 topicExpandedState[topicTitle] ?: false
@@ -2625,7 +2737,7 @@ fun SummaryScreen(
                                 elevation = CardDefaults.cardElevation(
                                     defaultElevation = 0.dp
                                 ),
-                                shape = RoundedCornerShape(0.dp)
+                                shape = topicCardShape
                             ) {
                                 Column(
                                     modifier = Modifier
@@ -2727,14 +2839,11 @@ fun SummaryScreen(
                                                 )
 
                                                 if (isCoach) {
-                                                    when (coachStatusMap[topicTitle to statusId]) {
-                                                        CoachSummaryStatus.TAUGHT,
-                                                        CoachSummaryStatus.PRACTICED,
-                                                        CoachSummaryStatus.NEEDS_REINFORCEMENT -> true
-
-                                                        CoachSummaryStatus.NOT_TAUGHT,
-                                                        null -> false
-                                                    }
+                                                    coachStatusMap[
+                                                        topicTitle to statusId
+                                                    ]
+                                                        .orEmpty()
+                                                        .isNotEmpty()
                                                 } else {
                                                     masteredMap[topicTitle to statusId] ==
                                                             MarkState.YES
@@ -2858,13 +2967,20 @@ fun SummaryScreen(
                                                             masteredMap[topicTitle to statusId]
                                                                 ?: MarkState.NONE
 
-                                                        val coachStatus =
-                                                            coachStatusMap[topicTitle to statusId]
+                                                        val coachStatuses =
+                                                            coachStatusMap[
+                                                                topicTitle to statusId
+                                                            ]
+                                                                .orEmpty()
+                                                                .take(2)
+
+                                                        val coachPrimaryStatus =
+                                                            coachStatuses.firstOrNull()
                                                                 ?: CoachSummaryStatus.NOT_TAUGHT
 
                                                         val statusBackgroundColor =
                                                             if (isCoach) {
-                                                                when (coachStatus) {
+                                                                when (coachPrimaryStatus) {
                                                                     CoachSummaryStatus.NOT_TAUGHT ->
                                                                         Color(0xFF8A939D)
 
@@ -2900,50 +3016,6 @@ fun SummaryScreen(
                                                                 Color.White
                                                             }
 
-                                                        val statusMark =
-                                                            if (isCoach) {
-                                                                when (coachStatus) {
-                                                                    CoachSummaryStatus.NOT_TAUGHT -> "—"
-                                                                    CoachSummaryStatus.TAUGHT -> "✓"
-                                                                    CoachSummaryStatus.PRACTICED -> "↻"
-                                                                    CoachSummaryStatus.NEEDS_REINFORCEMENT -> "!"
-                                                                }
-                                                            } else {
-                                                                when (state) {
-                                                                    MarkState.YES -> "✓"
-                                                                    MarkState.NO -> "✗"
-                                                                    MarkState.NONE -> "○"
-                                                                }
-                                                            }
-
-                                                        val statusLabel =
-                                                            if (isCoach) {
-                                                                when (coachStatus) {
-                                                                    CoachSummaryStatus.NOT_TAUGHT ->
-                                                                        tr("לא נלמד", "Not taught")
-
-                                                                    CoachSummaryStatus.TAUGHT ->
-                                                                        tr("נלמד", "Taught")
-
-                                                                    CoachSummaryStatus.PRACTICED ->
-                                                                        tr("תורגל", "Practiced")
-
-                                                                    CoachSummaryStatus.NEEDS_REINFORCEMENT ->
-                                                                        tr("נדרש חיזוק", "Reinforce")
-                                                                }
-                                                            } else {
-                                                                when (state) {
-                                                                    MarkState.YES ->
-                                                                        tr("יודע", "Known")
-
-                                                                    MarkState.NO ->
-                                                                        tr("לא יודע", "Not known")
-
-                                                                    MarkState.NONE ->
-                                                                        tr("לא סומן", "Unmarked")
-                                                                }
-                                                            }
-
                                                         val cleanFavId =
                                                             cleanItem(
                                                                 row.sourceTopicTitle,
@@ -2962,7 +3034,7 @@ fun SummaryScreen(
                                                                 .background(
                                                                     color =
                                                                         if (isCoach) {
-                                                                            when (coachStatus) {
+                                                                            when (coachPrimaryStatus) {
                                                                                 CoachSummaryStatus.PRACTICED ->
                                                                                     Color(0xFF2F9B4E).copy(alpha = 0.07f)
 
@@ -3054,84 +3126,279 @@ fun SummaryScreen(
 
                                                             Spacer(Modifier.width(6.dp))
 
-                                                            Column(
-                                                                modifier = Modifier.widthIn(
-                                                                    min =
-                                                                        if (isCoach) {
-                                                                            58.dp
-                                                                        } else {
-                                                                            48.dp
-                                                                        }
-                                                                ),
-                                                                horizontalAlignment =
-                                                                    Alignment.CenterHorizontally
-                                                            ) {
-                                                                Surface(
-                                                                    modifier = Modifier.size(
-                                                                        if (isCoach) {
-                                                                            36.dp
-                                                                        } else {
-                                                                            28.dp
-                                                                        }
-                                                                    ),
-                                                                    shape = CircleShape,
-                                                                    color = statusBackgroundColor,
-                                                                    shadowElevation = 2.dp,
-                                                                    tonalElevation = 0.dp
-                                                                ) {
-                                                                    Box(
-                                                                        modifier = Modifier.fillMaxSize(),
-                                                                        contentAlignment = Alignment.Center
+                                                            if (isCoach) {
+
+                                                                /*
+                                                                 * אם לא נבחר שום סטטוס,
+                                                                 * ממשיכים להציג אייקון אפור "לא נלמד".
+                                                                 */
+                                                                if (coachStatuses.isEmpty()) {
+
+                                                                    Column(
+                                                                        modifier = Modifier.widthIn(
+                                                                            min = 58.dp
+                                                                        ),
+                                                                        horizontalAlignment =
+                                                                            Alignment.CenterHorizontally
                                                                     ) {
-                                                                        if (
-                                                                            !isCoach &&
-                                                                            state == MarkState.NONE
+                                                                        Surface(
+                                                                            modifier = Modifier.size(36.dp),
+                                                                            shape = CircleShape,
+                                                                            color = Color(0xFF8A939D),
+                                                                            shadowElevation = 2.dp,
+                                                                            tonalElevation = 0.dp
                                                                         ) {
                                                                             Box(
-                                                                                modifier = Modifier
-                                                                                    .size(9.dp)
-                                                                                    .border(
-                                                                                        width = 1.7.dp,
-                                                                                        color =
-                                                                                            statusForegroundColor,
-                                                                                        shape = CircleShape
-                                                                                    )
-                                                                            )
-                                                                        } else {
-                                                                            Text(
-                                                                                text = statusMark,
-                                                                                color =
-                                                                                    statusForegroundColor,
-                                                                                fontWeight =
-                                                                                    FontWeight.ExtraBold,
-                                                                                textAlign =
-                                                                                    TextAlign.Center,
-                                                                                fontSize =
-                                                                                    if (isCoach) {
-                                                                                        18.sp
-                                                                                    } else {
-                                                                                        14.sp
+                                                                                modifier = Modifier.fillMaxSize(),
+                                                                                contentAlignment = Alignment.Center
+                                                                            ) {
+                                                                                Text(
+                                                                                    text = "—",
+                                                                                    color = Color.White,
+                                                                                    fontWeight = FontWeight.ExtraBold,
+                                                                                    textAlign = TextAlign.Center,
+                                                                                    fontSize = 18.sp
+                                                                                )
+                                                                            }
+                                                                        }
+
+                                                                        Spacer(Modifier.height(2.dp))
+
+                                                                        Text(
+                                                                            text =
+                                                                                tr(
+                                                                                    "לא נלמד",
+                                                                                    "Not taught"
+                                                                                ),
+                                                                            style =
+                                                                                KmiTypography.caption.copy(
+                                                                                    fontWeight =
+                                                                                        FontWeight.ExtraBold
+                                                                                ),
+                                                                            color = Color(0xFF8A939D),
+                                                                            textAlign = TextAlign.Center,
+                                                                            maxLines = 2,
+                                                                            overflow =
+                                                                                androidx.compose.ui.text.style
+                                                                                    .TextOverflow.Ellipsis
+                                                                        )
+                                                                    }
+
+                                                                } else {
+
+                                                                    /*
+                                                                     * עד שני סטטוסים מוצגים זה לצד זה.
+                                                                     */
+                                                                    Row(
+                                                                        horizontalArrangement =
+                                                                            Arrangement.spacedBy(6.dp),
+                                                                        verticalAlignment =
+                                                                            Alignment.Top
+                                                                    ) {
+                                                                        coachStatuses.forEach { status ->
+
+                                                                            val coachColor =
+                                                                                when (status) {
+                                                                                    CoachSummaryStatus.TAUGHT ->
+                                                                                        Color(0xFFF3A062)
+
+                                                                                    CoachSummaryStatus.PRACTICED ->
+                                                                                        Color(0xFF2F9B4E)
+
+                                                                                    CoachSummaryStatus.NEEDS_REINFORCEMENT ->
+                                                                                        Color(0xFF3478D4)
+
+                                                                                    CoachSummaryStatus.NOT_TAUGHT ->
+                                                                                        Color(0xFF8A939D)
+                                                                                }
+
+                                                                            val coachMark =
+                                                                                when (status) {
+                                                                                    CoachSummaryStatus.TAUGHT ->
+                                                                                        "✓"
+
+                                                                                    CoachSummaryStatus.PRACTICED ->
+                                                                                        "↻"
+
+                                                                                    CoachSummaryStatus.NEEDS_REINFORCEMENT ->
+                                                                                        "!"
+
+                                                                                    CoachSummaryStatus.NOT_TAUGHT ->
+                                                                                        "—"
+                                                                                }
+
+                                                                            val coachLabel =
+                                                                                when (status) {
+                                                                                    CoachSummaryStatus.TAUGHT ->
+                                                                                        tr(
+                                                                                            "נלמד",
+                                                                                            "Taught"
+                                                                                        )
+
+                                                                                    CoachSummaryStatus.PRACTICED ->
+                                                                                        tr(
+                                                                                            "תורגל",
+                                                                                            "Practiced"
+                                                                                        )
+
+                                                                                    CoachSummaryStatus.NEEDS_REINFORCEMENT ->
+                                                                                        tr(
+                                                                                            "חיזוק",
+                                                                                            "Reinforce"
+                                                                                        )
+
+                                                                                    CoachSummaryStatus.NOT_TAUGHT ->
+                                                                                        tr(
+                                                                                            "לא נלמד",
+                                                                                            "Not taught"
+                                                                                        )
+                                                                                }
+
+                                                                            Column(
+                                                                                modifier = Modifier.width(48.dp),
+                                                                                horizontalAlignment =
+                                                                                    Alignment.CenterHorizontally
+                                                                            ) {
+                                                                                Surface(
+                                                                                    modifier = Modifier.size(36.dp),
+                                                                                    shape = CircleShape,
+                                                                                    color = coachColor,
+                                                                                    shadowElevation = 2.dp,
+                                                                                    tonalElevation = 0.dp
+                                                                                ) {
+                                                                                    Box(
+                                                                                        modifier =
+                                                                                            Modifier.fillMaxSize(),
+                                                                                        contentAlignment =
+                                                                                            Alignment.Center
+                                                                                    ) {
+                                                                                        Text(
+                                                                                            text = coachMark,
+                                                                                            color = Color.White,
+                                                                                            fontWeight =
+                                                                                                FontWeight.ExtraBold,
+                                                                                            textAlign =
+                                                                                                TextAlign.Center,
+                                                                                            fontSize = 18.sp
+                                                                                        )
                                                                                     }
-                                                                            )
+                                                                                }
+
+                                                                                Spacer(
+                                                                                    Modifier.height(2.dp)
+                                                                                )
+
+                                                                                Text(
+                                                                                    text = coachLabel,
+                                                                                    style =
+                                                                                        KmiTypography.caption.copy(
+                                                                                            fontWeight =
+                                                                                                FontWeight.ExtraBold
+                                                                                        ),
+                                                                                    color = coachColor,
+                                                                                    textAlign =
+                                                                                        TextAlign.Center,
+                                                                                    maxLines = 1,
+                                                                                    overflow =
+                                                                                        androidx.compose.ui.text.style
+                                                                                            .TextOverflow.Ellipsis
+                                                                                )
+                                                                            }
                                                                         }
                                                                     }
+
                                                                 }
 
-                                                                Spacer(Modifier.height(2.dp))
+                                                            } else {
 
-                                                                Text(
-                                                                    text = statusLabel,
-                                                                    style =
-                                                                        KmiTypography.caption.copy(
-                                                                            fontWeight =
-                                                                                FontWeight.ExtraBold
-                                                                        ),
-                                                                    color = statusBackgroundColor,
-                                                                    textAlign = TextAlign.Center,
-                                                                    maxLines = 2,
-                                                                    overflow =
-                                                                        androidx.compose.ui.text.style.TextOverflow.Ellipsis
-                                                                )
+                                                                /*
+                                                                 * משתמש רגיל נשאר בדיוק כפי שהיה:
+                                                                 * יודע / לא יודע / לא סומן.
+                                                                 */
+                                                                Column(
+                                                                    modifier = Modifier.widthIn(
+                                                                        min = 48.dp
+                                                                    ),
+                                                                    horizontalAlignment =
+                                                                        Alignment.CenterHorizontally
+                                                                ) {
+                                                                    Surface(
+                                                                        modifier = Modifier.size(28.dp),
+                                                                        shape = CircleShape,
+                                                                        color = statusBackgroundColor,
+                                                                        shadowElevation = 2.dp,
+                                                                        tonalElevation = 0.dp
+                                                                    ) {
+                                                                        Box(
+                                                                            modifier = Modifier.fillMaxSize(),
+                                                                            contentAlignment = Alignment.Center
+                                                                        ) {
+                                                                            if (state == MarkState.NONE) {
+                                                                                Box(
+                                                                                    modifier = Modifier
+                                                                                        .size(9.dp)
+                                                                                        .border(
+                                                                                            width = 1.7.dp,
+                                                                                            color =
+                                                                                                statusForegroundColor,
+                                                                                            shape = CircleShape
+                                                                                        )
+                                                                                )
+                                                                            } else {
+                                                                                Text(
+                                                                                    text =
+                                                                                        when (state) {
+                                                                                            MarkState.YES -> "✓"
+                                                                                            MarkState.NO -> "✗"
+                                                                                            MarkState.NONE -> "○"
+                                                                                        },
+                                                                                    color = statusForegroundColor,
+                                                                                    fontWeight =
+                                                                                        FontWeight.ExtraBold,
+                                                                                    textAlign =
+                                                                                        TextAlign.Center,
+                                                                                    fontSize = 14.sp
+                                                                                )
+                                                                            }
+                                                                        }
+                                                                    }
+
+                                                                    Spacer(Modifier.height(2.dp))
+
+                                                                    Text(
+                                                                        text =
+                                                                            when (state) {
+                                                                                MarkState.YES ->
+                                                                                    tr(
+                                                                                        "יודע",
+                                                                                        "Known"
+                                                                                    )
+
+                                                                                MarkState.NO ->
+                                                                                    tr(
+                                                                                        "לא יודע",
+                                                                                        "Not known"
+                                                                                    )
+
+                                                                                MarkState.NONE ->
+                                                                                    tr(
+                                                                                        "לא סומן",
+                                                                                        "Unmarked"
+                                                                                    )
+                                                                            },
+                                                                        style =
+                                                                            KmiTypography.caption.copy(
+                                                                                fontWeight =
+                                                                                    FontWeight.ExtraBold
+                                                                            ),
+                                                                        color = statusBackgroundColor,
+                                                                        textAlign = TextAlign.Center,
+                                                                        maxLines = 2,
+                                                                        overflow =
+                                                                            androidx.compose.ui.text.style
+                                                                                .TextOverflow.Ellipsis
+                                                                    )
+                                                                }
                                                             }
                                                         }
                                                     }

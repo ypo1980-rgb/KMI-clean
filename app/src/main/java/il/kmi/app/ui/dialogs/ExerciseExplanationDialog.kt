@@ -8,10 +8,14 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.draw.shadow
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.outlined.StarBorder
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -457,12 +461,14 @@ fun ExerciseExplanationDialog(
 
 @Composable
 fun ExerciseNoteEditorDialog(
+    exerciseTitle: String = "",
     noteText: String,
     isEnglish: Boolean = false,
     accentColor: Color,
     onNoteChange: (String) -> Unit,
     onDismiss: () -> Unit,
-    onSave: () -> Unit
+    onSave: () -> Unit,
+    onDelete: (() -> Unit)? = null
 ) {
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -493,6 +499,8 @@ fun ExerciseNoteEditorDialog(
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
+                        .imePadding()
+                        .verticalScroll(rememberScrollState())
                         .background(
                             brush = Brush.verticalGradient(
                                 colors = listOf(
@@ -502,9 +510,9 @@ fun ExerciseNoteEditorDialog(
                                 )
                             )
                         )
-                        .padding(horizontal = 22.dp, vertical = 22.dp),
+                        .padding(horizontal = 22.dp, vertical = 18.dp),
                     horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.spacedBy(16.dp)
+                    verticalArrangement = Arrangement.spacedBy(14.dp)
                 ) {
                     Text(
                         text =
@@ -520,6 +528,19 @@ fun ExerciseNoteEditorDialog(
                         ),
                         color = Color(0xFF1E2A3D)
                     )
+
+                    if (exerciseTitle.isNotBlank()) {
+                        Text(
+                            text = exerciseTitle,
+                            modifier = Modifier.fillMaxWidth(),
+                            textAlign = TextAlign.Center,
+                            style = KmiTypography.cardTitle.copy(
+                                fontWeight = FontWeight.Black
+                            ),
+                            color = accentColor,
+                            maxLines = 2
+                        )
+                    }
 
                     Text(
                         text =
@@ -596,50 +617,151 @@ fun ExerciseNoteEditorDialog(
 
                     Row(
                         modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(18.dp),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
+                        // בטל
                         Surface(
                             onClick = onDismiss,
                             modifier = Modifier
                                 .weight(1f)
-                                .height(56.dp),
-                            shape = RoundedCornerShape(18.dp),
-                            color = Color.Transparent
+                                .height(50.dp),
+                            shape = RoundedCornerShape(16.dp),
+                            color = Color.White.copy(alpha = 0.80f),
+                            border = BorderStroke(
+                                width = 1.dp,
+                                color = Color(0xFF6D5BA6).copy(alpha = 0.22f)
+                            ),
+                            shadowElevation = 2.dp
                         ) {
-                            Box(
+                            Column(
                                 modifier = Modifier.fillMaxSize(),
-                                contentAlignment = Alignment.Center
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                verticalArrangement = Arrangement.Center
                             ) {
+                                Icon(
+                                    imageVector = Icons.Filled.Close,
+                                    contentDescription =
+                                        if (isEnglish) "Cancel" else "בטל",
+                                    tint = Color(0xFF6D5BA6),
+                                    modifier = Modifier.size(17.dp)
+                                )
+
+                                Spacer(Modifier.height(2.dp))
+
                                 Text(
                                     text = if (isEnglish) "Cancel" else "בטל",
                                     style = KmiTypography.action.copy(
                                         fontWeight = FontWeight.Black
                                     ),
-                                    color = Color(0xFF6D5BA6)
+                                    color = Color(0xFF6D5BA6),
+                                    maxLines = 1
                                 )
                             }
                         }
 
+                        // מחק
+                        Surface(
+                            onClick = {
+                                if (noteText.isNotBlank()) {
+                                    onNoteChange("")
+                                    onDelete?.invoke()
+                                }
+                            },
+                            modifier = Modifier
+                                .weight(1f)
+                                .height(50.dp),
+                            shape = RoundedCornerShape(16.dp),
+                            color =
+                                if (noteText.isNotBlank()) {
+                                    Color(0xFFFFEBEE)
+                                } else {
+                                    Color(0xFFF4F4F5)
+                                },
+                            border = BorderStroke(
+                                width = 1.dp,
+                                color =
+                                    if (noteText.isNotBlank()) {
+                                        Color(0xFFE57373).copy(alpha = 0.42f)
+                                    } else {
+                                        Color(0xFFD4D4D8).copy(alpha = 0.55f)
+                                    }
+                            ),
+                            shadowElevation =
+                                if (noteText.isNotBlank()) {
+                                    2.dp
+                                } else {
+                                    0.dp
+                                }
+                        ) {
+                            Column(
+                                modifier = Modifier.fillMaxSize(),
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                verticalArrangement = Arrangement.Center
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Filled.Delete,
+                                    contentDescription =
+                                        if (isEnglish) "Delete" else "מחק",
+                                    tint =
+                                        if (noteText.isNotBlank()) {
+                                            Color(0xFFD32F2F)
+                                        } else {
+                                            Color(0xFFA1A1AA)
+                                        },
+                                    modifier = Modifier.size(17.dp)
+                                )
+
+                                Spacer(Modifier.height(2.dp))
+
+                                Text(
+                                    text = if (isEnglish) "Delete" else "מחק",
+                                    style = KmiTypography.action.copy(
+                                        fontWeight = FontWeight.Black
+                                    ),
+                                    color =
+                                        if (noteText.isNotBlank()) {
+                                            Color(0xFFD32F2F)
+                                        } else {
+                                            Color(0xFFA1A1AA)
+                                        },
+                                    maxLines = 1
+                                )
+                            }
+                        }
+
+                        // שמור
                         Surface(
                             onClick = onSave,
                             modifier = Modifier
                                 .weight(1f)
-                                .height(56.dp),
-                            shape = RoundedCornerShape(18.dp),
-                            color = accentColor.copy(alpha = 0.78f),
-                            shadowElevation = 8.dp
+                                .height(50.dp),
+                            shape = RoundedCornerShape(16.dp),
+                            color = accentColor.copy(alpha = 0.86f),
+                            shadowElevation = 6.dp
                         ) {
-                            Box(
+                            Column(
                                 modifier = Modifier.fillMaxSize(),
-                                contentAlignment = Alignment.Center
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                verticalArrangement = Arrangement.Center
                             ) {
+                                Icon(
+                                    imageVector = Icons.Filled.Check,
+                                    contentDescription =
+                                        if (isEnglish) "Save" else "שמור",
+                                    tint = Color.White,
+                                    modifier = Modifier.size(18.dp)
+                                )
+
+                                Spacer(Modifier.height(2.dp))
+
                                 Text(
                                     text = if (isEnglish) "Save" else "שמור",
                                     style = KmiTypography.action.copy(
                                         fontWeight = FontWeight.Black
                                     ),
-                                    color = Color.White
+                                    color = Color.White,
+                                    maxLines = 1
                                 )
                             }
                         }

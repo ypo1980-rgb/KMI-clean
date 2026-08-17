@@ -558,6 +558,7 @@ fun ExamScreen(
 
             if (showNoteEditor) {
                 ExerciseNoteEditorDialog(
+                    exerciseTitle = toDisplayItem(item),
                     noteText = noteText,
                     isEnglish = false,
                     accentColor = b.color,
@@ -647,6 +648,7 @@ fun ExamScreen(
 
             if (showNoteEditor) {
                 ExerciseNoteEditorDialog(
+                    exerciseTitle = displayItem,
                     noteText = noteText,
                     isEnglish = false,
                     accentColor = belt.color,

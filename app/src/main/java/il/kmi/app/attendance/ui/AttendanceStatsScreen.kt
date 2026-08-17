@@ -15,9 +15,12 @@ import java.util.Date
 import java.util.Locale
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.ui.input.pointer.PointerEventType
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -57,12 +60,15 @@ import java.time.YearMonth
 /**
  * נתון חודשי אחד בגרף הנוכחות.
  *
- * attendedTrainings הוא מספר הימים בחודש שבהם
+ * attendedDates מכיל את התאריכים הייחודיים שבהם
  * המתאמן סומן כנוכח לפחות פעם אחת.
+ *
+ * attendedTrainings הוא מספר ימי הנוכחות בחודש.
  */
 private data class MonthlyAttendancePoint(
     val yearMonth: YearMonth,
-    val attendedTrainings: Int
+    val attendedTrainings: Int,
+    val attendedDates: List<LocalDate>
 )
 
 @Composable
@@ -436,10 +442,21 @@ fun AttendanceStatsScreen(
                         )
                     }
                     .map { (yearMonth, sessions) ->
+
+                        val attendedDates =
+                            sessions
+                                .map { session ->
+                                    session.date
+                                }
+                                .distinct()
+                                .sorted()
+
                         MonthlyAttendancePoint(
                             yearMonth = yearMonth,
                             attendedTrainings =
-                                sessions.size
+                                attendedDates.size,
+                            attendedDates =
+                                attendedDates
                         )
                     }
                     .filter { point ->
@@ -1275,6 +1292,10 @@ private fun MonthlyAttendanceChart(
         return
     }
 
+    var selectedPoint by remember {
+        mutableStateOf<MonthlyAttendancePoint?>(null)
+    }
+
     val maxAttendance =
         points
             .maxOfOrNull {
@@ -1442,14 +1463,49 @@ private fun MonthlyAttendanceChart(
 
                         Box(
                             modifier = Modifier
-                                .width(28.dp)
-                                .height(124.dp),
+                                .width(40.dp)
+                                .height(124.dp)
+                                .pointerInput(point.yearMonth) {
+                                    awaitPointerEventScope {
+                                        while (true) {
+                                            val event =
+                                                awaitPointerEvent()
+
+                                            when (event.type) {
+                                                PointerEventType.Enter,
+                                                PointerEventType.Move -> {
+                                                    selectedPoint = point
+                                                }
+
+                                                PointerEventType.Exit -> {
+                                                    if (
+                                                        selectedPoint?.yearMonth ==
+                                                        point.yearMonth
+                                                    ) {
+                                                        selectedPoint = null
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                                .clickable {
+                                    selectedPoint =
+                                        if (
+                                            selectedPoint?.yearMonth ==
+                                            point.yearMonth
+                                        ) {
+                                            null
+                                        } else {
+                                            point
+                                        }
+                                },
                             contentAlignment =
                                 Alignment.BottomCenter
                         ) {
                             Box(
                                 modifier = Modifier
-                                    .fillMaxWidth()
+                                    .width(28.dp)
                                     .height(barHeight)
                                     .clip(
                                         RoundedCornerShape(
@@ -1490,6 +1546,94 @@ private fun MonthlyAttendanceChart(
                                 MaterialTheme.colorScheme.onSurfaceVariant,
                             maxLines = 1
                         )
+                    }
+                }
+            }
+
+            selectedPoint?.let { point ->
+
+                val selectedMonthIndex =
+                    point.yearMonth.monthValue - 1
+
+                val selectedMonthName =
+                    if (isEnglish) {
+                        monthNamesEn[selectedMonthIndex]
+                    } else {
+                        monthNamesHe[selectedMonthIndex]
+                    }
+
+                Surface(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(16.dp),
+                    color =
+                        MaterialTheme.colorScheme.primaryContainer.copy(
+                            alpha = 0.55f
+                        ),
+                    border = BorderStroke(
+                        width = 1.dp,
+                        color =
+                            MaterialTheme.colorScheme.primary.copy(
+                                alpha = 0.25f
+                            )
+                    )
+                ) {
+                    Column(
+                        modifier = Modifier.padding(
+                            horizontal = 14.dp,
+                            vertical = 10.dp
+                        ),
+                        verticalArrangement =
+                            Arrangement.spacedBy(6.dp)
+                    ) {
+
+                        Text(
+                            text =
+                                if (isEnglish) {
+                                    "$selectedMonthName ${point.yearMonth.year} · " +
+                                            "${point.attendedTrainings} attended"
+                                } else {
+                                    "$selectedMonthName ${point.yearMonth.year} · " +
+                                            "${point.attendedTrainings} נוכחויות"
+                                },
+                            style = KmiTypography.secondary,
+                            fontWeight = FontWeight.Bold,
+                            color =
+                                MaterialTheme.colorScheme.onSurface,
+                            textAlign =
+                                if (isEnglish) {
+                                    TextAlign.Left
+                                } else {
+                                    TextAlign.Right
+                                },
+                            modifier = Modifier.fillMaxWidth()
+                        )
+
+                        Column(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalArrangement =
+                                Arrangement.spacedBy(4.dp)
+                        ) {
+                            point.attendedDates.forEach { date ->
+                                Text(
+                                    text =
+                                        if (isEnglish) {
+                                            date.toString()
+                                        } else {
+                                            formatDateHeb(date)
+                                        },
+                                    style = KmiTypography.caption,
+                                    color =
+                                        MaterialTheme.colorScheme.onSurfaceVariant,
+                                    textAlign =
+                                        if (isEnglish) {
+                                            TextAlign.Left
+                                        } else {
+                                            TextAlign.Right
+                                        },
+                                    modifier = Modifier.fillMaxWidth()
+                                )
+                            }
+                        }
                     }
                 }
             }

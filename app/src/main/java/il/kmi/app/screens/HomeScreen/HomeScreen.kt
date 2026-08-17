@@ -4221,6 +4221,11 @@ fun HomeScreen(
 
                 if (showNoteEditor) {
                     ExerciseNoteEditorDialog(
+                        exerciseTitle = if (isEnglish) {
+                            ExerciseTitlesEn.getOrSame(displayName)
+                        } else {
+                            displayName
+                        },
                         noteText = noteText,
                         isEnglish = isEnglish,
                         accentColor = belt.color,

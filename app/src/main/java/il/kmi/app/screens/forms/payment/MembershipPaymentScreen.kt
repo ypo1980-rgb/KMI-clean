@@ -75,9 +75,9 @@ import kotlinx.coroutines.tasks.await
 import androidx.compose.foundation.border
 import androidx.compose.material3.CheckboxDefaults
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.unit.sp
 import il.kmi.app.ui.DrawerBridge
 import il.kmi.app.ui.KmiTopBar
+import il.kmi.app.ui.KmiTypography
 
 //==========================================================================
 
@@ -562,15 +562,16 @@ fun MembershipPaymentScreen(
                 .background(
                     Brush.verticalGradient(
                         colors = listOf(
-                            Color(0xFFF8FBFF),
-                            Color(0xFFEAF4FF),
-                            Color(0xFFB7DDF7),
-                            Color(0xFF1F78B4),
-                            Color(0xFF062B4A)
+                            MaterialTheme.colorScheme.background,
+                            MaterialTheme.colorScheme.surfaceVariant,
+                            MaterialTheme.colorScheme.primaryContainer.copy(
+                                alpha = 0.55f
+                            ),
+                            MaterialTheme.colorScheme.background
                         )
                     )
-                    )
-                ) {
+                )
+        ) {
             Column(
                 modifier = Modifier
                     .fillMaxSize()
@@ -653,25 +654,32 @@ fun MembershipPaymentScreen(
                             singleLine = true,
                             shape = RoundedCornerShape(14.dp),
                             label = {
-
                                 Text(
-                                    text = if (isEnglish) "Branch Name" else "שם הסניף",
-                                    color = Color(0xFF5E6C80),
-                                    fontSize = 10.sp,
-                                    lineHeight = 12.sp,
+                                    text =
+                                        if (isEnglish) {
+                                            "Branch Name"
+                                        } else {
+                                            "שם הסניף"
+                                        },
+                                    style = KmiTypography.caption,
                                     fontWeight = FontWeight.SemiBold,
                                     maxLines = 1,
                                     overflow = TextOverflow.Ellipsis,
-                                    textAlign = if (isEnglish) TextAlign.Left else TextAlign.Right,
+                                    textAlign =
+                                        if (isEnglish) {
+                                            TextAlign.Left
+                                        } else {
+                                            TextAlign.Right
+                                        },
                                     modifier = Modifier.fillMaxWidth()
                                 )
-                                    },
+                            },
                             leadingIcon = if (isEnglish) {
                                 {
                                     Icon(
                                         imageVector = Icons.Default.Business,
                                         contentDescription = null,
-                                        tint = Color.White.copy(alpha = 0.72f),
+                                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
                                         modifier = Modifier.size(19.dp)
                                     )
                                 }
@@ -695,7 +703,7 @@ fun MembershipPaymentScreen(
                                         Icon(
                                             imageVector = Icons.Default.Business,
                                             contentDescription = null,
-                                            tint = Color.White.copy(alpha = 0.72f),
+                                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
                                             modifier = Modifier.size(19.dp)
                                         )
                                     }
@@ -705,38 +713,71 @@ fun MembershipPaymentScreen(
                                 .fillMaxWidth()
                                 .height(60.dp)
                                 .menuAnchor(),
-                            textStyle = MaterialTheme.typography.bodyMedium.copy(
-                                fontSize = 13.sp,
-                                lineHeight = 16.sp,
-                                textAlign = if (isEnglish) TextAlign.Left else TextAlign.Right
-                            ),
-                            colors = androidx.compose.material3.OutlinedTextFieldDefaults.colors(
-                                focusedContainerColor = Color.White,
-                                unfocusedContainerColor = Color.White,
-                                disabledContainerColor = Color(0xFFF4F7FB),
+                            textStyle =
+                                KmiTypography.body.copy(
+                                    textAlign =
+                                        if (isEnglish) {
+                                            TextAlign.Left
+                                        } else {
+                                            TextAlign.Right
+                                        },
+                                    fontWeight = FontWeight.SemiBold
+                                ),
+                            colors =
+                                androidx.compose.material3.OutlinedTextFieldDefaults.colors(
+                                    focusedContainerColor =
+                                        MaterialTheme.colorScheme.surfaceVariant.copy(
+                                            alpha = 0.45f
+                                        ),
+                                    unfocusedContainerColor =
+                                        MaterialTheme.colorScheme.surfaceVariant.copy(
+                                            alpha = 0.32f
+                                        ),
+                                    disabledContainerColor =
+                                        MaterialTheme.colorScheme.surfaceVariant.copy(
+                                            alpha = 0.22f
+                                        ),
 
-                                focusedBorderColor = Color(0xFFBFD0E8),
-                                unfocusedBorderColor = Color(0xFFD8E3F5),
-                                disabledBorderColor = Color(0xFFD8E3F5),
+                                    focusedBorderColor =
+                                        MaterialTheme.colorScheme.primary,
+                                    unfocusedBorderColor =
+                                        MaterialTheme.colorScheme.outlineVariant,
+                                    disabledBorderColor =
+                                        MaterialTheme.colorScheme.outlineVariant.copy(
+                                            alpha = 0.45f
+                                        ),
 
-                                focusedTextColor = Color(0xFF1E2A3D),
-                                unfocusedTextColor = Color(0xFF1E2A3D),
-                                disabledTextColor = Color(0xFF1E2A3D).copy(alpha = 0.50f),
+                                    focusedTextColor =
+                                        MaterialTheme.colorScheme.onSurface,
+                                    unfocusedTextColor =
+                                        MaterialTheme.colorScheme.onSurface,
+                                    disabledTextColor =
+                                        MaterialTheme.colorScheme.onSurface.copy(
+                                            alpha = 0.55f
+                                        ),
 
-                                focusedLabelColor = Color(0xFF5E6C80),
-                                unfocusedLabelColor = Color(0xFF6B778B),
-                                disabledLabelColor = Color(0xFF6B778B).copy(alpha = 0.45f),
+                                    focusedLabelColor =
+                                        MaterialTheme.colorScheme.primary,
+                                    unfocusedLabelColor =
+                                        MaterialTheme.colorScheme.onSurfaceVariant,
+                                    disabledLabelColor =
+                                        MaterialTheme.colorScheme.onSurfaceVariant.copy(
+                                            alpha = 0.55f
+                                        ),
 
-                                focusedLeadingIconColor = Color(0xFF5E6C80),
-                                unfocusedLeadingIconColor = Color(0xFF6B778B),
-                                disabledLeadingIconColor = Color(0xFF6B778B).copy(alpha = 0.40f),
+                                    focusedLeadingIconColor =
+                                        MaterialTheme.colorScheme.primary,
+                                    unfocusedLeadingIconColor =
+                                        MaterialTheme.colorScheme.onSurfaceVariant,
 
-                                focusedTrailingIconColor = Color(0xFF5E6C80),
-                                unfocusedTrailingIconColor = Color(0xFF6B778B),
-                                disabledTrailingIconColor = Color(0xFF6B778B).copy(alpha = 0.40f),
+                                    focusedTrailingIconColor =
+                                        MaterialTheme.colorScheme.primary,
+                                    unfocusedTrailingIconColor =
+                                        MaterialTheme.colorScheme.onSurfaceVariant,
 
-                                cursorColor = Color(0xFF1E2A3D)
-                            )
+                                    cursorColor =
+                                        MaterialTheme.colorScheme.primary
+                                )
                         )
 
                         ExposedDropdownMenu(
@@ -748,7 +789,14 @@ fun MembershipPaymentScreen(
                                     text = {
                                         Text(
                                             text = option,
-                                            textAlign = if (isEnglish) TextAlign.Left else TextAlign.Right,
+                                            style = KmiTypography.body,
+                                            color = MaterialTheme.colorScheme.onSurface,
+                                            textAlign =
+                                                if (isEnglish) {
+                                                    TextAlign.Left
+                                                } else {
+                                                    TextAlign.Right
+                                                },
                                             modifier = Modifier.fillMaxWidth()
                                         )
                                     },
@@ -786,7 +834,7 @@ fun MembershipPaymentScreen(
                 ) {
                     Surface(
                         shape = RoundedCornerShape(18.dp),
-                        color = Color(0xFF24365E)
+                        color = MaterialTheme.colorScheme.secondaryContainer
                     ) {
                         Row(
                             modifier = Modifier
@@ -814,8 +862,8 @@ fun MembershipPaymentScreen(
 
                             Text(
                                 text = payerSameToggleText,
-                                style = MaterialTheme.typography.bodySmall,
-                                color = Color.White,
+                                style = KmiTypography.body,
+                                color = MaterialTheme.colorScheme.onSecondaryContainer,
                                 textAlign = if (isEnglish) TextAlign.Left else TextAlign.Right,
                                 modifier = Modifier
                                     .weight(1f)
@@ -898,10 +946,10 @@ fun MembershipPaymentScreen(
                 ) {
                     Surface(
                         shape = RoundedCornerShape(16.dp),
-                        color = Color.White,
+                        color = MaterialTheme.colorScheme.surfaceVariant,
                         border = androidx.compose.foundation.BorderStroke(
                             width = 1.dp,
-                            color = Color(0xFFD8E3F5)
+                            color = MaterialTheme.colorScheme.outlineVariant
                         )
                     ) {
                         Text(
@@ -910,8 +958,8 @@ fun MembershipPaymentScreen(
                             } else {
                                 "תשלום דמי חבר הוא סופי לאחר אישור הפעולה, למעט מקרים של תשלום כפול בטעות או טעות אחרת בתום לב, בכפוף לבדיקת העמותה."
                             },
-                            style = MaterialTheme.typography.bodySmall,
-                            color = Color(0xFF1E2A3D),
+                            style = KmiTypography.body,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
                             fontWeight = FontWeight.SemiBold,
                             textAlign = if (isEnglish) TextAlign.Left else TextAlign.Right,
                             modifier = Modifier
@@ -934,7 +982,7 @@ fun MembershipPaymentScreen(
                                 onReadFullPolicy()
                             },
                             colors = ButtonDefaults.textButtonColors(
-                                contentColor = Color(0xFF7C5CE6)
+                                contentColor = MaterialTheme.colorScheme.primary
                             )
                         ) {
                             if (isEnglish) {
@@ -943,9 +991,17 @@ fun MembershipPaymentScreen(
                                     contentDescription = null,
                                     modifier = Modifier.padding(end = 6.dp)
                                 )
-                                Text(readPolicyText)
+                                Text(
+                                    text = readPolicyText,
+                                    style = KmiTypography.body,
+                                    fontWeight = FontWeight.SemiBold
+                                )
                             } else {
-                                Text(readPolicyText)
+                                Text(
+                                    text = readPolicyText,
+                                    style = KmiTypography.body,
+                                    fontWeight = FontWeight.SemiBold
+                                )
                                 Icon(
                                     imageVector = Icons.Default.Description,
                                     contentDescription = null,
@@ -957,20 +1013,22 @@ fun MembershipPaymentScreen(
 
                     Surface(
                         shape = RoundedCornerShape(18.dp),
-                        color = if (policyAccepted) {
-                            Color(0xFFE8FFF3)
-                        } else {
-                            Color.White
-                        },
+                        color =
+                            if (policyAccepted) {
+                                MaterialTheme.colorScheme.tertiaryContainer
+                            } else {
+                                MaterialTheme.colorScheme.surfaceVariant
+                            },
                         modifier = Modifier
                             .fillMaxWidth()
                             .border(
                                 width = 1.5.dp,
-                                color = if (policyAccepted) {
-                                    Color(0xFF19C37D)
-                                } else {
-                                    Color(0xFFBFD0E8)
-                                },
+                                color =
+                                    if (policyAccepted) {
+                                        Color(0xFF19C37D)
+                                    } else {
+                                        MaterialTheme.colorScheme.outlineVariant
+                                    },
                                 shape = RoundedCornerShape(18.dp)
                             )
                     ) {
@@ -994,8 +1052,13 @@ fun MembershipPaymentScreen(
 
                                 Text(
                                     text = "I have read and agree to the cancellation and refund policy.",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = Color(0xFF1E2A3D),
+                                    style = KmiTypography.body,
+                                    color =
+                                        if (policyAccepted) {
+                                            MaterialTheme.colorScheme.onTertiaryContainer
+                                        } else {
+                                            MaterialTheme.colorScheme.onSurfaceVariant
+                                        },
                                     fontWeight = FontWeight.SemiBold,
                                     textAlign = TextAlign.Left,
                                     modifier = Modifier
@@ -1005,8 +1068,13 @@ fun MembershipPaymentScreen(
                             } else {
                                 Text(
                                     text = "קראתי ואני מאשר/ת את מדיניות הביטולים וההחזרים.",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = Color(0xFF1E2A3D),
+                                    style = KmiTypography.body,
+                                    color =
+                                        if (policyAccepted) {
+                                            MaterialTheme.colorScheme.onTertiaryContainer
+                                        } else {
+                                            MaterialTheme.colorScheme.onSurfaceVariant
+                                        },
                                     fontWeight = FontWeight.SemiBold,
                                     textAlign = TextAlign.Right,
                                     modifier = Modifier
@@ -1056,8 +1124,13 @@ fun MembershipPaymentScreen(
                     colors = ButtonDefaults.buttonColors(
                         containerColor = Color(0xFF7C5CE6),
                         contentColor = Color.White,
-                        disabledContainerColor = Color(0xFFD8E3F5),
-                        disabledContentColor = Color(0xFF6B778B)
+                        disabledContainerColor =
+                            MaterialTheme.colorScheme.surfaceVariant,
+
+                        disabledContentColor =
+                            MaterialTheme.colorScheme.onSurfaceVariant.copy(
+                                alpha = 0.55f
+                            )
                     ),
                     modifier = Modifier.fillMaxWidth()
                 ) {
@@ -1067,7 +1140,8 @@ fun MembershipPaymentScreen(
                     )
                     Text(
                         text = "  $continueText",
-                        style = MaterialTheme.typography.titleMedium,
+                        style = KmiTypography.cardTitle,
+                        fontWeight = FontWeight.Bold,
                         modifier = Modifier.padding(vertical = 4.dp)
                     )
                 }
@@ -1086,14 +1160,25 @@ fun MembershipPaymentScreen(
                         showFullRefundPolicy = false
                     }
                 ) {
-                    Text(if (isEnglish) "Close" else "סגור")
+                    Text(
+                        text = if (isEnglish) "Close" else "סגור",
+                        style = KmiTypography.body,
+                        fontWeight = FontWeight.SemiBold
+                    )
                 }
             },
             title = {
                 Text(
                     text = policyTitle,
+                    style = KmiTypography.sectionTitle,
+                    color = MaterialTheme.colorScheme.onSurface,
                     modifier = Modifier.fillMaxWidth(),
-                    textAlign = if (isEnglish) TextAlign.Left else TextAlign.Right,
+                    textAlign =
+                        if (isEnglish) {
+                            TextAlign.Left
+                        } else {
+                            TextAlign.Right
+                        },
                     fontWeight = FontWeight.ExtraBold
                 )
             },
@@ -1165,7 +1250,7 @@ fun MembershipPaymentScreen(
                     )
                 }
             },
-            containerColor = Color(0xFFF8F5FB)
+            containerColor = MaterialTheme.colorScheme.surface
         )
     }
 }
@@ -1200,14 +1285,16 @@ private fun PremiumPaymentHeader(
             ) {
                 Text(
                     text = title,
-                    style = MaterialTheme.typography.headlineSmall,
+                    style = KmiTypography.sectionTitle,
+                    fontWeight = FontWeight.Bold,
                     color = Color.White,
                     textAlign = textAlign,
                     modifier = Modifier.fillMaxWidth()
                 )
+
                 Text(
                     text = subtitle,
-                    style = MaterialTheme.typography.bodyMedium,
+                    style = KmiTypography.body,
                     color = Color.White.copy(alpha = 0.78f),
                     textAlign = textAlign,
                     modifier = Modifier.fillMaxWidth()
@@ -1249,7 +1336,7 @@ private fun ProductHeroCard(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(24.dp),
         colors = CardDefaults.cardColors(
-            containerColor = Color(0xFFEAF2FF)
+            containerColor = MaterialTheme.colorScheme.surface
         ),
         elevation = CardDefaults.cardElevation(defaultElevation = 6.dp)
     ) {
@@ -1266,7 +1353,7 @@ private fun ProductHeroCard(
                 Surface(
                     modifier = Modifier.align(Alignment.CenterEnd),
                     shape = RoundedCornerShape(18.dp),
-                    color = Color(0xFFDCE7F7)
+                    color = MaterialTheme.colorScheme.surfaceVariant
                 ) {
                     IconButton(
                         onClick = onClose,
@@ -1275,7 +1362,7 @@ private fun ProductHeroCard(
                         Icon(
                             imageVector = Icons.Default.Close,
                             contentDescription = if (isEnglish) "Close" else "סגור",
-                            tint = Color(0xFF5D6F89)
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
                 }
@@ -1287,9 +1374,13 @@ private fun ProductHeroCard(
                 ) {
                     Text(
                         text = compactAmount,
-                        style = MaterialTheme.typography.titleLarge,
+                        style = KmiTypography.sectionTitle,
+                        fontWeight = FontWeight.Bold,
                         color = Color.White,
-                        modifier = Modifier.padding(horizontal = 22.dp, vertical = 10.dp),
+                        modifier = Modifier.padding(
+                            horizontal = 22.dp,
+                            vertical = 10.dp
+                        ),
                         maxLines = 1
                     )
                 }
@@ -1297,7 +1388,7 @@ private fun ProductHeroCard(
                 Surface(
                     modifier = Modifier.align(Alignment.CenterStart),
                     shape = RoundedCornerShape(18.dp),
-                    color = Color(0xFFDCE7F7)
+                    color = MaterialTheme.colorScheme.surfaceVariant
                 ) {
                     Box(
                         modifier = Modifier
@@ -1308,7 +1399,7 @@ private fun ProductHeroCard(
                         Icon(
                             imageVector = Icons.Default.CreditCard,
                             contentDescription = null,
-                            tint = Color(0xFF6E59B5)
+                            tint = MaterialTheme.colorScheme.primary
                         )
                     }
                 }
@@ -1316,8 +1407,8 @@ private fun ProductHeroCard(
 
             Text(
                 text = if (isEnglish) "Association Membership" else "חברות בעמותה",
-                style = MaterialTheme.typography.titleMedium,
-                color = Color(0xFF1E2A3D),
+                style = KmiTypography.cardTitle,
+                color = MaterialTheme.colorScheme.onSurface,
                 modifier = Modifier.fillMaxWidth(),
                 textAlign = textAlign,
                 maxLines = 1,
@@ -1330,8 +1421,8 @@ private fun ProductHeroCard(
                 } else {
                     "רישום מאובטח לתשלום לפני מעבר לסליקה"
                 },
-                style = MaterialTheme.typography.bodyMedium,
-                color = Color(0xFF5E6C80),
+                style = KmiTypography.body,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.fillMaxWidth(),
                 textAlign = textAlign,
                 maxLines = 2,
@@ -1348,12 +1439,18 @@ private fun SectionCard(
     isEnglish: Boolean,
     content: @Composable ColumnScope.() -> Unit
 ) {
-    val textAlign = if (isEnglish) TextAlign.Left else TextAlign.Right
+    val textAlign =
+        if (isEnglish) {
+            TextAlign.Left
+        } else {
+            TextAlign.Right
+        }
+
     Card(
         modifier = Modifier.fillMaxWidth(),
         shape = MaterialTheme.shapes.extraLarge,
         colors = CardDefaults.cardColors(
-            containerColor = Color(0xFFEAF2FF)
+            containerColor = MaterialTheme.colorScheme.surface
         ),
         elevation = CardDefaults.cardElevation(
             defaultElevation = 8.dp,
@@ -1361,7 +1458,10 @@ private fun SectionCard(
         )
     ) {
         Column(
-            modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
+            modifier = Modifier.padding(
+                horizontal = 14.dp,
+                vertical = 12.dp
+            ),
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             Row(
@@ -1371,7 +1471,10 @@ private fun SectionCard(
             ) {
                 Surface(
                     shape = MaterialTheme.shapes.large,
-                    color = MaterialTheme.colorScheme.primary.copy(alpha = 0.14f)
+                    color =
+                        MaterialTheme.colorScheme.primary.copy(
+                            alpha = 0.14f
+                        )
                 ) {
                     Box(
                         modifier = Modifier
@@ -1382,15 +1485,15 @@ private fun SectionCard(
                         Icon(
                             imageVector = icon,
                             contentDescription = null,
-                            tint = Color(0xFF0F5E9C)
+                            tint = MaterialTheme.colorScheme.primary
                         )
                     }
                 }
 
                 Text(
                     text = title,
-                    style = MaterialTheme.typography.titleMedium,
-                    color = Color(0xFF1E2A3D),
+                    style = KmiTypography.cardTitle,
+                    color = MaterialTheme.colorScheme.onSurface,
                     fontWeight = FontWeight.ExtraBold,
                     textAlign = textAlign,
                     modifier = Modifier.weight(1f)
@@ -1398,7 +1501,10 @@ private fun SectionCard(
             }
 
             HorizontalDivider(
-                color = Color(0xFFBFD0E8)
+                color =
+                    MaterialTheme.colorScheme.outlineVariant.copy(
+                        alpha = 0.65f
+                    )
             )
 
             content()
@@ -1417,7 +1523,12 @@ private fun FormTextField(
     placeholder: String = "",
     isEnglish: Boolean
 ) {
-    val textAlign = if (isEnglish) TextAlign.Left else TextAlign.Right
+    val textAlign =
+        if (isEnglish) {
+            TextAlign.Left
+        } else {
+            TextAlign.Right
+        }
 
     OutlinedTextField(
         value = value,
@@ -1431,9 +1542,7 @@ private fun FormTextField(
         label = {
             Text(
                 text = label,
-                color = Color(0xFF5E6C80),
-                fontSize = 10.sp,
-                lineHeight = 12.sp,
+                style = KmiTypography.caption,
                 fontWeight = FontWeight.SemiBold,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
@@ -1441,76 +1550,116 @@ private fun FormTextField(
                 modifier = Modifier.fillMaxWidth()
             )
         },
-        leadingIcon = if (isEnglish) {
-            {
-                Icon(
-                    imageVector = leadingIcon,
-                    contentDescription = null,
-                    tint = Color(0xFF6B778B),
-                    modifier = Modifier.size(19.dp)
-                )
-            }
-        } else {
-            null
-        },
-        trailingIcon = if (isEnglish) {
-            null
-        } else {
-            {
-                Icon(
-                    imageVector = leadingIcon,
-                    contentDescription = null,
-                    tint = Color(0xFF6B778B),
-                    modifier = Modifier.size(19.dp)
-                )
-            }
-        },
+        leadingIcon =
+            if (isEnglish) {
+                {
+                    Icon(
+                        imageVector = leadingIcon,
+                        contentDescription = null,
+                        modifier = Modifier.size(19.dp)
+                    )
+                }
+            } else {
+                null
+            },
+        trailingIcon =
+            if (isEnglish) {
+                null
+            } else {
+                {
+                    Icon(
+                        imageVector = leadingIcon,
+                        contentDescription = null,
+                        modifier = Modifier.size(19.dp)
+                    )
+                }
+            },
         placeholder = {
             if (placeholder.isNotBlank()) {
                 Text(
                     text = placeholder,
-                    color = Color(0xFF7A879A),
-                    fontSize = 11.sp,
+                    style = KmiTypography.caption,
+                    color =
+                        MaterialTheme.colorScheme.onSurfaceVariant.copy(
+                            alpha = 0.72f
+                        ),
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
             }
         },
-        keyboardOptions = KeyboardOptions(keyboardType = keyboardType),
-        textStyle = MaterialTheme.typography.bodyMedium.copy(
-            textAlign = textAlign,
-            fontSize = 12.sp,
-            lineHeight = 16.sp,
-            fontWeight = FontWeight.SemiBold,
-            color = Color(0xFF1E2A3D)
-        ),
-        colors = androidx.compose.material3.OutlinedTextFieldDefaults.colors(
-            focusedContainerColor = Color.White,
-            unfocusedContainerColor = Color.White,
-            disabledContainerColor = Color.White,
+        keyboardOptions =
+            KeyboardOptions(
+                keyboardType = keyboardType
+            ),
+        textStyle =
+            KmiTypography.body.copy(
+                textAlign = textAlign,
+                fontWeight = FontWeight.SemiBold
+            ),
+        colors =
+            androidx.compose.material3.OutlinedTextFieldDefaults.colors(
+                focusedContainerColor =
+                    MaterialTheme.colorScheme.surfaceVariant.copy(
+                        alpha = 0.45f
+                    ),
+                unfocusedContainerColor =
+                    MaterialTheme.colorScheme.surfaceVariant.copy(
+                        alpha = 0.32f
+                    ),
+                disabledContainerColor =
+                    MaterialTheme.colorScheme.surfaceVariant.copy(
+                        alpha = 0.22f
+                    ),
 
-            focusedBorderColor = Color(0xFFBFD0E8),
-            unfocusedBorderColor = Color(0xFFD8E3F5),
-            disabledBorderColor = Color(0xFFD8E3F5),
+                focusedBorderColor =
+                    MaterialTheme.colorScheme.primary,
+                unfocusedBorderColor =
+                    MaterialTheme.colorScheme.outlineVariant,
+                disabledBorderColor =
+                    MaterialTheme.colorScheme.outlineVariant.copy(
+                        alpha = 0.45f
+                    ),
 
-            focusedTextColor = Color(0xFF1E2A3D),
-            unfocusedTextColor = Color(0xFF1E2A3D),
-            disabledTextColor = Color(0xFF1E2A3D),
+                focusedTextColor =
+                    MaterialTheme.colorScheme.onSurface,
+                unfocusedTextColor =
+                    MaterialTheme.colorScheme.onSurface,
+                disabledTextColor =
+                    MaterialTheme.colorScheme.onSurface.copy(
+                        alpha = 0.55f
+                    ),
 
-            focusedLabelColor = Color(0xFF5E6C80),
-            unfocusedLabelColor = Color(0xFF6B778B),
-            disabledLabelColor = Color(0xFF6B778B),
+                focusedLabelColor =
+                    MaterialTheme.colorScheme.primary,
+                unfocusedLabelColor =
+                    MaterialTheme.colorScheme.onSurfaceVariant,
+                disabledLabelColor =
+                    MaterialTheme.colorScheme.onSurfaceVariant.copy(
+                        alpha = 0.55f
+                    ),
 
-            focusedLeadingIconColor = Color(0xFF5E6C80),
-            unfocusedLeadingIconColor = Color(0xFF6B778B),
-            disabledLeadingIconColor = Color(0xFF6B778B),
+                focusedLeadingIconColor =
+                    MaterialTheme.colorScheme.primary,
+                unfocusedLeadingIconColor =
+                    MaterialTheme.colorScheme.onSurfaceVariant,
+                disabledLeadingIconColor =
+                    MaterialTheme.colorScheme.onSurfaceVariant.copy(
+                        alpha = 0.45f
+                    ),
 
-            focusedTrailingIconColor = Color(0xFF5E6C80),
-            unfocusedTrailingIconColor = Color(0xFF6B778B),
-            disabledTrailingIconColor = Color(0xFF6B778B),
+                focusedTrailingIconColor =
+                    MaterialTheme.colorScheme.primary,
+                unfocusedTrailingIconColor =
+                    MaterialTheme.colorScheme.onSurfaceVariant,
+                disabledTrailingIconColor =
+                    MaterialTheme.colorScheme.onSurfaceVariant.copy(
+                        alpha = 0.45f
+                    ),
 
-            cursorColor = Color(0xFF1E2A3D)
-        )
+                cursorColor =
+                    MaterialTheme.colorScheme.primary
+            )
     )
 }
 
@@ -1521,8 +1670,19 @@ private fun ProductPriceRow(
     emphasize: Boolean = false,
     isEnglish: Boolean
 ) {
-    val labelAlign = if (isEnglish) TextAlign.Left else TextAlign.Right
-    val valueAlign = if (isEnglish) TextAlign.Right else TextAlign.Left
+    val labelAlign =
+        if (isEnglish) {
+            TextAlign.Left
+        } else {
+            TextAlign.Right
+        }
+
+    val valueAlign =
+        if (isEnglish) {
+            TextAlign.Right
+        } else {
+            TextAlign.Left
+        }
 
     Row(
         modifier = Modifier.fillMaxWidth(),
@@ -1530,24 +1690,32 @@ private fun ProductPriceRow(
     ) {
         Text(
             text = label,
-            style = MaterialTheme.typography.bodyLarge,
-            color = Color(0xFF5E6C80),
+            style = KmiTypography.body,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
             textAlign = labelAlign,
             modifier = Modifier.weight(1f)
         )
 
         Text(
             text = value,
-            style = if (emphasize) {
-                MaterialTheme.typography.titleLarge
-            } else {
-                MaterialTheme.typography.titleMedium
-            },
-            color = if (emphasize) {
-                Color(0xFF7C5CE6)
-            } else {
-                Color(0xFF1E2A3D)
-            },
+            style =
+                if (emphasize) {
+                    KmiTypography.sectionTitle
+                } else {
+                    KmiTypography.cardTitle
+                },
+            fontWeight =
+                if (emphasize) {
+                    FontWeight.Bold
+                } else {
+                    FontWeight.SemiBold
+                },
+            color =
+                if (emphasize) {
+                    MaterialTheme.colorScheme.primary
+                } else {
+                    MaterialTheme.colorScheme.onSurface
+                },
             textAlign = valueAlign
         )
     }

@@ -2235,6 +2235,17 @@ fun MaterialsScreen(
 
             noteEditorFor?.let { itemId ->
                 ExerciseNoteEditorDialog(
+                    exerciseTitle =
+                        explainTriple
+                            ?.third
+                            ?.let { rawTitle ->
+                                itemTitleForUi(
+                                    topic = explainTriple?.second.orEmpty(),
+                                    rawItem = rawTitle,
+                                    lang = currentLang
+                                )
+                            }
+                            .orEmpty(),
                     noteText = noteDraft,
                     isEnglish = isEnglish,
                     accentColor = belt.color,
@@ -2973,6 +2984,33 @@ fun MaterialsScreen(
                                                                         }
                                                                 )
                                                             }
+
+                                                            if (noteText.isNotBlank()) {
+                                                                Spacer(
+                                                                    Modifier.width(6.dp)
+                                                                )
+
+                                                                ExerciseMetaBadge(
+                                                                    text =
+                                                                        if (isEnglish) {
+                                                                            "Note"
+                                                                        } else {
+                                                                            "הערה"
+                                                                        },
+                                                                    containerColor =
+                                                                        if (isDarkSurface) {
+                                                                            Color(0xFF5B4A22)
+                                                                        } else {
+                                                                            Color(0xFFFFE7B3)
+                                                                        },
+                                                                    contentColor =
+                                                                        if (isDarkSurface) {
+                                                                            Color(0xFFFFD978)
+                                                                        } else {
+                                                                            Color(0xFF8A5A00)
+                                                                        }
+                                                                )
+                                                            }
                                                         }
                                                     }
                                                 }
@@ -3049,7 +3087,7 @@ fun MaterialsScreen(
                                                                 traineeUpdatedAt > 0L
                                                             ) {
                                                                 SimpleDateFormat(
-                                                                    "dd/MM/yyyy",
+                                                                    "dd/MM/yy",
                                                                     Locale.getDefault()
                                                                 ).format(
                                                                     Date(traineeUpdatedAt)
@@ -3364,6 +3402,12 @@ fun MaterialsScreen(
                                             // דיאלוג הערה
                                             if (showNoteDialog) {
                                                 ExerciseNoteEditorDialog(
+                                                    exerciseTitle =
+                                                        itemTitleForUi(
+                                                            topic = topicUi,
+                                                            rawItem = item,
+                                                            lang = currentLang
+                                                        ),
                                                     noteText = noteText,
                                                     isEnglish = isEnglish,
                                                     accentColor = belt.color,

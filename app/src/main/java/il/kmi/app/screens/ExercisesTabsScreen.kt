@@ -2202,6 +2202,7 @@ fun ExercisesTabsScreen(
 
         noteEditorFor?.let { item ->
             ExerciseNoteEditorDialog(
+                exerciseTitle = formattedExerciseTitle(item),
                 noteText = noteDraft,
                 isEnglish = isEnglish,
                 accentColor = belt.color,

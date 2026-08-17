@@ -1406,6 +1406,7 @@ fun RandomPracticeScreen(
 
                 if (showNoteEditor) {
                     ExerciseNoteEditorDialog(
+                        exerciseTitle = itemTitleUi,
                         noteText = noteText,
                         isEnglish = isEnglish,
                         accentColor = b.color,
@@ -1511,6 +1512,7 @@ fun RandomPracticeScreen(
 
                 if (showNoteEditor) {
                     ExerciseNoteEditorDialog(
+                        exerciseTitle = safeItemTitleUi,
                         noteText = noteText,
                         isEnglish = isEnglish,
                         accentColor = belt.color,

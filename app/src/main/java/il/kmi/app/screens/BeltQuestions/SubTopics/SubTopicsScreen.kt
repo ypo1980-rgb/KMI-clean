@@ -2537,6 +2537,7 @@ private fun ModernExerciseInfoDialog(
 
     if (showNoteEditor) {
         ExerciseNoteEditorDialog(
+            exerciseTitle = title,
             noteText = noteText,
             isEnglish = isEnglish,
             accentColor = accentColor,
@@ -3594,8 +3595,22 @@ private fun HardBeltGroupsStickyContent(
         Belt.fromId(id)
     }
 
+    val editorExerciseTitle =
+        if (editorItemId != null && editorBelt != null) {
+            flatRows
+                .firstOrNull { row ->
+                    row.belt == editorBelt &&
+                            statusIdFor(row.belt, row.rawItem) == editorItemId
+                }
+                ?.displayItem
+                .orEmpty()
+        } else {
+            ""
+        }
+
     if (editorItemId != null && editorBelt != null) {
         ExerciseNoteEditorDialog(
+            exerciseTitle = editorExerciseTitle,
             noteText = noteDraft,
             isEnglish = isEnglish,
             accentColor = editorBelt.color,
@@ -4513,7 +4528,16 @@ private fun HardBeltGroupCard(
     }
 
     noteEditorFor?.let { itemId ->
+        val editorExerciseTitle =
+            displayItems
+                .firstOrNull { pair ->
+                    statusIdFor(pair.first) == itemId
+                }
+                ?.second
+                .orEmpty()
+
         ExerciseNoteEditorDialog(
+            exerciseTitle = editorExerciseTitle,
             noteText = noteDraft,
             isEnglish = isEnglish,
             accentColor = belt.color,
