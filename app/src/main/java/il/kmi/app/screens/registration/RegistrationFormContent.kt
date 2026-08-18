@@ -177,6 +177,10 @@ fun RegistrationFormContent(
     password: String,
     onPasswordChange: (String) -> Unit,
     passwordError: Boolean,
+
+    // כל הסניפים הזמינים לפי האזורים שנבחרו במסך הראשי
+    availableBranches: List<String>,
+
     selectedRegions: List<String>,
     onRegionsChange: (List<String>) -> Unit,
     selectedBranches: List<String>,
@@ -631,6 +635,7 @@ fun RegistrationFormContent(
 
                 RegionAndMultiBranchPicker(
                     branchType = branchType,
+                    availableBranches = availableBranches,
                     selectedRegions = selectedRegions,
                     selectedBranches = selectedBranches,
                     onRegionsChange = onRegionsChange,
@@ -1079,6 +1084,7 @@ private fun BirthDatePicker(
 @Composable
 private fun RegionAndMultiBranchPicker(
     branchType: String,
+    availableBranches: List<String>,
     selectedRegions: List<String>,
     selectedBranches: List<String>,
     onRegionsChange: (List<String>) -> Unit,
@@ -1138,51 +1144,26 @@ private fun RegionAndMultiBranchPicker(
         }
     }
 
+    /*
+     * מקור האמת לסניפים מגיע מ־RegistrationFormScreen,
+     * שם הרשימה כבר מחושבת מכל האזורים שנבחרו
+     * ומשלבת את branches.json עם TrainingCatalog.
+     *
+     * כך בחירת "השרון" תציג את כל סניפי השרון,
+     * וגם בחירה של כמה אזורים תציג את האיחוד שלהם.
+     */
     val allBranches = remember(
-        ctx,
-        branchType,
+        availableBranches,
         selectedRegions,
-        isEnglish
+        branchType
     ) {
         if (selectedRegions.isEmpty()) {
             emptyList()
         } else {
-            val dbBranches = KmiDatabaseProvider
-                .branches(ctx)
-                .filter { branch ->
-                    selectedRegions.any { selectedRegion ->
-                        branch.regionHe == selectedRegion ||
-                                branch.regionEn.equals(
-                                    selectedRegion,
-                                    ignoreCase = true
-                                ) ||
-                                branch.regionId.equals(
-                                    selectedRegion,
-                                    ignoreCase = true
-                                )
-                    }
-                }
-                .map { dbBranch ->
-                    if (isEnglish) {
-                        dbBranch.nameEn.ifBlank { dbBranch.nameHe }
-                    } else {
-                        dbBranch.nameHe.ifBlank { dbBranch.nameEn }
-                    }
-                }
+            availableBranches
+                .map { it.trim() }
                 .filter { it.isNotBlank() }
                 .distinct()
-
-            if (dbBranches.isNotEmpty()) {
-                dbBranches
-            } else {
-                selectedRegions
-                    .flatMap { region ->
-                        TrainingCatalog.branchesFor(region)
-                    }
-                    .map { it.trim() }
-                    .filter { it.isNotBlank() }
-                    .distinct()
-            }
         }
     }
 

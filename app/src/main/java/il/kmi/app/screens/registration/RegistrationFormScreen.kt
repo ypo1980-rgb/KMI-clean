@@ -1571,6 +1571,17 @@ fun RegistrationFormScreen(
                     passwordError = false
                 },
                 passwordError = passwordError,
+
+                // כל הסניפים בפועל לפי האזורים שנבחרו.
+                availableBranches =
+                    selectedRegions
+                        .flatMap { region ->
+                            branchesByRegion[region].orEmpty()
+                        }
+                        .map { it.trim() }
+                        .filter { it.isNotBlank() }
+                        .distinct(),
+
                 selectedRegions = selectedRegions,
                 onRegionsChange = { list ->
                     val clean = list
