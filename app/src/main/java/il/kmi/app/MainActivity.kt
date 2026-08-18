@@ -21,6 +21,7 @@ import il.kmi.app.subscription.BillingRepository
 // Firebase
 import com.google.firebase.Timestamp
 import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.SetOptions
 import com.google.firebase.messaging.FirebaseMessaging
@@ -51,6 +52,11 @@ private const val SUPPRESS_NEXT_DRAWER_OPEN_KEY = "kmi_suppress_next_drawer_open
 class MainActivity : androidx.fragment.app.FragmentActivity() {
 
     private var billingRepository: BillingRepository? = null
+
+    // מונע ספירה כפולה של אותה פתיחת אפליקציה.
+    // אם onCreate רץ לפני שהמשתמש מזוהה,
+    // נוכל לנסות שוב אחרי Login בלי להעלות את המונה פעמיים.
+    private var appOpenTrackedForThisSession = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
 
@@ -124,6 +130,11 @@ class MainActivity : androidx.fragment.app.FragmentActivity() {
         // התחברות Google צריכה להתחיל ממצב נקי, ורק לאחר התחברות אמיתית
         // נסנכרן FCM ופרטי משתמש.
         setupFcmTokenSync(userSp)
+
+        // ✅ מעקב שימוש אמיתי:
+        // פעם אחת בכל יצירת MainActivity נרשמת פתיחת אפליקציה
+        // ומתעדכן זמן השימוש האחרון במסמך המשתמש האמיתי.
+        trackAppOpenForCurrentUser(userSp)
 
         // -------------------- UI --------------------
         setContent {
@@ -691,6 +702,195 @@ class MainActivity : androidx.fragment.app.FragmentActivity() {
 
         auth.addAuthStateListener {
             syncForCurrentProfile()
+
+            // אחרי Login / שינוי משתמש,
+            // מנסים שוב לעדכן usage כי עכשיו ה-UID והפרופיל זמינים.
+            trackAppOpenForCurrentUser(userSp)
+        }
+    }
+
+    private fun trackAppOpenForCurrentUser(
+        userSp: SharedPreferences
+    ) {
+        val auth = FirebaseAuth.getInstance()
+        val db = FirebaseFirestore.getInstance()
+
+        fun cleanPhone(raw: String?): String {
+            return raw
+                .orEmpty()
+                .trim()
+                .replace("-", "")
+                .replace(" ", "")
+                .replace("(", "")
+                .replace(")", "")
+        }
+
+        fun localProfileUid(): String {
+            return listOf(
+                userSp.getString("uid", null),
+                userSp.getString("user_uid", null),
+                userSp.getString("firebase_uid", null),
+                userSp.getString("auth_uid", null)
+            )
+                .map { it.orEmpty().trim() }
+                .firstOrNull { it.isNotBlank() }
+                .orEmpty()
+        }
+
+        fun localProfileEmail(): String {
+            return listOf(
+                userSp.getString("email", null),
+                userSp.getString("user_email", null)
+            )
+                .map { it.orEmpty().trim() }
+                .firstOrNull { it.isNotBlank() }
+                .orEmpty()
+        }
+
+        fun localProfilePhone(): String {
+            return listOf(
+                userSp.getString("phone", null),
+                userSp.getString("phoneNumber", null),
+                userSp.getString("phoneRaw", null),
+                userSp.getString("user_phone", null)
+            )
+                .map { cleanPhone(it) }
+                .firstOrNull { it.isNotBlank() }
+                .orEmpty()
+        }
+
+        fun updateUsage(
+            userDocId: String
+        ) {
+            if (appOpenTrackedForThisSession) {
+                return
+            }
+
+            val cleanUserDocId = userDocId.trim()
+
+            if (cleanUserDocId.isBlank()) {
+                return
+            }
+
+            val nowMillis = System.currentTimeMillis()
+
+            db.collection("users")
+                .document(cleanUserDocId)
+                .set(
+                    mapOf(
+                        "uid" to cleanUserDocId,
+
+                        // ✅ מונה פתיחות אמיתי
+                        "appOpenCount" to FieldValue.increment(1L),
+
+                        // ✅ שימוש אחרון
+                        "lastSeenAtMillis" to nowMillis,
+
+                        // ✅ תאימות למסכים/גרסאות ישנות
+                        "lastSeenAt" to Timestamp.now(),
+                        "lastOpenAtMillis" to nowMillis,
+                        "lastOpenAt" to Timestamp.now()
+                    ),
+                    SetOptions.merge()
+                )
+                .addOnSuccessListener {
+                    appOpenTrackedForThisSession = true
+                }
+                .addOnFailureListener {
+                }
+        }
+
+        val profileUid = localProfileUid()
+        val profileEmail = localProfileEmail()
+        val profilePhone = localProfilePhone()
+        val authUid = auth.currentUser?.uid.orEmpty().trim()
+
+        // --------------------------------------------------
+        // 1. קודם מייל — כדי לעדכן את מסמך המשתמש העסקי
+        // ולא בטעות ליצור מסמך חדש לפי Firebase UID.
+        // --------------------------------------------------
+
+        if (profileEmail.isNotBlank()) {
+            db.collection("users")
+                .whereEqualTo("email", profileEmail)
+                .limit(1)
+                .get()
+                .addOnSuccessListener { snap ->
+                    val doc = snap.documents.firstOrNull()
+
+                    if (doc != null) {
+                        updateUsage(doc.id)
+                    } else if (profilePhone.isNotBlank()) {
+                        db.collection("users")
+                            .whereEqualTo("phone", profilePhone)
+                            .limit(1)
+                            .get()
+                            .addOnSuccessListener { phoneSnap ->
+                                val phoneDoc =
+                                    phoneSnap.documents.firstOrNull()
+
+                                when {
+                                    phoneDoc != null ->
+                                        updateUsage(phoneDoc.id)
+
+                                    profileUid.isNotBlank() ->
+                                        updateUsage(profileUid)
+
+                                    authUid.isNotBlank() ->
+                                        updateUsage(authUid)
+                                }
+                            }
+                    } else {
+                        when {
+                            profileUid.isNotBlank() ->
+                                updateUsage(profileUid)
+
+                            authUid.isNotBlank() ->
+                                updateUsage(authUid)
+                        }
+                    }
+                }
+
+            return
+        }
+
+        // --------------------------------------------------
+        // 2. אין מייל — מחפשים לפי טלפון.
+        // --------------------------------------------------
+
+        if (profilePhone.isNotBlank()) {
+            db.collection("users")
+                .whereEqualTo("phone", profilePhone)
+                .limit(1)
+                .get()
+                .addOnSuccessListener { snap ->
+                    val doc = snap.documents.firstOrNull()
+
+                    when {
+                        doc != null ->
+                            updateUsage(doc.id)
+
+                        profileUid.isNotBlank() ->
+                            updateUsage(profileUid)
+
+                        authUid.isNotBlank() ->
+                            updateUsage(authUid)
+                    }
+                }
+
+            return
+        }
+
+        // --------------------------------------------------
+        // 3. fallback ל-UID.
+        // --------------------------------------------------
+
+        when {
+            profileUid.isNotBlank() ->
+                updateUsage(profileUid)
+
+            authUid.isNotBlank() ->
+                updateUsage(authUid)
         }
     }
 

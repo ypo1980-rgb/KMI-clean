@@ -818,24 +818,79 @@ private fun searchExercisesWithHebrewVariants(
         return emptyList()
     }
 
+    val numberNormalizedQuery =
+        cleanQuery
+            .replace(
+                Regex("""(?<!\S)(אחת|אחד)(?!\S)"""),
+                "1"
+            )
+            .replace(
+                Regex("""(?<!\S)(שתיים|שניים)(?!\S)"""),
+                "2"
+            )
+            .replace(
+                Regex("""(?<!\S)(שלוש|שלושה)(?!\S)"""),
+                "3"
+            )
+            .replace(
+                Regex("""(?<!\S)(ארבע|ארבעה)(?!\S)"""),
+                "4"
+            )
+            .replace(
+                Regex("""(?<!\S)(חמש|חמישה)(?!\S)"""),
+                "5"
+            )
+            .replace(
+                Regex("""\s+"""),
+                " "
+            )
+            .trim()
+
     /*
-     * תחילה יוצרים את שני הכתיבים האפשריים
-     * של "צואר" ו־"צוואר".
+     * תומכים גם בצורה המלאה "מספר 1"
+     * וגם בצורה שבה שמות התרגילים נשמרו: "מס' 1".
      */
-    val neckSpellingVariants =
+    val numberLabelVariants =
         linkedSetOf(
             cleanQuery,
-            cleanQuery.replace(
-                oldValue = "צוואר",
-                newValue = "צואר",
-                ignoreCase = true
+            numberNormalizedQuery,
+
+            numberNormalizedQuery.replace(
+                Regex("""\bמספר\s+([1-5])"""),
+                "מס' $1"
             ),
-            cleanQuery.replace(
-                oldValue = "צואר",
-                newValue = "צוואר",
-                ignoreCase = true
+
+            numberNormalizedQuery.replace(
+                Regex("""\bמספר\s+([1-5])"""),
+                "מס׳ $1"
             )
         )
+
+    /*
+     * יוצרים גם וריאנטים של צואר / צוואר.
+     */
+    val neckSpellingVariants =
+        linkedSetOf<String>().apply {
+            numberLabelVariants.forEach { value ->
+                add(value)
+
+                add(
+                    value.replace(
+                        oldValue = "צוואר",
+                        newValue = "צואר",
+                        ignoreCase = true
+                    )
+                )
+
+                add(
+                    value.replace(
+                        oldValue = "צואר",
+                        newValue = "צוואר",
+                        ignoreCase = true
+                    )
+                )
+            }
+        }
 
     /*
      * עבור כל כתיב יוצרים גם גרסה ללא מקפים.

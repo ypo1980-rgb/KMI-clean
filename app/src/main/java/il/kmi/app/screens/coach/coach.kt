@@ -22,6 +22,9 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Divider
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.ExposedDropdownMenuBox
+import androidx.compose.material3.ExposedDropdownMenuDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
@@ -108,89 +111,333 @@ fun CoachTraineesScreen(
 
     // הסטטיסטיקה הארצית נפתחת כעת מתוך מסך סטטיסטיקת הקבוצה.
 
-    // --- branch / groupKey שנעשה בהם שימוש בפועל ---
-    var effectiveBranch by remember { mutableStateOf(branch) }
-    var effectiveGroupKey by remember { mutableStateOf(groupKey) }
+    // --- סניף / קבוצה שנעשה בהם שימוש בפועל ---
+    var effectiveBranch by remember {
+        mutableStateOf(branch.trim())
+    }
 
-    // מנסים קודם מה-SharedPreferences, ואם לא – מה-Firestore (users/{uid})
+    var effectiveGroupKey by remember {
+        mutableStateOf(groupKey.trim())
+    }
+
+    // כל הסניפים והקבוצות שהמאמן רשום אליהם.
+    var availableBranches by remember {
+        mutableStateOf<List<String>>(emptyList())
+    }
+
+    var availableGroups by remember {
+        mutableStateOf<List<String>>(emptyList())
+    }
+
+    var branchPickerExpanded by remember {
+        mutableStateOf(false)
+    }
+
+    var groupPickerExpanded by remember {
+        mutableStateOf(false)
+    }
+
+    /*
+     * קורא רשימה מ-SharedPreferences.
+     *
+     * תומך:
+     * - String רגיל
+     * - CSV
+     * - JSON Array
+     * - StringSet
+     */
+    fun readCoachPrefList(
+        vararg keys: String
+    ): List<String> {
+        return keys
+            .flatMap { key ->
+                when (val raw = sp.all[key]) {
+                    is Set<*> ->
+                        raw.mapNotNull {
+                            it?.toString()
+                        }
+
+                    is String -> {
+                        val value = raw.trim()
+
+                        if (value.isBlank()) {
+                            emptyList()
+                        } else if (
+                            value.startsWith("[") &&
+                            value.endsWith("]")
+                        ) {
+                            runCatching {
+                                val json =
+                                    org.json.JSONArray(value)
+
+                                buildList {
+                                    for (i in 0 until json.length()) {
+                                        json.optString(i)
+                                            .trim()
+                                            .takeIf {
+                                                it.isNotBlank()
+                                            }
+                                            ?.let(::add)
+                                    }
+                                }
+                            }.getOrElse {
+                                value.split(",")
+                            }
+                        } else {
+                            value.split(",")
+                        }
+                    }
+
+                    else ->
+                        emptyList()
+                }
+            }
+            .map {
+                it.trim()
+            }
+            .filter {
+                it.isNotBlank()
+            }
+            .distinct()
+    }
+
+    /*
+     * טוענים תמיד את כל הסניפים והקבוצות של המאמן.
+     *
+     * לא מסתפקים ב-activeBranch / activeGroup,
+     * כי המסך צריך לאפשר מעבר בין כל השיוכים.
+     */
     LaunchedEffect(Unit) {
-        // 1. SharedPreferences – תומך במפתחות הישנים והחדשים
-        if (effectiveBranch.isBlank()) {
-            effectiveBranch =
-                sp.getString("active_branch", null)
-                    ?: sp.getString("activeBranch", null)
-                            ?: sp.getString("branch", null)
-                            ?: sp.getString("branchesCsv", null)
-                            ?: sp.getString("coach_branch", null)
-                            ?: sp.getString("selected_branch", null)
-                            ?: sp.getString("current_branch", null)
-                            ?: ""
-        }
 
-        if (effectiveGroupKey.isBlank()) {
-            effectiveGroupKey =
-                sp.getString("active_group", null)
-                    ?: sp.getString("activeGroup", null)
-                            ?: sp.getString("primaryGroup", null)
-                            ?: sp.getString("groupKey", null)
-                            ?: sp.getString("group_key", null)
-                            ?: sp.getString("age_group", null)
-                            ?: sp.getString("group", null)
-                            ?: sp.getString("coach_groupKey", null)
-                            ?: sp.getString("selected_groupKey", null)
-                            ?: sp.getString("current_groupKey", null)
-                            ?: ""
-        }
+        val localBranches =
+            (
+                    readCoachPrefList(
+                        "branches_json",
+                        "branches",
+                        "selected_branches",
+                        "branchesCsv"
+                    ) +
+                            readCoachPrefList(
+                                "active_branch",
+                                "activeBranch",
+                                "branch",
+                                "coach_branch",
+                                "selected_branch",
+                                "current_branch"
+                            )
+                    )
+                .map { it.trim() }
+                .filter { it.isNotBlank() }
+                .distinct()
 
-        // 2. אם עדיין חסר – שליפה מ-Firestore users/{uid}
-        if (effectiveBranch.isBlank() || effectiveGroupKey.isBlank()) {
-            val uid = FirebaseAuth.getInstance().currentUser?.uid
-            if (uid != null) {
-                try {
-                    val snap = Firebase.firestore
+        val localGroups =
+            (
+                    readCoachPrefList(
+                        "groups_json",
+                        "groups",
+                        "selected_groups",
+                        "groupsCsv"
+                    ) +
+                            readCoachPrefList(
+                                "active_group",
+                                "activeGroup",
+                                "primaryGroup",
+                                "groupKey",
+                                "group_key",
+                                "age_group",
+                                "group",
+                                "coach_groupKey",
+                                "selected_groupKey",
+                                "current_groupKey"
+                            )
+                    )
+                .map { it.trim() }
+                .filter { it.isNotBlank() }
+                .distinct()
+
+        var serverBranches =
+            emptyList<String>()
+
+        var serverGroups =
+            emptyList<String>()
+
+        val uid =
+            FirebaseAuth
+                .getInstance()
+                .currentUser
+                ?.uid
+
+        if (!uid.isNullOrBlank()) {
+            try {
+                val snap =
+                    Firebase.firestore
                         .collection("users")
                         .document(uid)
                         .get()
                         .await()
 
-                    if (effectiveBranch.isBlank()) {
-                        val branchesList = snap.get("branches") as? List<*>
-                        val branchesFromList = branchesList
-                            ?.mapNotNull { it?.toString()?.trim() }
-                            ?.firstOrNull { it.isNotBlank() }
-                            .orEmpty()
+                serverBranches =
+                    buildList {
+                        // רשימת סניפים חדשה
+                        (snap.get("branches") as? List<*>)
+                            ?.forEach { item ->
+                                item
+                                    ?.toString()
+                                    ?.trim()
+                                    ?.takeIf {
+                                        it.isNotBlank()
+                                    }
+                                    ?.let(::add)
+                            }
 
-                        effectiveBranch =
-                            snap.getString("activeBranch")
-                                ?: snap.getString("active_branch")
-                                        ?: snap.getString("branch")
-                                        ?: snap.getString("branchesCsv")
-                                        ?: snap.getString("coachBranch")
-                                        ?: branchesFromList
+                        // CSV
+                        snap.getString("branchesCsv")
+                            ?.split(",")
+                            ?.forEach { value ->
+                                value
+                                    .trim()
+                                    .takeIf {
+                                        it.isNotBlank()
+                                    }
+                                    ?.let(::add)
+                            }
+
+                        // תאימות לשדות יחידים ישנים
+                        listOf(
+                            snap.getString("activeBranch"),
+                            snap.getString("active_branch"),
+                            snap.getString("branch"),
+                            snap.getString("coachBranch")
+                        )
+                            .mapNotNull { it }
+                            .forEach { value ->
+                                value
+                                    .trim()
+                                    .takeIf {
+                                        it.isNotBlank()
+                                    }
+                                    ?.let(::add)
+                            }
                     }
+                        .distinct()
 
-                    if (effectiveGroupKey.isBlank()) {
-                        val groupsList = snap.get("groups") as? List<*>
-                        val groupFromList = groupsList
-                            ?.mapNotNull { it?.toString()?.trim() }
-                            ?.firstOrNull { it.isNotBlank() }
-                            .orEmpty()
+                serverGroups =
+                    buildList {
+                        // רשימת קבוצות חדשה
+                        (snap.get("groups") as? List<*>)
+                            ?.forEach { item ->
+                                item
+                                    ?.toString()
+                                    ?.trim()
+                                    ?.takeIf {
+                                        it.isNotBlank()
+                                    }
+                                    ?.let(::add)
+                            }
 
-                        effectiveGroupKey =
-                            snap.getString("activeGroup")
-                                ?: snap.getString("active_group")
-                                        ?: snap.getString("primaryGroup")
-                                        ?: snap.getString("groupKey")
-                                        ?: snap.getString("group_key")
-                                        ?: snap.getString("age_group")
-                                        ?: snap.getString("group")
-                                        ?: snap.getString("coachGroupKey")
-                                        ?: groupFromList
+                        // CSV אם קיים
+                        snap.getString("groupsCsv")
+                            ?.split(",")
+                            ?.forEach { value ->
+                                value
+                                    .trim()
+                                    .takeIf {
+                                        it.isNotBlank()
+                                    }
+                                    ?.let(::add)
+                            }
+
+                        // תאימות לשדות הישנים
+                        listOf(
+                            snap.getString("activeGroup"),
+                            snap.getString("active_group"),
+                            snap.getString("primaryGroup"),
+                            snap.getString("groupKey"),
+                            snap.getString("group_key"),
+                            snap.getString("age_group"),
+                            snap.getString("group"),
+                            snap.getString("coachGroupKey")
+                        )
+                            .mapNotNull { it }
+                            .forEach { value ->
+                                value
+                                    .trim()
+                                    .takeIf {
+                                        it.isNotBlank()
+                                    }
+                                    ?.let(::add)
+                            }
                     }
-                } catch (_: Exception) {
-                    // במקרה של שגיאה לא מפילים את האפליקציה – פשוט נשארים עם מה שיש
-                }
+                        .distinct()
+
+            } catch (_: Exception) {
+                // נשארים עם הנתונים המקומיים.
             }
+        }
+
+        availableBranches =
+            (localBranches + serverBranches)
+                .map { it.trim() }
+                .filter { it.isNotBlank() }
+                .distinct()
+
+        availableGroups =
+            (localGroups + serverGroups)
+                .map { it.trim() }
+                .filter { it.isNotBlank() }
+                .distinct()
+
+        /*
+         * אם קיבלנו branch/group בכניסה למסך –
+         * שומרים אותם.
+         *
+         * אחרת בוחרים את הפעיל הקיים,
+         * ואם אין – את האפשרות הראשונה.
+         */
+        if (
+            effectiveBranch.isBlank() ||
+            effectiveBranch.contains(",")
+        ) {
+            val activeBranch =
+                readCoachPrefList(
+                    "active_branch",
+                    "activeBranch",
+                    "branch",
+                    "selected_branch",
+                    "current_branch"
+                )
+                    .firstOrNull {
+                        it in availableBranches
+                    }
+
+            effectiveBranch =
+                activeBranch
+                    ?: availableBranches.firstOrNull()
+                        .orEmpty()
+        }
+
+        if (
+            effectiveGroupKey.isBlank() ||
+            effectiveGroupKey.contains(",")
+        ) {
+            val activeGroup =
+                readCoachPrefList(
+                    "active_group",
+                    "activeGroup",
+                    "primaryGroup",
+                    "groupKey",
+                    "group_key",
+                    "age_group",
+                    "group"
+                )
+                    .firstOrNull {
+                        it in availableGroups
+                    }
+
+            effectiveGroupKey =
+                activeGroup
+                    ?: availableGroups.firstOrNull()
+                        .orEmpty()
         }
     }
 
@@ -210,23 +457,32 @@ fun CoachTraineesScreen(
     val app = ctx.applicationContext as Application
     val repo = remember(app) { AttendanceRepository.get(app) }
 
-    var traineeProfiles by remember { mutableStateOf<List<TraineeProfile>>(emptyList()) }
-    var isProfilesLoading by remember { mutableStateOf(true) }
-    var didFinishInitialProfilesLoad by remember { mutableStateOf(false) }
-
-    // מונע הצגת "לא נמצאו מתאמנים" לפני שהסנכרון הראשוני באמת הסתיים
-    var isInitialServerSyncRunning by remember { mutableStateOf(true) }
-
-    // ✅ אם effectiveBranch מגיע כ-CSV ("סניף1, סניף2") – עובדים בפועל עם הסניף הראשון
-    val effectiveBranchPrimary = remember(effectiveBranch) {
-        effectiveBranch
-            .split(",")
-            .map { it.trim() }
-            .firstOrNull { it.isNotBlank() }
-            ?: effectiveBranch.trim()
+    var traineeProfiles by remember {
+        mutableStateOf<List<TraineeProfile>>(emptyList())
     }
 
-    LaunchedEffect(effectiveBranch, effectiveGroupKey) {
+    var isProfilesLoading by remember {
+        mutableStateOf(true)
+    }
+
+    var didFinishInitialProfilesLoad by remember {
+        mutableStateOf(false)
+    }
+
+    // מונע הצגת "לא נמצאו מתאמנים" לפני שהסנכרון הראשוני באמת הסתיים
+    var isInitialServerSyncRunning by remember {
+        mutableStateOf(true)
+    }
+
+    // הסניף הנבחר כרגע הוא סניף יחיד מתוך רשימת הסניפים של המאמן.
+    val effectiveBranchPrimary = remember(effectiveBranch) {
+        effectiveBranch.trim()
+    }
+
+    LaunchedEffect(
+        effectiveBranch,
+        effectiveGroupKey
+    ) {
         isProfilesLoading = true
         isInitialServerSyncRunning = true
         didFinishInitialProfilesLoad = false
@@ -1859,6 +2115,273 @@ fun CoachTraineesScreen(
                             }
 
                             if (isTraineePickerExpanded) {
+
+                                // =====================================================
+                                // בחירת סניף
+                                // =====================================================
+
+                                ExposedDropdownMenuBox(
+                                    expanded = branchPickerExpanded,
+                                    onExpandedChange = {
+                                        if (availableBranches.isNotEmpty()) {
+                                            branchPickerExpanded = it
+                                        }
+                                    },
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    OutlinedTextField(
+                                        value = effectiveBranch,
+                                        onValueChange = {},
+                                        readOnly = true,
+                                        singleLine = true,
+                                        label = {
+                                            Text(
+                                                text = coachTr(
+                                                    isEnglish,
+                                                    "סניף",
+                                                    "Branch"
+                                                )
+                                            )
+                                        },
+                                        placeholder = {
+                                            Text(
+                                                text = coachTr(
+                                                    isEnglish,
+                                                    "בחר סניף",
+                                                    "Select branch"
+                                                )
+                                            )
+                                        },
+                                        trailingIcon = {
+                                            ExposedDropdownMenuDefaults
+                                                .TrailingIcon(
+                                                    expanded =
+                                                        branchPickerExpanded
+                                                )
+                                        },
+                                        colors =
+                                            OutlinedTextFieldDefaults.colors(
+                                                focusedTextColor =
+                                                    Color(0xFF172036),
+                                                unfocusedTextColor =
+                                                    Color(0xFF172036),
+                                                focusedBorderColor =
+                                                    Color(0xFF7C5CE7),
+                                                unfocusedBorderColor =
+                                                    Color(0xFFCBD8EA),
+                                                focusedContainerColor =
+                                                    Color.White,
+                                                unfocusedContainerColor =
+                                                    Color.White,
+                                                focusedLabelColor =
+                                                    Color(0xFF4F46E5),
+                                                unfocusedLabelColor =
+                                                    Color(0xFF64748B)
+                                            ),
+                                        shape = RoundedCornerShape(18.dp),
+                                        textStyle =
+                                            MaterialTheme.typography
+                                                .bodyMedium
+                                                .copy(
+                                                    fontWeight =
+                                                        FontWeight.Bold,
+                                                    textAlign =
+                                                        coachTextAlign(
+                                                            isEnglish
+                                                        )
+                                                ),
+                                        modifier = Modifier
+                                            .menuAnchor()
+                                            .fillMaxWidth()
+                                    )
+
+                                    ExposedDropdownMenu(
+                                        expanded = branchPickerExpanded,
+                                        onDismissRequest = {
+                                            branchPickerExpanded = false
+                                        }
+                                    ) {
+                                        availableBranches.forEach { branchItem ->
+                                            DropdownMenuItem(
+                                                text = {
+                                                    Text(
+                                                        text = branchItem,
+                                                        fontWeight =
+                                                            if (
+                                                                branchItem ==
+                                                                effectiveBranch
+                                                            ) {
+                                                                FontWeight.ExtraBold
+                                                            } else {
+                                                                FontWeight.Medium
+                                                            },
+                                                        textAlign =
+                                                            coachTextAlign(
+                                                                isEnglish
+                                                            ),
+                                                        modifier =
+                                                            Modifier.fillMaxWidth()
+                                                    )
+                                                },
+                                                onClick = {
+                                                    if (
+                                                        branchItem !=
+                                                        effectiveBranch
+                                                    ) {
+                                                        effectiveBranch =
+                                                            branchItem
+
+                                                        /*
+                                                         * החלפת סניף מאפסת
+                                                         * את בחירת המתאמן.
+                                                         */
+                                                        selectedId = null
+                                                        traineeSearchQuery = ""
+                                                        expandedCoachSection =
+                                                            null
+                                                    }
+
+                                                    branchPickerExpanded =
+                                                        false
+                                                }
+                                            )
+                                        }
+                                    }
+                                }
+
+                                // =====================================================
+                                // בחירת קבוצה
+                                // =====================================================
+
+                                ExposedDropdownMenuBox(
+                                    expanded = groupPickerExpanded,
+                                    onExpandedChange = {
+                                        if (availableGroups.isNotEmpty()) {
+                                            groupPickerExpanded = it
+                                        }
+                                    },
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    OutlinedTextField(
+                                        value = effectiveGroupKey,
+                                        onValueChange = {},
+                                        readOnly = true,
+                                        singleLine = true,
+                                        label = {
+                                            Text(
+                                                text = coachTr(
+                                                    isEnglish,
+                                                    "קבוצה",
+                                                    "Group"
+                                                )
+                                            )
+                                        },
+                                        placeholder = {
+                                            Text(
+                                                text = coachTr(
+                                                    isEnglish,
+                                                    "בחר קבוצה",
+                                                    "Select group"
+                                                )
+                                            )
+                                        },
+                                        trailingIcon = {
+                                            ExposedDropdownMenuDefaults
+                                                .TrailingIcon(
+                                                    expanded =
+                                                        groupPickerExpanded
+                                                )
+                                        },
+                                        colors =
+                                            OutlinedTextFieldDefaults.colors(
+                                                focusedTextColor =
+                                                    Color(0xFF172036),
+                                                unfocusedTextColor =
+                                                    Color(0xFF172036),
+                                                focusedBorderColor =
+                                                    Color(0xFF7C5CE7),
+                                                unfocusedBorderColor =
+                                                    Color(0xFFCBD8EA),
+                                                focusedContainerColor =
+                                                    Color.White,
+                                                unfocusedContainerColor =
+                                                    Color.White,
+                                                focusedLabelColor =
+                                                    Color(0xFF4F46E5),
+                                                unfocusedLabelColor =
+                                                    Color(0xFF64748B)
+                                            ),
+                                        shape = RoundedCornerShape(18.dp),
+                                        textStyle =
+                                            MaterialTheme.typography
+                                                .bodyMedium
+                                                .copy(
+                                                    fontWeight =
+                                                        FontWeight.Bold,
+                                                    textAlign =
+                                                        coachTextAlign(
+                                                            isEnglish
+                                                        )
+                                                ),
+                                        modifier = Modifier
+                                            .menuAnchor()
+                                            .fillMaxWidth()
+                                    )
+
+                                    ExposedDropdownMenu(
+                                        expanded = groupPickerExpanded,
+                                        onDismissRequest = {
+                                            groupPickerExpanded = false
+                                        }
+                                    ) {
+                                        availableGroups.forEach { groupItem ->
+                                            DropdownMenuItem(
+                                                text = {
+                                                    Text(
+                                                        text = groupItem,
+                                                        fontWeight =
+                                                            if (
+                                                                groupItem ==
+                                                                effectiveGroupKey
+                                                            ) {
+                                                                FontWeight.ExtraBold
+                                                            } else {
+                                                                FontWeight.Medium
+                                                            },
+                                                        textAlign =
+                                                            coachTextAlign(
+                                                                isEnglish
+                                                            ),
+                                                        modifier =
+                                                            Modifier.fillMaxWidth()
+                                                    )
+                                                },
+                                                onClick = {
+                                                    if (
+                                                        groupItem !=
+                                                        effectiveGroupKey
+                                                    ) {
+                                                        effectiveGroupKey =
+                                                            groupItem
+
+                                                        selectedId = null
+                                                        traineeSearchQuery = ""
+                                                        expandedCoachSection =
+                                                            null
+                                                    }
+
+                                                    groupPickerExpanded =
+                                                        false
+                                                }
+                                            )
+                                        }
+                                    }
+                                }
+
+                                // =====================================================
+                                // חיפוש מתאמן
+                                // =====================================================
+
                                 OutlinedTextField(
                                     value = traineeSearchQuery,
                                     onValueChange = { traineeSearchQuery = it },

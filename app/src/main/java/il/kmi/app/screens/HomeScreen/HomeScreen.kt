@@ -92,6 +92,7 @@ import android.graphics.Path
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.material.icons.filled.History
+import androidx.compose.material.icons.rounded.NearMe
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.graphicsLayer
@@ -2880,7 +2881,7 @@ fun HomeScreen(
                                         item.status.isCancelled ||
                                         item.activeOverride != null
                             }
-                            .take(5)
+                            .take(10)
                     }
 
                 LaunchedEffect(upcoming, isEnglish) {
@@ -5495,24 +5496,48 @@ private fun NavigationChip(
                 .padding(horizontal = 10.dp, vertical = 7.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // אייקון
+            // אייקון ניווט פרימיום
             Surface(
                 shape = CircleShape,
                 color =
-                    MaterialTheme.colorScheme.primaryContainer.copy(
-                        alpha = 0.52f
+                    MaterialTheme.colorScheme.primary.copy(
+                        alpha =
+                            if (isDarkNavigationCard) {
+                                0.18f
+                            } else {
+                                0.10f
+                            }
                     ),
-                border = null,
+                border = BorderStroke(
+                    width = 0.75.dp,
+                    color =
+                        MaterialTheme.colorScheme.primary.copy(
+                            alpha =
+                                if (isDarkNavigationCard) {
+                                    0.30f
+                                } else {
+                                    0.20f
+                                }
+                        )
+                ),
                 tonalElevation = 0.dp,
                 shadowElevation = 0.dp,
-                modifier = Modifier.size(32.dp)
+                modifier = Modifier.size(34.dp)
             ) {
-                Box(contentAlignment = Alignment.Center) {
+                Box(
+                    modifier = Modifier.fillMaxSize(),
+                    contentAlignment = Alignment.Center
+                ) {
                     Icon(
-                        painter = painterResource(id = R.drawable.ic_google_maps),
-                        contentDescription = null,
-                        tint = Color.Unspecified,
-                        modifier = Modifier.size(18.dp)
+                        imageVector = Icons.Rounded.NearMe,
+                        contentDescription =
+                            if (isEnglish) {
+                                "Navigate"
+                            } else {
+                                "ניווט"
+                            },
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(19.dp)
                     )
                 }
             }

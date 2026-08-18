@@ -151,14 +151,37 @@ data class AdminUserRecord(
         val userUid: String? = null
     )
 
-    // חישוב גיל ללא java.time – עובד על כל מכשיר
+    // חישוב גיל מדויק לפי שנה + חודש + יום
     val age: Int?
         get() {
             val year = birthYear ?: return null
-            val currentYear = Calendar.getInstance().get(Calendar.YEAR)
-            val rough = currentYear - year
-            // פילטר בסיסי לערכים לא הגיוניים
-            return if (rough in 0..120) rough else null
+
+            val now = Calendar.getInstance()
+            val currentYear = now.get(Calendar.YEAR)
+
+            var calculatedAge = currentYear - year
+
+            val month = birthMonth
+            val day = birthDay
+
+            if (
+                month != null &&
+                day != null &&
+                month in 1..12 &&
+                day in 1..31
+            ) {
+                val currentMonth = now.get(Calendar.MONTH) + 1
+                val currentDay = now.get(Calendar.DAY_OF_MONTH)
+
+                if (
+                    currentMonth < month ||
+                    (currentMonth == month && currentDay < day)
+                ) {
+                    calculatedAge--
+                }
+            }
+
+            return calculatedAge.takeIf { it in 0..120 }
         }
 
     val ageBucket: String
@@ -301,27 +324,409 @@ private fun traineeRankLabelFromOrderedId(
 }
 
 /**
- * מפתח דה-דופ – מאחד מסמכים של אותו משתמש:
- * קודם לפי מייל, אחר כך טלפון, אחר כך uid, ואם אין – לפי שם.
+ * בודק האם שתי רשומות Firestore שייכות לאותו משתמש.
+ *
+ * התאמה באחד מהמזהים החזקים מספיקה:
+ * UID / אימייל / טלפון.
+ *
+ * שם משמש רק כאשר לשתי הרשומות אין שום מזהה חזק,
+ * כדי לא לאחד בטעות שני אנשים בעלי אותו שם.
  */
-private fun AdminUserRecord.dedupeKey(): String {
-    // 1) מייל – הכי יציב לזיהוי אותו אדם
-    email?.trim()?.lowercase()?.takeIf { it.isNotEmpty() }?.let { mail ->
-        return "email:$mail"
+private fun AdminUserRecord.isSameAdminUser(
+    other: AdminUserRecord
+): Boolean {
+
+    fun normalizeName(value: String): String {
+        return value
+            .trim()
+            .replace(Regex("\\s+"), " ")
+            .lowercase()
     }
 
-    // 2) טלפון – מורידים כל מה שלא ספרות
-    phone?.filter { it.isDigit() }?.takeIf { it.isNotEmpty() }?.let { digits ->
-        return "phone:$digits"
+    fun normalizeEmail(value: String?): String {
+        return value
+            .orEmpty()
+            .trim()
+            .lowercase()
     }
 
-    // 3) uid – רק אם אין מייל/טלפון
-    uidField?.trim()?.takeIf { it.isNotEmpty() }?.let { uid ->
-        return "uid:$uid"
+    fun normalizePhone(value: String?): String {
+        val digits =
+            value
+                .orEmpty()
+                .filter { it.isDigit() }
+
+        return when {
+            digits.startsWith("972") && digits.length >= 11 ->
+                "0" + digits.removePrefix("972")
+
+            digits.startsWith("00972") && digits.length >= 13 ->
+                "0" + digits.removePrefix("00972")
+
+            else ->
+                digits
+        }
     }
 
-    // 4) נפילה אחרונה – שם מלא
-    return "name:${fullName.trim()}"
+    // --------------------------------------------------
+    // 1. UID
+    //
+    // בחלק מהמסמכים ה-UID נמצא בשדה uid/userId,
+    // ובחלק מהמסמכים Document ID עצמו הוא ה-UID.
+    // לכן משווים את כל הצירופים האפשריים.
+    // --------------------------------------------------
+
+    val thisUidField = uidField.orEmpty().trim()
+    val otherUidField = other.uidField.orEmpty().trim()
+
+    val thisDocumentId = id.trim()
+    val otherDocumentId = other.id.trim()
+
+    if (
+        thisUidField.isNotBlank() &&
+        otherUidField.isNotBlank() &&
+        thisUidField == otherUidField
+    ) {
+        return true
+    }
+
+    if (
+        thisUidField.isNotBlank() &&
+        otherDocumentId.isNotBlank() &&
+        thisUidField == otherDocumentId
+    ) {
+        return true
+    }
+
+    if (
+        otherUidField.isNotBlank() &&
+        thisDocumentId.isNotBlank() &&
+        otherUidField == thisDocumentId
+    ) {
+        return true
+    }
+
+    if (
+        thisDocumentId.isNotBlank() &&
+        otherDocumentId.isNotBlank() &&
+        thisDocumentId == otherDocumentId
+    ) {
+        return true
+    }
+
+    // --------------------------------------------------
+    // 2. אימייל
+    // --------------------------------------------------
+
+    val thisEmail = normalizeEmail(email)
+    val otherEmail = normalizeEmail(other.email)
+
+    if (
+        thisEmail.isNotBlank() &&
+        otherEmail.isNotBlank() &&
+        thisEmail == otherEmail
+    ) {
+        return true
+    }
+
+    // --------------------------------------------------
+    // 3. טלפון
+    // --------------------------------------------------
+
+    val thisPhone = normalizePhone(phone)
+    val otherPhone = normalizePhone(other.phone)
+
+    if (
+        thisPhone.isNotBlank() &&
+        otherPhone.isNotBlank() &&
+        thisPhone == otherPhone
+    ) {
+        return true
+    }
+
+    // --------------------------------------------------
+    // 4. שם מלא + תאריך לידה
+    //
+    // זה מטפל במקרה שבו נוצרו שתי רשומות לאותו אדם
+    // בלי UID/אימייל/טלפון משותף, אבל פרטי האדם זהים.
+    // לא מאחדים לפי שם בלבד כאשר יש לנו מידע נוסף.
+    // --------------------------------------------------
+
+    val thisName = normalizeName(fullName)
+    val otherName = normalizeName(other.fullName)
+
+    val sameName =
+        thisName.isNotBlank() &&
+                otherName.isNotBlank() &&
+                thisName == otherName
+
+    val thisHasBirthDate =
+        birthYear != null &&
+                birthMonth != null &&
+                birthDay != null
+
+    val otherHasBirthDate =
+        other.birthYear != null &&
+                other.birthMonth != null &&
+                other.birthDay != null
+
+    // התאמה מלאה: שם + תאריך לידה מלא
+    if (
+        sameName &&
+        thisHasBirthDate &&
+        otherHasBirthDate &&
+        birthYear == other.birthYear &&
+        birthMonth == other.birthMonth &&
+        birthDay == other.birthDay
+    ) {
+        return true
+    }
+
+    // התאמה לרשומות ישנות שבהן נשמרה רק שנת לידה.
+    //
+    // אם השם המלא זהה וגם שנת הלידה זהה,
+    // מדובר בסבירות גבוהה מאוד באותו משתמש.
+    if (
+        sameName &&
+        birthYear != null &&
+        other.birthYear != null &&
+        birthYear == other.birthYear
+    ) {
+        return true
+    }
+
+    // אם קיימים חודש ושנה בשתי הרשומות,
+    // גם הם מספיקים יחד עם שם מלא זהה.
+    if (
+        sameName &&
+        birthYear != null &&
+        other.birthYear != null &&
+        birthMonth != null &&
+        other.birthMonth != null &&
+        birthYear == other.birthYear &&
+        birthMonth == other.birthMonth
+    ) {
+        return true
+    }
+
+    // --------------------------------------------------
+    // 5. אם לשתי הרשומות אין בכלל מזהה חזק,
+    // שם מלא זהה הוא fallback אחרון.
+    // --------------------------------------------------
+
+    val thisHasStrongIdentity =
+        thisUidField.isNotBlank() ||
+                thisEmail.isNotBlank() ||
+                thisPhone.isNotBlank()
+
+    val otherHasStrongIdentity =
+        otherUidField.isNotBlank() ||
+                otherEmail.isNotBlank() ||
+                otherPhone.isNotBlank()
+
+    if (
+        sameName &&
+        !thisHasStrongIdentity &&
+        !otherHasStrongIdentity
+    ) {
+        return true
+    }
+
+    return false
+}
+
+/**
+ * מאחד את כל המסמכים ששייכים לאותו משתמש.
+ *
+ * פרטי הפרופיל נלקחים מהרשומה העדכנית ביותר,
+ * אבל סניפים וקבוצות מתאחדים מכל הרשומות.
+ * שימוש אחרון נלקח לפי הזמן המאוחר ביותר,
+ * וותק נלקח לפי תאריך היצירה המוקדם ביותר.
+ */
+private fun mergeAdminUserRecords(
+    records: List<AdminUserRecord>
+): AdminUserRecord {
+    val newest =
+        records.maxWithOrNull(
+            compareBy<AdminUserRecord> {
+                it.lastSeenAtMillis ?: 0L
+            }.thenBy {
+                it.createdAtMillis ?: 0L
+            }
+        ) ?: records.first()
+
+    fun newestNonBlank(
+        selector: (AdminUserRecord) -> String?
+    ): String? {
+        return records
+            .sortedWith(
+                compareByDescending<AdminUserRecord> { record ->
+                    // רשומה עם פרטי פרופיל אמיתיים מקבלת עדיפות
+                    val value = selector(record).orEmpty().trim()
+
+                    if (
+                        value.isNotBlank() &&
+                        !value.startsWith(
+                            "Unknown user",
+                            ignoreCase = true
+                        )
+                    ) {
+                        1
+                    } else {
+                        0
+                    }
+                }.thenByDescending {
+                    it.lastSeenAtMillis ?: 0L
+                }.thenByDescending {
+                    it.createdAtMillis ?: 0L
+                }
+            )
+            .firstNotNullOfOrNull { record ->
+                selector(record)
+                    ?.trim()
+                    ?.takeIf {
+                        it.isNotBlank() &&
+                                !it.equals(
+                                    "null",
+                                    ignoreCase = true
+                                ) &&
+                                it != "—"
+                    }
+            }
+    }
+
+    val mergedBranches =
+        records
+            .flatMap { record ->
+                buildList {
+                    record.branch
+                        ?.trim()
+                        ?.takeIf { it.isNotBlank() }
+                        ?.let { add(it) }
+
+                    addAll(
+                        record.branches
+                            .map { it.trim() }
+                            .filter { it.isNotBlank() }
+                    )
+                }
+            }
+            .distinctBy { it.lowercase() }
+
+    val mergedGroups =
+        records
+            .flatMap { it.groups }
+            .map { it.trim() }
+            .filter { it.isNotBlank() }
+            .distinctBy { it.lowercase() }
+
+    return newest.copy(
+        uidField = newestNonBlank { it.uidField },
+        fullName =
+            newestNonBlank { record ->
+                record.fullName.takeUnless {
+                    it.startsWith(
+                        "Unknown user",
+                        ignoreCase = true
+                    )
+                }
+            } ?: newest.fullName,
+        gender = newestNonBlank { it.gender },
+
+        birthDay =
+            records.firstNotNullOfOrNull { it.birthDay },
+        birthMonth =
+            records.firstNotNullOfOrNull { it.birthMonth },
+        birthYear =
+            records.firstNotNullOfOrNull { it.birthYear },
+
+        region = newestNonBlank { it.region },
+
+        branch =
+            newestNonBlank { it.branch }
+                ?: mergedBranches.firstOrNull(),
+
+        branches = mergedBranches,
+        groups = mergedGroups,
+
+        currentBeltId =
+            newestNonBlank { it.currentBeltId },
+
+        phone =
+            newestNonBlank { it.phone },
+
+        email =
+            newestNonBlank { it.email },
+
+        role =
+            newestNonBlank { it.role },
+
+        isCoachFlag =
+            when {
+                records.any { it.isCoachFlag == true } -> true
+                records.any { it.isCoachFlag == false } -> false
+                else -> null
+            },
+
+        createdAtMillis =
+            records
+                .mapNotNull { it.createdAtMillis }
+                .minOrNull(),
+
+        appOpenCount =
+            records
+                .maxOfOrNull { it.appOpenCount }
+                ?: 0,
+
+        lastSeenAtMillis =
+            records
+                .mapNotNull { it.lastSeenAtMillis }
+                .maxOrNull()
+    )
+}
+
+/**
+ * מבצע איחוד טרנזיטיבי:
+ * גם אם A תואם ל-B לפי מייל ו-B תואם ל-C לפי טלפון,
+ * שלושתם ייחשבו משתמש אחד.
+ */
+private fun mergeDuplicateAdminUsers(
+    users: List<AdminUserRecord>
+): List<AdminUserRecord> {
+    val groups =
+        mutableListOf<MutableList<AdminUserRecord>>()
+
+    users.forEach { user ->
+        val matchingIndexes =
+            groups.indices.filter { index ->
+                groups[index].any { existing ->
+                    existing.isSameAdminUser(user)
+                }
+            }
+
+        if (matchingIndexes.isEmpty()) {
+            groups += mutableListOf(user)
+        } else {
+            val targetIndex = matchingIndexes.first()
+
+            groups[targetIndex].add(user)
+
+            matchingIndexes
+                .drop(1)
+                .sortedDescending()
+                .forEach { index ->
+                    groups[targetIndex]
+                        .addAll(groups[index])
+
+                    groups.removeAt(index)
+                }
+        }
+    }
+
+    return groups
+        .map { records ->
+            mergeAdminUserRecords(records)
+        }
 }
 
 private fun AdminUserRecord.hasRealAdminUserContent(): Boolean {
@@ -369,11 +774,13 @@ private fun DocumentSnapshot.toAdminUserRecord(): AdminUserRecord? {
         }
 
     fun intFromAnyField(vararg keys: String): Int {
-        for (key in keys) {
-            val value = intOrNull(key)
-            if (value != null && value > 0) return value
-        }
-        return 0
+        return keys
+            .mapNotNull { key ->
+                intOrNull(key)
+                    ?.takeIf { it >= 0 }
+            }
+            .maxOrNull()
+            ?: 0
     }
 
     fun stringOrNull(vararg keys: String): String? {
@@ -445,10 +852,32 @@ private fun DocumentSnapshot.toAdminUserRecord(): AdminUserRecord? {
     }
 
     // uid של המשתמש מתוך המסמך (אם קיים)
-    val uidField = stringOrNull("uid", "userId")
+    // תומך גם בשמות ישנים/חלופיים של אותו שדה.
+    val uidField = stringOrNull(
+        "uid",
+        "userId",
+        "user_id",
+        "firebaseUid",
+        "firebase_uid",
+        "authUid",
+        "auth_uid"
+    )
 
-    @Suppress("UNCHECKED_CAST")
-    val groupsList = (get("groups") as? List<*>)?.mapNotNull { it?.toString() } ?: emptyList()
+    val groupsList =
+        stringListOrEmpty(
+            "groups",
+            "selectedGroups",
+            "selected_groups",
+            "ageGroups",
+            "age_groups",
+            "age_group",
+            "group",
+            "trainingGroups",
+            "trainingGroup"
+        )
+            .map { it.trim() }
+            .filter { it.isNotBlank() }
+            .distinctBy { it.lowercase() }
 
     // createdAt יכול להיות בשם ישן או חדש
     val createdMillis = adminMillisFromFirestore(
@@ -502,30 +931,48 @@ private fun DocumentSnapshot.toAdminUserRecord(): AdminUserRecord? {
 
         createdAtMillis = createdMillis,
 
-        // ✅ נתוני שימוש באפליקציה
-        // קורא כמה שמות אפשריים כדי לא להציג 0 אם השדה נשמר בשם אחר
+        // ✅ מספר שימושים באפליקציה.
+        //
+        // קיימות גרסאות שונות של האפליקציה ששמרו
+        // את המונה בשמות שונים, ולכן קוראים את כולם
+        // ולוקחים את הערך הגבוה ביותר.
+        //
+        // screenViewCount לא נכלל בכוונה:
+        // צפייה במסכים אינה שוות ערך לשימוש/פתיחת אפליקציה.
         appOpenCount = intFromAnyField(
             "appOpenCount",
             "app_open_count",
             "appOpens",
+            "app_opens",
             "openCount",
+            "open_count",
             "opensCount",
             "launchCount",
-            "loginCount",
+            "launch_count",
+            "appLaunchCount",
+            "app_launch_count",
             "usageCount",
+            "usage_count",
             "sessionsCount",
-            "screenViewCount"
+            "sessions_count",
+            "sessionCount",
+            "session_count",
+            "loginCount",
+            "login_count"
         ),
+
+        // ✅ שימוש אחרון אמיתי באפליקציה.
+        // updatedAt אינו מתאים כאן כי גם שמירת פרופיל
+        // או עדכון נתונים יכולים לשנות אותו.
         lastSeenAtMillis = adminMillisFromFirestore(
             get("lastSeenAtMillis")
                 ?: get("lastSeenAt")
-                ?: get("lastLoginAtMillis")
-                ?: get("lastLoginAt")
                 ?: get("lastOpenAtMillis")
                 ?: get("lastOpenAt")
                 ?: get("lastUsedAtMillis")
                 ?: get("lastUsedAt")
-                ?: get("updatedAt")
+                ?: get("lastLoginAtMillis")
+                ?: get("lastLoginAt")
         )
     )
 }
@@ -588,32 +1035,20 @@ object AdminUsersPreloadCache {
                     user.hasRealAdminUserContent()
                 }
 
-            loadedUsers = raw
-                .groupBy { it.dedupeKey() }
-                .map { (_, list) ->
-                    list.maxWithOrNull(
+            loadedUsers =
+                mergeDuplicateAdminUsers(raw)
+                    .sortedWith(
                         compareBy<AdminUserRecord> {
-                            // קודם מעדיפים רשומה שיש בה שימושים בפועל
-                            it.appOpenCount
+                            it.fullName.startsWith(
+                                "Unknown user",
+                                ignoreCase = true
+                            )
                         }.thenBy {
-                            // אחר כך שימוש אחרון
-                            it.lastSeenAtMillis ?: 0L
-                        }.thenBy {
-                            // אחר כך תאריך יצירה
-                            it.createdAtMillis ?: 0L
-                        }.thenBy {
-                            // אחר כך רשומה עם שם אמיתי
-                            if (it.fullName.startsWith("Unknown user", ignoreCase = true)) 0 else 1
+                            it.fullName
+                                .trim()
+                                .lowercase()
                         }
-                    ) ?: list.first()
-                }
-                .sortedWith(
-                    compareBy<AdminUserRecord> {
-                        it.fullName.startsWith("Unknown user", ignoreCase = true)
-                    }.thenBy {
-                        it.fullName.trim().lowercase()
-                    }
-                )
+                    )
 
         } catch (t: Throwable) {
             val rawErr = t.message ?: adminTr(
@@ -3256,6 +3691,33 @@ private fun UserRowCard(
         adminTr(isEnglish, "מתאמן", "Trainee")
     }
 
+    val nowMillis = System.currentTimeMillis()
+    val activeWindowMillis =
+        30L * 24L * 60L * 60L * 1000L
+
+    val isActiveUser =
+        user.lastSeenAtMillis
+            ?.let { lastSeen ->
+                lastSeen > 0L &&
+                        lastSeen <= nowMillis &&
+                        nowMillis - lastSeen <= activeWindowMillis
+            }
+            ?: false
+
+    val activityStatusLabel =
+        if (isActiveUser) {
+            adminTr(isEnglish, "פעיל", "Active")
+        } else {
+            adminTr(isEnglish, "לא פעיל", "Inactive")
+        }
+
+    val activityStatusColor =
+        if (isActiveUser) {
+            Color(0xFF22C55E)
+        } else {
+            Color(0xFFEF4444)
+        }
+
     val textAlign = adminTextAlign(isEnglish)
     val contentAlignment = if (isEnglish) Alignment.Start else Alignment.End
     val rowArrangement = if (isEnglish) Arrangement.Start else Arrangement.End
@@ -3286,46 +3748,51 @@ private fun UserRowCard(
                 verticalArrangement = Arrangement.spacedBy(3.dp),
                 horizontalAlignment = contentAlignment
             ) {
+                // שם המתאמן – שורה נפרדת כדי שלא ייחתך בגלל התגים
+                Text(
+                    text = user.fullName,
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = Color(0xFFE5E7EB),
+                    fontWeight = FontWeight.SemiBold,
+                    textAlign = if (isEnglish) {
+                        TextAlign.Left
+                    } else {
+                        TextAlign.Right
+                    },
+                    maxLines = 1,
+                    overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+// תפקיד + סטטוס פעילות – בתחילת השורה
                 Row(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = rowArrangement,
+                    horizontalArrangement = Arrangement.Start,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     if (isEnglish) {
-                        Text(
-                            text = user.fullName,
-                            style = MaterialTheme.typography.bodyLarge,
-                            color = Color(0xFFE5E7EB),
-                            fontWeight = FontWeight.SemiBold,
-                            textAlign = TextAlign.Left,
-                            maxLines = 1,
-                            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
-                            modifier = Modifier.weight(1f)
-                        )
-
-                        Spacer(Modifier.width(8.dp))
-
                         UserRoleBadge(
                             label = roleLabel,
                             isCoach = user.isCoach
+                        )
+
+                        Spacer(Modifier.width(6.dp))
+
+                        UserActivityBadge(
+                            label = activityStatusLabel,
+                            color = activityStatusColor
                         )
                     } else {
+                        UserActivityBadge(
+                            label = activityStatusLabel,
+                            color = activityStatusColor
+                        )
+
+                        Spacer(Modifier.width(6.dp))
+
                         UserRoleBadge(
                             label = roleLabel,
                             isCoach = user.isCoach
-                        )
-
-                        Spacer(Modifier.width(8.dp))
-
-                        Text(
-                            text = user.fullName,
-                            style = MaterialTheme.typography.bodyLarge,
-                            color = Color(0xFFE5E7EB),
-                            fontWeight = FontWeight.SemiBold,
-                            textAlign = TextAlign.Right,
-                            maxLines = 1,
-                            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
-                            modifier = Modifier.weight(1f)
                         )
                     }
                 }
@@ -3410,6 +3877,36 @@ private fun UserRowCard(
                 UserBeltAccent(beltColor)
             }
         }
+    }
+}
+
+@Composable
+private fun UserActivityBadge(
+    label: String,
+    color: Color
+) {
+    Row(
+        modifier = Modifier
+            .clip(RoundedCornerShape(999.dp))
+            .background(color.copy(alpha = 0.14f))
+            .padding(horizontal = 8.dp, vertical = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(5.dp)
+    ) {
+        Box(
+            modifier = Modifier
+                .size(7.dp)
+                .clip(CircleShape)
+                .background(color)
+        )
+
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelSmall,
+            color = color,
+            fontWeight = FontWeight.Bold,
+            maxLines = 1
+        )
     }
 }
 

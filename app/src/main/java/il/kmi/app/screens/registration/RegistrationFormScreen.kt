@@ -540,7 +540,6 @@ fun RegistrationFormScreen(
     }
 
 // אזור / סניפים / קבוצות
-    var selectedRegion by rememberSaveable { mutableStateOf(sp.getString("region", "") ?: "") }
     var selectedBranch by rememberSaveable { mutableStateOf(sp.getString("branch", "") ?: "") }
     var selectedGroup by rememberSaveable { mutableStateOf(sp.getString("age_group", "") ?: "") }
 
@@ -600,6 +599,25 @@ fun RegistrationFormScreen(
             .map { it.trim() }
             .filter { it.isNotBlank() }
             .distinct()
+    }
+
+    // --- אזורים נבחרים — מקור אמת רשימתי ---
+    val selectedRegions = rememberSaveable(
+        saver = listSaver(
+            save = { it.toList() },
+            restore = { it.toMutableStateList() }
+        )
+    ) {
+        val saved = readSavedListFromPrefs(
+            "regions_json",
+            "selected_regions",
+            "regions",
+            "region"
+        )
+
+        mutableStateListOf<String>().apply {
+            addAll(saved)
+        }
     }
 
     // --- סניפים נבחרים (עד 3) — מקור אמת יחיד ---
@@ -716,9 +734,18 @@ fun RegistrationFormScreen(
     // ✅ השחזור כבר מתבצע ב־rememberSaveable דרך readSavedListFromPrefs.
     // לא מאפסים כאן selectedGroups כדי לא לדרוס groups_json / selected_groups.
 
-    LaunchedEffect(selectedRegion) {
-        val branchesForRegion = branchesByRegion[selectedRegion].orEmpty()
-        if (selectedBranch.isNotBlank() && !branchesForRegion.contains(selectedBranch)) {
+    LaunchedEffect(selectedRegions.toList()) {
+        val branchesForSelectedRegions =
+            selectedRegions
+                .flatMap { region ->
+                    branchesByRegion[region].orEmpty()
+                }
+                .distinct()
+
+        if (
+            selectedBranch.isNotBlank() &&
+            selectedBranch !in branchesForSelectedRegions
+        ) {
             selectedBranch = ""
             selectedGroup = ""
         }
@@ -806,7 +833,8 @@ fun RegistrationFormScreen(
         if (!isGoogleAuth && password.isBlank()) {
             passwordError = true; valid = false
         }
-        if (selectedRegion.isBlank()) {
+
+        if (selectedRegions.isEmpty()) {
             regionError = true; valid = false
         }
 
@@ -939,6 +967,20 @@ fun RegistrationFormScreen(
 
         val groupsCsv = groupsListFinalForPrefs.joinToString(", ")
         val primaryGroup = groupsListFinalForPrefs.firstOrNull() ?: ""
+        val regionsListFinalForPrefs =
+            selectedRegions
+                .map { it.trim() }
+                .filter { it.isNotBlank() }
+                .distinct()
+
+        val regionsJson =
+            org.json.JSONArray(regionsListFinalForPrefs).toString()
+
+        val regionsCsv =
+            regionsListFinalForPrefs.joinToString(", ")
+
+        val primaryRegion =
+            regionsListFinalForPrefs.firstOrNull().orEmpty()
 
         // ✅ חגורה סופית גם למתאמן וגם למאמן.
         // אם משום מה לא נבחרה חגורה, לא נשאיר Firestore / SP עם belt ריק,
@@ -973,7 +1015,12 @@ fun RegistrationFormScreen(
             .putString("phone", phoneFinal)
             .putString("phone_number", phoneFinal)
             .putString("email", email.trim())
-            .putString("region", selectedRegion)
+
+            // ✅ אזורים — שומרים גם תאימות ישנה וגם מקור אמת רשימתי
+            .putString("region", primaryRegion)
+            .putString("regions", regionsCsv)
+            .putString("regions_json", regionsJson)
+            .putString("selected_regions", regionsCsv)
 
             // ✅ סניפים — שומרים גם CSV וגם JSON גם ב־sp הראשי
             .putString("branch", branchesFinal)
@@ -1048,7 +1095,12 @@ fun RegistrationFormScreen(
             putBoolean("can_view_payment_reports", roleFinal == "coach" && profileAllowsCoach)
             putBoolean("can_manage_payments", roleFinal == "coach" && profileAllowsCoach)
             putBoolean("can_send_broadcasts", roleFinal == "coach" && profileAllowsCoach)
-            putString("region", selectedRegion)
+
+            // ✅ אזורים — שומרים גם תאימות ישנה וגם מקור אמת רשימתי
+            putString("region", primaryRegion)
+            putString("regions", regionsCsv)
+            putString("regions_json", regionsJson)
+            putString("selected_regions", regionsCsv)
 
             // ✅ סניפים — שומרים גם CSV וגם JSON
             putString("branch", branchesFinal)
@@ -1088,7 +1140,7 @@ fun RegistrationFormScreen(
         kmiPrefs.fullName = fullName
         kmiPrefs.phone = phoneFinal
         kmiPrefs.email = email.trim()
-        kmiPrefs.region = selectedRegion
+        kmiPrefs.region = primaryRegion
         kmiPrefs.branch = branchesFinal
         kmiPrefs.ageGroup = primaryGroup
         kmiPrefs.username = if (isGoogleAuth) email.trim() else username
@@ -1125,7 +1177,10 @@ fun RegistrationFormScreen(
                 "email" to email.trim(),
                 "emailLower" to email.trim().lowercase(),
                 "authProvider" to if (isGoogleAuth) "google" else "local",
-                "region" to selectedRegion,
+
+                "region" to primaryRegion,
+                "regions" to regionsListFinalForPrefs,
+                "regionsCsv" to regionsCsv,
 
                 "branches" to branchesListFinal,
                 "branchesCsv" to branchesFinal,
@@ -1516,13 +1571,26 @@ fun RegistrationFormScreen(
                     passwordError = false
                 },
                 passwordError = passwordError,
-                selectedRegion = selectedRegion,
-                onRegionChange = {
-                    selectedRegion = it
+                selectedRegions = selectedRegions,
+                onRegionsChange = { list ->
+                    val clean = list
+                        .map { it.trim() }
+                        .filter { it.isNotBlank() }
+                        .distinct()
+
+                    selectedRegions.clear()
+                    selectedRegions.addAll(clean)
+
                     selectedBranches.clear()
                     selectedBranch = ""
+
                     selectedGroups.clear()
-                    regionError = false
+                    selectedGroup = ""
+
+                    activeBranch = ""
+                    activeGroup = ""
+
+                    regionError = clean.isEmpty()
                 },
                 selectedBranches = selectedBranches,
                 onBranchesChange = { list ->

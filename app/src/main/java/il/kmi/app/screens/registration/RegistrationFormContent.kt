@@ -177,8 +177,8 @@ fun RegistrationFormContent(
     password: String,
     onPasswordChange: (String) -> Unit,
     passwordError: Boolean,
-    selectedRegion: String,
-    onRegionChange: (String) -> Unit,
+    selectedRegions: List<String>,
+    onRegionsChange: (List<String>) -> Unit,
     selectedBranches: List<String>,
     onBranchesChange: (List<String>) -> Unit,
     selectedGroups: List<String>,
@@ -251,7 +251,8 @@ fun RegistrationFormContent(
     val showPhoneMissing = (phoneError || highlightMissingRequired) && phone.isBlank()
     val showEmailMissing = (emailError || highlightMissingRequired) && email.isBlank()
     val showGenderMissing = (genderError || highlightMissingRequired) && gender.isBlank()
-    val showRegionMissing = (regionError || highlightMissingRequired) && selectedRegion.isBlank()
+    val showRegionMissing =
+        (regionError || highlightMissingRequired) && selectedRegions.isEmpty()
     val showBranchMissing = (branchError || highlightMissingRequired) && selectedBranches.isEmpty()
     val showGroupMissing = (groupError || highlightMissingRequired) &&
             shouldShowGroupsPicker &&
@@ -563,7 +564,7 @@ fun RegistrationFormContent(
                     selected = branchType == "israel",
                     onClick = {
                         onBranchTypeChange("israel")
-                        onRegionChange("")
+                        onRegionsChange(emptyList())
                         onBranchesChange(emptyList())
                         onGroupsChange(emptyList())
                     },
@@ -596,7 +597,7 @@ fun RegistrationFormContent(
                     selected = branchType == "abroad",
                     onClick = {
                         onBranchTypeChange("abroad")
-                        onRegionChange("")
+                        onRegionsChange(emptyList())
                         onBranchesChange(emptyList())
                         onGroupsChange(emptyList())
                     },
@@ -630,9 +631,9 @@ fun RegistrationFormContent(
 
                 RegionAndMultiBranchPicker(
                     branchType = branchType,
-                    selectedRegion = selectedRegion,
+                    selectedRegions = selectedRegions,
                     selectedBranches = selectedBranches,
-                    onRegionChange = onRegionChange,
+                    onRegionsChange = onRegionsChange,
                     onBranchesConfirm = onBranchesChange,
                     onGroupsChange = onGroupsChange,
                     regionError = regionError,
@@ -1078,9 +1079,9 @@ private fun BirthDatePicker(
 @Composable
 private fun RegionAndMultiBranchPicker(
     branchType: String,
-    selectedRegion: String,
+    selectedRegions: List<String>,
     selectedBranches: List<String>,
-    onRegionChange: (String) -> Unit,
+    onRegionsChange: (List<String>) -> Unit,
     onBranchesConfirm: (List<String>) -> Unit,
     onGroupsChange: (List<String>) -> Unit,
     regionError: Boolean,
@@ -1092,7 +1093,8 @@ private fun RegionAndMultiBranchPicker(
     val ctx = LocalContext.current
     val fieldShape = RoundedCornerShape(14.dp)
 
-    val showRegionMissing = (regionError || highlightMissingRequired) && selectedRegion.isBlank()
+    val showRegionMissing =
+        (regionError || highlightMissingRequired) && selectedRegions.isEmpty()
     val showBranchMissing = (branchError || highlightMissingRequired) && selectedBranches.isEmpty()
 
     val regionFieldColors = registrationRequiredFieldColors(
@@ -1136,16 +1138,29 @@ private fun RegionAndMultiBranchPicker(
         }
     }
 
-    val allBranches = remember(ctx, branchType, selectedRegion, isEnglish) {
-        if (selectedRegion.isBlank()) {
+    val allBranches = remember(
+        ctx,
+        branchType,
+        selectedRegions,
+        isEnglish
+    ) {
+        if (selectedRegions.isEmpty()) {
             emptyList()
         } else {
             val dbBranches = KmiDatabaseProvider
                 .branches(ctx)
                 .filter { branch ->
-                    branch.regionHe == selectedRegion ||
-                            branch.regionEn.equals(selectedRegion, ignoreCase = true) ||
-                            branch.regionId.equals(selectedRegion, ignoreCase = true)
+                    selectedRegions.any { selectedRegion ->
+                        branch.regionHe == selectedRegion ||
+                                branch.regionEn.equals(
+                                    selectedRegion,
+                                    ignoreCase = true
+                                ) ||
+                                branch.regionId.equals(
+                                    selectedRegion,
+                                    ignoreCase = true
+                                )
+                    }
                 }
                 .map { dbBranch ->
                     if (isEnglish) {
@@ -1160,43 +1175,88 @@ private fun RegionAndMultiBranchPicker(
             if (dbBranches.isNotEmpty()) {
                 dbBranches
             } else {
-                TrainingCatalog.branchesFor(selectedRegion)
+                selectedRegions
+                    .flatMap { region ->
+                        TrainingCatalog.branchesFor(region)
+                    }
+                    .map { it.trim() }
+                    .filter { it.isNotBlank() }
+                    .distinct()
             }
         }
     }
 
-    var regionExpanded by remember { mutableStateOf(false) }
+    var regionExpanded by remember {
+        mutableStateOf(false)
+    }
+
+    var tempRegionSelection by remember(selectedRegions) {
+        mutableStateOf(selectedRegions.toList())
+    }
 
     ExposedDropdownMenuBox(
         expanded = regionExpanded,
-        onExpandedChange = { regionExpanded = !regionExpanded },
+        onExpandedChange = { open ->
+            regionExpanded = open
+
+            if (open) {
+                tempRegionSelection =
+                    selectedRegions.toList()
+            }
+        },
         modifier = Modifier.fillMaxWidth()
     ) {
+        val regionDisplay =
+            if (selectedRegions.isEmpty()) {
+                ""
+            } else {
+                selectedRegions.joinToString("\n")
+            }
+
         OutlinedTextField(
-            value = selectedRegion,
+            value = regionDisplay,
             onValueChange = {},
             readOnly = true,
-            singleLine = true,
             isError = regionError,
+            minLines =
+                if (selectedRegions.isEmpty()) {
+                    1
+                } else {
+                    selectedRegions.size.coerceAtMost(4)
+                },
+            maxLines = 6,
             label = {
                 Text(
-                    text = if (branchType == "abroad") {
-                        trLocal("מדינה", "Country")
-                    } else {
-                        trLocal("מחוז / אזור", "District / Region")
-                    },
+                    text =
+                        if (branchType == "abroad") {
+                            trLocal(
+                                "מדינות",
+                                "Countries"
+                            )
+                        } else {
+                            trLocal(
+                                "מחוזות / אזורים",
+                                "Districts / Regions"
+                            )
+                        },
                     color = Color(0xFF374151)
                 )
             },
             trailingIcon = {
-                ExposedDropdownMenuDefaults.TrailingIcon(expanded = regionExpanded)
+                ExposedDropdownMenuDefaults.TrailingIcon(
+                    expanded = regionExpanded
+                )
             },
             modifier = Modifier
                 .menuAnchor()
                 .fillMaxWidth()
                 .heightIn(min = fieldHeight)
                 .background(
-                    if (showRegionMissing) Color(0xFFFFE4E6) else Color.White,
+                    if (showRegionMissing) {
+                        Color(0xFFFFE4E6)
+                    } else {
+                        Color.White
+                    },
                     shape = fieldShape
                 ),
             colors = regionFieldColors,
@@ -1207,11 +1267,18 @@ private fun RegionAndMultiBranchPicker(
             ),
             placeholder = {
                 Text(
-                    text = if (branchType == "abroad") {
-                        trLocal("בחר/י מדינה", "Select country")
-                    } else {
-                        trLocal("בחר/י אזור", "Select region")
-                    },
+                    text =
+                        if (branchType == "abroad") {
+                            trLocal(
+                                "בחר/י מדינות",
+                                "Select countries"
+                            )
+                        } else {
+                            trLocal(
+                                "בחר/י אזורים",
+                                "Select regions"
+                            )
+                        },
                     color = Color(0xFF64748B)
                 )
             }
@@ -1219,24 +1286,103 @@ private fun RegionAndMultiBranchPicker(
 
         ExposedDropdownMenu(
             expanded = regionExpanded,
-            onDismissRequest = { regionExpanded = false },
+            onDismissRequest = {
+                regionExpanded = false
+            },
             containerColor = Color.White
         ) {
             regions.forEach { region ->
+                val checked =
+                    region in tempRegionSelection
+
                 DropdownMenuItem(
                     text = {
-                        Text(
-                            text = region,
-                            color = Color.Black,
-                            textAlign = align,
-                            modifier = Modifier.fillMaxWidth()
-                        )
+                        Row(
+                            verticalAlignment =
+                                Alignment.CenterVertically,
+                            modifier =
+                                Modifier.fillMaxWidth()
+                        ) {
+                            Checkbox(
+                                checked = checked,
+                                onCheckedChange = null
+                            )
+
+                            Spacer(Modifier.width(8.dp))
+
+                            Text(
+                                text = region,
+                                color = Color.Black,
+                                textAlign = align,
+                                modifier = Modifier.weight(1f)
+                            )
+                        }
                     },
                     onClick = {
-                        regionExpanded = false
-                        onRegionChange(region)
+                        tempRegionSelection =
+                            if (checked) {
+                                tempRegionSelection.filterNot {
+                                    it == region
+                                }
+                            } else {
+                                tempRegionSelection + region
+                            }
                     }
                 )
+            }
+
+            Divider(
+                color = Color(0xFFE5E7EB)
+            )
+
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(Color.White)
+                    .padding(12.dp),
+                horizontalArrangement =
+                    Arrangement.SpaceBetween
+            ) {
+                TextButton(
+                    onClick = {
+                        tempRegionSelection =
+                            emptyList()
+                    }
+                ) {
+                    Text(
+                        trLocal(
+                            "נקה",
+                            "Clear"
+                        ),
+                        color = Color(0xFF374151)
+                    )
+                }
+
+                Button(
+                    onClick = {
+                        onRegionsChange(
+                            tempRegionSelection
+                        )
+
+                        // אחרי שינוי אזורים מנקים בחירות
+                        // שאינן בהכרח שייכות יותר לאזורים החדשים.
+                        onBranchesConfirm(
+                            emptyList()
+                        )
+                        onGroupsChange(
+                            emptyList()
+                        )
+
+                        regionExpanded = false
+                    }
+                ) {
+                    Text(
+                        trLocal(
+                            "אישור",
+                            "Confirm"
+                        )
+                    )
+                }
             }
         }
     }

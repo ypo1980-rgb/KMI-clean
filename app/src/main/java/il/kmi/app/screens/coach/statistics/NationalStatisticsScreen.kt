@@ -296,149 +296,73 @@ fun NationalStatisticsScreen(
                             }
 
                             item {
-                                NationalFilterSection(
-                                    title = tr(
-                                        isEnglish,
-                                        "סינון לפי סניף",
-                                        "Filter by branch"
-                                    ),
+                                NationalPremiumFiltersCard(
                                     isEnglish = isEnglish,
-                                    options = availableBranches,
-                                    selected =
+
+                                    availableBranches = availableBranches,
+                                    selectedBranches =
                                         filters.selectedBranches,
-                                    labelForOption = { branch ->
-                                        branch
-                                    },
-                                    onToggle = { branch ->
+                                    onBranchToggle = { branch ->
                                         filters = filters.copy(
                                             selectedBranches =
                                                 filters.selectedBranches
                                                     .toggle(branch)
                                         )
-                                    }
-                                )
-                            }
-
-                            item {
-                                NationalFilterSection(
-                                    title = tr(
-                                        isEnglish,
-                                        "סינון לפי קבוצת גיל",
-                                        "Filter by age group"
-                                    ),
-                                    isEnglish = isEnglish,
-                                    options =
-                                        NationalStatsAgeGroup.entries,
-                                    selected =
-                                        filters.selectedAgeGroups,
-                                    labelForOption = { group ->
-                                        ageGroupLabel(
-                                            group = group,
-                                            isEnglish = isEnglish
-                                        )
                                     },
-                                    onToggle = { group ->
+
+                                    ageGroups =
+                                        NationalStatsAgeGroup.entries,
+                                    selectedAgeGroups =
+                                        filters.selectedAgeGroups,
+                                    onAgeGroupToggle = { group ->
                                         filters = filters.copy(
                                             selectedAgeGroups =
                                                 filters.selectedAgeGroups
                                                     .toggle(group)
                                         )
-                                    }
-                                )
-                            }
-
-                            item {
-                                NationalFilterSection(
-                                    title = tr(
-                                        isEnglish,
-                                        "סינון לפי מין",
-                                        "Filter by gender"
-                                    ),
-                                    isEnglish = isEnglish,
-                                    options =
-                                        NationalStatsGender.entries,
-                                    selected =
-                                        filters.selectedGenders,
-                                    labelForOption = { gender ->
-                                        genderLabel(
-                                            gender = gender,
-                                            isEnglish = isEnglish
-                                        )
                                     },
-                                    onToggle = { gender ->
+
+                                    genders =
+                                        NationalStatsGender.entries,
+                                    selectedGenders =
+                                        filters.selectedGenders,
+                                    onGenderToggle = { gender ->
                                         filters = filters.copy(
                                             selectedGenders =
                                                 filters.selectedGenders
                                                     .toggle(gender)
                                         )
-                                    }
-                                )
-                            }
-
-                            item {
-                                NationalFilterSection(
-                                    title = tr(
-                                        isEnglish,
-                                        "סינון לפי חגורה",
-                                        "Filter by belt"
-                                    ),
-                                    isEnglish = isEnglish,
-                                    options = availableBelts,
-                                    selected =
-                                        filters.selectedBelts,
-                                    labelForOption = { belt ->
-                                        beltLabel(
-                                            belt = belt,
-                                            isEnglish = isEnglish
-                                        )
                                     },
-                                    onToggle = { belt ->
+
+                                    availableBelts = availableBelts,
+                                    selectedBelts =
+                                        filters.selectedBelts,
+                                    onBeltToggle = { belt ->
                                         filters = filters.copy(
                                             selectedBelts =
                                                 filters.selectedBelts
                                                     .toggle(belt)
                                         )
-                                    }
-                                )
-                            }
-
-                            item {
-                                NationalFilterSection(
-                                    title = tr(
-                                        isEnglish,
-                                        "סינון לפי קבוצה",
-                                        "Filter by group"
-                                    ),
-                                    isEnglish = isEnglish,
-                                    options = availableGroups,
-                                    selected =
-                                        filters.selectedGroups,
-                                    labelForOption = { group ->
-                                        group
                                     },
-                                    onToggle = { group ->
+
+                                    availableGroups = availableGroups,
+                                    selectedGroups =
+                                        filters.selectedGroups,
+                                    onGroupToggle = { group ->
                                         filters = filters.copy(
                                             selectedGroups =
                                                 filters.selectedGroups
                                                     .toggle(group)
                                         )
-                                    }
-                                )
-                            }
+                                    },
 
-                            item {
-                                NationalActiveFilterCard(
-                                    activeOnly =
-                                        filters.activeOnly,
-                                    hasFilters =
-                                        filters.hasActiveFilters,
-                                    isEnglish = isEnglish,
-                                    onActiveOnlyChange = {
-                                            activeOnly ->
+                                    activeOnly = filters.activeOnly,
+                                    onActiveOnlyChange = { activeOnly ->
                                         filters = filters.copy(
                                             activeOnly = activeOnly
                                         )
                                     },
+
                                     onClearFilters = {
                                         filters =
                                             NationalStatisticsFilters()
@@ -754,6 +678,331 @@ private fun NationalStatisticsSearch(
 }
 
 @Composable
+private fun NationalPremiumFiltersCard(
+    isEnglish: Boolean,
+
+    availableBranches: List<String>,
+    selectedBranches: Set<String>,
+    onBranchToggle: (String) -> Unit,
+
+    ageGroups: List<NationalStatsAgeGroup>,
+    selectedAgeGroups: Set<NationalStatsAgeGroup>,
+    onAgeGroupToggle: (NationalStatsAgeGroup) -> Unit,
+
+    genders: List<NationalStatsGender>,
+    selectedGenders: Set<NationalStatsGender>,
+    onGenderToggle: (NationalStatsGender) -> Unit,
+
+    availableBelts: List<String>,
+    selectedBelts: Set<String>,
+    onBeltToggle: (String) -> Unit,
+
+    availableGroups: List<String>,
+    selectedGroups: Set<String>,
+    onGroupToggle: (String) -> Unit,
+
+    activeOnly: Boolean,
+    onActiveOnlyChange: (Boolean) -> Unit,
+
+    onClearFilters: () -> Unit
+) {
+    val activeFiltersCount =
+        listOf(
+            selectedBranches.isNotEmpty(),
+            selectedAgeGroups.isNotEmpty(),
+            selectedGenders.isNotEmpty(),
+            selectedBelts.isNotEmpty(),
+            selectedGroups.isNotEmpty(),
+            activeOnly
+        ).count { it }
+
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(26.dp),
+        color = Color.White,
+        border = BorderStroke(
+            width = 1.dp,
+            color = Color(0xFFDDD6FE)
+        ),
+        shadowElevation = 5.dp
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(
+                    horizontal = 14.dp,
+                    vertical = 16.dp
+                ),
+            verticalArrangement =
+                Arrangement.spacedBy(12.dp)
+        ) {
+
+            // =====================================================
+            // כותרת
+            // =====================================================
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Text(
+                        text = tr(
+                            isEnglish,
+                            "סינון נתונים",
+                            "Filter data"
+                        ),
+                        modifier = Modifier.fillMaxWidth(),
+                        fontSize = 20.sp,
+                        lineHeight = 23.sp,
+                        fontWeight = FontWeight.Black,
+                        color = Color(0xFF172036),
+                        textAlign =
+                            startTextAlign(isEnglish)
+                    )
+
+                    Spacer(Modifier.height(2.dp))
+
+                    Text(
+                        text = tr(
+                            isEnglish,
+                            "התאמה מדויקת של הנתונים",
+                            "Fine-tune the displayed data"
+                        ),
+                        modifier = Modifier.fillMaxWidth(),
+                        fontSize = 12.sp,
+                        color = Color(0xFF64748B),
+                        textAlign =
+                            startTextAlign(isEnglish)
+                    )
+                }
+
+                if (activeFiltersCount > 0) {
+                    Spacer(Modifier.width(8.dp))
+
+                    Surface(
+                        shape = RoundedCornerShape(999.dp),
+                        color =
+                            Color(0xFF7C3AED)
+                                .copy(alpha = 0.10f),
+                        border = BorderStroke(
+                            width = 1.dp,
+                            color =
+                                Color(0xFF7C3AED)
+                                    .copy(alpha = 0.20f)
+                        )
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(
+                                horizontal = 10.dp,
+                                vertical = 6.dp
+                            ),
+                            verticalAlignment =
+                                Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                imageVector =
+                                    Icons.Default.Check,
+                                contentDescription = null,
+                                tint = Color(0xFF7C3AED),
+                                modifier =
+                                    Modifier.size(15.dp)
+                            )
+
+                            Spacer(Modifier.width(4.dp))
+
+                            Text(
+                                text = tr(
+                                    isEnglish,
+                                    "$activeFiltersCount פעילים",
+                                    "$activeFiltersCount active"
+                                ),
+                                fontSize = 11.sp,
+                                fontWeight =
+                                    FontWeight.ExtraBold,
+                                color = Color(0xFF6D28D9)
+                            )
+                        }
+                    }
+                }
+            }
+
+            // =====================================================
+            // שורה 1 — סניף + קבוצה
+            // =====================================================
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement =
+                    Arrangement.spacedBy(10.dp)
+            ) {
+                Box(
+                    modifier = Modifier.weight(1f)
+                ) {
+                    NationalFilterSection(
+                        title = tr(
+                            isEnglish,
+                            "📍 סניף",
+                            "📍 Branch"
+                        ),
+                        isEnglish = isEnglish,
+                        options = availableBranches,
+                        selected = selectedBranches,
+                        labelForOption = { branch ->
+                            branch
+                        },
+                        onToggle = onBranchToggle
+                    )
+                }
+
+                Box(
+                    modifier = Modifier.weight(1f)
+                ) {
+                    NationalFilterSection(
+                        title = tr(
+                            isEnglish,
+                            "👥 קבוצה",
+                            "👥 Group"
+                        ),
+                        isEnglish = isEnglish,
+                        options = availableGroups,
+                        selected = selectedGroups,
+                        labelForOption = { group ->
+                            group
+                        },
+                        onToggle = onGroupToggle
+                    )
+                }
+            }
+
+            // =====================================================
+            // שורה 2 — גיל + מין
+            // =====================================================
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement =
+                    Arrangement.spacedBy(10.dp)
+            ) {
+                Box(
+                    modifier = Modifier.weight(1f)
+                ) {
+                    NationalFilterSection(
+                        title = tr(
+                            isEnglish,
+                            "🎂 גיל",
+                            "🎂 Age"
+                        ),
+                        isEnglish = isEnglish,
+                        options = ageGroups,
+                        selected = selectedAgeGroups,
+                        labelForOption = { group ->
+                            ageGroupLabel(
+                                group = group,
+                                isEnglish = isEnglish
+                            )
+                        },
+                        onToggle = onAgeGroupToggle
+                    )
+                }
+
+                Box(
+                    modifier = Modifier.weight(1f)
+                ) {
+                    NationalFilterSection(
+                        title = tr(
+                            isEnglish,
+                            "👤 מין",
+                            "👤 Gender"
+                        ),
+                        isEnglish = isEnglish,
+                        options = genders,
+                        selected = selectedGenders,
+                        labelForOption = { gender ->
+                            genderLabel(
+                                gender = gender,
+                                isEnglish = isEnglish
+                            )
+                        },
+                        onToggle = onGenderToggle
+                    )
+                }
+            }
+
+            // =====================================================
+            // שורה 3 — חגורה ברוחב מלא
+            // =====================================================
+
+            NationalFilterSection(
+                title = tr(
+                    isEnglish,
+                    "🥋 חגורה",
+                    "🥋 Belt"
+                ),
+                isEnglish = isEnglish,
+                options = availableBelts,
+                selected = selectedBelts,
+                labelForOption = { belt ->
+                    beltLabel(
+                        belt = belt,
+                        isEnglish = isEnglish
+                    )
+                },
+                onToggle = onBeltToggle
+            )
+
+            // =====================================================
+            // פעילים בלבד + איפוס
+            // =====================================================
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment =
+                    Alignment.CenterVertically
+            ) {
+                FilterChip(
+                    selected = activeOnly,
+                    onClick = {
+                        onActiveOnlyChange(!activeOnly)
+                    },
+                    label = {
+                        Text(
+                            text = tr(
+                                isEnglish,
+                                "פעילים בלבד",
+                                "Active only"
+                            ),
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                )
+
+                Spacer(Modifier.weight(1f))
+
+                if (activeFiltersCount > 0) {
+                    TextButton(
+                        onClick = onClearFilters
+                    ) {
+                        Text(
+                            text = tr(
+                                isEnglish,
+                                "↻ איפוס סינונים",
+                                "↻ Reset filters"
+                            ),
+                            fontWeight =
+                                FontWeight.ExtraBold,
+                            color = Color(0xFF6D28D9)
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
 private fun <T> NationalFilterSection(
     title: String,
     isEnglish: Boolean,
@@ -797,14 +1046,18 @@ private fun <T> NationalFilterSection(
 
     Column(
         modifier = Modifier.fillMaxWidth(),
-        verticalArrangement = Arrangement.spacedBy(7.dp)
+        verticalArrangement =
+            Arrangement.spacedBy(5.dp)
     ) {
         Text(
             text = title,
             modifier = Modifier.fillMaxWidth(),
-            style = MaterialTheme.typography.titleSmall,
+            fontSize = 12.sp,
+            lineHeight = 15.sp,
             fontWeight = FontWeight.ExtraBold,
-            color = Color(0xFF334155)
+            color = Color(0xFF475569),
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
         )
 
         Box(
@@ -834,50 +1087,33 @@ private fun <T> NationalFilterSection(
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .heightIn(min = 52.dp)
+                        .heightIn(min = 46.dp)
                         .padding(
-                            horizontal = 14.dp,
-                            vertical = 10.dp
+                            horizontal = 11.dp,
+                            vertical = 7.dp
                         ),
-                    verticalAlignment = Alignment.CenterVertically
+                    verticalAlignment =
+                        Alignment.CenterVertically
                 ) {
-                    Column(
-                        modifier = Modifier.weight(1f)
-                    ) {
-                        Text(
-                            text = selectedText,
-                            modifier = Modifier.fillMaxWidth(),
-                            fontSize = 14.sp,
-                            lineHeight = 17.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = if (selected.isNotEmpty()) {
-                                Color(0xFF6D28D9)
-                            } else {
-                                Color(0xFF475569)
-                            },
-                            maxLines = 2,
-                            overflow = TextOverflow.Ellipsis
-                        )
+                    Text(
+                        text = selectedText,
+                        modifier = Modifier.weight(1f),
+                        fontSize = 13.sp,
+                        lineHeight = 16.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = if (selected.isNotEmpty()) {
+                            Color(0xFF6D28D9)
+                        } else {
+                            Color(0xFF475569)
+                        },
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
 
-                        if (selected.isNotEmpty()) {
-                            Spacer(Modifier.height(2.dp))
-
-                            Text(
-                                text = tr(
-                                    isEnglish,
-                                    "לחץ לשינוי הבחירה",
-                                    "Tap to change selection"
-                                ),
-                                fontSize = 10.sp,
-                                color = Color(0xFF94A3B8)
-                            )
-                        }
-                    }
-
-                    Spacer(Modifier.width(8.dp))
+                    Spacer(Modifier.width(6.dp))
 
                     Surface(
-                        modifier = Modifier.size(34.dp),
+                        modifier = Modifier.size(30.dp),
                         shape = CircleShape,
                         color = if (expanded) {
                             Color(0xFF7C3AED)

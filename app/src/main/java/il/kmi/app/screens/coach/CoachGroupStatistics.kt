@@ -669,7 +669,9 @@ private fun StatisticsTabsSelector(
         Row(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(3.dp),
+                // שומרים רווח רק בצדדים.
+                // כך קו הטאב הפעיל יישב על קו המסגרת התחתון.
+                .padding(horizontal = 3.dp),
             verticalAlignment =
                 Alignment.CenterVertically
         ) {
@@ -822,21 +824,29 @@ private fun StatisticsTabButton(
                 modifier = Modifier.fillMaxWidth()
             )
 
+            // קו הבחירה יושב על המסגרת התחתונה של הטאבים
+            // ורחב משמעותית מהקו הקודם.
             Box(
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
-                    .width(
-                        38.dp * selectionProgress
+                    .fillMaxWidth(
+                        0.62f * selectionProgress
                     )
-                    .height(3.dp)
+                    .height(4.dp)
                     .background(
                         brush = Brush.horizontalGradient(
                             colors = listOf(
                                 Color(0xFF7C3AED),
+                                Color(0xFF4F46E5),
                                 Color(0xFF0284C7)
                             )
                         ),
-                        shape = RoundedCornerShape(999.dp)
+                        shape = RoundedCornerShape(
+                            topStart = 999.dp,
+                            topEnd = 999.dp,
+                            bottomStart = 0.dp,
+                            bottomEnd = 0.dp
+                        )
                     )
             )
         }
