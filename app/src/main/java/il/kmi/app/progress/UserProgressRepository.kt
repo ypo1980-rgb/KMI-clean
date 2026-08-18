@@ -3,6 +3,7 @@ package il.kmi.app.progress
 import com.google.firebase.Timestamp
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
+import com.google.firebase.firestore.Source
 import kotlinx.coroutines.tasks.await
 import kotlin.math.roundToInt
 
@@ -35,13 +36,33 @@ object UserProgressRepository {
         val uid = FirebaseAuth.getInstance().currentUser?.uid
             ?: return
 
+        val cleanBeltId = beltId.trim()
+
+        if (cleanBeltId.isBlank()) {
+            return
+        }
+
         val safePercent = knownPercent.coerceIn(0, 100)
         val safeKnownCount = knownCount.coerceAtLeast(0)
         val safeTotalCount = totalCount.coerceAtLeast(0)
 
+        /*
+         * כל משתמש מקבל מסמך נפרד לכל חגורה.
+         *
+         * בעבר המסמך נשמר רק לפי uid:
+         *     userProgress/{uid}
+         *
+         * ולכן מעבר לחגורה אחרת דרס את נתוני החגורה הקודמת.
+         *
+         * מעכשיו המבנה הוא:
+         *     userProgress/{uid}__{beltId}
+         */
+        val documentId =
+            "${uid}__${cleanBeltId}"
+
         val data = mapOf(
             "uid" to uid,
-            "beltId" to beltId,
+            "beltId" to cleanBeltId,
             "knownPercent" to safePercent,
             "knownCount" to safeKnownCount,
             "totalCount" to safeTotalCount,
@@ -51,7 +72,7 @@ object UserProgressRepository {
 
         FirebaseFirestore.getInstance()
             .collection("userProgress")
-            .document(uid)
+            .document(documentId)
             .set(data)
             .await()
     }
@@ -80,6 +101,13 @@ object UserProgressRepository {
          * באותה חגורה. אין תלות במסמך beltStats חיצוני
          * שאינו מתעדכן מתוך האפליקציה.
          */
+        /*
+         * נתוני ההשוואה חייבים להגיע מהשרת.
+         *
+         * אחרת מכשיר אחד עלול להשתמש ב-cache שבו
+         * ההתקדמות של המשתמש השני עדיין 0%, למרות
+         * שבמכשיר השני כבר נשמר אחוז חדש.
+         */
         val snapshot =
             FirebaseFirestore.getInstance()
                 .collection("userProgress")
@@ -87,14 +115,26 @@ object UserProgressRepository {
                     "beltId",
                     cleanBeltId
                 )
-                .get()
+                .get(Source.SERVER)
                 .await()
 
         /*
-         * המשתמש הנוכחי אינו משתתף בממוצע.
-         * בנוסף מתעלמים ממסמכים ריקים או לא תקינים.
+   * מאחדים את כל הרשומות של אותה חגורה לפי uid.
+   *
+   * בתקופת המעבר ייתכן שלמשתמש קיימת גם רשומת legacy
+   * וגם רשומת uid__beltId, ולכן תמיד בוחרים את הרשומה
+   * העדכנית ביותר לפי updatedAt.
+   */
+        /*
+         * משתמשים רק במסמכים במבנה החדש:
+         *
+         *     {uid}__{beltId}
+         *
+         * מסמכי legacy בשם uid בלבד אינם משתתפים יותר
+         * בחישוב, כדי שערך ישן לא ידרוס את נתוני החגורה
+         * החדשים של אותו משתמש.
          */
-        val otherTraineePercents =
+        val latestPercentByUid =
             snapshot.documents
                 .mapNotNull { document ->
                     val documentUid =
@@ -110,9 +150,12 @@ object UserProgressRepository {
                         (document.getLong("knownPercent") ?: -1L)
                             .toInt()
 
+                    val expectedDocumentId =
+                        "${documentUid}__${cleanBeltId}"
+
                     if (
                         documentUid.isNotBlank() &&
-                        documentUid != currentUid &&
+                        document.id == expectedDocumentId &&
                         totalCount > 0 &&
                         knownPercent in 0..100
                     ) {
@@ -121,32 +164,56 @@ object UserProgressRepository {
                         null
                     }
                 }
-                .distinctBy { (uid, _) ->
-                    uid
+                .toMap()
+
+        val safeUserPercent =
+            userKnownPercent.coerceIn(0, 100)
+
+        /*
+         * לצורך "אתה מעל" מוציאים רק את המשתמש הנוכחי.
+         */
+        val otherTraineePercents =
+            latestPercentByUid
+                .filterKeys { uid ->
+                    uid != currentUid
                 }
-                .map { (_, percent) ->
-                    percent
-                }
+                .values
+                .toList()
 
         if (otherTraineePercents.isEmpty()) {
             return null
         }
 
-        val safeUserPercent =
-            userKnownPercent.coerceIn(0, 100)
+        /*
+         * הממוצע ומספר המתאמנים הם נתונים גלובליים:
+         * כל המשתמשים בחגורה נלקחים מ-Firestore.
+         *
+         * אם מסמך המשתמש הנוכחי עדיין לא הגיע ל-query,
+         * משתמשים זמנית באחוז המקומי שלו.
+         */
+        val allTraineePercents =
+            if (latestPercentByUid.containsKey(currentUid)) {
+                latestPercentByUid.values.toList()
+            } else {
+                latestPercentByUid.values.toList() +
+                        safeUserPercent
+            }
 
-        val usersCount =
+        val otherUsersCount =
             otherTraineePercents.size
 
+        val displayedUsersCount =
+            allTraineePercents.size
+
         val averageKnownPercent =
-            otherTraineePercents
+            allTraineePercents
                 .average()
                 .roundToInt()
                 .coerceIn(0, 100)
 
         /*
-         * "אתה מעל" מחושב רק מול מתאמנים שהאחוז שלהם
-         * נמוך ממש מאחוז המשתמש, ולא כולל שוויון.
+         * "אתה מעל" עדיין מחושב רק מול מתאמנים אחרים,
+         * כדי שהמשתמש לא ישווה את עצמו לעצמו.
          */
         val traineesBelowUser =
             otherTraineePercents.count { percent ->
@@ -156,7 +223,7 @@ object UserProgressRepository {
         val percentileAbove =
             (
                     traineesBelowUser.toFloat() /
-                            usersCount.toFloat() *
+                            otherUsersCount.toFloat() *
                             100f
                     )
                 .roundToInt()
@@ -164,7 +231,7 @@ object UserProgressRepository {
 
         return UserProgressComparison(
             beltId = cleanBeltId,
-            usersCount = usersCount,
+            usersCount = displayedUsersCount,
             userKnownPercent = safeUserPercent,
             averageKnownPercent = averageKnownPercent,
             percentileAbove = percentileAbove,

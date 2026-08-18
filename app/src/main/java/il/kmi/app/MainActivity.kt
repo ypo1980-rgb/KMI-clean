@@ -136,6 +136,8 @@ class MainActivity : androidx.fragment.app.FragmentActivity() {
         // ומתעדכן זמן השימוש האחרון במסמך המשתמש האמיתי.
         trackAppOpenForCurrentUser(userSp)
 
+
+
         // -------------------- UI --------------------
         setContent {
 

@@ -64,9 +64,6 @@ import il.kmi.app.ui.dialogs.ExerciseNoteEditorDialog
 import il.kmi.app.domain.ExerciseExplanationResolver
 import il.kmi.app.progress.UserProgressComparison
 import il.kmi.app.progress.UserProgressRepository
-import com.google.firebase.auth.FirebaseAuth
-import com.google.firebase.firestore.FirebaseFirestore
-import kotlinx.coroutines.tasks.await
 
 /* ------------------------------ MarkState (3 states) ------------------------------ */
 
@@ -911,61 +908,6 @@ private fun SummaryMiniProgressChip(
             )
         }
     }
-}
-
-private suspend fun loadBeltComparisonFallbackFromUserProgress(
-    beltId: String,
-    userKnownPercent: Int
-): UserProgressComparison? {
-    val currentUid = FirebaseAuth.getInstance().currentUser?.uid.orEmpty()
-    if (currentUid.isBlank()) return null
-
-    val snap = FirebaseFirestore.getInstance()
-        .collection("userProgress")
-        .whereEqualTo("beltId", beltId)
-        .get()
-        .await()
-
-    val percents = snap.documents
-        .mapNotNull { doc ->
-            val totalCount = (doc.getLong("totalCount") ?: 0L).toInt()
-            val knownPercent = (doc.getLong("knownPercent") ?: -1L).toInt()
-
-            val userKey =
-                doc.getString("uid")
-                    ?: doc.getString("userId")
-                    ?: doc.getString("userUid")
-                    ?: doc.id
-
-            if (totalCount > 0 && knownPercent in 0..100) {
-                userKey to knownPercent
-            } else {
-                null
-            }
-        }
-        .distinctBy { it.first }
-        .map { it.second }
-
-    if (percents.isEmpty()) {
-        return null
-    }
-
-    val usersCount = percents.size
-    val averageKnownPercent = percents.average().toInt()
-    val belowOrEqualCount = percents.count { it <= userKnownPercent }
-
-    val percentileAbove =
-        ((belowOrEqualCount.toFloat() / usersCount.toFloat()) * 100f)
-            .toInt()
-            .coerceIn(0, 100)
-
-    return UserProgressComparison(
-        userKnownPercent = userKnownPercent,
-        averageKnownPercent = averageKnownPercent,
-        usersCount = usersCount,
-        percentileAbove = percentileAbove,
-        hasEnoughData = usersCount >= 2
-    )
 }
 
 @Composable
@@ -1861,9 +1803,23 @@ fun SummaryScreen(
 
         runCatching {
             /*
-             * מקור אמת יחיד: userProgress.
-             * ה־Repository מסנן את המשתמש הנוכחי ומחשב
-             * את הממוצע והאחוזון מול יתר המתאמנים בלבד.
+             * לפני שקוראים את נתוני ההשוואה,
+             * שומרים וממתינים לנתון המדויק שמסך הסיכום
+             * עצמו כבר חישב.
+             *
+             * כך לא ייתכן שבמסך מוצג 5% אבל ב-Firestore
+             * עדיין נשאר 0% מסנכרון רקע ישן.
+             */
+            UserProgressRepository.saveUserProgress(
+                beltId = belt.id,
+                knownPercent = overallPct,
+                knownCount = overallDone,
+                totalCount = overallTotal
+            )
+
+            /*
+             * רק לאחר שהשמירה הסתיימה קוראים את
+             * כל המתאמנים ומחשבים ממוצע גלובלי.
              */
             userProgressComparison =
                 UserProgressRepository.loadBeltComparison(

@@ -18,6 +18,10 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
+import il.kmi.app.progress.UserProgressRepository
+import kotlin.math.roundToInt
 
 // ========= הדגשת תרגיל במסך הפריטים =========
 private val _highlightItem = MutableStateFlow<String?>(null)
@@ -305,27 +309,65 @@ class KmiViewModel(
                                     Boolean? =
                                 null
 
-                            for (
-                            candidateId in
-                            candidateIds
+                            /*
+                             * חייבים להשתמש באותו topicKey שבו
+                             * Materials/Summary שומרים את הסימון.
+                             *
+                             * פריט ישיר:
+                             *     topicTitle
+                             *
+                             * פריט מתוך תת-נושא:
+                             *     topicTitle__subTopicTitle
+                             */
+                            val candidateTopicKeys =
+                                linkedSetOf<String>()
+                                    .apply {
+                                        add(
+                                            entry.topicTitle
+                                                .trim()
+                                        )
+
+                                        entry.subTopicTitle
+                                            ?.trim()
+                                            ?.takeIf {
+                                                it.isNotBlank()
+                                            }
+                                            ?.let { subTopicTitle ->
+                                                add(
+                                                    "${entry.topicTitle.trim()}__${subTopicTitle}"
+                                                )
+                                            }
+                                    }
+                                    .filter {
+                                        it.isNotBlank()
+                                    }
+
+                            search@ for (
+                            candidateTopicKey in
+                            candidateTopicKeys
                             ) {
-                                val candidateStatus =
-                                    getItemStatusNullable(
-                                        belt =
-                                            belt,
-                                        topic =
-                                            entry.topicTitle,
-                                        item =
-                                            candidateId
-                                    )
-
-                                if (
-                                    candidateStatus != null
+                                for (
+                                candidateId in
+                                candidateIds
                                 ) {
-                                    resolvedStatus =
-                                        candidateStatus
+                                    val candidateStatus =
+                                        getItemStatusNullable(
+                                            belt =
+                                                belt,
+                                            topic =
+                                                candidateTopicKey,
+                                            item =
+                                                candidateId
+                                        )
 
-                                    break
+                                    if (
+                                        candidateStatus != null
+                                    ) {
+                                        resolvedStatus =
+                                            candidateStatus
+
+                                        break@search
+                                    }
                                 }
                             }
 
@@ -459,6 +501,7 @@ class KmiViewModel(
                 null -> ds.clearItemStatus(belt, t, item)
                 else -> ds.setItemMastered(belt, t, item, value)
             }
+
             recalcProgress()
             _marksVersion.value = _marksVersion.value + 1L
         }
@@ -483,6 +526,7 @@ class KmiViewModel(
             canonicalIds.forEach { id ->
                 ds.clearItemStatus(belt, t, id)
             }
+
             recalcProgress()
             _marksVersion.value = _marksVersion.value + 1L
         }
@@ -499,7 +543,14 @@ class KmiViewModel(
 
         // ננקה datastore
         viewModelScope.launch {
-            items.forEach { ds.clearItemStatus(belt, t, it) }
+            items.forEach {
+                ds.clearItemStatus(
+                    belt,
+                    t,
+                    it
+                )
+            }
+
             recalcProgress()
             _marksVersion.value = _marksVersion.value + 1L
         }
@@ -619,110 +670,290 @@ class KmiViewModel(
         }
     }
 
-    private fun recalcProgress() {
-        val newProgress = mutableMapOf<Belt, Int>()
+    /*
+     * סנכרון התקדמות החגורה ל-Firestore.
+     *
+     * הסימונים עצמם נשארים מקומיים ב-DataStore.
+     * ל-Firestore נשלח רק הסיכום:
+     * knownCount / totalCount / knownPercent.
+     *
+     * ההשהיה הקצרה מונעת חישוב מחדש בכל לחיצה מהירה
+     * כאשר המשתמש מסמן מספר תרגילים ברצף.
+     */
+    /*
+     * Job נפרד לכל חגורה.
+     *
+     * כך שינוי מהיר בחגורה אחת לא מבטל
+     * סנכרון שכבר ממתין עבור חגורה אחרת.
+     */
+    private val progressSyncJobs =
+        mutableMapOf<String, Job>()
 
-        val beltsInOrder: List<Belt> = listOf(
-            Belt.WHITE,
-            Belt.YELLOW,
-            Belt.ORANGE,
-            Belt.GREEN,
-            Belt.BLUE,
-            Belt.BROWN,
-            Belt.BLACK
-        )
+    private fun scheduleBeltProgressSync(
+        belt: Belt
+    ) {
+        val beltId =
+            belt.id
 
-        // נחשב לפי סדר החגורות שלך
-        for (belt: Belt in beltsInOrder) {
-            val entries = getCatalogEntriesForBelt(belt)
-            val total = entries.size
-            if (total == 0) {
-                newProgress[belt] = 0
-                continue
-            }
+        progressSyncJobs[beltId]
+            ?.cancel()
 
-            val learned: Set<String> =
-                masteredItems[belt.id]
-                    ?.values
-                    ?.flatMap { topicMap -> topicMap.filterValues { it == true }.keys }
-                    ?.map { it.trim() }
-                    ?.filter { it.isNotBlank() }
-                    ?.toSet()
-                    ?: emptySet()
+        progressSyncJobs[beltId] =
+            viewModelScope.launch {
+                delay(500)
 
-            val masteredCount = entries.count { entry ->
-                val canonicalFromRaw = il.kmi.app.domain.CanonicalIds.canonicalFor(
-                    belt = belt,
-                    topicTitle = entry.topicTitle,
-                    displayItem = entry.rawItem
-                )
-
-                val canonicalFromDisplay = il.kmi.app.domain.CanonicalIds.canonicalFor(
-                    belt = belt,
-                    topicTitle = entry.topicTitle,
-                    displayItem = entry.displayItem
-                )
-
-                val candidates = setOf(
-                    entry.rawItem.trim(),
-                    entry.displayItem.trim(),
-                    canonicalFromRaw.trim(),
-                    canonicalFromDisplay.trim()
-                ).filter { it.isNotBlank() }
-
-                candidates.any { candidate -> candidate in learned }
-            }
-
-            val percent = (masteredCount * 100) / total
-            newProgress[belt] = percent
-        }
-
-        _progress.value = newProgress
-    }
-
-    fun preloadTopicsBySubjectCounts() {
-        viewModelScope.launch(context = kotlinx.coroutines.Dispatchers.Default) {
-            runCatching {
-                val subjects = il.kmi.app.domain.TopicsBySubjectRegistry.allSubjects()
-                val handsBase = subjects.firstOrNull { it.id == "hands_all" }
-
-                val beltForCounts =
-                    selectedBelt.value
-                        ?: Belt.GREEN
-
-                SubjectTopicsUiLogic
-                    .ensureTopicsUiCountsPreloaded(
-                        subjects = subjects,
-                        handsBase = handsBase,
-                        currentBelt = beltForCounts
+                runCatching {
+                    syncBeltProgressToFirestore(
+                        belt = belt
                     )
+                }
+
+                progressSyncJobs.remove(
+                    beltId
+                )
+            }
+    }
+
+    private suspend fun syncBeltProgressToFirestore(
+        belt: Belt
+    ) {
+        val snapshot =
+            readBeltProgressForAssistant(
+                belt = belt
+            )
+
+        val totalCount =
+            snapshot.totalExercises
+                .coerceAtLeast(0)
+
+        if (totalCount <= 0) {
+            return
+        }
+
+        val knownCount =
+            snapshot.knownExercises
+                .size
+                .coerceIn(
+                    0,
+                    totalCount
+                )
+
+        val knownPercent =
+            (
+                    knownCount.toFloat() /
+                            totalCount.toFloat() *
+                            100f
+                    )
+                .roundToInt()
+                .coerceIn(
+                    0,
+                    100
+                )
+
+        UserProgressRepository.saveUserProgress(
+            beltId = belt.id,
+            knownPercent = knownPercent,
+            knownCount = knownCount,
+            totalCount = totalCount
+        )
+    }
+
+    /*
+ * שומר ב-Firestore את נתוני ההתקדמות שכבר חושבו
+ * במסך הסיכום עצמו.
+ *
+ * זהו המקור המדויק ביותר להשוואה, משום שהמסך
+ * משתמש באותה רשימת תרגילים ובאותם statusTopicKeys
+ * שמהם מוצג האחוז למשתמש.
+ */
+    fun saveCalculatedBeltProgress(
+        belt: Belt,
+        knownCount: Int,
+        totalCount: Int,
+        knownPercent: Int
+    ) {
+        viewModelScope.launch {
+            val safeTotalCount =
+                totalCount.coerceAtLeast(0)
+
+            if (safeTotalCount <= 0) {
+                return@launch
+            }
+
+            val safeKnownCount =
+                knownCount.coerceIn(
+                    0,
+                    safeTotalCount
+                )
+
+            val safeKnownPercent =
+                knownPercent.coerceIn(
+                    0,
+                    100
+                )
+
+            runCatching {
+                UserProgressRepository.saveUserProgress(
+                    beltId = belt.id,
+                    knownPercent = safeKnownPercent,
+                    knownCount = safeKnownCount,
+                    totalCount = safeTotalCount
+                )
             }
         }
     }
 
-    init {
-        recalcProgress()
-        preloadTopicsBySubjectCounts()
+/*
+
+ * מסנכרן את כל נתוני ההתקדמות המקומיים של המשתמש
+ */
+/*
+ * מסנכרן את כל נתוני ההתקדמות המקומיים של המשתמש
+ * ל-Firestore לאחר שהמשתמש מזוהה.
+ *
+ * כך גם משתמש קיים אינו חייב לפתוח את מסך הסיכום
+ * או לשנות סימון כדי להיכלל בנתוני ההשוואה.
+ */
+fun syncAllBeltProgressToFirestore() {
+    viewModelScope.launch {
+
+        val firebaseUser =
+            com.google.firebase.auth.FirebaseAuth
+                .getInstance()
+                .currentUser
+
+        if (
+            firebaseUser == null ||
+            firebaseUser.isAnonymous
+        ) {
+            return@launch
+        }
+
+        val belts =
+            listOf(
+                Belt.WHITE,
+                Belt.YELLOW,
+                Belt.ORANGE,
+                Belt.GREEN,
+                Belt.BLUE,
+                Belt.BROWN,
+                Belt.BLACK
+            )
+
+        belts.forEach { belt ->
+            runCatching {
+                syncBeltProgressToFirestore(
+                    belt = belt
+                )
+            }
+        }
     }
+}
+
+private fun recalcProgress() {
+    val newProgress = mutableMapOf<Belt, Int>()
+
+    val beltsInOrder: List<Belt> = listOf(
+        Belt.WHITE,
+        Belt.YELLOW,
+        Belt.ORANGE,
+        Belt.GREEN,
+        Belt.BLUE,
+        Belt.BROWN,
+        Belt.BLACK
+    )
+
+    // נחשב לפי סדר החגורות שלך
+    for (belt: Belt in beltsInOrder) {
+        val entries = getCatalogEntriesForBelt(belt)
+        val total = entries.size
+        if (total == 0) {
+            newProgress[belt] = 0
+            continue
+        }
+
+        val learned: Set<String> =
+            masteredItems[belt.id]
+                ?.values
+                ?.flatMap { topicMap -> topicMap.filterValues { it == true }.keys }
+                ?.map { it.trim() }
+                ?.filter { it.isNotBlank() }
+                ?.toSet()
+                ?: emptySet()
+
+        val masteredCount = entries.count { entry ->
+            val canonicalFromRaw = il.kmi.app.domain.CanonicalIds.canonicalFor(
+                belt = belt,
+                topicTitle = entry.topicTitle,
+                displayItem = entry.rawItem
+            )
+
+            val canonicalFromDisplay = il.kmi.app.domain.CanonicalIds.canonicalFor(
+                belt = belt,
+                topicTitle = entry.topicTitle,
+                displayItem = entry.displayItem
+            )
+
+            val candidates = setOf(
+                entry.rawItem.trim(),
+                entry.displayItem.trim(),
+                canonicalFromRaw.trim(),
+                canonicalFromDisplay.trim()
+            ).filter { it.isNotBlank() }
+
+            candidates.any { candidate -> candidate in learned }
+        }
+
+        val percent = (masteredCount * 100) / total
+        newProgress[belt] = percent
+    }
+
+    _progress.value = newProgress
+}
+
+fun preloadTopicsBySubjectCounts() {
+    viewModelScope.launch(context = kotlinx.coroutines.Dispatchers.Default) {
+        runCatching {
+            val subjects = il.kmi.app.domain.TopicsBySubjectRegistry.allSubjects()
+            val handsBase = subjects.firstOrNull { it.id == "hands_all" }
+
+            val beltForCounts =
+                selectedBelt.value
+                    ?: Belt.GREEN
+
+            SubjectTopicsUiLogic
+                .ensureTopicsUiCountsPreloaded(
+                    subjects = subjects,
+                    handsBase = handsBase,
+                    currentBelt = beltForCounts
+                )
+        }
+    }
+}
+
+init {
+    recalcProgress()
+    preloadTopicsBySubjectCounts()
+}
 }
 
 // ─────────────────────────────────────────────
 // Factory עבור KmiViewModel (להישאר באותו קובץ)
 // ─────────────────────────────────────────────
 class KmiViewModelFactory(
-    private val dataStoreManager: DataStoreManager,
-    private val spTrainingSummary: SharedPreferences,
+private val dataStoreManager: DataStoreManager,
+private val spTrainingSummary: SharedPreferences,
 ) : androidx.lifecycle.ViewModelProvider.Factory {
 
-    @Suppress("UNCHECKED_CAST")
-    override fun <T : androidx.lifecycle.ViewModel> create(modelClass: Class<T>): T {
-        if (modelClass.isAssignableFrom(KmiViewModel::class.java)) {
-            val localRepo = TrainingSummaryLocalRepo(spTrainingSummary)
-            return KmiViewModel(
-                ds = dataStoreManager,
-                trainingSummaryLocalRepo = localRepo
-            ) as T
-        }
-        throw IllegalArgumentException("Unknown ViewModel class: ${modelClass.name}")
+@Suppress("UNCHECKED_CAST")
+override fun <T : androidx.lifecycle.ViewModel> create(modelClass: Class<T>): T {
+    if (modelClass.isAssignableFrom(KmiViewModel::class.java)) {
+        val localRepo = TrainingSummaryLocalRepo(spTrainingSummary)
+        return KmiViewModel(
+            ds = dataStoreManager,
+            trainingSummaryLocalRepo = localRepo
+        ) as T
     }
+    throw IllegalArgumentException("Unknown ViewModel class: ${modelClass.name}")
+}
 }
