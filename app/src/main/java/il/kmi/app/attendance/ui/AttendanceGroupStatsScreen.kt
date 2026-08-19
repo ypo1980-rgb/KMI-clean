@@ -90,7 +90,8 @@ fun AttendanceGroupStatsScreen(
     repo: AttendanceRepository,
     branch: String,
     groupKey: String,
-    onBack: () -> Unit
+    onBack: () -> Unit,
+    onHome: () -> Unit
 ) {
     val isEnglish = rememberIsEnglish()
     val context = androidx.compose.ui.platform.LocalContext.current
@@ -168,12 +169,23 @@ fun AttendanceGroupStatsScreen(
         topBar = {
             KmiTopBar(
                 title = tr("סטטיסטיקת נוכחות", "Attendance statistics"),
+
+                /*
+                 * אייקוני הבית והחיפוש מוצגים בשורת
+                 * הפעולות התחתונה של KmiTopBar.
+                 */
                 showTopHome = false,
                 showTopSearch = false,
                 showBottomActions = true,
                 showTopShare = false,
-                lockSearch = true,
+
+                lockHome = false,
+                lockSearch = false,
+
                 centerTitle = true,
+
+                onHome = onHome,
+
                 onShare = {
                     shareAttendanceStatsPdf(
                         context = context,

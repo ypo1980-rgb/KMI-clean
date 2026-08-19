@@ -3103,32 +3103,6 @@ private fun BeltArcPicker(
                                 }
                             }
                         }
-                        .noRippleClickable {
-                            if (isCenter) {
-                                clickSound()
-                                haptic(true)
-                                onCenterTap()
-                            } else {
-                                val selectedIndex =
-                                    index.coerceIn(
-                                        0,
-                                        belts.lastIndex
-                                    )
-
-                                /*
-                                 * לחיצה על חגורה צדדית מעדכנת מיד
-                                 * את מקור האמת המשותף לכל המסך.
-                                 */
-                                scope.launch {
-                                    center.snapTo(
-                                        selectedIndex.toFloat()
-                                    )
-                                    onIndexChange(selectedIndex)
-                                    clickSound()
-                                    haptic(true)
-                                }
-                            }
-                        }
                 }
 
             Box(

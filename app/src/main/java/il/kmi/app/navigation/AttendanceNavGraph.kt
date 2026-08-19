@@ -310,7 +310,17 @@ fun NavGraphBuilder.attendanceNavGraph(
             repo = repo,
             branch = branch,
             groupKey = groupKey,
-            onBack = { nav.popBackStack() }
+            onBack = {
+                nav.popBackStack()
+            },
+            onHome = {
+                nav.navigate(Route.Home.route) {
+                    popUpTo(Route.Home.route) {
+                        inclusive = false
+                    }
+                    launchSingleTop = true
+                }
+            }
         )
     }
 }

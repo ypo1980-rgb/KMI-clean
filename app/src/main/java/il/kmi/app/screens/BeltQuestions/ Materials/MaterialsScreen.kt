@@ -4095,6 +4095,15 @@ internal fun CoachMaterialStatusSelector(
             )
         }
 
+        Box(
+            modifier = Modifier
+                .width(3.dp)
+                .height(58.dp)
+                .background(
+                    Color(0xFFE53935)
+                )
+        )
+
         statuses.forEach { status ->
 
             val isSelected =
