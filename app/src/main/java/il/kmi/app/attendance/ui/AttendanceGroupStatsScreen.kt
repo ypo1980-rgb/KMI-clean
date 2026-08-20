@@ -127,15 +127,29 @@ fun AttendanceGroupStatsScreen(
             .sortedByDescending { (ym, _) -> ym } // חודשים מהחדש לישן
     }
 
-    // Accordion per month: ברירת מחדל = פתוח
-    val expandedByMonth = remember { mutableStateMapOf<YearMonth, Boolean>() }
+    /*
+     * כל כרטיסי החודשים מתחילים סגורים.
+     *
+     * רק לחיצה מפורשת על כרטיס החודש תפתח
+     * את רשימת האימונים השייכת אליו.
+     */
+    val expandedByMonth =
+        remember {
+            mutableStateMapOf<YearMonth, Boolean>()
+        }
 
     // פתיחה/סגירה של פירוט מתאמנים לכל דו"ח
-    val expandedReportDetails = remember { mutableStateMapOf<Long, Boolean>() }
+    val expandedReportDetails =
+        remember {
+            mutableStateMapOf<Long, Boolean>()
+        }
 
     LaunchedEffect(reportsByMonth) {
         reportsByMonth.forEach { (ym, _) ->
-            expandedByMonth.putIfAbsent(ym, true)
+            expandedByMonth.putIfAbsent(
+                ym,
+                false
+            )
         }
     }
 
@@ -316,17 +330,22 @@ fun AttendanceGroupStatsScreen(
                             ym.atDay(1).format(monthTitleFormatter)
                         }
 
-                        // ✅ לקרוא מצב “פתוח/סגור” בתוך קומפוזיציה
-                        val isExpanded = expandedByMonth[ym] != false
+                        /*
+                         * חודש נחשב פתוח רק כאשר הערך שלו
+                         * הוגדר במפורש כ-true.
+                         */
+                        val isExpanded =
+                            expandedByMonth[ym] == true
 
                         Surface(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .clickable {
                                     val current =
-                                        expandedByMonth[ym] != false
+                                        expandedByMonth[ym] == true
 
-                                    expandedByMonth[ym] = !current
+                                    expandedByMonth[ym] =
+                                        !current
                                 },
                             shape = RoundedCornerShape(18.dp),
                             color =
@@ -454,53 +473,208 @@ fun AttendanceGroupStatsScreen(
                         }
                     }
 
-                    // ✅ כאן (מחוץ ל-item) לקרוא שוב מצב נוכחי בצורה “טהורה”
-                    val isExpandedNow = expandedByMonth[ym] != false
+                    /*
+                     * כל דיווחי החודש מוצגים בתוך משטח
+                     * רציף אחד, עם קו מפריד בין האימונים.
+                     */
+                    val isExpandedNow =
+                        expandedByMonth[ym] == true
+
                     if (isExpandedNow) {
-                        items(monthReports, key = { it.id }) { r ->
-                            val checked = selected[r.id] == true
-                            val detailsExpanded = expandedReportDetails[r.id] == true
-
-                            Column(
-                                modifier = Modifier.fillMaxWidth(),
-                                verticalArrangement = Arrangement.spacedBy(8.dp)
+                        item(
+                            key = "month_reports_$ym"
+                        ) {
+                            Surface(
+                                modifier =
+                                    Modifier.fillMaxWidth(),
+                                shape =
+                                    RoundedCornerShape(20.dp),
+                                color =
+                                    if (isDarkMode) {
+                                        MaterialTheme
+                                            .colorScheme
+                                            .surfaceVariant
+                                    } else {
+                                        Color(0xFFF8FBFF)
+                                    },
+                                tonalElevation = 2.dp,
+                                shadowElevation = 4.dp,
+                                border = BorderStroke(
+                                    width = 1.dp,
+                                    color =
+                                        if (isDarkMode) {
+                                            MaterialTheme
+                                                .colorScheme
+                                                .outline
+                                                .copy(alpha = 0.45f)
+                                        } else {
+                                            Color(0xFFD6E4F2)
+                                        }
+                                )
                             ) {
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                                Column(
+                                    modifier =
+                                        Modifier.fillMaxWidth()
                                 ) {
-                                    if (deleteMode) {
-                                        Checkbox(
-                                            checked = checked,
-                                            onCheckedChange = { v -> selected[r.id] = v }
-                                        )
+                                    monthReports.forEachIndexed {
+                                            reportIndex,
+                                            report ->
+
+                                        val checked =
+                                            selected[report.id] == true
+
+                                        val detailsExpanded =
+                                            expandedReportDetails[
+                                                report.id
+                                            ] == true
+
+                                        /*
+                                         * רקע מתחלף מדגיש את ההפרדה
+                                         * בין הדוחות בלי ליצור כרטיס
+                                         * נפרד סביב כל אימון.
+                                         */
+                                        val reportBackgroundColor =
+                                            if (isDarkMode) {
+                                                if (
+                                                    reportIndex % 2 == 0
+                                                ) {
+                                                    MaterialTheme
+                                                        .colorScheme
+                                                        .surface
+                                                        .copy(alpha = 0.28f)
+                                                } else {
+                                                    MaterialTheme
+                                                        .colorScheme
+                                                        .primary
+                                                        .copy(alpha = 0.09f)
+                                                }
+                                            } else {
+                                                if (
+                                                    reportIndex % 2 == 0
+                                                ) {
+                                                    Color.White.copy(
+                                                        alpha = 0.42f
+                                                    )
+                                                } else {
+                                                    Color(0xFFE8F4FD)
+                                                        .copy(alpha = 0.88f)
+                                                }
+                                            }
+
+                                        Column(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .background(
+                                                    color =
+                                                        reportBackgroundColor
+                                                )
+                                                .padding(
+                                                    top = 4.dp,
+                                                    bottom = 4.dp
+                                                )
+                                        ) {
+                                            Row(
+                                                modifier = Modifier
+                                                    .fillMaxWidth()
+                                                    .padding(
+                                                        horizontal = 8.dp
+                                                    ),
+                                                verticalAlignment =
+                                                    Alignment.CenterVertically,
+                                                horizontalArrangement =
+                                                    Arrangement.spacedBy(
+                                                        8.dp
+                                                    )
+                                            ) {
+                                                if (deleteMode) {
+                                                    Checkbox(
+                                                        checked =
+                                                            checked,
+                                                        onCheckedChange = {
+                                                                value ->
+
+                                                            selected[
+                                                                report.id
+                                                            ] = value
+                                                        }
+                                                    )
+                                                }
+
+                                                ReportRowCard(
+                                                    dateText =
+                                                        report.date
+                                                            .toString(),
+                                                    total =
+                                                        report.totalMembers,
+                                                    present =
+                                                        report.presentCount,
+                                                    absent =
+                                                        report.absentCount,
+                                                    pct =
+                                                        report.percentPresent,
+                                                    isEnglish =
+                                                        isEnglish,
+                                                    isDetailsExpanded =
+                                                        detailsExpanded,
+                                                    onToggleDetails = {
+                                                        expandedReportDetails[
+                                                            report.id
+                                                        ] =
+                                                            !detailsExpanded
+                                                    },
+                                                    modifier =
+                                                        Modifier.weight(1f)
+                                                )
+                                            }
+
+                                            if (detailsExpanded) {
+                                                ReportAttendanceDetailsCard(
+                                                    repo = repo,
+                                                    branch = branch,
+                                                    groupKey = groupKey,
+                                                    date = report.date,
+                                                    isEnglish = isEnglish
+                                                )
+                                            }
+
+                                            /*
+                                             * קו מפריד מוצג רק בין
+                                             * האימונים ולא אחרי האחרון.
+                                             */
+                                            if (
+                                                reportIndex <
+                                                monthReports.lastIndex
+                                            ) {
+                                                Box(
+                                                    modifier = Modifier
+                                                        .fillMaxWidth()
+                                                        .padding(
+                                                            horizontal =
+                                                                12.dp
+                                                        )
+                                                        .height(1.dp)
+                                                        .background(
+                                                            color =
+                                                                if (
+                                                                    isDarkMode
+                                                                ) {
+                                                                    MaterialTheme
+                                                                        .colorScheme
+                                                                        .primary
+                                                                        .copy(
+                                                                            alpha =
+                                                                                0.48f
+                                                                        )
+                                                                } else {
+                                                                    Color(
+                                                                        0xFF9CCAF0
+                                                                    )
+                                                                }
+                                                        )
+                                                )
+                                            }
+                                        }
                                     }
-
-                                    ReportRowCard(
-                                        dateText = r.date.toString(),
-                                        total = r.totalMembers,
-                                        present = r.presentCount,
-                                        absent = r.absentCount,
-                                        pct = r.percentPresent,
-                                        isEnglish = isEnglish,
-                                        isDetailsExpanded = detailsExpanded,
-                                        onToggleDetails = {
-                                            expandedReportDetails[r.id] =
-                                                !detailsExpanded
-                                        },
-                                        modifier = Modifier.weight(1f)
-                                    )
-                                }
-
-                                if (detailsExpanded) {
-                                    ReportAttendanceDetailsCard(
-                                        repo = repo,
-                                        branch = branch,
-                                        groupKey = groupKey,
-                                        date = r.date,
-                                        isEnglish = isEnglish
-                                    )
                                 }
                             }
                         }
@@ -1646,28 +1820,19 @@ private fun ReportRowCard(
     val isDarkMode =
         MaterialTheme.colorScheme.surface.luminance() < 0.5f
 
+    /*
+     * אין מסגרת נפרדת לכל אימון.
+     *
+     * המסגרת החיצונית עוטפת כעת את כל
+     * רשימת האימונים של אותו חודש.
+     */
     Surface(
         modifier = modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(26.dp),
-        color =
-            if (isDarkMode) {
-                MaterialTheme.colorScheme.surfaceVariant
-            } else {
-                Color(0xFFF8FBFF)
-            },
-        tonalElevation = 4.dp,
-        shadowElevation = 6.dp,
-        border = BorderStroke(
-            width = 1.dp,
-            color =
-                if (isDarkMode) {
-                    MaterialTheme.colorScheme.outline.copy(
-                        alpha = 0.50f
-                    )
-                } else {
-                    Color(0xFFD6E4F2)
-                }
-        )
+        shape = RoundedCornerShape(0.dp),
+        color = Color.Transparent,
+        tonalElevation = 0.dp,
+        shadowElevation = 0.dp,
+        border = null
     ) {
         val datePretty = remember(dateText, isEnglish) {
             runCatching {

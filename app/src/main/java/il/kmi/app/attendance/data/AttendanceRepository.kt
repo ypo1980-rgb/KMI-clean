@@ -651,6 +651,44 @@ class AttendanceRepository private constructor(
     }
 
     /**
+     * בודק אם כבר קיים דוח שמור עבור
+     * התאריך, הסניף והקבוצה שנבחרו.
+     *
+     * עצם קיומם של סימוני נוכחות אינו מספיק,
+     * משום שייתכן שהמאמן התחיל לסמן אך עדיין
+     * לא שמר את הדוח.
+     */
+    suspend fun hasSavedReportForDate(
+        branch: String,
+        groupKey: String,
+        date: LocalDate
+    ): Boolean {
+        val cleanBranch = branch.trim()
+        val cleanGroupKey = groupKey.trim()
+
+        if (
+            cleanBranch.isBlank() ||
+            cleanGroupKey.isBlank()
+        ) {
+            return false
+        }
+
+        return reportsRef(
+            cleanBranch,
+            cleanGroupKey
+        )
+            .whereEqualTo(
+                "date",
+                date.toString()
+            )
+            .limit(1)
+            .get()
+            .await()
+            .documents
+            .isNotEmpty()
+    }
+
+    /**
      * מחשב דו"ח נוכחות ליום מסוים ושומר אותו ב־Firestore.
      */
     suspend fun saveReportForDate(

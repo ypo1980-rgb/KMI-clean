@@ -102,29 +102,58 @@ fun AttendanceScreen(
         MaterialTheme.colorScheme.background.luminance() < 0.5f
 
     /*
-     * לאחר שמירת הדיווח מסתירים את רשימת השמות
-     * ואת כפתורי הסימון, אך נשארים באותו מסך.
+     * true רק כאשר המאמן בחר לפתוח דוח קיים
+     * לצורך עריכה.
      *
-     * שינוי תאריך, סניף או קבוצה פותח אוטומטית
-     * מצב רישום חדש.
+     * שינוי תאריך, סניף או קבוצה מחזיר את המסך
+     * למצב הסגור שנקבע לפי הנתונים מהשרת.
      */
-    var isReportSaved by rememberSaveable(
-        date,
-        branch,
-        groupKey
+    var isEditingSavedReport by rememberSaveable(
+        state.date,
+        state.branch,
+        state.groupKey
     ) {
         mutableStateOf(false)
     }
 
+    /*
+     * מאפשר סגירה מיידית לאחר שמירה, עוד לפני
+     * שהקריאה החוזרת מ־Firestore הסתיימה.
+     */
+    var reportSavedLocally by rememberSaveable(
+        state.date,
+        state.branch,
+        state.groupKey
+    ) {
+        mutableStateOf(false)
+    }
+
+    /*
+     * דוח נשאר סגור כאשר הוא קיים בשרת או
+     * נשמר בהצלחה במהלך הכניסה הנוכחית,
+     * כל עוד המאמן לא לחץ על עריכת דיווח.
+     */
+    val isReportSaved =
+        (
+                state.hasSavedReport ||
+                        reportSavedLocally
+                ) &&
+                !isEditingSavedReport
+
     LaunchedEffect(vm) {
-        vm.events.collect { ev ->
-            when (ev) {
+        vm.events.collect { event ->
+            when (event) {
                 is UiEvent.ReportSaved -> {
-                    isReportSaved = true
+                    reportSavedLocally = true
+                    isEditingSavedReport = false
                 }
 
                 is UiEvent.ReportSaveFailed -> {
-                    isReportSaved = false
+                    /*
+                     * בכשל שמירה משאירים את הרשימה
+                     * פתוחה כדי שהסימונים לא ייעלמו.
+                     */
+                    reportSavedLocally = false
                 }
             }
         }
@@ -886,10 +915,11 @@ fun AttendanceScreen(
                             onClick = {
                                 if (isReportSaved) {
                                     /*
-                                     * מחזירים את השמות ואת הסימונים
-                                     * שכבר נמצאים ב־ViewModel.
+                                     * פותחים את הדוח הקיים לעריכה.
+                                     * הסימונים שכבר נטענו מהשרת
+                                     * נשארים כפי שנשמרו.
                                      */
-                                    isReportSaved = false
+                                    isEditingSavedReport = true
                                 } else if (hasRealMembers) {
                                     vm.saveTodayReport()
                                 }

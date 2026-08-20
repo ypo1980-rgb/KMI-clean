@@ -27,6 +27,7 @@ data class AttendanceUiState(
     val availableBranches: List<String> = emptyList(),
     val availableGroups: List<String> = emptyList(),
     val hasScheduledTraining: Boolean = false,
+    val hasSavedReport: Boolean = false,
     val sessionId: Long? = null,
     val members: List<GroupMember> = emptyList(),
     val records: List<AttendanceRecord> = emptyList(),
@@ -209,6 +210,67 @@ class AttendanceViewModel(app: Application) : AndroidViewModel(app) {
             }
         }
 
+    /*
+     * מקור האמת לכך שהדיווח נשמר הוא מסמך
+     * שקיים באוסף reports.
+     *
+     * קיומם של סימונים בלבד אינו מעיד שהדוח
+     * אכן נשמר.
+     */
+    private val savedReportFlow: Flow<Boolean> =
+        combine(
+            _branch,
+            _groupKey,
+            _date,
+            _refreshTick
+        ) { branch, groupKey, date, _ ->
+            AttendanceContext(
+                branch = branch,
+                groupKey = groupKey,
+                date = date
+            )
+        }
+            .flatMapLatest { context ->
+                if (
+                    context.branch.isBlank() ||
+                    context.groupKey.isBlank()
+                ) {
+                    flowOf(false)
+                } else {
+                    flow {
+                        val hasSavedReport =
+                            repo.hasSavedReportForDate(
+                                branch = context.branch,
+                                groupKey = context.groupKey,
+                                date = context.date
+                            )
+
+                        emit(hasSavedReport)
+                    }.catch {
+                        /*
+                         * אם בדיקת השרת נכשלה, לא סוגרים
+                         * בטעות את רשימת המתאמנים.
+                         */
+                        emit(false)
+                    }
+                }
+            }
+            .distinctUntilChanged()
+
+    /*
+     * מאחדים את רשימת הקבוצות עם מצב הדוח
+     * כדי להשאיר את ה-combine הראשי עם
+     * חמישה מקורות בלבד.
+     */
+    private val groupsAndSavedReportFlow:
+            Flow<Pair<List<String>, Boolean>> =
+        combine(
+            _availableGroups,
+            savedReportFlow
+        ) { availableGroups, hasSavedReport ->
+            availableGroups to hasSavedReport
+        }
+
     private data class Quad<A, B, C, D>(
         val first: A,
         val second: B,
@@ -224,8 +286,18 @@ class AttendanceViewModel(app: Application) : AndroidViewModel(app) {
             membersFlow,
             recordsFlow,
             _availableBranches,
-            _availableGroups
-        ) { h, members, records, availableBranches, availableGroups ->
+            groupsAndSavedReportFlow
+        ) {
+                h,
+                members,
+                records,
+                availableBranches,
+                groupsAndSavedReport ->
+
+            val (
+                availableGroups,
+                hasSavedReport
+            ) = groupsAndSavedReport
 
             val hasScheduledTraining =
                 TrainingCatalog.hasTrainingOn(
@@ -260,6 +332,9 @@ class AttendanceViewModel(app: Application) : AndroidViewModel(app) {
                 availableBranches = availableBranches,
                 availableGroups = availableGroups,
                 hasScheduledTraining = hasScheduledTraining,
+                hasSavedReport =
+                    hasScheduledTraining &&
+                            hasSavedReport,
                 sessionId =
                     if (hasScheduledTraining) {
                         h.fourth
@@ -840,7 +915,18 @@ class AttendanceViewModel(app: Application) : AndroidViewModel(app) {
                     date = d
                 )
             }.onSuccess {
-                _events.tryEmit(UiEvent.ReportSaved(branch = b, groupKey = g))
+                /*
+                 * מרעננים את savedReportFlow כדי שהמסך
+                 * יקבל מיד אישור שקיים דוח שמור.
+                 */
+                _refreshTick.update { it + 1 }
+
+                _events.tryEmit(
+                    UiEvent.ReportSaved(
+                        branch = b,
+                        groupKey = g
+                    )
+                )
             }.onFailure { t ->
                 _events.tryEmit(
                     UiEvent.ReportSaveFailed(

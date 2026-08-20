@@ -82,6 +82,7 @@ import il.kmi.app.subscription.KmiAccess
 import il.kmi.app.progress.UserProgressRepository
 import il.kmi.app.ui.KmiTopBar
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import java.net.URLDecoder
 import java.text.SimpleDateFormat
@@ -459,6 +460,26 @@ fun MaterialsScreen(
     }
 
     val scope = rememberCoroutineScope()
+
+    /*
+     * הסנכרון ל-Firestore מושהה מעט לאחר לחיצה.
+     *
+     * אם המשתמש מסמן כמה תרגילים ברצף, הסנכרון
+     * הקודם מתבטל ומתבצע רק סנכרון אחד עם המצב
+     * האחרון של כל התרגילים.
+     */
+    var progressSyncJob by remember(
+        belt.id
+    ) {
+        mutableStateOf<Job?>(null)
+    }
+
+    DisposableEffect(belt.id) {
+        onDispose {
+            progressSyncJob?.cancel()
+        }
+    }
+
     val scroll = rememberScrollState()
     val itemStates =
         remember(belt.id, topic, subTopicFilter) {
@@ -1518,9 +1539,13 @@ fun MaterialsScreen(
 
         /*
          * לחיצה אחת יכולה לעדכן כמה מפתחות ולשנות את marksVersion
-         * מספר פעמים. ההשהיה מבטלת טעינות ביניים ומריצה רק את
-         * הטעינה האחרונה.
+         * מספר פעמים.
+         *
+         * כל שינוי חדש מבטל אוטומטית את הרצת ה-LaunchedEffect
+         * הקודמת. כך רק השינוי האחרון גורם לקריאה מחודשת של
+         * הרשימה, בזמן שהסימון המקומי כבר מוצג מיד.
          */
+        delay(120L)
 
         val nextStates = withContext(Dispatchers.Default) {
             buildMap<String, Boolean?> {
@@ -3613,6 +3638,32 @@ fun MaterialsScreen(
                                                                                     }
                                                                                     .distinct()
 
+                                                                            /*
+                                                                             * האייקון והמונים כבר עודכנו
+                                                                             * באופן מקומי מעל החלק הזה.
+                                                                             *
+                                                                             * הסנכרון ל-Firestore אינו צריך
+                                                                             * להתבצע מחדש בכל לחיצה מהירה.
+                                                                             */
+                                                                            progressSyncJob?.cancel()
+
+                                                                            progressSyncJob =
+                                                                                scope.launch {
+                                                                                    delay(650L)
+
+                                                                                    withContext(
+                                                                                        Dispatchers.IO
+                                                                                    ) {
+                                                                                        runCatching {
+                                                                                            UserProgressRepository
+                                                                                                .syncCurrentUserBeltProgress(
+                                                                                                    vm = vm,
+                                                                                                    belt = belt
+                                                                                                )
+                                                                                        }
+                                                                                    }
+                                                                                }
+
                                                                             scope.launch(Dispatchers.IO) {
                                                                                 statusTopicKeys.forEach { topicKeyToSave ->
                                                                                     vm.setItemStatusNullable(
@@ -3735,20 +3786,10 @@ fun MaterialsScreen(
                                                                                 editor.apply()
 
                                                                                 /*
-                                                                                 * מעדכנים מיד את מסמך
-                                                                                 * userProgress של החגורה.
-                                                                                 *
-                                                                                 * כך המתאמן יופיע בהשוואה
-                                                                                 * גם אם לא פתח את מסך הסיכום.
+                                                                                 * השמירה המקומית הסתיימה.
+                                                                                 * סנכרון Firestore מתבצע
+                                                                                 * בנפרד לאחר רצף הלחיצות.
                                                                                  */
-                                                                                runCatching {
-                                                                                    UserProgressRepository
-                                                                                        .syncCurrentUserBeltProgress(
-                                                                                            vm = vm,
-                                                                                            belt = belt
-                                                                                        )
-                                                                                }
-
                                                                                 withContext(
                                                                                     Dispatchers.Main.immediate
                                                                                 ) {
