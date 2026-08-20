@@ -63,6 +63,7 @@ import il.kmi.shared.domain.content.ExerciseIdentityRegistry
 import il.kmi.app.ui.dialogs.ExerciseExplanationDialog
 import il.kmi.app.ui.dialogs.ExerciseNoteEditorDialog
 import il.kmi.app.domain.ExerciseExplanationResolver
+import il.kmi.app.progress.CoachGroupProgressSummary
 import il.kmi.app.progress.UserProgressComparison
 import il.kmi.app.progress.UserProgressRepository
 
@@ -399,6 +400,7 @@ fun ProgressMeter(
     doneOverride: Int? = null,
     totalOverride: Int? = null,
     knownOverride: Int? = null,
+    partiallyKnownOverride: Int? = null,
     notKnownOverride: Int? = null,
     unmarkedOverride: Int? = null
 ) {
@@ -484,16 +486,37 @@ fun ProgressMeter(
         unmarkedCount = none
     }
 
-    val effectiveKnown = knownOverride ?: doneOverride ?: knownCount
-    val effectiveNotKnown = notKnownOverride ?: notKnownCount
-    val effectiveUnmarked = unmarkedOverride ?: unmarkedCount
-    val effectiveTotal = totalOverride ?: total
+    val effectiveKnown =
+        knownOverride
+            ?: doneOverride
+            ?: knownCount
 
-    // ✅ התקדמות = כל מה שסומן: יודע + לא יודע.
-    // ירוק = יודע, אדום = לא יודע, אפור = לא סומן.
-    val effectiveCompleted = (effectiveKnown + effectiveNotKnown)
-        .coerceAtMost(effectiveTotal)
-        .coerceAtLeast(0)
+    val effectivePartiallyKnown =
+        partiallyKnownOverride
+            ?: 0
+
+    val effectiveNotKnown =
+        notKnownOverride
+            ?: notKnownCount
+
+    val effectiveTotal =
+        totalOverride
+            ?: total
+
+    /*
+     * אחוז ההתקדמות מציין כמה תרגילים סומנו.
+     *
+     * „יודע חלקית” נחשב מסומן, אך אינו מתווסף
+     * למספר התרגילים שהמשתמש יודע במלואם.
+     */
+    val effectiveCompleted =
+        (
+                effectiveKnown +
+                        effectivePartiallyKnown +
+                        effectiveNotKnown
+                )
+            .coerceAtMost(effectiveTotal)
+            .coerceAtLeast(0)
 
     val pct: Int =
         if (effectiveTotal == 0) 0
@@ -505,16 +528,42 @@ fun ProgressMeter(
         label = "premiumKnownSweep"
     )
 
-    val animatedNotKnownSweep by animateFloatAsState(
-        targetValue = if (effectiveTotal == 0) 0f else 360f * (effectiveNotKnown.toFloat() / effectiveTotal.toFloat()),
-        animationSpec = tween(durationMillis = 950),
-        label = "premiumNotKnownSweep"
+    val animatedPartiallyKnownSweep by
+    animateFloatAsState(
+        targetValue =
+            if (effectiveTotal == 0) {
+                0f
+            } else {
+                360f *
+                        (
+                                effectivePartiallyKnown
+                                    .toFloat() /
+                                        effectiveTotal.toFloat()
+                                )
+            },
+        animationSpec =
+            tween(durationMillis = 950),
+        label =
+            "premiumPartiallyKnownSweep"
     )
 
-    val animatedUnmarkedSweep by animateFloatAsState(
-        targetValue = if (effectiveTotal == 0) 0f else 360f * (effectiveUnmarked.toFloat() / effectiveTotal.toFloat()),
-        animationSpec = tween(durationMillis = 950),
-        label = "premiumUnmarkedSweep"
+    val animatedNotKnownSweep by
+    animateFloatAsState(
+        targetValue =
+            if (effectiveTotal == 0) {
+                0f
+            } else {
+                360f *
+                        (
+                                effectiveNotKnown
+                                    .toFloat() /
+                                        effectiveTotal.toFloat()
+                                )
+            },
+        animationSpec =
+            tween(durationMillis = 950),
+        label =
+            "premiumNotKnownSweep"
     )
 
     val context = LocalContext.current
@@ -522,6 +571,7 @@ fun ProgressMeter(
     val isEnglish = languageManager.getCurrentLanguage() == AppLanguage.ENGLISH
 
     val knownColor = Color(0xFF4CAF50)
+    val partiallyKnownColor = Color(0xFFF28C28)
     val notKnownColor = Color(0xFFE53935)
     val unmarkedColor = Color(0xFFD9D9E3)
 
@@ -559,6 +609,27 @@ fun ProgressMeter(
                 )
                 startAngle += animatedKnownSweep
             }
+
+            if (
+                animatedPartiallyKnownSweep >
+                0.1f
+            ) {
+                drawArc(
+                    color = partiallyKnownColor,
+                    startAngle = startAngle,
+                    sweepAngle =
+                        animatedPartiallyKnownSweep,
+                    useCenter = false,
+                    style = Stroke(
+                        width = strokePx,
+                        cap = StrokeCap.Round
+                    )
+                )
+
+                startAngle +=
+                    animatedPartiallyKnownSweep
+            }
+
 
             if (animatedNotKnownSweep > 0.1f) {
                 drawArc(
@@ -1115,6 +1186,333 @@ private fun PremiumSummaryLoading() {
         }
     }
 }
+
+@Composable
+private fun CoachGroupsProgressCard(
+    summary: CoachGroupProgressSummary?,
+    isLoaded: Boolean,
+    belt: Belt,
+    isEnglish: Boolean,
+    modifier: Modifier = Modifier,
+    onClose: () -> Unit
+) {
+    val surfaceColor =
+        MaterialTheme.colorScheme.surface
+
+    val primaryTextColor =
+        MaterialTheme.colorScheme.onSurface
+
+    val secondaryTextColor =
+        MaterialTheme.colorScheme.onSurfaceVariant
+
+    Surface(
+        modifier = modifier,
+        shape = RoundedCornerShape(24.dp),
+        color = surfaceColor,
+        shadowElevation = 5.dp,
+        tonalElevation = 1.dp,
+        border = BorderStroke(
+            width = 1.dp,
+            color = belt.color.copy(alpha = 0.38f)
+        )
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(
+                    brush = Brush.verticalGradient(
+                        colors = listOf(
+                            surfaceColor,
+                            belt.color
+                                .copy(alpha = 0.12f)
+                                .compositeOver(surfaceColor),
+                            surfaceColor
+                        )
+                    )
+                )
+                .padding(16.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                IconButton(
+                    onClick = onClose,
+                    modifier = Modifier.size(34.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Close,
+                        contentDescription =
+                            if (isEnglish) {
+                                "Close group data"
+                            } else {
+                                "סגור נתוני קבוצות"
+                            },
+                        tint = secondaryTextColor,
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
+
+                Text(
+                    text =
+                        if (isEnglish) {
+                            "Your groups · ${belt.id}"
+                        } else {
+                            "נתוני הקבוצות · ${belt.heb}"
+                        },
+                    modifier = Modifier.weight(1f),
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Black,
+                    color = primaryTextColor,
+                    textAlign =
+                        if (isEnglish) {
+                            TextAlign.Start
+                        } else {
+                            TextAlign.End
+                        }
+                )
+            }
+
+            if (!isLoaded) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(150.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    CircularProgressIndicator(
+                        color = belt.color,
+                        strokeWidth = 4.dp
+                    )
+                }
+            } else if (
+                summary == null ||
+                summary.totalTrainees <= 0
+            ) {
+                Text(
+                    text =
+                        if (isEnglish) {
+                            "No trainees were found in the groups assigned to you."
+                        } else {
+                            "לא נמצאו מתאמנים בקבוצות שאליהן אתה משויך."
+                        },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 24.dp),
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    color = secondaryTextColor,
+                    textAlign = TextAlign.Center
+                )
+            } else {
+                Surface(
+                    shape = CircleShape,
+                    color = belt.color.copy(alpha = 0.16f),
+                    border = BorderStroke(
+                        width = 2.dp,
+                        color = belt.color.copy(alpha = 0.55f)
+                    ),
+                    modifier = Modifier.size(138.dp)
+                ) {
+                    Box(
+                        modifier = Modifier.fillMaxSize(),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.Center
+                        ) {
+                            Text(
+                                text =
+                                    "${summary.averageKnownPercent}%",
+                                fontSize = 34.sp,
+                                lineHeight = 38.sp,
+                                fontWeight = FontWeight.Black,
+                                color = primaryTextColor,
+                                textAlign = TextAlign.Center
+                            )
+
+                            Text(
+                                text =
+                                    if (isEnglish) {
+                                        "Average knowledge"
+                                    } else {
+                                        "ידיעת החומר"
+                                    },
+                                style = KmiTypography.caption,
+                                fontWeight = FontWeight.Bold,
+                                color = secondaryTextColor,
+                                textAlign = TextAlign.Center
+                            )
+                        }
+                    }
+                }
+
+                Text(
+                    text =
+                        if (isEnglish) {
+                            "Average knowledge of the ${belt.id} belt material"
+                        } else {
+                            "ממוצע ידיעת חומר ${belt.heb}"
+                        },
+                    modifier = Modifier.fillMaxWidth(),
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = primaryTextColor,
+                    textAlign = TextAlign.Center
+                )
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Surface(
+                        modifier = Modifier.weight(1f),
+                        shape = RoundedCornerShape(16.dp),
+                        color = MaterialTheme.colorScheme.surfaceVariant
+                            .copy(alpha = 0.72f)
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(
+                                horizontal = 8.dp,
+                                vertical = 12.dp
+                            ),
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            Text(
+                                text = summary.groupsCount.toString(),
+                                fontSize = 22.sp,
+                                fontWeight = FontWeight.Black,
+                                color = belt.color
+                            )
+
+                            Text(
+                                text =
+                                    if (isEnglish) {
+                                        "Groups"
+                                    } else {
+                                        "קבוצות"
+                                    },
+                                style = KmiTypography.caption,
+                                fontWeight = FontWeight.Bold,
+                                color = secondaryTextColor,
+                                textAlign = TextAlign.Center
+                            )
+                        }
+                    }
+
+                    Surface(
+                        modifier = Modifier.weight(1f),
+                        shape = RoundedCornerShape(16.dp),
+                        color = MaterialTheme.colorScheme.surfaceVariant
+                            .copy(alpha = 0.72f)
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(
+                                horizontal = 8.dp,
+                                vertical = 12.dp
+                            ),
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            Text(
+                                text = summary.totalTrainees.toString(),
+                                fontSize = 22.sp,
+                                fontWeight = FontWeight.Black,
+                                color = belt.color
+                            )
+
+                            Text(
+                                text =
+                                    if (isEnglish) {
+                                        "Trainees"
+                                    } else {
+                                        "מתאמנים"
+                                    },
+                                style = KmiTypography.caption,
+                                fontWeight = FontWeight.Bold,
+                                color = secondaryTextColor,
+                                textAlign = TextAlign.Center
+                            )
+                        }
+                    }
+
+                    Surface(
+                        modifier = Modifier.weight(1f),
+                        shape = RoundedCornerShape(16.dp),
+                        color = MaterialTheme.colorScheme.surfaceVariant
+                            .copy(alpha = 0.72f)
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(
+                                horizontal = 8.dp,
+                                vertical = 12.dp
+                            ),
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            Text(
+                                text =
+                                    summary
+                                        .traineesWithProgress
+                                        .toString(),
+                                fontSize = 22.sp,
+                                fontWeight = FontWeight.Black,
+                                color = belt.color
+                            )
+
+                            Text(
+                                text =
+                                    if (isEnglish) {
+                                        "With data"
+                                    } else {
+                                        "עם נתונים"
+                                    },
+                                style = KmiTypography.caption,
+                                fontWeight = FontWeight.Bold,
+                                color = secondaryTextColor,
+                                textAlign = TextAlign.Center
+                            )
+                        }
+                    }
+                }
+
+                if (!summary.hasProgressData) {
+                    Text(
+                        text =
+                            if (isEnglish) {
+                                "The trainees have not saved progress for this belt yet."
+                            } else {
+                                "המתאמנים עדיין לא שמרו נתוני התקדמות בחגורה זו."
+                            },
+                        modifier = Modifier.fillMaxWidth(),
+                        style = KmiTypography.caption,
+                        fontWeight = FontWeight.SemiBold,
+                        color = secondaryTextColor,
+                        textAlign = TextAlign.Center
+                    )
+                } else if (
+                    summary.traineesWithoutProgress > 0
+                ) {
+                    Text(
+                        text =
+                            if (isEnglish) {
+                                "${summary.traineesWithoutProgress} trainees do not yet have progress data for this belt."
+                            } else {
+                                "ל־${summary.traineesWithoutProgress} מתאמנים עדיין אין נתוני התקדמות בחגורה זו."
+                            },
+                        modifier = Modifier.fillMaxWidth(),
+                        style = KmiTypography.caption,
+                        fontWeight = FontWeight.SemiBold,
+                        color = secondaryTextColor,
+                        textAlign = TextAlign.Center
+                    )
+                }
+            }
+        }
+    }
+}
+
 /* ------------------------------ SummaryScreen ------------------------------ */
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -1248,6 +1646,14 @@ fun SummaryScreen(
     }
 
     var userProgressComparisonLoaded by remember {
+        mutableStateOf(false)
+    }
+
+    var coachGroupProgress by remember {
+        mutableStateOf<CoachGroupProgressSummary?>(null)
+    }
+
+    var coachGroupProgressLoaded by remember {
         mutableStateOf(false)
     }
 
@@ -1461,8 +1867,33 @@ fun SummaryScreen(
      * ExerciseIdentityRegistry / fallback legacy_row_index.
      * לא משתמשים כאן ב-canonicalId כדי למנוע הדבקת סימונים בין תרגילים דומים.
      */
-    var masteredMap by remember(belt, itemsByTopic) {
-        mutableStateOf<Map<Pair<String, String>, MarkState>>(emptyMap())
+    var masteredMap by remember(
+        belt,
+        itemsByTopic
+    ) {
+        mutableStateOf<
+                Map<Pair<String, String>, MarkState>
+                >(
+            emptyMap()
+        )
+    }
+
+    /*
+     * „יודע חלקית” נשמר ב-MaterialsScreen
+     * במפתח SharedPreferences נפרד.
+     *
+     * ה-Set מכיל את אותו צמד שבו משתמש masteredMap:
+     * שם הנושא + מזהה התרגיל.
+     */
+    var partiallyKnownIds by remember(
+        belt,
+        itemsByTopic
+    ) {
+        mutableStateOf<
+                Set<Pair<String, String>>
+                >(
+            emptySet()
+        )
     }
 
     /*
@@ -1615,6 +2046,7 @@ fun SummaryScreen(
              * משאירים את הטוען פעיל עד שהרשימה תהיה מוכנה.
              */
             masteredMap = emptyMap()
+            partiallyKnownIds = emptySet()
             return@LaunchedEffect
         }
 
@@ -1698,10 +2130,76 @@ fun SummaryScreen(
             }
 
             /*
-             * מפרסמים למסך מפה מלאה בלבד.
-             * לאחר ההצבה, כל הספירות נגזרות מאותה תמונת מצב.
+             * קוראים את המצב „יודע חלקית” מאותו מפתח
+             * שבו MaterialsScreen שומר אותו:
+             *
+             * partially_known_{beltId}_{topicKey}
+             */
+            val computedPartiallyKnown:
+                    Set<Pair<String, String>> =
+                withContext(Dispatchers.Default) {
+                    buildSet {
+                        itemsByTopic.forEach {
+                                (topicTitle, rows) ->
+
+                            rows.forEach { row ->
+                                val statusId =
+                                    summaryExerciseIdentityIdFor(
+                                        belt = belt,
+                                        topicKey =
+                                            row.statusTopicKey,
+                                        topicTitle =
+                                            row.sourceTopicTitle,
+                                        index =
+                                            row.indexInStatusGroup,
+                                        item =
+                                            row.itemRaw
+                                    )
+
+                                val legacyStatusId =
+                                    summaryLegacyStatusIdFor(
+                                        belt = belt,
+                                        topicKey =
+                                            row.statusTopicKey,
+                                        index =
+                                            row.indexInStatusGroup,
+                                        item =
+                                            row.itemRaw
+                                    )
+
+                                val partiallyKnownKey =
+                                    "partially_known_" +
+                                            "${belt.id}_" +
+                                            row.statusTopicKey
+
+                                val savedPartialIds =
+                                    notesSp.getStringSet(
+                                        partiallyKnownKey,
+                                        emptySet()
+                                    )
+                                        .orEmpty()
+
+                                if (
+                                    statusId in savedPartialIds ||
+                                    legacyStatusId in
+                                    savedPartialIds
+                                ) {
+                                    add(
+                                        topicTitle to statusId
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+
+            /*
+             * מפרסמים למסך את שתי המפות יחד.
              */
             masteredMap = computed
+            partiallyKnownIds =
+                computedPartiallyKnown
+
             isSummaryLoading = false
 
         } catch (cancelled: CancellationException) {
@@ -1719,6 +2217,7 @@ fun SummaryScreen(
                 )
 
             masteredMap = emptyMap()
+            partiallyKnownIds = emptySet()
             isSummaryLoading = false
         }
     }
@@ -1770,9 +2269,17 @@ fun SummaryScreen(
         belt.id,
         overallDone,
         overallTotal,
-        overallPct
+        overallPct,
+        isCoach
     ) {
-        if (overallTotal > 0) {
+        /*
+         * סימוני המאמן מתארים חומר שנלמד או תורגל
+         * ואינם התקדמות אישית של מתאמן.
+         */
+        if (
+            !isCoach &&
+            overallTotal > 0
+        ) {
             runCatching {
                 UserProgressRepository.saveUserProgress(
                     beltId = belt.id,
@@ -1788,9 +2295,17 @@ fun SummaryScreen(
         showComparison,
         belt.id,
         overallPct,
-        overallTotal
+        overallTotal,
+        isCoach
     ) {
-        if (!showComparison) {
+        /*
+         * כרטיס ההשוואה הרגיל שייך למתאמן בלבד.
+         * במצב מאמן אותו כפתור פותח את נתוני הקבוצות.
+         */
+        if (
+            !showComparison ||
+            isCoach
+        ) {
             return@LaunchedEffect
         }
 
@@ -1846,6 +2361,43 @@ fun SummaryScreen(
         }
     }
 
+    LaunchedEffect(
+        showComparison,
+        belt.id,
+        isCoach
+    ) {
+        if (
+            !showComparison ||
+            !isCoach
+        ) {
+            return@LaunchedEffect
+        }
+
+        coachGroupProgressLoaded = false
+        coachGroupProgress = null
+        loadError = null
+
+        runCatching {
+            coachGroupProgress =
+                UserProgressRepository
+                    .loadCoachGroupsBeltProgress(
+                        beltId = belt.id
+                    )
+
+            coachGroupProgressLoaded = true
+        }.onFailure { error ->
+            coachGroupProgress = null
+            coachGroupProgressLoaded = true
+
+            loadError =
+                error.message
+                    ?: tr(
+                        "שגיאה בטעינת נתוני הקבוצות",
+                        "Error loading group data"
+                    )
+        }
+    }
+
     // === חיפוש/הסבר ===
     var explainFromSearch: Triple<Belt, String, String>? by rememberSaveable { mutableStateOf(null) }
     var noteEditorFor by rememberSaveable { mutableStateOf<String?>(null) }
@@ -1886,6 +2438,8 @@ fun SummaryScreen(
                 belt = belt,
                 itemsByTopic = itemsByTopic,
                 masteredMap = masteredMap,
+                partiallyKnownIds =
+                    partiallyKnownIds,
                 isEnglish = isEnglish,
                 topic = topic,
                 subTopicFilter = subTopicFilter
@@ -2332,11 +2886,24 @@ fun SummaryScreen(
                         )
 
                         SummaryToggleButton(
-                            text = tr("השוואה", "Compare"),
+                            text =
+                                if (isCoach) {
+                                    tr(
+                                        "נתוני הקבוצות",
+                                        "Group data"
+                                    )
+                                } else {
+                                    tr(
+                                        "השוואה",
+                                        "Compare"
+                                    )
+                                },
                             iconColor = belt.color,
                             selected = showComparison,
                             onClick = {
-                                showComparison = !showComparison
+                                showComparison =
+                                    !showComparison
+
                                 if (showComparison) {
                                     showProgress = false
                                 }
@@ -2346,7 +2913,26 @@ fun SummaryScreen(
                     }
                 }
 
-                if (showComparison) {
+                if (
+                    showComparison &&
+                    isCoach
+                ) {
+                    CoachGroupsProgressCard(
+                        summary = coachGroupProgress,
+                        isLoaded = coachGroupProgressLoaded,
+                        belt = belt,
+                        isEnglish = isEnglish,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(
+                                top = 2.dp,
+                                bottom = 10.dp
+                            ),
+                        onClose = {
+                            showComparison = false
+                        }
+                    )
+                } else if (showComparison) {
                     UserProgressComparisonCard(
                         comparison = userProgressComparison,
                         isLoaded = userProgressComparisonLoaded,
@@ -2354,7 +2940,10 @@ fun SummaryScreen(
                         isEnglish = isEnglish,
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(top = 2.dp, bottom = 10.dp),
+                            .padding(
+                                top = 2.dp,
+                                bottom = 10.dp
+                            ),
                         onClose = {
                             showComparison = false
                         }
@@ -2389,8 +2978,24 @@ fun SummaryScreen(
                         }
                     }
 
-                    val notKnownCount = masteredMap.values.count { it == MarkState.NO }
-                    val unmarkedCount = (overallTotal - overallDone - notKnownCount).coerceAtLeast(0)
+                    val partiallyKnownCount =
+                        partiallyKnownIds.size
+
+                    val notKnownCount =
+                        masteredMap.entries.count {
+                                (key, state) ->
+                            state == MarkState.NO &&
+                                    key !in partiallyKnownIds
+                        }
+
+                    val unmarkedCount =
+                        (
+                                overallTotal -
+                                        overallDone -
+                                        partiallyKnownCount -
+                                        notKnownCount
+                                )
+                            .coerceAtLeast(0)
 
                     Card(
                         modifier = Modifier
@@ -2482,8 +3087,12 @@ fun SummaryScreen(
                                 doneOverride = overallDone,
                                 totalOverride = overallTotal,
                                 knownOverride = overallDone,
-                                notKnownOverride = notKnownCount,
-                                unmarkedOverride = unmarkedCount
+                                partiallyKnownOverride =
+                                    partiallyKnownCount,
+                                notKnownOverride =
+                                    notKnownCount,
+                                unmarkedOverride =
+                                    unmarkedCount
                             )
 
                             Row(
@@ -2521,6 +3130,69 @@ fun SummaryScreen(
                                     }
                                 }
 
+                                /*
+                                 * יודע חלקית — קטגוריה כתומה נפרדת.
+                                 */
+                                Surface(
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .height(44.dp),
+                                    shape =
+                                        RoundedCornerShape(
+                                            16.dp
+                                        ),
+                                    color =
+                                        Color(0xFFF28C28)
+                                            .copy(
+                                                alpha = 0.12f
+                                            ),
+                                    border = BorderStroke(
+                                        width = 1.dp,
+                                        color =
+                                            Color(0xFFF28C28)
+                                                .copy(
+                                                    alpha = 0.30f
+                                                )
+                                    )
+                                ) {
+                                    Box(
+                                        modifier =
+                                            Modifier.fillMaxSize(),
+                                        contentAlignment =
+                                            Alignment.Center
+                                    ) {
+                                        Text(
+                                            text = tr(
+                                                "חלקית: $partiallyKnownCount",
+                                                "Partial: $partiallyKnownCount"
+                                            ),
+                                            style =
+                                                KmiTypography
+                                                    .caption
+                                                    .copy(
+                                                        fontWeight =
+                                                            FontWeight
+                                                                .ExtraBold
+                                                    ),
+                                            color =
+                                                Color(0xFFB85C00),
+                                            textAlign =
+                                                TextAlign.Center,
+                                            maxLines = 1,
+                                            overflow =
+                                                androidx.compose
+                                                    .ui
+                                                    .text
+                                                    .style
+                                                    .TextOverflow
+                                                    .Ellipsis
+                                        )
+                                    }
+                                }
+
+                                /*
+                                 * לא יודע — קטגוריה אדומה.
+                                 */
                                 Surface(
                                     modifier = Modifier
                                         .weight(1f)
@@ -2922,8 +3594,16 @@ fun SummaryScreen(
                                                         )
 
                                                         val state =
-                                                            masteredMap[topicTitle to statusId]
-                                                                ?: MarkState.NONE
+                                                            masteredMap[
+                                                                topicTitle to statusId
+                                                            ] ?: MarkState.NONE
+
+                                                        val isPartiallyKnown =
+                                                            partiallyKnownIds
+                                                                .contains(
+                                                                    topicTitle to
+                                                                            statusId
+                                                                )
 
                                                         val coachStatuses =
                                                             coachStatusMap[
@@ -2952,15 +3632,29 @@ fun SummaryScreen(
                                                                         Color(0xFF3478D4)
                                                                 }
                                                             } else {
-                                                                when (state) {
-                                                                    MarkState.YES ->
-                                                                        Color(0xFF4CAF50)
+                                                                if (
+                                                                    isPartiallyKnown
+                                                                ) {
+                                                                    Color(
+                                                                        0xFFF28C28
+                                                                    )
+                                                                } else {
+                                                                    when (state) {
+                                                                        MarkState.YES ->
+                                                                            Color(
+                                                                                0xFF4CAF50
+                                                                            )
 
-                                                                    MarkState.NO ->
-                                                                        Color(0xFFE53935)
+                                                                        MarkState.NO ->
+                                                                            Color(
+                                                                                0xFFE53935
+                                                                            )
 
-                                                                    MarkState.NONE ->
-                                                                        Color(0xFFE0E0E0)
+                                                                        MarkState.NONE ->
+                                                                            Color(
+                                                                                0xFFE0E0E0
+                                                                            )
+                                                                    }
                                                                 }
                                                             }
 
@@ -3006,10 +3700,24 @@ fun SummaryScreen(
                                                                                     Color.Transparent
                                                                             }
                                                                         } else {
-                                                                            if (state == MarkState.YES) {
-                                                                                belt.color.copy(alpha = 0.075f)
-                                                                            } else {
-                                                                                Color.Transparent
+                                                                            when {
+                                                                                isPartiallyKnown ->
+                                                                                    Color(
+                                                                                        0xFFF28C28
+                                                                                    ).copy(
+                                                                                        alpha =
+                                                                                            0.075f
+                                                                                    )
+
+                                                                                state ==
+                                                                                        MarkState.YES ->
+                                                                                    belt.color.copy(
+                                                                                        alpha =
+                                                                                            0.075f
+                                                                                    )
+
+                                                                                else ->
+                                                                                    Color.Transparent
                                                                             }
                                                                         },
                                                                     shape = RoundedCornerShape(14.dp)
@@ -3274,9 +3982,10 @@ fun SummaryScreen(
                                                                  * יודע / לא יודע / לא סומן.
                                                                  */
                                                                 Column(
-                                                                    modifier = Modifier.widthIn(
-                                                                        min = 48.dp
-                                                                    ),
+                                                                    modifier =
+                                                                        Modifier.width(
+                                                                            78.dp
+                                                                        ),
                                                                     horizontalAlignment =
                                                                         Alignment.CenterHorizontally
                                                                 ) {
@@ -3305,10 +4014,23 @@ fun SummaryScreen(
                                                                             } else {
                                                                                 Text(
                                                                                     text =
-                                                                                        when (state) {
-                                                                                            MarkState.YES -> "✓"
-                                                                                            MarkState.NO -> "✗"
-                                                                                            MarkState.NONE -> "○"
+                                                                                        if (
+                                                                                            isPartiallyKnown
+                                                                                        ) {
+                                                                                            "◐"
+                                                                                        } else {
+                                                                                            when (
+                                                                                                state
+                                                                                            ) {
+                                                                                                MarkState.YES ->
+                                                                                                    "✓"
+
+                                                                                                MarkState.NO ->
+                                                                                                    "✗"
+
+                                                                                                MarkState.NONE ->
+                                                                                                    "○"
+                                                                                            }
                                                                                         },
                                                                                     color = statusForegroundColor,
                                                                                     fontWeight =
@@ -3325,24 +4047,35 @@ fun SummaryScreen(
 
                                                                     Text(
                                                                         text =
-                                                                            when (state) {
-                                                                                MarkState.YES ->
-                                                                                    tr(
-                                                                                        "יודע",
-                                                                                        "Known"
-                                                                                    )
+                                                                            if (
+                                                                                isPartiallyKnown
+                                                                            ) {
+                                                                                tr(
+                                                                                    "יודע חלקית",
+                                                                                    "Partially known"
+                                                                                )
+                                                                            } else {
+                                                                                when (
+                                                                                    state
+                                                                                ) {
+                                                                                    MarkState.YES ->
+                                                                                        tr(
+                                                                                            "יודע",
+                                                                                            "Known"
+                                                                                        )
 
-                                                                                MarkState.NO ->
-                                                                                    tr(
-                                                                                        "לא יודע",
-                                                                                        "Not known"
-                                                                                    )
+                                                                                    MarkState.NO ->
+                                                                                        tr(
+                                                                                            "לא יודע",
+                                                                                            "Not known"
+                                                                                        )
 
-                                                                                MarkState.NONE ->
-                                                                                    tr(
-                                                                                        "לא סומן",
-                                                                                        "Unmarked"
-                                                                                    )
+                                                                                    MarkState.NONE ->
+                                                                                        tr(
+                                                                                            "לא סומן",
+                                                                                            "Unmarked"
+                                                                                        )
+                                                                                }
                                                                             },
                                                                         style =
                                                                             KmiTypography.caption.copy(
@@ -3385,8 +4118,12 @@ fun SummaryScreen(
 private fun createSummaryPdf(
     dir: File,
     belt: Belt,
-    itemsByTopic: Map<String, List<SummaryExerciseRow>>,
-    masteredMap: Map<Pair<String, String>, MarkState>,
+    itemsByTopic:
+    Map<String, List<SummaryExerciseRow>>,
+    masteredMap:
+    Map<Pair<String, String>, MarkState>,
+    partiallyKnownIds:
+    Set<Pair<String, String>>,
     isEnglish: Boolean = false,
     topic: String = "",
     subTopicFilter: String? = null
@@ -3410,9 +4147,33 @@ private fun createSummaryPdf(
     val borderBlue = android.graphics.Color.rgb(191, 213, 232)
     val textDark = android.graphics.Color.rgb(15, 23, 42)
     val textMuted = android.graphics.Color.rgb(80, 100, 120)
-    val green = android.graphics.Color.rgb(22, 163, 74)
-    val red = android.graphics.Color.rgb(220, 38, 38)
-    val gray = android.graphics.Color.rgb(107, 114, 128)
+    val green =
+        android.graphics.Color.rgb(
+            22,
+            163,
+            74
+        )
+
+    val orange =
+        android.graphics.Color.rgb(
+            242,
+            140,
+            40
+        )
+
+    val red =
+        android.graphics.Color.rgb(
+            220,
+            38,
+            38
+        )
+
+    val gray =
+        android.graphics.Color.rgb(
+            107,
+            114,
+            128
+        )
     val white = android.graphics.Color.WHITE
 
     val regular = android.graphics.Typeface.create(
@@ -3515,27 +4276,104 @@ private fun createSummaryPdf(
         canvas.restore()
     }
 
-    fun stateFor(topicTitle: String, row: SummaryExerciseRow): MarkState {
-        val statusId = summaryExerciseIdentityIdFor(
+    fun statusIdForPdf(
+        row: SummaryExerciseRow
+    ): String {
+        return summaryExerciseIdentityIdFor(
             belt = belt,
             topicKey = row.statusTopicKey,
             topicTitle = row.sourceTopicTitle,
             index = row.indexInStatusGroup,
             item = row.itemRaw
         )
-        return masteredMap[topicTitle to statusId] ?: MarkState.NONE
     }
 
-    val allRows = itemsByTopic.values.flatten()
-    val knownCount = itemsByTopic.entries.sumOf { (topicTitle, rows) ->
-        rows.count { stateFor(topicTitle, it) == MarkState.YES }
+    fun stateFor(
+        topicTitle: String,
+        row: SummaryExerciseRow
+    ): MarkState {
+        val statusId =
+            statusIdForPdf(row)
+
+        return masteredMap[
+            topicTitle to statusId
+        ] ?: MarkState.NONE
     }
-    val notKnownCount = itemsByTopic.entries.sumOf { (topicTitle, rows) ->
-        rows.count { stateFor(topicTitle, it) == MarkState.NO }
+
+    fun isPartiallyKnownFor(
+        topicTitle: String,
+        row: SummaryExerciseRow
+    ): Boolean {
+        val statusId =
+            statusIdForPdf(row)
+
+        return partiallyKnownIds.contains(
+            topicTitle to statusId
+        )
     }
-    val unmarkedCount = (allRows.size - knownCount - notKnownCount).coerceAtLeast(0)
-    val markedCount = knownCount + notKnownCount
-    val markedPercent = if (allRows.isEmpty()) 0 else markedCount * 100 / allRows.size
+
+    val allRows =
+        itemsByTopic.values.flatten()
+
+    val knownCount =
+        itemsByTopic.entries.sumOf {
+                (topicTitle, rows) ->
+            rows.count { row ->
+                stateFor(
+                    topicTitle,
+                    row
+                ) == MarkState.YES
+            }
+        }
+
+    val partiallyKnownCount =
+        itemsByTopic.entries.sumOf {
+                (topicTitle, rows) ->
+            rows.count { row ->
+                isPartiallyKnownFor(
+                    topicTitle,
+                    row
+                )
+            }
+        }
+
+    val notKnownCount =
+        itemsByTopic.entries.sumOf {
+                (topicTitle, rows) ->
+            rows.count { row ->
+                stateFor(
+                    topicTitle,
+                    row
+                ) == MarkState.NO &&
+                        !isPartiallyKnownFor(
+                            topicTitle,
+                            row
+                        )
+            }
+        }
+
+    val unmarkedCount =
+        (
+                allRows.size -
+                        knownCount -
+                        partiallyKnownCount -
+                        notKnownCount
+                )
+            .coerceAtLeast(0)
+
+    val markedCount =
+        knownCount +
+                partiallyKnownCount +
+                notKnownCount
+
+    val markedPercent =
+        if (allRows.isEmpty()) {
+            0
+        } else {
+            markedCount *
+                    100 /
+                    allRows.size
+        }
 
     val beltLabel = if (isEnglish) {
         when (belt) {
@@ -3568,6 +4406,7 @@ private fun createSummaryPdf(
         val subTopicTitle: String?,
         val title: String,
         val state: MarkState,
+        val isPartiallyKnown: Boolean,
         val height: Float
     )
 
@@ -3603,8 +4442,21 @@ private fun createSummaryPdf(
                 topicTitle = topicTitle,
                 subTopicTitle = row.subTopicTitle,
                 title = title,
-                state = stateFor(topicTitle, row),
-                height = maxOf(64f, layout.height + 40f)
+                state =
+                    stateFor(
+                        topicTitle,
+                        row
+                    ),
+                isPartiallyKnown =
+                    isPartiallyKnownFor(
+                        topicTitle,
+                        row
+                    ),
+                height =
+                    maxOf(
+                        64f,
+                        layout.height + 40f
+                    )
             )
         }
 
@@ -3941,15 +4793,32 @@ private fun createSummaryPdf(
         drawLayout(canvas, summaryTitle, margin + 20f, top + 16f)
 
         val stats = listOf(
-            knownCount.toString() to tr("יודע", "Known"),
-            notKnownCount.toString() to tr("לא יודע", "Not known"),
-            unmarkedCount.toString() to tr("לא סומן", "Unmarked"),
-            "$markedPercent%" to tr("סומנו", "Marked")
+            knownCount.toString() to
+                    tr("יודע", "Known"),
+
+            partiallyKnownCount.toString() to
+                    tr("חלקית", "Partial"),
+
+            notKnownCount.toString() to
+                    tr("לא יודע", "Not known"),
+
+            unmarkedCount.toString() to
+                    tr("לא סומן", "Unmarked"),
+
+            "$markedPercent%" to
+                    tr("סומנו", "Marked")
         )
 
-        val gap = 8f
+        val gap = 6f
         val innerLeft = margin + 16f
-        val cardWidth = (pageWidth - margin * 2f - 32f - gap * 3f) / 4f
+
+        val cardWidth =
+            (
+                    pageWidth -
+                            margin * 2f -
+                            32f -
+                            gap * 4f
+                    ) / 5f
         val cardTop = top + 48f
 
         stats.forEachIndexed { index, (value, label) ->
@@ -3976,12 +4845,14 @@ private fun createSummaryPdf(
                 stroke = true
             )
 
-            val valueColor = when (index) {
-                0 -> green
-                1 -> red
-                2 -> gray
-                else -> blue
-            }
+            val valueColor =
+                when (index) {
+                    0 -> green
+                    1 -> orange
+                    2 -> red
+                    3 -> gray
+                    else -> blue
+                }
 
             canvas.drawText(
                 value,
@@ -4070,16 +4941,49 @@ private fun createSummaryPdf(
         row: PdfRow
     ): Float {
         val bottom = top + row.height
-        val statusColor = when (row.state) {
-            MarkState.YES -> green
-            MarkState.NO -> red
-            MarkState.NONE -> gray
-        }
-        val statusLabel = when (row.state) {
-            MarkState.YES -> tr("יודע", "Known")
-            MarkState.NO -> tr("לא יודע", "Not known")
-            MarkState.NONE -> tr("לא סומן", "Unmarked")
-        }
+        val statusColor =
+            if (row.isPartiallyKnown) {
+                orange
+            } else {
+                when (row.state) {
+                    MarkState.YES ->
+                        green
+
+                    MarkState.NO ->
+                        red
+
+                    MarkState.NONE ->
+                        gray
+                }
+            }
+
+        val statusLabel =
+            if (row.isPartiallyKnown) {
+                tr(
+                    "יודע חלקית",
+                    "Partially known"
+                )
+            } else {
+                when (row.state) {
+                    MarkState.YES ->
+                        tr(
+                            "יודע",
+                            "Known"
+                        )
+
+                    MarkState.NO ->
+                        tr(
+                            "לא יודע",
+                            "Not known"
+                        )
+
+                    MarkState.NONE ->
+                        tr(
+                            "לא סומן",
+                            "Unmarked"
+                        )
+                }
+            }
 
         drawRoundRect(
             canvas,

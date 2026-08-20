@@ -453,21 +453,41 @@ fun ExamScreen(
                         }
 
                         OutlinedButton(
-                            onClick = { showHelp = true },
+                            onClick = {
+                                showHelp = true
+                            },
+                            modifier = Modifier.weight(1f),
                             shape = MaterialTheme.shapes.large
                         ) {
                             Text("עזרה")
                         }
 
-                        Button(
-                            onClick = {
-                                KmiTtsManager.stop()
-                                if (currentIndex < items.lastIndex) currentIndex++
-                            },
-                            modifier = Modifier.weight(1f),
-                            shape = MaterialTheme.shapes.large
+                        /*
+                         * בתרגיל האחרון אין תרגיל נוסף
+                         * שאליו ניתן לדלג.
+                         */
+                        if (
+                            currentIndex <
+                            items.lastIndex
                         ) {
-                            Text("דלג")
+                            Button(
+                                onClick = {
+                                    KmiTtsManager.stop()
+
+                                    if (
+                                        currentIndex <
+                                        items.lastIndex
+                                    ) {
+                                        currentIndex++
+                                    }
+                                },
+                                modifier =
+                                    Modifier.weight(1f),
+                                shape =
+                                    MaterialTheme.shapes.large
+                            ) {
+                                Text("דלג")
+                            }
                         }
                     }
                 }

@@ -33,3 +33,28 @@ data class UserProgressComparison(
     val percentileAbove: Int = 0,
     val hasEnoughData: Boolean = false
 )
+
+/*
+ * נתוני התקדמות קבוצתיים המוצגים למאמן במסך הסיכום.
+ *
+ * הנתונים מחושבים מכל המתאמנים בכל הסניפים והקבוצות
+ * שאליהם המאמן משויך, ביחס לחגורה המוצגת במסך.
+ *
+ * מתאמן המשויך ליותר מקבוצה אחת נספר פעם אחת בלבד.
+ */
+data class CoachGroupProgressSummary(
+    val beltId: String = "",
+    val groupsCount: Int = 0,
+    val totalTrainees: Int = 0,
+    val traineesWithProgress: Int = 0,
+    val averageKnownPercent: Int = 0
+) {
+    val hasProgressData: Boolean
+        get() = traineesWithProgress > 0
+
+    val traineesWithoutProgress: Int
+        get() = (
+                totalTrainees -
+                        traineesWithProgress
+                ).coerceAtLeast(0)
+}

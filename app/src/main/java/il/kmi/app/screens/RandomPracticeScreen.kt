@@ -1307,9 +1307,17 @@ fun RandomPracticeScreen(
 
                     PracticeBottomActionCard(
                         isEnglish = isEnglish,
-                        onHelp = { showHelp = true },
+                        showSkip =
+                            currentIndex <
+                                    weightedItems.lastIndex,
+                        onHelp = {
+                            showHelp = true
+                        },
                         onSkip = {
-                            if (currentIndex < weightedItems.lastIndex) {
+                            if (
+                                currentIndex <
+                                weightedItems.lastIndex
+                            ) {
                                 currentIndex++
                             }
                         },
@@ -1870,6 +1878,7 @@ private fun SegmentedTimeChooser(
 @Composable
 private fun ModernActionsRow(
     isEnglish: Boolean,
+    showSkip: Boolean,
     onHelp: () -> Unit,
     onSkip: () -> Unit
 ) {
@@ -1894,27 +1903,45 @@ private fun ModernActionsRow(
             modifier = Modifier.weight(1f)
         )
 
-        ModernPillButton(
-            text = if (isEnglish) "Skip" else "דלג",
-            leading = { Icon(Icons.Filled.PlayArrow, contentDescription = null) },
-            container = Color(0xFF6D56B8),
-            content = Color.White,
-            overlayGradient = Brush.horizontalGradient(
-                listOf(
-                    Color.White.copy(alpha = 0.24f),
-                    Color.White.copy(alpha = 0.08f),
-                    Color.Transparent
-                )
-            ),
-            onClick = onSkip,
-            modifier = Modifier.weight(1f)
-        )
+        if (showSkip) {
+            ModernPillButton(
+                text =
+                    if (isEnglish) {
+                        "Skip"
+                    } else {
+                        "דלג"
+                    },
+                leading = {
+                    Icon(
+                        Icons.Filled.PlayArrow,
+                        contentDescription = null
+                    )
+                },
+                container = Color(0xFF6D56B8),
+                content = Color.White,
+                overlayGradient =
+                    Brush.horizontalGradient(
+                        listOf(
+                            Color.White.copy(
+                                alpha = 0.24f
+                            ),
+                            Color.White.copy(
+                                alpha = 0.08f
+                            ),
+                            Color.Transparent
+                        )
+                    ),
+                onClick = onSkip,
+                modifier = Modifier.weight(1f)
+            )
+        }
     }
 }
 
 @Composable
 private fun PracticeBottomActionCard(
     isEnglish: Boolean,
+    showSkip: Boolean,
     onHelp: () -> Unit,
     onSkip: () -> Unit,
     onFinish: () -> Unit
@@ -1946,6 +1973,7 @@ private fun PracticeBottomActionCard(
         ) {
             ModernActionsRow(
                 isEnglish = isEnglish,
+                showSkip = showSkip,
                 onHelp = onHelp,
                 onSkip = onSkip
             )

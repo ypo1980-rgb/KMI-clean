@@ -68,7 +68,6 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.relocation.BringIntoViewRequester
 import androidx.compose.ui.unit.Dp
 import il.kmi.app.domain.ContentRepo
-import il.kmi.app.screens.MasterToggle
 import il.kmi.app.ui.color
 import il.kmi.app.ui.KmiIconSize
 import il.kmi.app.ui.KmiTypography
@@ -80,6 +79,7 @@ import il.kmi.shared.localization.AppLanguageManager
 import il.kmi.shared.domain.content.ExerciseTitlesEn
 import il.kmi.shared.domain.content.ExerciseIdentityRegistry
 import il.kmi.app.subscription.KmiAccess
+import il.kmi.app.progress.UserProgressRepository
 import il.kmi.app.ui.KmiTopBar
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -90,6 +90,19 @@ import java.util.Locale
 import kotlin.math.ceil
 
 //=================================================================================
+
+/*
+ * שלושת המצבים שהמתאמן יכול לבחור.
+ *
+ * מצב לא מסומן מיוצג באמצעות null ואינו חלק מה-enum.
+ */
+internal enum class TraineeMaterialStatus(
+    val storageValue: String
+) {
+    KNOWN("known"),
+    PARTIALLY_KNOWN("partially_known"),
+    UNKNOWN("unknown")
+}
 
 internal enum class CoachMaterialStatus(
     val storageValue: String
@@ -1354,10 +1367,93 @@ fun MaterialsScreen(
 
     fun setUnknown(id: String, set: Boolean) {
         val s = unknowns.toMutableSet()
-        if (set) s.add(id) else s.remove(id)
+
+        if (set) {
+            s.add(id)
+        } else {
+            s.remove(id)
+        }
+
         unknowns = s
-        sp.edit().putStringSet(unknownKey, s).apply()
+
+        sp.edit()
+            .putStringSet(
+                unknownKey,
+                s
+            )
+            .apply()
     }
+
+    /*
+     * „יודע חלקית” נשמר בנפרד.
+     *
+     * ברמת מנגנון ההתקדמות הקיים הוא עדיין אינו
+     * נחשב „יודע”, אך ניתן להבדיל בינו לבין
+     * „לא יודע” במסך התרגילים.
+     */
+    val partiallyKnownKey =
+        remember(
+            belt.id,
+            excludedKeySuffix
+        ) {
+            "partially_known_${belt.id}_$excludedKeySuffix"
+        }
+
+    var partiallyKnownSet by remember(
+        partiallyKnownKey
+    ) {
+        mutableStateOf<MutableSet<String>>(
+            sp.getStringSet(
+                partiallyKnownKey,
+                emptySet()
+            )
+                ?.toMutableSet()
+                ?: mutableSetOf()
+        )
+    }
+
+    fun setPartiallyKnownLocal(
+        id: String,
+        set: Boolean
+    ) {
+        val next =
+            partiallyKnownSet.toMutableSet()
+
+        if (set) {
+            next.add(id)
+        } else {
+            next.remove(id)
+        }
+
+        partiallyKnownSet = next
+
+        sp.edit()
+            .putStringSet(
+                partiallyKnownKey,
+                next
+            )
+            .apply()
+    }
+
+    fun traineeMaterialStatusFor(
+        statusId: String,
+        mastered: Boolean?
+    ): TraineeMaterialStatus? {
+        return when {
+            mastered == true ->
+                TraineeMaterialStatus.KNOWN
+
+            partiallyKnownSet.contains(statusId) ->
+                TraineeMaterialStatus.PARTIALLY_KNOWN
+
+            mastered == false ->
+                TraineeMaterialStatus.UNKNOWN
+
+            else ->
+                null
+        }
+    }
+
 // ✅ NEW: נשמור גם mastered (וי ירוק) ב-SP כדי שהסיכום יראה אותו
     val masteredKey =
         remember(belt.id, excludedKeySuffix) { "mastered_${belt.id}_$excludedKeySuffix" }
@@ -1583,25 +1679,71 @@ fun MaterialsScreen(
             .count { it == true }
     }
 
-    val summaryUnknownCount = remember(
+    val summaryPartiallyKnownCount = remember(
         itemList,
-        itemStates.toMap(),
-        masteredSet,
-        unknowns,
+        partiallyKnownSet,
         belt.id,
         topicKey
     ) {
         itemList
             .mapIndexed { index, item ->
-                val statusId = statusIdFor(index, item)
+                val statusId =
+                    statusIdFor(
+                        index,
+                        item
+                    )
 
-                itemStates[statusId] ?: when {
-                    masteredSet.contains(statusId) -> true
-                    unknowns.contains(statusId) -> false
-                    else -> null
-                }
+                partiallyKnownSet.contains(
+                    statusId
+                )
             }
-            .count { it == false }
+            .count { isPartiallyKnown ->
+                isPartiallyKnown
+            }
+    }
+
+    val summaryUnknownCount = remember(
+        itemList,
+        itemStates.toMap(),
+        masteredSet,
+        unknowns,
+        partiallyKnownSet,
+        belt.id,
+        topicKey
+    ) {
+        itemList
+            .mapIndexed { index, item ->
+                val statusId =
+                    statusIdFor(
+                        index,
+                        item
+                    )
+
+                val state =
+                    itemStates[statusId]
+                        ?: when {
+                            masteredSet.contains(
+                                statusId
+                            ) ->
+                                true
+
+                            unknowns.contains(
+                                statusId
+                            ) ->
+                                false
+
+                            else ->
+                                null
+                        }
+
+                state == false &&
+                        !partiallyKnownSet.contains(
+                            statusId
+                        )
+            }
+            .count { isUnknown ->
+                isUnknown
+            }
     }
 
     val summaryFavoritesCount = remember(
@@ -1769,11 +1911,41 @@ fun MaterialsScreen(
                             MaterialPdfItem(
                                 number = index + 1,
                                 title = itemTitleForUi(topicUi, item, currentLang),
-                                status = when (state) {
-                                    true -> if (isEnglish) "Known" else "יודע"
-                                    false -> if (isEnglish) "Unknown" else "לא יודע"
-                                    null -> if (isEnglish) "Not marked" else "לא סומן"
-                                },
+                                status =
+                                    if (
+                                        partiallyKnownSet.contains(
+                                            statusId
+                                        )
+                                    ) {
+                                        if (isEnglish) {
+                                            "Partially known"
+                                        } else {
+                                            "יודע חלקית"
+                                        }
+                                    } else {
+                                        when (state) {
+                                            true ->
+                                                if (isEnglish) {
+                                                    "Known"
+                                                } else {
+                                                    "יודע"
+                                                }
+
+                                            false ->
+                                                if (isEnglish) {
+                                                    "Unknown"
+                                                } else {
+                                                    "לא יודע"
+                                                }
+
+                                            null ->
+                                                if (isEnglish) {
+                                                    "Not marked"
+                                                } else {
+                                                    "לא סומן"
+                                                }
+                                        }
+                                    },
                                 isFavorite = isFavoriteByAliases(materialRootTopic, item),
                                 isExcluded = excludedItems.contains(canonicalId),
                                 hasNote = loadNote(canonicalId).isNotBlank()
@@ -1917,9 +2089,17 @@ fun MaterialsScreen(
                                     coachProgressStates.clear()
                                     excludedItems.clear()
 
-                                    favorites = mutableSetOf()
-                                    masteredSet = mutableSetOf()
-                                    unknowns = mutableSetOf()
+                                    favorites =
+                                        mutableSetOf()
+
+                                    masteredSet =
+                                        mutableSetOf()
+
+                                    unknowns =
+                                        mutableSetOf()
+
+                                    partiallyKnownSet =
+                                        mutableSetOf()
 
                                     /*
                                      * מחיקת כל הנתונים השמורים מקומית.
@@ -1941,6 +2121,9 @@ fun MaterialsScreen(
                                             )
                                             .remove(
                                                 "unknown_${belt.id}_$key"
+                                            )
+                                            .remove(
+                                                "partially_known_${belt.id}_$key"
                                             )
                                     }
 
@@ -1991,6 +2174,20 @@ fun MaterialsScreen(
                                                     belt = belt,
                                                     topic = key
                                                 )
+                                            }
+
+                                            /*
+                                             * איפוס של מאמן אינו נתון
+                                             * התקדמות אישי של מתאמן.
+                                             */
+                                            if (!effectiveIsCoach) {
+                                                runCatching {
+                                                    UserProgressRepository
+                                                        .syncCurrentUserBeltProgress(
+                                                            vm = vm,
+                                                            belt = belt
+                                                        )
+                                                }
                                             }
                                         }
                                     }
@@ -2376,16 +2573,47 @@ fun MaterialsScreen(
                                         )
 
                                         MaterialsTopStatChip(
-                                            value = summaryMasteredCount.toString(),
-                                            label = if (isEnglish) "Known" else "יודע",
-                                            containerColor = Color(0xFF7ACB88),
-                                            contentColor = Color.White,
+                                            value =
+                                                summaryMasteredCount
+                                                    .toString(),
+                                            label =
+                                                if (isEnglish) {
+                                                    "Known"
+                                                } else {
+                                                    "יודע"
+                                                },
+                                            containerColor =
+                                                Color(0xFF7ACB88),
+                                            contentColor =
+                                                Color.White,
                                             minWidth = 64.dp,
-                                            horizontalPadding = 12.dp
+                                            horizontalPadding =
+                                                12.dp
                                         )
 
                                         MaterialsTopStatChip(
-                                            value = summaryUnknownCount.toString(),
+                                            value =
+                                                summaryPartiallyKnownCount
+                                                    .toString(),
+                                            label =
+                                                if (isEnglish) {
+                                                    "Partial"
+                                                } else {
+                                                    "חלקית"
+                                                },
+                                            containerColor =
+                                                Color(0xFFF28C28),
+                                            contentColor =
+                                                Color.White,
+                                            minWidth = 64.dp,
+                                            horizontalPadding =
+                                                10.dp
+                                        )
+
+                                        MaterialsTopStatChip(
+                                            value =
+                                                summaryUnknownCount
+                                                    .toString(),
                                             label = if (isEnglish) "Unknown" else "לא יודע",
                                             containerColor = Color(0xFFF1A97A),
                                             contentColor = Color.White
@@ -3097,13 +3325,60 @@ fun MaterialsScreen(
                                                             }
 
                                                         Row(
-                                                            modifier = Modifier.fillMaxWidth(),
-                                                            horizontalArrangement = Arrangement.SpaceEvenly,
-                                                            verticalAlignment = Alignment.Top
+                                                            modifier = Modifier
+                                                                .fillMaxWidth()
+                                                                .height(
+                                                                    IntrinsicSize.Min
+                                                                ),
+                                                            horizontalArrangement =
+                                                                Arrangement.spacedBy(
+                                                                    7.dp
+                                                                ),
+                                                            verticalAlignment =
+                                                                Alignment.Top
                                                         ) {
 
                                                             Column(
-                                                                modifier = Modifier.weight(1f),
+                                                                modifier = Modifier
+                                                                    .weight(0.82f)
+                                                                    .fillMaxHeight()
+                                                                    .background(
+                                                                        color =
+                                                                            Color(
+                                                                                0xFF1976D2
+                                                                            ).copy(
+                                                                                alpha =
+                                                                                    0.055f
+                                                                            ),
+                                                                        shape =
+                                                                            RoundedCornerShape(
+                                                                                16.dp
+                                                                            )
+                                                                    )
+                                                                    .border(
+                                                                        border =
+                                                                            BorderStroke(
+                                                                                width =
+                                                                                    1.dp,
+                                                                                color =
+                                                                                    Color(
+                                                                                        0xFF1976D2
+                                                                                    ).copy(
+                                                                                        alpha =
+                                                                                            0.28f
+                                                                                    )
+                                                                            ),
+                                                                        shape =
+                                                                            RoundedCornerShape(
+                                                                                16.dp
+                                                                            )
+                                                                    )
+                                                                    .padding(
+                                                                        horizontal =
+                                                                            4.dp,
+                                                                        vertical =
+                                                                            6.dp
+                                                                    ),
                                                                 horizontalAlignment =
                                                                     Alignment.CenterHorizontally
                                                             ) {
@@ -3165,7 +3440,48 @@ fun MaterialsScreen(
                                                             }
 
                                                             Column(
-                                                                modifier = Modifier.weight(1f),
+                                                                modifier = Modifier
+                                                                    .weight(3f)
+                                                                    .fillMaxHeight()
+                                                                    .background(
+                                                                        color =
+                                                                            MaterialTheme
+                                                                                .colorScheme
+                                                                                .surfaceVariant
+                                                                                .copy(
+                                                                                    alpha =
+                                                                                        0.32f
+                                                                                ),
+                                                                        shape =
+                                                                            RoundedCornerShape(
+                                                                                18.dp
+                                                                            )
+                                                                    )
+                                                                    .border(
+                                                                        border =
+                                                                            BorderStroke(
+                                                                                width =
+                                                                                    1.dp,
+                                                                                color =
+                                                                                    MaterialTheme
+                                                                                        .colorScheme
+                                                                                        .outline
+                                                                                        .copy(
+                                                                                            alpha =
+                                                                                                0.22f
+                                                                                        )
+                                                                            ),
+                                                                        shape =
+                                                                            RoundedCornerShape(
+                                                                                18.dp
+                                                                            )
+                                                                    )
+                                                                    .padding(
+                                                                        horizontal =
+                                                                            4.dp,
+                                                                        vertical =
+                                                                            6.dp
+                                                                    ),
                                                                 horizontalAlignment =
                                                                     Alignment.CenterHorizontally,
                                                                 verticalArrangement =
@@ -3177,196 +3493,280 @@ fun MaterialsScreen(
                                                                     contentAlignment =
                                                                         Alignment.Center
                                                                 ) {
-                                                                    MasterToggle(
-                                                                    mastered = mastered,
-                                                                    onSelect = { newVal ->
-                                                                        pendingItemStates[statusId] =
-                                                                            newVal
-                                                                        itemStates[statusId] =
-                                                                            newVal
+                                                                    TraineeMaterialStatusSelector(
+                                                                        selectedStatus =
+                                                                            traineeMaterialStatusFor(
+                                                                                statusId =
+                                                                                    statusId,
+                                                                                mastered =
+                                                                                    mastered
+                                                                            ),
+                                                                        dateText =
+                                                                            traineeDateText,
+                                                                        isEnglish =
+                                                                            isEnglish,
+                                                                        onSelect = { selectedStatus ->
 
-                                                                        /*
-                                                                         * שומר את זמן השינוי של ✓ / ✗.
-                                                                         * באיפוס ל-null התאריך נמחק.
-                                                                         */
-                                                                        saveTraineeUpdatedAt(
-                                                                            statusId = statusId,
-                                                                            value = newVal
-                                                                        )
-
-                                                                        val nextMasteredSet =
-                                                                            masteredSet.toMutableSet()
-
-                                                                        val nextUnknownSet =
-                                                                            unknowns.toMutableSet()
-
-                                                                        when (newVal) {
-                                                                            true -> {
-                                                                                nextMasteredSet.add(
-                                                                                    statusId
-                                                                                )
-                                                                                nextUnknownSet.remove(
-                                                                                    statusId
-                                                                                )
-                                                                            }
-
-                                                                            false -> {
-                                                                                nextUnknownSet.add(
-                                                                                    statusId
-                                                                                )
-                                                                                nextMasteredSet.remove(
-                                                                                    statusId
-                                                                                )
-                                                                            }
-
-                                                                            null -> {
-                                                                                nextMasteredSet.remove(
-                                                                                    statusId
-                                                                                )
-                                                                                nextUnknownSet.remove(
-                                                                                    statusId
-                                                                                )
-                                                                            }
-                                                                        }
-
-                                                                        masteredSet =
-                                                                            nextMasteredSet
-                                                                        unknowns = nextUnknownSet
-
-                                                                        val statusTopicKeys =
-                                                                            if (subTopicFilter.isNullOrBlank()) {
-                                                                                listOf(
-                                                                                    topicKey,
-                                                                                    topicUi,
-                                                                                    "כללי"
-                                                                                )
-                                                                            } else {
-                                                                                listOf(topicKey)
-                                                                            }
-                                                                                .map { key ->
-                                                                                    key.trim()
-                                                                                }
-                                                                                .filter { key ->
-                                                                                    key.isNotBlank()
-                                                                                }
-                                                                                .distinct()
-
-                                                                        scope.launch(Dispatchers.IO) {
-                                                                            statusTopicKeys.forEach { topicKeyToSave ->
-                                                                                vm.setItemStatusNullable(
-                                                                                    belt = belt,
-                                                                                    topic = topicKeyToSave,
-                                                                                    item = statusId,
-                                                                                    value = newVal
-                                                                                )
-                                                                            }
-
-                                                                            val editor = sp.edit()
-
-                                                                            statusTopicKeys.forEach { topicKeyToSave ->
-                                                                                val masteredPreferenceKey =
-                                                                                    "mastered_${belt.id}_${topicKeyToSave}"
-
-                                                                                val unknownPreferenceKey =
-                                                                                    "unknown_${belt.id}_${topicKeyToSave}"
-
-                                                                                val savedMastered =
-                                                                                    (
-                                                                                            sp.getStringSet(
-                                                                                                masteredPreferenceKey,
-                                                                                                emptySet()
-                                                                                            )
-                                                                                                ?: emptySet()
-                                                                                            ).toMutableSet()
-
-                                                                                val savedUnknown =
-                                                                                    (
-                                                                                            sp.getStringSet(
-                                                                                                unknownPreferenceKey,
-                                                                                                emptySet()
-                                                                                            )
-                                                                                                ?: emptySet()
-                                                                                            ).toMutableSet()
-
-                                                                                when (newVal) {
-                                                                                    true -> {
-                                                                                        savedMastered.add(
-                                                                                            statusId
-                                                                                        )
-                                                                                        savedUnknown.remove(
-                                                                                            statusId
-                                                                                        )
-                                                                                    }
-
-                                                                                    false -> {
-                                                                                        savedUnknown.add(
-                                                                                            statusId
-                                                                                        )
-                                                                                        savedMastered.remove(
-                                                                                            statusId
-                                                                                        )
-                                                                                    }
-
-                                                                                    null -> {
-                                                                                        savedMastered.remove(
-                                                                                            statusId
-                                                                                        )
-                                                                                        savedUnknown.remove(
-                                                                                            statusId
-                                                                                        )
-                                                                                    }
-                                                                                }
-
-                                                                                editor.putStringSet(
-                                                                                    masteredPreferenceKey,
-                                                                                    savedMastered
-                                                                                )
-
-                                                                                editor.putStringSet(
-                                                                                    unknownPreferenceKey,
-                                                                                    savedUnknown
-                                                                                )
-                                                                            }
-
-                                                                            editor.apply()
-
-                                                                            withContext(Dispatchers.Main.immediate) {
-                                                                                if (
-                                                                                    pendingItemStates.containsKey(
-                                                                                        statusId
-                                                                                    ) &&
-                                                                                    pendingItemStates[statusId] == newVal
+                                                                            val newVal:
+                                                                                    Boolean? =
+                                                                                when (
+                                                                                    selectedStatus
                                                                                 ) {
-                                                                                    pendingItemStates.remove(
+                                                                                    TraineeMaterialStatus.KNOWN ->
+                                                                                        true
+
+                                                                                    TraineeMaterialStatus.PARTIALLY_KNOWN ->
+                                                                                        false
+
+                                                                                    TraineeMaterialStatus.UNKNOWN ->
+                                                                                        false
+
+                                                                                    null ->
+                                                                                        null
+                                                                                }
+
+                                                                            /*
+                                                                             * המצב החלקי נשמר בנוסף
+                                                                             * לסימון הבינארי הקיים.
+                                                                             *
+                                                                             * כך מסכי הסיכום ממשיכים
+                                                                             * כרגע לעבוד ללא שינוי.
+                                                                             */
+                                                                            setPartiallyKnownLocal(
+                                                                                id =
+                                                                                    statusId,
+                                                                                set =
+                                                                                    selectedStatus ==
+                                                                                            TraineeMaterialStatus
+                                                                                                .PARTIALLY_KNOWN
+                                                                            )
+
+                                                                            pendingItemStates[statusId] =
+                                                                                newVal
+                                                                            itemStates[statusId] =
+                                                                                newVal
+
+                                                                            /*
+                                                                             * שומר את זמן השינוי של ✓ / ✗.
+                                                                             * באיפוס ל-null התאריך נמחק.
+                                                                             */
+                                                                            saveTraineeUpdatedAt(
+                                                                                statusId = statusId,
+                                                                                value = newVal
+                                                                            )
+
+                                                                            val nextMasteredSet =
+                                                                                masteredSet.toMutableSet()
+
+                                                                            val nextUnknownSet =
+                                                                                unknowns.toMutableSet()
+
+                                                                            when (newVal) {
+                                                                                true -> {
+                                                                                    nextMasteredSet.add(
                                                                                         statusId
                                                                                     )
-                                                                                    itemStates[statusId] =
-                                                                                        newVal
+                                                                                    nextUnknownSet.remove(
+                                                                                        statusId
+                                                                                    )
+                                                                                }
+
+                                                                                false -> {
+                                                                                    nextUnknownSet.add(
+                                                                                        statusId
+                                                                                    )
+                                                                                    nextMasteredSet.remove(
+                                                                                        statusId
+                                                                                    )
+                                                                                }
+
+                                                                                null -> {
+                                                                                    nextMasteredSet.remove(
+                                                                                        statusId
+                                                                                    )
+                                                                                    nextUnknownSet.remove(
+                                                                                        statusId
+                                                                                    )
+                                                                                }
+                                                                            }
+
+                                                                            masteredSet =
+                                                                                nextMasteredSet
+                                                                            unknowns =
+                                                                                nextUnknownSet
+
+                                                                            val statusTopicKeys =
+                                                                                if (subTopicFilter.isNullOrBlank()) {
+                                                                                    listOf(
+                                                                                        topicKey,
+                                                                                        topicUi,
+                                                                                        "כללי"
+                                                                                    )
+                                                                                } else {
+                                                                                    listOf(topicKey)
+                                                                                }
+                                                                                    .map { key ->
+                                                                                        key.trim()
+                                                                                    }
+                                                                                    .filter { key ->
+                                                                                        key.isNotBlank()
+                                                                                    }
+                                                                                    .distinct()
+
+                                                                            scope.launch(Dispatchers.IO) {
+                                                                                statusTopicKeys.forEach { topicKeyToSave ->
+                                                                                    vm.setItemStatusNullable(
+                                                                                        belt = belt,
+                                                                                        topic = topicKeyToSave,
+                                                                                        item = statusId,
+                                                                                        value = newVal
+                                                                                    )
+                                                                                }
+
+                                                                                val editor =
+                                                                                    sp.edit()
+
+                                                                                statusTopicKeys.forEach { topicKeyToSave ->
+                                                                                    val masteredPreferenceKey =
+                                                                                        "mastered_${belt.id}_${topicKeyToSave}"
+
+                                                                                    val unknownPreferenceKey =
+                                                                                        "unknown_${belt.id}_${topicKeyToSave}"
+
+                                                                                    val partiallyKnownPreferenceKey =
+                                                                                        "partially_known_${belt.id}_${topicKeyToSave}"
+
+                                                                                    val savedMastered =
+                                                                                        (
+                                                                                                sp.getStringSet(
+                                                                                                    masteredPreferenceKey,
+                                                                                                    emptySet()
+                                                                                                )
+                                                                                                    ?: emptySet()
+                                                                                                ).toMutableSet()
+
+                                                                                    val savedUnknown =
+                                                                                        (
+                                                                                                sp.getStringSet(
+                                                                                                    unknownPreferenceKey,
+                                                                                                    emptySet()
+                                                                                                )
+                                                                                                    ?: emptySet()
+                                                                                                ).toMutableSet()
+
+
+                                                                                    val savedPartiallyKnown =
+                                                                                        (
+                                                                                                sp.getStringSet(
+                                                                                                    partiallyKnownPreferenceKey,
+                                                                                                    emptySet()
+                                                                                                )
+                                                                                                    ?: emptySet()
+                                                                                                ).toMutableSet()
+
+                                                                                    when (
+                                                                                        selectedStatus
+                                                                                    ) {
+                                                                                        TraineeMaterialStatus.KNOWN -> {
+                                                                                            savedMastered.add(
+                                                                                                statusId
+                                                                                            )
+                                                                                            savedUnknown.remove(
+                                                                                                statusId
+                                                                                            )
+                                                                                            savedPartiallyKnown.remove(
+                                                                                                statusId
+                                                                                            )
+                                                                                        }
+
+                                                                                        TraineeMaterialStatus.PARTIALLY_KNOWN -> {
+                                                                                            savedMastered.remove(
+                                                                                                statusId
+                                                                                            )
+                                                                                            savedUnknown.add(
+                                                                                                statusId
+                                                                                            )
+                                                                                            savedPartiallyKnown.add(
+                                                                                                statusId
+                                                                                            )
+                                                                                        }
+
+                                                                                        TraineeMaterialStatus.UNKNOWN -> {
+                                                                                            savedMastered.remove(
+                                                                                                statusId
+                                                                                            )
+                                                                                            savedUnknown.add(
+                                                                                                statusId
+                                                                                            )
+                                                                                            savedPartiallyKnown.remove(
+                                                                                                statusId
+                                                                                            )
+                                                                                        }
+
+                                                                                        null -> {
+                                                                                            savedMastered.remove(
+                                                                                                statusId
+                                                                                            )
+                                                                                            savedUnknown.remove(
+                                                                                                statusId
+                                                                                            )
+                                                                                            savedPartiallyKnown.remove(
+                                                                                                statusId
+                                                                                            )
+                                                                                        }
+                                                                                    }
+
+                                                                                    editor.putStringSet(
+                                                                                        masteredPreferenceKey,
+                                                                                        savedMastered
+                                                                                    )
+
+                                                                                    editor.putStringSet(
+                                                                                        unknownPreferenceKey,
+                                                                                        savedUnknown
+                                                                                    )
+
+                                                                                    editor.putStringSet(
+                                                                                        partiallyKnownPreferenceKey,
+                                                                                        savedPartiallyKnown
+                                                                                    )
+                                                                                }
+
+                                                                                editor.apply()
+
+                                                                                /*
+                                                                                 * מעדכנים מיד את מסמך
+                                                                                 * userProgress של החגורה.
+                                                                                 *
+                                                                                 * כך המתאמן יופיע בהשוואה
+                                                                                 * גם אם לא פתח את מסך הסיכום.
+                                                                                 */
+                                                                                runCatching {
+                                                                                    UserProgressRepository
+                                                                                        .syncCurrentUserBeltProgress(
+                                                                                            vm = vm,
+                                                                                            belt = belt
+                                                                                        )
+                                                                                }
+
+                                                                                withContext(
+                                                                                    Dispatchers.Main.immediate
+                                                                                ) {
+                                                                                    if (
+                                                                                        pendingItemStates.containsKey(
+                                                                                            statusId
+                                                                                        ) &&
+                                                                                        pendingItemStates[statusId] == newVal
+                                                                                    ) {
+                                                                                        pendingItemStates.remove(
+                                                                                            statusId
+                                                                                        )
+                                                                                        itemStates[statusId] =
+                                                                                            newVal
+                                                                                    }
                                                                                 }
                                                                             }
                                                                         }
-                                                                    }
-                                                                )
-                                                            }
-
-                                                                if (
-                                                                    traineeDateText.isNotBlank()
-                                                                ) {
-                                                                    Text(
-                                                                        text =
-                                                                            traineeDateText,
-                                                                        style =
-                                                                            KmiTypography.caption.copy(
-                                                                                fontWeight =
-                                                                                    FontWeight.Medium
-                                                                            ),
-                                                                        color =
-                                                                            MaterialTheme
-                                                                                .colorScheme
-                                                                                .onSurfaceVariant,
-                                                                        textAlign =
-                                                                            TextAlign.Center,
-                                                                        maxLines = 1
                                                                     )
                                                                 }
                                                             }
@@ -3517,8 +3917,26 @@ private fun createMaterialsPdf(
     val borderBlue = android.graphics.Color.rgb(191, 213, 232)
     val textDark = android.graphics.Color.rgb(15, 23, 42)
     val textMuted = android.graphics.Color.rgb(80, 100, 120)
-    val red = android.graphics.Color.rgb(220, 38, 38)
-    val green = android.graphics.Color.rgb(22, 163, 74)
+    val red =
+        android.graphics.Color.rgb(
+            220,
+            38,
+            38
+        )
+
+    val orange =
+        android.graphics.Color.rgb(
+            242,
+            140,
+            40
+        )
+
+    val green =
+        android.graphics.Color.rgb(
+            22,
+            163,
+            74
+        )
 
     val regular = Typeface.create(Typeface.SANS_SERIF, Typeface.NORMAL)
     val bold = Typeface.create(Typeface.SANS_SERIF, Typeface.BOLD)
@@ -3682,13 +4100,63 @@ private fun createMaterialsPdf(
         canvas.drawText("www.kmi.org.il", pageWidth - 66f, footerY + 31f, smallPaint)
     }
 
-    fun drawSummary(canvas: Canvas, top: Float): Float {
-        val total = items.size
-        val known = items.count { it.status == tr("יודע", "Known") }
-        val unknown = items.count { it.status == tr("לא יודע", "Unknown") }
-        val excluded = items.count { it.isExcluded }
-        val favorites = items.count { it.isFavorite }
-        val notes = items.count { it.hasNote }
+    fun drawSummary(
+        canvas: Canvas,
+        top: Float
+    ): Float {
+        val total =
+            items.size
+
+        val known =
+            items.count {
+                it.status ==
+                        tr(
+                            "יודע",
+                            "Known"
+                        )
+            }
+
+        val partiallyKnown =
+            items.count {
+                it.status ==
+                        tr(
+                            "יודע חלקית",
+                            "Partially known"
+                        )
+            }
+
+        val unknown =
+            items.count {
+                it.status ==
+                        tr(
+                            "לא יודע",
+                            "Unknown"
+                        )
+            }
+
+        val unmarked =
+            items.count {
+                it.status ==
+                        tr(
+                            "לא סומן",
+                            "Not marked"
+                        )
+            }
+
+        val excluded =
+            items.count {
+                it.isExcluded
+            }
+
+        val favorites =
+            items.count {
+                it.isFavorite
+            }
+
+        val notes =
+            items.count {
+                it.hasNote
+            }
 
         drawRoundRect(canvas, margin, top, pageWidth - margin, top + 120f, lightBlue, 12f)
         drawRoundRect(
@@ -3713,20 +4181,50 @@ private fun createMaterialsPdf(
         )
 
         val stats = listOf(
-            total.toString() to tr("תרגילים", "Exercises"),
-            known.toString() to tr("יודע", "Known"),
-            unknown.toString() to tr("לא יודע", "Unknown"),
-            excluded.toString() to tr("מוחרגים", "Excluded"),
-            favorites.toString() to tr("מועדפים", "Favorites"),
-            notes.toString() to tr("הערות", "Notes")
+            total.toString() to
+                    tr("תרגילים", "Exercises"),
+
+            known.toString() to
+                    tr("יודע", "Known"),
+
+            partiallyKnown.toString() to
+                    tr("חלקית", "Partial"),
+
+            unknown.toString() to
+                    tr("לא יודע", "Unknown"),
+
+            unmarked.toString() to
+                    tr("לא סומן", "Unmarked"),
+
+            excluded.toString() to
+                    tr("מוחרגים", "Excluded"),
+
+            favorites.toString() to
+                    tr("מועדפים", "Favorites"),
+
+            notes.toString() to
+                    tr("הערות", "Notes")
         )
 
-        val boxTop = top + 48f
-        val boxW = (pageWidth - margin * 2f - 30f) / 3f
+        val boxTop =
+            top + 48f
 
-        stats.forEachIndexed { index, pair ->
-            val row = index / 3
-            val col = index % 3
+        val boxW =
+            (
+                    pageWidth -
+                            margin * 2f -
+                            30f
+                    ) / 4f
+
+        stats.forEachIndexed {
+                index,
+                pair ->
+
+            val row =
+                index / 4
+
+            val col =
+                index % 4
             val left = margin + 15f + col * boxW
             val cardTop = boxTop + row * 34f
             val right = left + boxW - 8f
@@ -3743,9 +4241,30 @@ private fun createMaterialsPdf(
                 stroke = true
             )
 
-            boldValuePaint.textAlign = Paint.Align.CENTER
-            boldValuePaint.color = navy
-            canvas.drawText(pair.first, (left + right) / 2f, cardTop + 12f, boldValuePaint)
+            boldValuePaint.textAlign =
+                Paint.Align.CENTER
+
+            boldValuePaint.color =
+                when (index) {
+                    1 ->
+                        green
+
+                    2 ->
+                        orange
+
+                    3 ->
+                        red
+
+                    else ->
+                        navy
+                }
+
+            canvas.drawText(
+                pair.first,
+                (left + right) / 2f,
+                cardTop + 12f,
+                boldValuePaint
+            )
 
             smallPaint.textAlign = Paint.Align.CENTER
             smallPaint.color = textMuted
@@ -3776,11 +4295,29 @@ private fun createMaterialsPdf(
         )
         drawRoundRect(canvas, left, top, right, bottom, borderBlue, 12f, stroke = true)
 
-        val statusColor = when (item.status) {
-            tr("יודע", "Known") -> green
-            tr("לא יודע", "Unknown") -> red
-            else -> textMuted
-        }
+        val statusColor =
+            when (item.status) {
+                tr(
+                    "יודע",
+                    "Known"
+                ) ->
+                    green
+
+                tr(
+                    "יודע חלקית",
+                    "Partially known"
+                ) ->
+                    orange
+
+                tr(
+                    "לא יודע",
+                    "Unknown"
+                ) ->
+                    red
+
+                else ->
+                    textMuted
+            }
 
         val numberRect = RectF(right - 54f, top + 18f, right - 22f, top + 50f)
         canvas.drawRoundRect(numberRect, 999f, 999f, Paint(Paint.ANTI_ALIAS_FLAG).apply {
@@ -4022,195 +4559,94 @@ private fun MaterialsTopStatChip(
 }
 
 @Composable
-internal fun CoachMaterialStatusSelector(
-    progress: CoachMaterialProgress,
+private fun TraineeMaterialStatusSelector(
+    selectedStatus: TraineeMaterialStatus?,
+    dateText: String,
     isEnglish: Boolean,
-    excluded: Boolean = false,
-    isFav: Boolean = false,
-    hasNote: Boolean = false,
-    onToggleExclude: () -> Unit = {},
-    onInfo: () -> Unit,
-    onToggleFavorite: () -> Unit = {},
-    onEditNote: () -> Unit = {},
-    onSelect: (CoachMaterialStatus) -> Unit
+    onSelect: (
+        TraineeMaterialStatus?
+    ) -> Unit
 ) {
-    val context = LocalContext.current
-
-    val statuses = listOf(
-        CoachMaterialStatus.TAUGHT,
-        CoachMaterialStatus.PRACTICED,
-        CoachMaterialStatus.NEEDS_REINFORCEMENT
-    )
-
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(
-                horizontal = 8.dp,
-                vertical = 2.dp
-            ),
-        horizontalArrangement =
-            Arrangement.SpaceEvenly,
-        verticalAlignment =
-            Alignment.Top
-    ) {
-
-        Column(
-            modifier = Modifier.weight(1f),
-            horizontalAlignment =
-                Alignment.CenterHorizontally
-        ) {
-            ItemFloatingActions(
-                isEnglish = isEnglish,
-                excluded = excluded,
-                isFav = isFav,
-                hasNote = hasNote,
-                onToggleExclude = onToggleExclude,
-                onInfo = onInfo,
-                onToggleFavorite = onToggleFavorite,
-                onEditNote = onEditNote
-            )
-
-            Spacer(
-                Modifier.height(2.dp)
-            )
-
-            Text(
-                text =
-                    if (isEnglish) {
-                        "Info"
-                    } else {
-                        "מידע"
-                    },
-                style =
-                    KmiTypography.caption.copy(
-                        fontWeight =
-                            FontWeight.SemiBold
-                    ),
-                color =
-                    Color(0xFF1976D2),
-                textAlign =
-                    TextAlign.Center,
-                maxLines = 1
-            )
-        }
-
-        Box(
-            modifier = Modifier
-                .width(3.dp)
-                .height(58.dp)
-                .background(
-                    Color(0xFFE53935)
-                )
+    val statuses =
+        listOf(
+            TraineeMaterialStatus.KNOWN,
+            TraineeMaterialStatus.PARTIALLY_KNOWN,
+            TraineeMaterialStatus.UNKNOWN
         )
 
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement =
+            Arrangement.SpaceEvenly,
+        verticalAlignment = Alignment.Top
+    ) {
         statuses.forEach { status ->
-
             val isSelected =
-                progress.isSelected(status)
+                selectedStatus == status
 
             val activeColor =
                 when (status) {
-                    CoachMaterialStatus.TAUGHT ->
+                    TraineeMaterialStatus.KNOWN ->
                         Color(0xFF2F9B4E)
 
-                    CoachMaterialStatus.PRACTICED ->
-                        Color(0xFF6D4BD8)
-
-                    CoachMaterialStatus.NEEDS_REINFORCEMENT ->
+                    TraineeMaterialStatus.PARTIALLY_KNOWN ->
                         Color(0xFFF28C28)
 
-                    CoachMaterialStatus.NOT_TAUGHT ->
-                        Color(0xFF8A939D)
+                    TraineeMaterialStatus.UNKNOWN ->
+                        Color(0xFFC62828)
                 }
 
             val symbol =
                 when (status) {
-                    CoachMaterialStatus.TAUGHT ->
+                    TraineeMaterialStatus.KNOWN ->
                         "✓"
 
-                    CoachMaterialStatus.PRACTICED ->
-                        "↻"
+                    TraineeMaterialStatus.PARTIALLY_KNOWN ->
+                        "◐"
 
-                    CoachMaterialStatus.NEEDS_REINFORCEMENT ->
-                        "!"
-
-                    CoachMaterialStatus.NOT_TAUGHT ->
-                        "—"
+                    TraineeMaterialStatus.UNKNOWN ->
+                        "×"
                 }
 
             val label =
                 when (status) {
-                    CoachMaterialStatus.TAUGHT ->
+                    TraineeMaterialStatus.KNOWN ->
                         if (isEnglish) {
-                            "Taught"
+                            "Known"
                         } else {
-                            "נלמד"
+                            "יודע"
                         }
 
-                    CoachMaterialStatus.PRACTICED ->
+                    TraineeMaterialStatus.PARTIALLY_KNOWN ->
                         if (isEnglish) {
-                            "Practiced"
+                            "Partly"
                         } else {
-                            "תורגל"
+                            "חלקית"
                         }
 
-                    CoachMaterialStatus.NEEDS_REINFORCEMENT ->
+                    TraineeMaterialStatus.UNKNOWN ->
                         if (isEnglish) {
-                            "Reinforce"
+                            "Unknown"
                         } else {
-                            "חיזוק"
-                        }
-
-                    CoachMaterialStatus.NOT_TAUGHT ->
-                        if (isEnglish) {
-                            "Not taught"
-                        } else {
-                            "לא נלמד"
+                            "לא יודע"
                         }
                 }
-
-            val updatedAt =
-                progress.updatedAtFor(status)
-
-            val dateText =
-                if (
-                    isSelected &&
-                    updatedAt > 0L
-                ) {
-                    SimpleDateFormat(
-                        "dd/MM/yy",
-                        Locale.getDefault()
-                    ).format(
-                        Date(updatedAt)
-                    )
-                } else {
-                    ""
-                }
-
-            val canSelect =
-                isSelected ||
-                        progress.selectedStatuses.size < 2
 
             Column(
                 modifier = Modifier
                     .weight(1f)
                     .clickable {
-                        if (canSelect) {
-                            onSelect(status)
-                        } else {
-                            Toast
-                                .makeText(
-                                    context,
-                                    if (isEnglish) {
-                                        "You can select up to 2 statuses."
-                                    } else {
-                                        "ניתן לבחור עד 2 סטטוסים."
-                                    },
-                                    Toast.LENGTH_SHORT
-                                )
-                                .show()
-                        }
+                        /*
+                         * לחיצה נוספת על המצב המסומן
+                         * מחזירה את התרגיל ללא מסומן.
+                         */
+                        onSelect(
+                            if (isSelected) {
+                                null
+                            } else {
+                                status
+                            }
+                        )
                     },
                 horizontalAlignment =
                     Alignment.CenterHorizontally
@@ -4230,12 +4666,14 @@ internal fun CoachMaterialStatusSelector(
                         } else {
                             0.dp
                         },
+                    tonalElevation = 0.dp,
                     border = BorderStroke(
                         width = 1.dp,
                         color =
                             if (isSelected) {
-                                Color.White
-                                    .copy(alpha = 0.38f)
+                                Color.White.copy(
+                                    alpha = 0.38f
+                                )
                             } else {
                                 MaterialTheme
                                     .colorScheme
@@ -4248,10 +4686,8 @@ internal fun CoachMaterialStatusSelector(
                     )
                 ) {
                     Box(
-                        modifier =
-                            Modifier.fillMaxSize(),
-                        contentAlignment =
-                            Alignment.Center
+                        modifier = Modifier.fillMaxSize(),
+                        contentAlignment = Alignment.Center
                     ) {
                         Text(
                             text = symbol,
@@ -4269,8 +4705,7 @@ internal fun CoachMaterialStatusSelector(
                                         .onSurfaceVariant
                                         .copy(alpha = 0.62f)
                                 },
-                            textAlign =
-                                TextAlign.Center
+                            textAlign = TextAlign.Center
                         )
                     }
                 }
@@ -4299,15 +4734,18 @@ internal fun CoachMaterialStatusSelector(
                                 .onSurfaceVariant
                                 .copy(alpha = 0.65f)
                         },
-                    textAlign =
-                        TextAlign.Center,
+                    textAlign = TextAlign.Center,
                     maxLines = 1,
-                    overflow =
-                        TextOverflow.Ellipsis
+                    overflow = TextOverflow.Ellipsis
                 )
 
                 Text(
-                    text = dateText,
+                    text =
+                        if (isSelected) {
+                            dateText
+                        } else {
+                            ""
+                        },
                     style =
                         KmiTypography.caption.copy(
                             fontWeight =
@@ -4317,10 +4755,369 @@ internal fun CoachMaterialStatusSelector(
                         MaterialTheme
                             .colorScheme
                             .onSurfaceVariant,
-                    textAlign =
-                        TextAlign.Center,
+                    textAlign = TextAlign.Center,
                     maxLines = 1
                 )
+            }
+        }
+    }
+}
+
+@Composable
+internal fun CoachMaterialStatusSelector(
+    progress: CoachMaterialProgress,
+    isEnglish: Boolean,
+    excluded: Boolean = false,
+    isFav: Boolean = false,
+    hasNote: Boolean = false,
+    onToggleExclude: () -> Unit = {},
+    onInfo: () -> Unit,
+    onToggleFavorite: () -> Unit = {},
+    onEditNote: () -> Unit = {},
+    onSelect: (CoachMaterialStatus) -> Unit
+) {
+    val context = LocalContext.current
+
+    val statuses = listOf(
+        CoachMaterialStatus.TAUGHT,
+        CoachMaterialStatus.PRACTICED,
+        CoachMaterialStatus.NEEDS_REINFORCEMENT
+    )
+
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(IntrinsicSize.Min)
+            .padding(
+                horizontal = 8.dp,
+                vertical = 2.dp
+            ),
+        horizontalArrangement =
+            Arrangement.spacedBy(7.dp),
+        verticalAlignment =
+            Alignment.Top
+    ) {
+
+        /*
+         * פעולות המידע נמצאות בכרטיס נפרד,
+         * כדי להבדיל אותן ממצבי החומר של המאמן
+         * ללא צורך בקו אנכי.
+         */
+        Surface(
+            modifier = Modifier
+                .weight(0.82f)
+                .fillMaxHeight(),
+            shape = RoundedCornerShape(16.dp),
+            color =
+                Color(0xFF1976D2)
+                    .copy(alpha = 0.055f),
+            tonalElevation = 0.dp,
+            shadowElevation = 0.dp,
+            border = BorderStroke(
+                width = 1.dp,
+                color =
+                    Color(0xFF1976D2)
+                        .copy(alpha = 0.28f)
+            )
+        ) {
+            Column(
+                modifier = Modifier.padding(
+                    horizontal = 4.dp,
+                    vertical = 6.dp
+                ),
+                horizontalAlignment =
+                    Alignment.CenterHorizontally
+            ) {
+                ItemFloatingActions(
+                    isEnglish = isEnglish,
+                    excluded = excluded,
+                    isFav = isFav,
+                    hasNote = hasNote,
+                    onToggleExclude = onToggleExclude,
+                    onInfo = onInfo,
+                    onToggleFavorite = onToggleFavorite,
+                    onEditNote = onEditNote
+                )
+
+                Spacer(
+                    Modifier.height(2.dp)
+                )
+
+                Text(
+                    text =
+                        if (isEnglish) {
+                            "Info"
+                        } else {
+                            "מידע"
+                        },
+                    style =
+                        KmiTypography.caption.copy(
+                            fontWeight =
+                                FontWeight.SemiBold
+                        ),
+                    color = Color(0xFF1976D2),
+                    textAlign = TextAlign.Center,
+                    maxLines = 1
+                )
+            }
+        }
+
+        /*
+         * שלושת מצבי החומר מוצגים כקבוצה אחת
+         * בתוך מסגרת משותפת ועדינה.
+         */
+        Surface(
+            modifier = Modifier
+                .weight(3f)
+                .fillMaxHeight(),
+            shape = RoundedCornerShape(18.dp),
+            color =
+                MaterialTheme
+                    .colorScheme
+                    .surfaceVariant
+                    .copy(alpha = 0.32f),
+            tonalElevation = 0.dp,
+            shadowElevation = 0.dp,
+            border = BorderStroke(
+                width = 1.dp,
+                color =
+                    MaterialTheme
+                        .colorScheme
+                        .outline
+                        .copy(alpha = 0.22f)
+            )
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(
+                        horizontal = 4.dp,
+                        vertical = 6.dp
+                    ),
+                horizontalArrangement =
+                    Arrangement.SpaceEvenly,
+                verticalAlignment =
+                    Alignment.Top
+            ) {
+                statuses.forEach { status ->
+
+                    val isSelected =
+                        progress.isSelected(status)
+
+                    val activeColor =
+                        when (status) {
+                            CoachMaterialStatus.TAUGHT ->
+                                Color(0xFF2F9B4E)
+
+                            CoachMaterialStatus.PRACTICED ->
+                                Color(0xFF6D4BD8)
+
+                            CoachMaterialStatus.NEEDS_REINFORCEMENT ->
+                                Color(0xFFF28C28)
+
+                            CoachMaterialStatus.NOT_TAUGHT ->
+                                Color(0xFF8A939D)
+                        }
+
+                    val symbol =
+                        when (status) {
+                            CoachMaterialStatus.TAUGHT ->
+                                "✓"
+
+                            CoachMaterialStatus.PRACTICED ->
+                                "↻"
+
+                            CoachMaterialStatus.NEEDS_REINFORCEMENT ->
+                                "!"
+
+                            CoachMaterialStatus.NOT_TAUGHT ->
+                                "—"
+                        }
+
+                    val label =
+                        when (status) {
+                            CoachMaterialStatus.TAUGHT ->
+                                if (isEnglish) {
+                                    "Taught"
+                                } else {
+                                    "נלמד"
+                                }
+
+                            CoachMaterialStatus.PRACTICED ->
+                                if (isEnglish) {
+                                    "Practiced"
+                                } else {
+                                    "תורגל"
+                                }
+
+                            CoachMaterialStatus.NEEDS_REINFORCEMENT ->
+                                if (isEnglish) {
+                                    "Reinforce"
+                                } else {
+                                    "חיזוק"
+                                }
+
+                            CoachMaterialStatus.NOT_TAUGHT ->
+                                if (isEnglish) {
+                                    "Not taught"
+                                } else {
+                                    "לא נלמד"
+                                }
+                        }
+
+                    val updatedAt =
+                        progress.updatedAtFor(status)
+
+                    val dateText =
+                        if (
+                            isSelected &&
+                            updatedAt > 0L
+                        ) {
+                            SimpleDateFormat(
+                                "dd/MM/yy",
+                                Locale.getDefault()
+                            ).format(
+                                Date(updatedAt)
+                            )
+                        } else {
+                            ""
+                        }
+
+                    val canSelect =
+                        isSelected ||
+                                progress.selectedStatuses.size < 2
+
+                    Column(
+                        modifier = Modifier
+                            .weight(1f)
+                            .clickable {
+                                if (canSelect) {
+                                    onSelect(status)
+                                } else {
+                                    Toast
+                                        .makeText(
+                                            context,
+                                            if (isEnglish) {
+                                                "You can select up to 2 statuses."
+                                            } else {
+                                                "ניתן לבחור עד 2 סטטוסים."
+                                            },
+                                            Toast.LENGTH_SHORT
+                                        )
+                                        .show()
+                                }
+                            },
+                        horizontalAlignment =
+                            Alignment.CenterHorizontally
+                    ) {
+                        Surface(
+                            shape = CircleShape,
+                            color =
+                                if (isSelected) {
+                                    activeColor
+                                } else {
+                                    Color(0xFF8A939D)
+                                        .copy(alpha = 0.34f)
+                                },
+                            shadowElevation =
+                                if (isSelected) {
+                                    3.dp
+                                } else {
+                                    0.dp
+                                },
+                            border = BorderStroke(
+                                width = 1.dp,
+                                color =
+                                    if (isSelected) {
+                                        Color.White
+                                            .copy(alpha = 0.38f)
+                                    } else {
+                                        MaterialTheme
+                                            .colorScheme
+                                            .outline
+                                            .copy(alpha = 0.20f)
+                                    }
+                            ),
+                            modifier = Modifier.size(
+                                scaledIconSize(32.dp)
+                            )
+                        ) {
+                            Box(
+                                modifier =
+                                    Modifier.fillMaxSize(),
+                                contentAlignment =
+                                    Alignment.Center
+                            ) {
+                                Text(
+                                    text = symbol,
+                                    style =
+                                        KmiTypography.metric.copy(
+                                            fontWeight =
+                                                FontWeight.ExtraBold
+                                        ),
+                                    color =
+                                        if (isSelected) {
+                                            Color.White
+                                        } else {
+                                            MaterialTheme
+                                                .colorScheme
+                                                .onSurfaceVariant
+                                                .copy(alpha = 0.62f)
+                                        },
+                                    textAlign =
+                                        TextAlign.Center
+                                )
+                            }
+                        }
+
+                        Spacer(
+                            Modifier.height(2.dp)
+                        )
+
+                        Text(
+                            text = label,
+                            style =
+                                KmiTypography.caption.copy(
+                                    fontWeight =
+                                        if (isSelected) {
+                                            FontWeight.ExtraBold
+                                        } else {
+                                            FontWeight.SemiBold
+                                        }
+                                ),
+                            color =
+                                if (isSelected) {
+                                    activeColor
+                                } else {
+                                    MaterialTheme
+                                        .colorScheme
+                                        .onSurfaceVariant
+                                        .copy(alpha = 0.65f)
+                                },
+                            textAlign =
+                                TextAlign.Center,
+                            maxLines = 1,
+                            overflow =
+                                TextOverflow.Ellipsis
+                        )
+
+                        Text(
+                            text = dateText,
+                            style =
+                                KmiTypography.caption.copy(
+                                    fontWeight =
+                                        FontWeight.Medium
+                                ),
+                            color =
+                                MaterialTheme
+                                    .colorScheme
+                                    .onSurfaceVariant,
+                            textAlign =
+                                TextAlign.Center,
+                            maxLines = 1
+                        )
+                    }
+                }
             }
         }
     }
