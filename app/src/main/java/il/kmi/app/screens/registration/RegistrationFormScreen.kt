@@ -639,7 +639,7 @@ fun RegistrationFormScreen(
         }
     }
 
-    // קבוצות נבחרות (עד 3)
+    // קבוצות נבחרות — רשימה שטוחה לתאימות לאחור.
     val selectedGroups = rememberSaveable(
         saver = listSaver(
             save = { it.toList() },
@@ -658,6 +658,20 @@ fun RegistrationFormScreen(
         mutableStateListOf<String>().apply {
             addAll(saved)
         }
+    }
+
+    /*
+     * מקור האמת החדש:
+     * רשימת קבוצות נפרדת לכל סניף.
+     */
+    val selectedGroupsByBranch =
+        remember {
+            mutableStateMapOf<String, List<String>>()
+        }
+
+    var didInitializeBranchAssignments by
+    rememberSaveable {
+        mutableStateOf(false)
     }
 
     // ✅ שמירה אוטומטית של activeBranch/activeGroup
@@ -710,21 +724,172 @@ fun RegistrationFormScreen(
         TrainingCatalog.branchesByRegion + fromDatabase
     }
 
-    val groupsByBranch: Map<String, List<String>> = remember(databaseBranches) {
-        val merged = TrainingCatalog.ageGroupsByBranch.toMutableMap()
+    val groupsByBranch: Map<String, List<String>> =
+        remember(databaseBranches) {
+            val merged =
+                TrainingCatalog
+                    .ageGroupsByBranch
+                    .toMutableMap()
 
-        databaseBranches.forEach { branch ->
-            val dbGroups = branch.trainingDays
-                .map { it.groupHe }
-                .filter { it.isNotBlank() }
-                .distinct()
+            databaseBranches.forEach { branch ->
+                val dbGroups =
+                    branch.trainingDays
+                        .map { trainingDay ->
+                            trainingDay.groupHe.trim()
+                        }
+                        .filter { group ->
+                            group.isNotBlank()
+                        }
+                        .distinct()
 
-            if (dbGroups.isNotEmpty()) {
-                merged[branch.nameHe] = dbGroups
+                if (dbGroups.isNotEmpty()) {
+                    merged[branch.nameHe] = dbGroups
+                }
             }
+
+            merged
         }
 
-        merged
+    /*
+     * טוענים את המבנה החדש.
+     *
+     * למשתמש ותיק שאין לו עדיין את השדה החדש,
+     * ממירים את רשימות הסניפים והקבוצות הישנות
+     * לשיוכים לפי הקטלוג, ללא תנאים קשיחים.
+     */
+    LaunchedEffect(
+        selectedBranches.toList(),
+        groupsByBranch
+    ) {
+        fun String.normalizedAssignmentValue(): String =
+            trim()
+                .replace('־', '-')
+                .replace('–', '-')
+                .replace('—', '-')
+                .replace(Regex("\\s+"), " ")
+
+        fun groupsForSelectedBranch(
+            branch: String
+        ): List<String> {
+            val normalizedBranch =
+                branch.normalizedAssignmentValue()
+
+            return groupsByBranch.entries
+                .firstOrNull { entry ->
+                    entry.key
+                        .normalizedAssignmentValue() ==
+                            normalizedBranch
+                }
+                ?.value
+                .orEmpty()
+                .map { group ->
+                    group.trim()
+                }
+                .filter { group ->
+                    group.isNotBlank()
+                }
+                .distinct()
+        }
+
+        if (!didInitializeBranchAssignments) {
+            val savedAssignments =
+                CoachBranchAssignmentsCodec.decode(
+                    sp.getString(
+                        "coach_branch_assignments_json",
+                        ""
+                    )
+                )
+
+            if (savedAssignments.isNotEmpty()) {
+                selectedGroupsByBranch.clear()
+
+                savedAssignments
+                    .filter { assignment ->
+                        assignment.branch in
+                                selectedBranches
+                    }
+                    .forEach { assignment ->
+                        selectedGroupsByBranch[
+                            assignment.branch
+                        ] = assignment.groups
+                    }
+            } else {
+                /*
+                 * המרה חד-פעמית מהמבנה הישן.
+                 * הנרמול משמש רק לבדיקת התאמה;
+                 * שמות הקבוצות המקוריים נשמרים.
+                 */
+                selectedGroupsByBranch.clear()
+
+                selectedBranches.forEach { branch ->
+                    val branchGroups =
+                        groupsForSelectedBranch(branch)
+
+                    val matchingLegacyGroups =
+                        selectedGroups.filter {
+                                selectedGroup ->
+
+                            val normalizedSelected =
+                                TrainingCatalog
+                                    .normalizeGroupName(
+                                        selectedGroup
+                                    )
+                                    .normalizedAssignmentValue()
+
+                            branchGroups.any {
+                                    branchGroup ->
+
+                                TrainingCatalog
+                                    .normalizeGroupName(
+                                        branchGroup
+                                    )
+                                    .normalizedAssignmentValue() ==
+                                        normalizedSelected
+                            }
+                        }
+                            .map { group ->
+                                group.trim()
+                            }
+                            .filter { group ->
+                                group.isNotBlank()
+                            }
+                            .distinct()
+
+                    selectedGroupsByBranch[branch] =
+                        matchingLegacyGroups
+                }
+            }
+
+            didInitializeBranchAssignments = true
+        }
+
+        /*
+         * הסרת שיוכים של סניפים שבוטלו.
+         */
+        selectedGroupsByBranch.keys
+            .toList()
+            .filterNot { branch ->
+                branch in selectedBranches
+            }
+            .forEach { removedBranch ->
+                selectedGroupsByBranch.remove(
+                    removedBranch
+                )
+            }
+
+        /*
+         * סניף חדש מתחיל ללא קבוצות נבחרות.
+         */
+        selectedBranches.forEach { branch ->
+            if (
+                !selectedGroupsByBranch.containsKey(
+                    branch
+                )
+            ) {
+                selectedGroupsByBranch[branch] =
+                    emptyList()
+            }
+        }
     }
 
     // חגורה
@@ -843,8 +1008,24 @@ fun RegistrationFormScreen(
             branchError = true; valid = false
         }
 
-        // ✅ אם זה חו״ל – לא דורשים קבוצות
-        if (branchType != "abroad" && selectedGroups.isEmpty()) {
+        /*
+         * בארץ חובה לבחור לפחות קבוצה אחת
+         * עבור כל סניף שנבחר.
+         */
+        val hasBranchWithoutGroups =
+            selectedBranches.any { branch ->
+                selectedGroupsByBranch[
+                    branch
+                ].isNullOrEmpty()
+            }
+
+        if (
+            branchType != "abroad" &&
+            (
+                    selectedGroups.isEmpty() ||
+                            hasBranchWithoutGroups
+                    )
+        ) {
             groupError = true
             valid = false
         }
@@ -951,21 +1132,89 @@ fun RegistrationFormScreen(
                     .distinct()
             }
 
-        val groupsListFinalForPrefs: List<String> =
-            if (selectedGroups.isNotEmpty()) {
-                selectedGroups.map { it.trim() }.filter { it.isNotBlank() }.distinct()
-            } else {
-                selectedGroup
-                    .split(',', ';', '|', '\n')
-                    .map { it.trim() }
-                    .filter { it.isNotBlank() }
-                    .distinct()
-            }
+        /*
+         * מקור האמת החדש: קבוצות לפי סניף.
+         * סדר הסניפים נשמר לפי הבחירה במסך.
+         */
+        val branchAssignmentsFinal =
+            branchesListFinalForPrefs
+                .take(10)
+                .map { branch ->
+                    CoachBranchAssignment(
+                        branch = branch,
+                        groups =
+                            selectedGroupsByBranch[
+                                branch
+                            ]
+                                .orEmpty()
+                                .map { group ->
+                                    group.trim()
+                                }
+                                .filter { group ->
+                                    group.isNotBlank()
+                                }
+                                .distinct()
+                    ).sanitized()
+                }
 
-        val branchesJson = org.json.JSONArray(branchesListFinalForPrefs).toString()
-        val groupsJson = org.json.JSONArray(groupsListFinalForPrefs).toString()
+        /*
+         * הרשימה השטוחה נשמרת לתאימות עם
+         * מסכים שטרם הוסבו למבנה החדש.
+         */
+        val groupsListFinalForPrefs:
+                List<String> =
+            CoachBranchAssignmentsCodec
+                .flattenGroups(
+                    branchAssignmentsFinal
+                )
+                .ifEmpty {
+                    if (
+                        selectedGroups.isNotEmpty()
+                    ) {
+                        selectedGroups
+                            .map { group ->
+                                group.trim()
+                            }
+                            .filter { group ->
+                                group.isNotBlank()
+                            }
+                            .distinct()
+                    } else {
+                        selectedGroup
+                            .split(
+                                ',',
+                                ';',
+                                '|',
+                                '\n'
+                            )
+                            .map { group ->
+                                group.trim()
+                            }
+                            .filter { group ->
+                                group.isNotBlank()
+                            }
+                            .distinct()
+                    }
+                }
 
-        val groupsCsv = groupsListFinalForPrefs.joinToString(", ")
+        val branchAssignmentsJson =
+            CoachBranchAssignmentsCodec.encode(
+                branchAssignmentsFinal
+            )
+
+        val branchesJson =
+            org.json.JSONArray(
+                branchesListFinalForPrefs
+            ).toString()
+
+        val groupsJson =
+            org.json.JSONArray(
+                groupsListFinalForPrefs
+            ).toString()
+
+        val groupsCsv =
+            groupsListFinalForPrefs
+                .joinToString(", ")
         val primaryGroup = groupsListFinalForPrefs.firstOrNull() ?: ""
         val regionsListFinalForPrefs =
             selectedRegions
@@ -992,10 +1241,29 @@ fun RegistrationFormScreen(
                 ?: branchesListFinalForPrefs.firstOrNull()
                 ?: "").trim()
 
+        /*
+         * קבוצה פעילה חייבת להשתייך לסניף
+         * הפעיל ולא רק להופיע ברשימה הכללית.
+         */
+        val activeBranchGroups =
+            branchAssignmentsFinal
+                .firstOrNull { assignment ->
+                    assignment.branch ==
+                            activeBranchFinal
+                }
+                ?.groups
+                .orEmpty()
+
         val activeGroupFinal =
-            (activeGroup.takeIf { it.isNotBlank() && it in groupsListFinalForPrefs }
-                ?: groupsListFinalForPrefs.firstOrNull()
-                ?: "").trim()
+            (
+                    activeGroup.takeIf { group ->
+                        group.isNotBlank() &&
+                                group in activeBranchGroups
+                    }
+                        ?: activeBranchGroups
+                            .firstOrNull()
+                        ?: ""
+                    ).trim()
 
         // ✅ branchesFinal תמיד עקבי מול מקור האמת הרשימתי
         val branchesFinal = branchesListFinalForPrefs.joinToString(", ")
@@ -1036,7 +1304,19 @@ fun RegistrationFormScreen(
             .putString("selected_groups", groupsCsv)
             .putString("age_group", primaryGroup)
             .putString("group", primaryGroup)
-            .putString("active_group", activeGroupFinal)
+            .putString(
+                "active_group",
+                activeGroupFinal
+            )
+
+            /*
+             * מקור האמת החדש לקשר בין
+             * סניפים לקבוצות.
+             */
+            .putString(
+                "coach_branch_assignments_json",
+                branchAssignmentsJson
+            )
 
             .putString("username", if (isGoogleAuth) email.trim() else username)
             .putString("authProvider", if (isGoogleAuth) "google" else "local")
@@ -1061,7 +1341,7 @@ fun RegistrationFormScreen(
             .putBoolean("profile_completed", true)
             .putBoolean("registration_complete", true)
             .putBoolean("registration_form_completed", true)
-            .putInt("registration_schema_version", 2)
+            .putInt("registration_schema_version", 3)
             .putString("profile_completed_uid", completedUid)
             .putLong("profile_completed_at", completedAt)
             // תאריך לידה
@@ -1116,7 +1396,14 @@ fun RegistrationFormScreen(
             putString("selected_groups", groupsCsv)
             putString("age_group", primaryGroup)
             putString("group", primaryGroup)
-            putString("active_group", activeGroupFinal)
+            putString(
+                "active_group",
+                activeGroupFinal
+            )
+            putString(
+                "coach_branch_assignments_json",
+                branchAssignmentsJson
+            )
             putString("birth_day", birthDay.toString())
             putString("birth_month", birthMonth.toString())
             putString("birth_year", birthYear.toString())
@@ -1125,7 +1412,7 @@ fun RegistrationFormScreen(
             putBoolean("profile_completed", true)
             putBoolean("registration_complete", true)
             putBoolean("registration_form_completed", true)
-            putInt("registration_schema_version", 2)
+            putInt("registration_schema_version", 3)
             putString("profile_completed_uid", completedUid)
             putLong("profile_completed_at", completedAt)
 
@@ -1187,12 +1474,25 @@ fun RegistrationFormScreen(
                 "activeBranch" to activeBranchFinal,
                 "branch" to activeBranchFinal,
 
+                /*
+                 * הרשימה השטוחה נשמרת לתאימות.
+                 */
                 "groups" to groupsListFinal,
                 "groupsCsv" to groupsCsv,
                 "primaryGroup" to primaryGroup,
                 "activeGroup" to activeGroupFinal,
                 "group" to activeGroupFinal,
                 "age_group" to activeGroupFinal,
+
+                /*
+                 * מקור האמת החדש:
+                 * כל סניף והקבוצות שלו.
+                 */
+                "coachBranchAssignments" to
+                        CoachBranchAssignmentsCodec
+                            .toFirestoreList(
+                                branchAssignmentsFinal
+                            ),
 
                 "birthDate" to birthDate,
                 "gender" to gender,
@@ -1204,8 +1504,9 @@ fun RegistrationFormScreen(
                 "profileCompletedAt" to System.currentTimeMillis(),
 
                 "registrationFormCompleted" to true,
-                "registrationSchemaVersion" to 2,
-                "registrationCompletedBy" to "registration_form_v2",
+                "registrationSchemaVersion" to 3,
+                "registrationCompletedBy" to
+                        "registration_form_v3_branch_assignments",
 
                 "subscribeSms" to subscribeSms,
                 "isActive" to true,
@@ -1624,22 +1925,98 @@ fun RegistrationFormScreen(
                 },
                 selectedGroups = selectedGroups,
                 onGroupsChange = { list ->
-                    val clean = list
-                        .map { it.trim() }
-                        .filter { it.isNotBlank() }
-                        .distinct()
+                    val clean =
+                        list
+                            .map { group ->
+                                group.trim()
+                            }
+                            .filter { group ->
+                                group.isNotBlank()
+                            }
+                            .distinct()
 
                     selectedGroups.clear()
                     selectedGroups.addAll(clean)
 
-                    selectedGroup = clean.joinToString(", ")
+                    selectedGroup =
+                        clean.joinToString(", ")
 
-                    if (activeGroup.isBlank() || activeGroup !in clean) {
-                        activeGroup = clean.firstOrNull().orEmpty()
+                    if (
+                        activeGroup.isBlank() ||
+                        activeGroup !in clean
+                    ) {
+                        activeGroup =
+                            clean.firstOrNull()
+                                .orEmpty()
                     }
 
                     groupError = clean.isEmpty()
                 },
+
+                selectedGroupsByBranch =
+                    selectedGroupsByBranch.toMap(),
+
+                onGroupsByBranchChange = {
+                        updatedAssignments ->
+
+                    selectedGroupsByBranch.clear()
+
+                    updatedAssignments.forEach {
+                            (branch, groups) ->
+
+                        selectedGroupsByBranch[branch] =
+                            groups
+                                .map { group ->
+                                    group.trim()
+                                }
+                                .filter { group ->
+                                    group.isNotBlank()
+                                }
+                                .distinct()
+                    }
+
+                    /*
+                     * מעדכנים גם את הרשימה הישנה
+                     * לצורך המסכים שטרם הוסבו.
+                     */
+                    val flattenedGroups =
+                        selectedBranches
+                            .flatMap { branch ->
+                                selectedGroupsByBranch[
+                                    branch
+                                ].orEmpty()
+                            }
+                            .distinct()
+
+                    selectedGroups.clear()
+                    selectedGroups.addAll(
+                        flattenedGroups
+                    )
+
+                    selectedGroup =
+                        flattenedGroups
+                            .joinToString(", ")
+
+                    if (
+                        activeGroup.isBlank() ||
+                        activeGroup !in
+                        flattenedGroups
+                    ) {
+                        activeGroup =
+                            flattenedGroups
+                                .firstOrNull()
+                                .orEmpty()
+                    }
+
+                    groupError =
+                        selectedBranches.any {
+                                branch ->
+                            selectedGroupsByBranch[
+                                branch
+                            ].isNullOrEmpty()
+                        }
+                },
+
                 regionError = regionError,
                 branchError = branchError,
                 groupError = groupError,

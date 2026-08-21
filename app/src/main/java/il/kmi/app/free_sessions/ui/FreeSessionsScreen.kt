@@ -5,9 +5,15 @@ import android.content.SharedPreferences
 import android.location.Geocoder
 import android.util.Log
 import android.widget.Toast
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.ExperimentalFoundationApi
@@ -76,13 +82,15 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import il.kmi.app.ui.KmiTopBar
 import il.kmi.app.ui.calendar.KmiCalendarPickerDialog
 import il.kmi.shared.localization.AppLanguage
@@ -122,22 +130,122 @@ import com.google.android.libraries.places.api.model.Place
 import com.google.android.libraries.places.api.net.FetchPlaceRequest
 import com.google.android.libraries.places.api.net.FindAutocompletePredictionsRequest
 import il.kmi.app.R
-
+import il.kmi.app.screens.registration.CoachBranchAssignmentsCodec
+import il.kmi.app.privacy.TraineeDisplayNameMapper
+import il.kmi.app.ui.KmiTypography
 
 //========================================================================
 
 private const val FREE_SESSIONS_DEBUG = "KMI_FREE_SESSIONS"
 
-private val KmiFreeBgTop = Color(0xFFF8FBFF)
-private val KmiFreeBgMid = Color(0xFFEAF4FF)
-private val KmiFreeBgBottom = Color(0xFF0EA5D7)
-private val KmiFreeCardColor = Color(0xFFF7FBFF)
-private val KmiFreeCardColorSoft = Color(0xFFFFFFFF)
-private val KmiFreeBorderColor = Color(0xFFBFD7EF)
-private val KmiFreeBorderColorStrong = Color(0xFF0EA5D7)
-private val KmiFreeTitleColor = Color(0xFF0F172A)
-private val KmiFreeTextColor = Color(0xFF111827)
-private val KmiFreeSubTextColor = Color(0xFF64748B)
+@Composable
+private fun freeSessionsIsDarkMode(): Boolean {
+    return MaterialTheme
+        .colorScheme
+        .background
+        .luminance() < 0.5f
+}
+
+private val KmiFreeBgTop: Color
+    @Composable
+    get() =
+        if (freeSessionsIsDarkMode()) {
+            MaterialTheme
+                .colorScheme
+                .background
+        } else {
+            Color(0xFFF8FBFF)
+        }
+
+private val KmiFreeBgMid: Color
+    @Composable
+    get() =
+        if (freeSessionsIsDarkMode()) {
+            MaterialTheme
+                .colorScheme
+                .surface
+        } else {
+            Color(0xFFEAF4FF)
+        }
+
+private val KmiFreeBgBottom: Color
+    @Composable
+    get() =
+        if (freeSessionsIsDarkMode()) {
+            Color(0xFF041E33)
+        } else {
+            Color(0xFF0EA5D7)
+        }
+
+private val KmiFreeCardColor: Color
+    @Composable
+    get() =
+        if (freeSessionsIsDarkMode()) {
+            Color(0xFF172534)
+        } else {
+            Color(0xFFF7FBFF)
+        }
+
+private val KmiFreeCardColorSoft: Color
+    @Composable
+    get() =
+        if (freeSessionsIsDarkMode()) {
+            Color(0xFF1D2C3A)
+        } else {
+            Color(0xFFFFFFFF)
+        }
+
+private val KmiFreeBorderColor: Color
+    @Composable
+    get() =
+        if (freeSessionsIsDarkMode()) {
+            Color(0xFF60A5FA)
+                .copy(alpha = 0.38f)
+        } else {
+            Color(0xFFBFD7EF)
+        }
+
+private val KmiFreeBorderColorStrong: Color
+    @Composable
+    get() =
+        if (freeSessionsIsDarkMode()) {
+            Color(0xFF38BDF8)
+        } else {
+            Color(0xFF0EA5D7)
+        }
+
+private val KmiFreeTitleColor: Color
+    @Composable
+    get() =
+        if (freeSessionsIsDarkMode()) {
+            MaterialTheme
+                .colorScheme
+                .onSurface
+        } else {
+            Color(0xFF0F172A)
+        }
+
+private val KmiFreeTextColor: Color
+    @Composable
+    get() =
+        if (freeSessionsIsDarkMode()) {
+            MaterialTheme
+                .colorScheme
+                .onSurface
+        } else {
+            Color(0xFF111827)
+        }
+
+private val KmiFreeSubTextColor: Color
+    @Composable
+    get() =
+        if (freeSessionsIsDarkMode()) {
+            MaterialTheme
+                .colorScheme
+                .onSurfaceVariant
+        } else {
+            Color(0xFF64748B)
+        }
 
 private data class FreeSessionPlaceSuggestion(
     val name: String,
@@ -154,6 +262,161 @@ private data class FreeSessionBranchUser(
     val phone: String,
     val mergeKey: String
 )
+
+@Composable
+private fun FreeSessionsPremiumLoading(
+    text: String,
+    modifier: Modifier = Modifier,
+    size: Dp = 64.dp,
+    textColor: Color? = null
+) {
+    val resolvedTextColor =
+        textColor
+            ?: KmiFreeSubTextColor
+    val transition =
+        rememberInfiniteTransition(
+            label = "freeSessionsLoading"
+        )
+
+    val outerRotation by transition.animateFloat(
+        initialValue = 0f,
+        targetValue = 360f,
+        animationSpec =
+            infiniteRepeatable(
+                animation =
+                    tween(
+                        durationMillis = 1_250,
+                        easing = LinearEasing
+                    )
+            ),
+        label = "freeSessionsOuterRing"
+    )
+
+    val innerRotation by transition.animateFloat(
+        initialValue = 360f,
+        targetValue = 0f,
+        animationSpec =
+            infiniteRepeatable(
+                animation =
+                    tween(
+                        durationMillis = 1_750,
+                        easing = LinearEasing
+                    )
+            ),
+        label = "freeSessionsInnerRing"
+    )
+
+    Column(
+        modifier =
+            modifier
+                .fillMaxWidth()
+                .padding(
+                    horizontal = 14.dp,
+                    vertical = 14.dp
+                ),
+        horizontalAlignment =
+            Alignment.CenterHorizontally,
+        verticalArrangement =
+            Arrangement.spacedBy(10.dp)
+    ) {
+        Box(
+            modifier =
+                Modifier.size(size),
+            contentAlignment =
+                Alignment.Center
+        ) {
+            Box(
+                modifier =
+                    Modifier
+                        .size(size)
+                        .graphicsLayer {
+                            rotationZ =
+                                outerRotation
+                        }
+                        .border(
+                            width = 4.dp,
+                            brush =
+                                Brush.sweepGradient(
+                                    listOf(
+                                        Color.Transparent,
+                                        Color(0xFFA855F7),
+                                        Color(0xFF38BDF8),
+                                        Color.Transparent
+                                    )
+                                ),
+                            shape = CircleShape
+                        )
+            )
+
+            Box(
+                modifier =
+                    Modifier
+                        .size(size * 0.68f)
+                        .graphicsLayer {
+                            rotationZ =
+                                innerRotation
+                        }
+                        .border(
+                            width = 3.dp,
+                            brush =
+                                Brush.sweepGradient(
+                                    listOf(
+                                        Color.Transparent,
+                                        Color(0xFFF59E0B),
+                                        Color(0xFF22C55E),
+                                        Color.Transparent
+                                    )
+                                ),
+                            shape = CircleShape
+                        )
+            )
+
+            Box(
+                modifier =
+                    Modifier
+                        .size(size * 0.25f)
+                        .background(
+                            color =
+                                if (
+                                    freeSessionsIsDarkMode()
+                                ) {
+                                    MaterialTheme
+                                        .colorScheme
+                                        .surface
+                                } else {
+                                    Color.White.copy(
+                                        alpha = 0.94f
+                                    )
+                                },
+                            shape = CircleShape
+                        )
+                        .border(
+                            width = 1.dp,
+                            color =
+                                Color(0xFFA78BFA)
+                                    .copy(
+                                        alpha = 0.55f
+                                    ),
+                            shape = CircleShape
+                        )
+            )
+        }
+
+        Text(
+            text = text,
+            color =
+                resolvedTextColor,
+            style =
+                KmiTypography.secondary,
+            fontWeight =
+                FontWeight.Bold,
+            textAlign =
+                TextAlign.Center,
+            modifier =
+                Modifier.fillMaxWidth()
+        )
+    }
+}
 
 private fun readFreeSessionPrefsList(
     sp: SharedPreferences,
@@ -201,13 +464,33 @@ private fun readFreeSessionPrefsList(
         .distinct()
 }
 
-private fun normalizeFreeSessionText(raw: String): String {
-    return raw.trim()
-        .replace('־', '-')
-        .replace('–', '-')
-        .replace('—', '-')
-        .replace(Regex("\\s+"), " ")
-        .lowercase(Locale("he", "IL"))
+private fun normalizeFreeSessionText(
+    raw: String
+): String {
+    return raw
+        .trim()
+        .replace(
+            "־",
+            "-"
+        )
+        .replace(
+            "–",
+            "-"
+        )
+        .replace(
+            "—",
+            "-"
+        )
+        .replace(
+            Regex("\\s+"),
+            " "
+        )
+        .lowercase(
+            Locale(
+                "he",
+                "IL"
+            )
+        )
 }
 
 private fun freeSessionFirestoreKey(raw: String): String {
@@ -299,49 +582,160 @@ fun FreeSessionsScreen(
     val screenHorizontalEnd = if (isEnglish) Alignment.Start else Alignment.End
 
     val userSp = remember(ctx) {
-        ctx.getSharedPreferences("kmi_user", Context.MODE_PRIVATE)
+        ctx.getSharedPreferences(
+            "kmi_user",
+            Context.MODE_PRIVATE
+        )
     }
 
-    val availableBranches = remember(userSp, branch) {
-        (
-                readFreeSessionPrefsList(
-                    userSp,
-                    "active_branch",
-                    "branch",
-                    "branches",
-                    "branches_json",
-                    "selected_branches",
-                    "branch2",
-                    "branch3"
-                ) + listOf(branch)
+    /*
+     * המבנה החדש הוא מקור האמת:
+     *
+     * כל סניף מחזיק רק את הקבוצות
+     * שאליהן המאמן משויך באותו סניף.
+     */
+    val coachBranchAssignments =
+        remember(userSp) {
+            CoachBranchAssignmentsCodec.decode(
+                userSp.getString(
+                    "coach_branch_assignments_json",
+                    ""
                 )
-            .map { it.trim() }
-            .filter { it.isNotBlank() }
-            .distinct()
-    }
+            )
+        }
 
-    val availableGroups = remember(userSp, groupKey) {
-        (
-                readFreeSessionPrefsList(
-                    userSp,
-                    "active_group",
-                    "group",
-                    "groups",
-                    "groups_json",
-                    "selected_groups",
-                    "age_group",
-                    "age_groups"
-                ) + listOf(groupKey)
-                )
-            .map {
-                il.kmi.app.training.TrainingCatalog
-                    .normalizeGroupName(it)
-                    .ifBlank { it }
+    val legacyAvailableBranches =
+        remember(
+            userSp,
+            branch
+        ) {
+            (
+                    readFreeSessionPrefsList(
+                        userSp,
+                        "active_branch",
+                        "branch",
+                        "branches",
+                        "branches_json",
+                        "selected_branches",
+                        "branch2",
+                        "branch3"
+                    ) +
+                            listOf(branch)
+                    )
+                .map {
+                    it.trim()
+                }
+                .filter {
+                    it.isNotBlank()
+                }
+                .distinct()
+        }
+
+    val legacyAvailableGroups =
+        remember(
+            userSp,
+            groupKey
+        ) {
+            (
+                    readFreeSessionPrefsList(
+                        userSp,
+                        "active_group",
+                        "group",
+                        "groups",
+                        "groups_json",
+                        "selected_groups",
+                        "age_group",
+                        "age_groups"
+                    ) +
+                            listOf(groupKey)
+                    )
+                .map { rawGroup ->
+                    il.kmi.app.training
+                        .TrainingCatalog
+                        .normalizeGroupName(
+                            rawGroup
+                        )
+                        .ifBlank {
+                            rawGroup
+                        }
+                }
+                .map {
+                    it.trim()
+                }
+                .filter {
+                    it.isNotBlank()
+                }
+                .distinct()
+        }
+
+    /*
+     * כאשר המבנה החדש קיים, לא מערבבים
+     * לתוכו סניפים מהמבנה הישן.
+     */
+    val availableBranches =
+        remember(
+            coachBranchAssignments,
+            legacyAvailableBranches
+        ) {
+            if (
+                coachBranchAssignments
+                    .isNotEmpty()
+            ) {
+                CoachBranchAssignmentsCodec
+                    .flattenBranches(
+                        coachBranchAssignments
+                    )
+                    .map {
+                        it.trim()
+                    }
+                    .filter {
+                        it.isNotBlank()
+                    }
+                    .distinct()
+            } else {
+                legacyAvailableBranches
             }
-            .map { it.trim() }
-            .filter { it.isNotBlank() }
-            .distinct()
-    }
+        }
+
+    /*
+     * הרשימה הכללית נשמרת לצורכי fallback
+     * בלבד. בהמשך הבחירה עצמה תסונן לפי
+     * הסניף שנבחר.
+     */
+    val availableGroups =
+        remember(
+            coachBranchAssignments,
+            legacyAvailableGroups
+        ) {
+            if (
+                coachBranchAssignments
+                    .isNotEmpty()
+            ) {
+                CoachBranchAssignmentsCodec
+                    .flattenGroups(
+                        coachBranchAssignments
+                    )
+                    .map { rawGroup ->
+                        il.kmi.app.training
+                            .TrainingCatalog
+                            .normalizeGroupName(
+                                rawGroup
+                            )
+                            .ifBlank {
+                                rawGroup
+                            }
+                    }
+                    .map {
+                        it.trim()
+                    }
+                    .filter {
+                        it.isNotBlank()
+                    }
+                    .distinct()
+            } else {
+                legacyAvailableGroups
+            }
+        }
 
     var selectedBranch by rememberSaveable(availableBranches.joinToString("|")) {
         mutableStateOf(
@@ -367,11 +761,71 @@ fun FreeSessionsScreen(
         mutableStateOf(readFreeSessionCoachUid(userSp))
     }
 
-    fun normalizedBranchKey(raw: String): String {
-        return normalizeFreeSessionText(raw)
+    fun normalizedBranchKey(
+        raw: String
+    ): String {
+        return normalizeFreeSessionText(
+            raw
+        )
     }
 
-    LaunchedEffect(currentUid, availableBranches.joinToString("|")) {
+    /*
+     * מפת הסניפים והקבוצות מתוך המבנה החדש.
+     * המפתח מנורמל רק לצורך השוואה.
+     */
+    val localGroupsByBranch =
+        remember(
+            coachBranchAssignments
+        ) {
+            coachBranchAssignments
+                .associate { assignment ->
+                    normalizedBranchKey(
+                        assignment.branch
+                    ) to
+                            assignment.groups
+                                .map { rawGroup ->
+                                    il.kmi.app.training
+                                        .TrainingCatalog
+                                        .normalizeGroupName(
+                                            rawGroup
+                                        )
+                                        .ifBlank {
+                                            rawGroup
+                                        }
+                                }
+                                .map {
+                                    it.trim()
+                                }
+                                .filter {
+                                    it.isNotBlank()
+                                }
+                                .distinct()
+                }
+                .filterKeys {
+                    it.isNotBlank()
+                }
+        }
+
+    LaunchedEffect(
+        currentUid,
+        availableBranches.joinToString("|"),
+        localGroupsByBranch
+    ) {
+        /*
+         * כאשר המבנה החדש קיים אין צורך
+         * לבצע סריקות Firestore כדי לנחש
+         * לאיזה סניף שייכת כל קבוצה.
+         */
+        if (localGroupsByBranch.isNotEmpty()) {
+            serverGroupsByBranch =
+                localGroupsByBranch
+
+            branchGroupsLoading = false
+            branchGroupsLoadedOnce = true
+
+            return@LaunchedEffect
+        }
+
         if (currentUid.isBlank()) {
             serverGroupsByBranch = emptyMap()
             branchGroupsLoading = false
@@ -825,22 +1279,47 @@ fun FreeSessionsScreen(
             }
     }
 
-    val groupsForSelectedBranch = remember(
-        selectedBranch,
-        serverGroupsByBranch,
-        branchGroupsLoading,
-        branchGroupsLoadedOnce
-    ) {
-        val rawGroups =
-            serverGroupsByBranch[normalizedBranchKey(selectedBranch)]
-                ?.takeIf { it.isNotEmpty() }
-                ?: emptyList()
+    val groupsForSelectedBranch =
+        remember(
+            selectedBranch,
+            localGroupsByBranch,
+            serverGroupsByBranch,
+            branchGroupsLoading,
+            branchGroupsLoadedOnce
+        ) {
+            val normalizedSelectedBranch =
+                normalizedBranchKey(
+                    selectedBranch
+                )
 
-        sanitizeFreeSessionGroupsForBranch(
-            branch = selectedBranch,
-            groups = rawGroups
-        )
-    }
+            val localGroups =
+                localGroupsByBranch[
+                    normalizedSelectedBranch
+                ]
+                    .orEmpty()
+
+            val serverGroups =
+                serverGroupsByBranch[
+                    normalizedSelectedBranch
+                ]
+                    .orEmpty()
+
+            /*
+             * המבנה החדש קודם תמיד.
+             * Firestore הישן הוא fallback בלבד.
+             */
+            val rawGroups =
+                if (localGroupsByBranch.isNotEmpty()) {
+                    localGroups
+                } else {
+                    serverGroups
+                }
+
+            sanitizeFreeSessionGroupsForBranch(
+                branch = selectedBranch,
+                groups = rawGroups
+            )
+        }
 
     var selectedGroupKey by rememberSaveable(
         availableGroups.joinToString("|"),
@@ -1411,43 +1890,53 @@ fun FreeSessionsScreen(
             onDismissRequest = { showCreate = false }
         ) {
             Surface(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 10.dp),
-                shape = RoundedCornerShape(34.dp),
+                modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 6.dp),
+                shape = RoundedCornerShape(22.dp),
                 color = Color.Transparent,
-                shadowElevation = 24.dp,
+                shadowElevation = 0.dp,
                 tonalElevation = 0.dp
             ) {
                 Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(34.dp))
-                        .background(
-                            Brush.verticalGradient(
-                                colors = listOf(
-                                    KmiFreeBorderColorStrong,
-                                    KmiFreeBorderColor,
-                                    KmiFreeBgTop
+                    modifier =
+                        Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(22.dp))
+                            .background(
+                                Brush.linearGradient(
+                                    colors =
+                                        listOf(
+                                            KmiFreeBorderColorStrong,
+                                            KmiFreeBorderColor,
+                                            KmiFreeBgTop
+                                        )
                                 )
                             )
-                        )
-                        .padding(1.dp)
+                            .padding(1.dp)
                 ) {
                     Surface(
                         modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(33.dp),
+                        shape = RoundedCornerShape(21.dp),
                         color = KmiFreeBgMid.copy(alpha = 0.98f),
+                        shadowElevation = 0.dp,
                         tonalElevation = 0.dp
                     ) {
                         val scroll = rememberScrollState()
 
                         Column(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = 18.dp, vertical = 18.dp),
-                            verticalArrangement = Arrangement.spacedBy(14.dp),
-                            horizontalAlignment = screenHorizontalEnd
+                            modifier =
+                                Modifier
+                                    .fillMaxWidth()
+                                    .padding(
+                                        horizontal = 10.dp,
+                                        vertical = 9.dp
+                                    ),
+                            verticalArrangement =
+                                Arrangement.spacedBy(6.dp),
+                            horizontalAlignment =
+                                screenHorizontalEnd
                         ) {
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
@@ -1458,68 +1947,94 @@ fun FreeSessionsScreen(
                                     horizontalAlignment = screenHorizontalEnd
                                 ) {
                                     Text(
-                                        text = tr("יצירת אימון חדש", "Create New Session"),
+                                        text =
+                                            tr(
+                                                "יצירת אימון חדש",
+                                                "Create New Session"
+                                            ),
                                         color = KmiFreeTitleColor,
-                                        fontWeight = FontWeight.Black,
-                                        fontSize = 22.sp,
-                                        lineHeight = 25.sp,
+                                        style =
+                                            KmiTypography.cardTitle.copy(
+                                                fontWeight =
+                                                    FontWeight.ExtraBold
+                                            ),
                                         textAlign = screenTextAlign,
                                         maxLines = 2,
                                         overflow = TextOverflow.Ellipsis,
                                         modifier = Modifier.fillMaxWidth()
                                     )
 
-                                    Spacer(Modifier.height(4.dp))
+                                    Spacer(Modifier.height(2.dp))
 
                                     Text(
-                                        text = tr(
-                                            "בחר כותרת, מקום, תאריך ושעה לאימון החופשי",
-                                            "Choose a title, location, date and time for the free session"
-                                        ),
+                                        text =
+                                            tr(
+                                                "בחר כותרת, מקום, תאריך ושעה לאימון החופשי",
+                                                "Choose a title, location, date and time for the free session"
+                                            ),
                                         color = KmiFreeSubTextColor,
                                         fontWeight = FontWeight.Bold,
-                                        fontSize = 12.sp,
-                                        lineHeight = 15.sp,
+                                        style = KmiTypography.caption,
                                         textAlign = screenTextAlign,
+                                        maxLines = 2,
+                                        overflow = TextOverflow.Ellipsis,
                                         modifier = Modifier.fillMaxWidth()
                                     )
                                 }
 
-                                Spacer(Modifier.width(12.dp))
+                                Spacer(Modifier.width(8.dp))
 
                                 Surface(
                                     shape = CircleShape,
-                                    color = Color.White.copy(alpha = 0.10f),
-                                    border = BorderStroke(
-                                        1.dp,
-                                        Color.White.copy(alpha = 0.18f)
-                                    )
+                                    color =
+                                        KmiFreeCardColorSoft.copy(
+                                            alpha = 0.72f
+                                        ),
+                                    border =
+                                        BorderStroke(
+                                            width = 1.dp,
+                                            color = KmiFreeBorderColor
+                                        ),
+                                    shadowElevation = 0.dp,
+                                    tonalElevation = 0.dp
                                 ) {
                                     Icon(
                                         imageVector = Icons.Filled.Schedule,
                                         contentDescription = null,
-                                        tint = Color(0xFF67E8F9),
-                                        modifier = Modifier
-                                            .padding(11.dp)
-                                            .size(24.dp)
+                                        tint = Color(0xFF22D3EE),
+                                        modifier =
+                                            Modifier
+                                                .padding(8.dp)
+                                                .size(20.dp)
                                     )
                                 }
                             }
 
-                            Divider(color = KmiFreeBorderColor)
+                            Divider(
+                                color =
+                                    KmiFreeBorderColor.copy(
+                                        alpha = 0.72f
+                                    )
+                            )
 
                             Column(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .heightIn(max = 560.dp)
-                                    .verticalScroll(scroll)
-                                    .padding(
-                                        bottom = WindowInsets.ime
-                                            .asPaddingValues()
-                                            .calculateBottomPadding() + 190.dp
-                                    ),
-                                verticalArrangement = Arrangement.spacedBy(14.dp),
-                                horizontalAlignment = screenHorizontalEnd
+                                modifier =
+                                    Modifier
+                                        .fillMaxWidth()
+                                        .heightIn(max = 390.dp)
+                                        .verticalScroll(scroll)
+                                        .padding(
+                                            bottom =
+                                                WindowInsets
+                                                    .ime
+                                                    .asPaddingValues()
+                                                    .calculateBottomPadding() +
+                                                        10.dp
+                                        ),
+                                verticalArrangement =
+                                    Arrangement.spacedBy(6.dp),
+                                horizontalAlignment =
+                                    screenHorizontalEnd
                             ) {
 
                                 PremiumBranchGroupSelector(
@@ -1596,7 +2111,7 @@ fun FreeSessionsScreen(
                                                 text = tr("ביטול", "Cancel"),
                                                 color = KmiFreeSubTextColor,
                                                 fontWeight = FontWeight.ExtraBold,
-                                                fontSize = 16.sp
+                                                style = KmiTypography.body
                                             )
                                         }
 
@@ -1689,7 +2204,7 @@ fun FreeSessionsScreen(
                                             },
                                             shape = RoundedCornerShape(999.dp),
                                             color = Color(0xFF22D3EE),
-                                            shadowElevation = 6.dp
+                                            shadowElevation = 0.dp
                                         ) {
                                             Box(
                                                 modifier = Modifier.padding(
@@ -1702,7 +2217,7 @@ fun FreeSessionsScreen(
                                                     text = tr("צור", "Create"),
                                                     color = Color(0xFF04101F),
                                                     fontWeight = FontWeight.Black,
-                                                    fontSize = 16.sp
+                                                    style = KmiTypography.body
                                                 )
                                             }
                                         }
@@ -1769,8 +2284,7 @@ private fun HeaderCard(
                 text = "${tr("סניף", "Branch")}: ${branch.trim()}",
                 color = KmiFreeTextColor,
                 fontWeight = FontWeight.ExtraBold,
-                fontSize = 14.sp,
-                lineHeight = 17.sp,
+                style = KmiTypography.secondary,
                 textAlign = align,
                 modifier = Modifier.fillMaxWidth(),
                 maxLines = 1,
@@ -1825,8 +2339,7 @@ private fun EmptyStateCard(
                 text = title,
                 color = KmiFreeTextColor,
                 fontWeight = FontWeight.Black,
-                fontSize = 17.sp,
-                lineHeight = 22.sp,
+                style = KmiTypography.body,
                 textAlign = align,
                 modifier = Modifier.fillMaxWidth()
             )
@@ -1835,8 +2348,7 @@ private fun EmptyStateCard(
                 text = subtitle,
                 color = KmiFreeSubTextColor,
                 fontWeight = FontWeight.Bold,
-                fontSize = 15.sp,
-                lineHeight = 22.sp,
+                style = KmiTypography.secondary,
                 textAlign = align,
                 modifier = Modifier.fillMaxWidth()
             )
@@ -1853,67 +2365,87 @@ private fun PremiumCreateInputField(
     keyboardOptions: KeyboardOptions,
     keyboardActions: KeyboardActions
 ) {
-    val align = if (isEnglish) TextAlign.Start else TextAlign.Right
-    val horizontal = if (isEnglish) Alignment.Start else Alignment.End
-
-    Column(
-        modifier = Modifier.fillMaxWidth(),
-        verticalArrangement = Arrangement.spacedBy(7.dp),
-        horizontalAlignment = horizontal
-    ) {
-        Text(
-            text = label,
-            color = KmiFreeTitleColor,
-            fontWeight = FontWeight.ExtraBold,
-            fontSize = 14.sp,
-            textAlign = align,
-            modifier = Modifier.fillMaxWidth()
-        )
-
-        Surface(
-            modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(20.dp),
-            color = KmiFreeCardColorSoft.copy(alpha = 0.82f),
-            border = BorderStroke(
-                1.dp,
-                KmiFreeBorderColor
-            ),
-            tonalElevation = 0.dp
-        ) {
-            OutlinedTextField(
-                value = value,
-                onValueChange = onValueChange,
-                singleLine = true,
-                modifier = Modifier.fillMaxWidth(),
-                keyboardOptions = keyboardOptions,
-                keyboardActions = keyboardActions,
-                textStyle = MaterialTheme.typography.titleMedium.copy(
-                    color = KmiFreeTextColor,
-                    fontWeight = FontWeight.ExtraBold,
-                    textAlign = align
-                ),
-                placeholder = {
-                    Text(
-                        text = label,
-                        color = KmiFreeSubTextColor.copy(alpha = 0.78f),
-                        textAlign = align,
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                },
-                colors = OutlinedTextFieldDefaults.colors(
-                    focusedContainerColor = Color.White,
-                    unfocusedContainerColor = Color.White,
-                    focusedTextColor = KmiFreeTextColor,
-                    unfocusedTextColor = KmiFreeTextColor,
-                    cursorColor = KmiFreeBorderColorStrong,
-                    focusedBorderColor = Color.Transparent,
-                    unfocusedBorderColor = Color.Transparent,
-                    focusedLabelColor = KmiFreeTitleColor,
-                    unfocusedLabelColor = KmiFreeTitleColor
-                )
-            )
+    val align =
+        if (isEnglish) {
+            TextAlign.Start
+        } else {
+            TextAlign.Right
         }
-    }
+
+    OutlinedTextField(
+        value = value,
+        onValueChange = onValueChange,
+        singleLine = true,
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .heightIn(min = 52.dp),
+        keyboardOptions = keyboardOptions,
+        keyboardActions = keyboardActions,
+        label = {
+            Text(
+                text = label,
+                color = KmiFreeSubTextColor,
+                fontWeight = FontWeight.Bold,
+                style = KmiTypography.caption,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+        },
+        textStyle =
+            KmiTypography.secondary.copy(
+                color = KmiFreeTextColor,
+                fontWeight = FontWeight.ExtraBold,
+                textAlign = align
+            ),
+        placeholder = {
+            Text(
+                text =
+                    if (isEnglish) {
+                        "Enter title"
+                    } else {
+                        "הקלד כותרת"
+                    },
+                color =
+                    KmiFreeSubTextColor.copy(
+                        alpha = 0.78f
+                    ),
+                style = KmiTypography.secondary,
+                textAlign = align,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.fillMaxWidth()
+            )
+        },
+        colors =
+            OutlinedTextFieldDefaults.colors(
+                focusedContainerColor =
+                    KmiFreeCardColorSoft,
+                unfocusedContainerColor =
+                    KmiFreeCardColorSoft.copy(
+                        alpha = 0.86f
+                    ),
+                disabledContainerColor =
+                    KmiFreeCardColorSoft,
+                focusedTextColor =
+                    KmiFreeTextColor,
+                unfocusedTextColor =
+                    KmiFreeTextColor,
+                disabledTextColor =
+                    KmiFreeTextColor,
+                cursorColor =
+                    KmiFreeBorderColorStrong,
+                focusedBorderColor =
+                    KmiFreeBorderColorStrong,
+                unfocusedBorderColor =
+                    KmiFreeBorderColor,
+                focusedLabelColor =
+                    KmiFreeSubTextColor,
+                unfocusedLabelColor =
+                    KmiFreeSubTextColor
+            ),
+        shape = RoundedCornerShape(15.dp)
+    )
 }
 
 @Composable
@@ -1936,20 +2468,27 @@ private fun PremiumBranchGroupSelector(
 
     Surface(
         modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(24.dp),
+        shape = RoundedCornerShape(22.dp),
         color = KmiFreeCardColor.copy(alpha = 0.94f),
         border = BorderStroke(
-            1.dp,
-            KmiFreeBorderColor
+            width = 1.dp,
+            color = KmiFreeBorderColor
         ),
+        shadowElevation = 0.dp,
         tonalElevation = 0.dp
     ) {
         Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 12.dp, vertical = 12.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
-            horizontalAlignment = horizontal
+            modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .padding(
+                        horizontal = 8.dp,
+                        vertical = 7.dp
+                    ),
+            verticalArrangement =
+                Arrangement.spacedBy(6.dp),
+            horizontalAlignment =
+                horizontal
         ) {
             if (branches.size > 1) {
                 PremiumComboPicker(
@@ -1962,26 +2501,38 @@ private fun PremiumBranchGroupSelector(
             }
 
             if (groups.isEmpty()) {
-                Text(
-                    text = if (isLoadingGroups) {
-                        tr(
-                            "טוען קבוצות לפי הסניף שנבחר...",
-                            "Loading groups for the selected branch..."
-                        )
-                    } else {
-                        tr(
-                            "לא נמצא שיוך קבוצות מדויק לסניף הזה",
-                            "No exact group mapping was found for this branch"
-                        )
-                    },
-                    color = KmiFreeSubTextColor,
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 12.sp,
-                    lineHeight = 14.sp,
-                    textAlign = if (isEnglish) TextAlign.Start else TextAlign.Right,
-                    maxLines = 2,
-                    modifier = Modifier.fillMaxWidth()
-                )
+                if (isLoadingGroups) {
+                    FreeSessionsPremiumLoading(
+                        text =
+                            tr(
+                                "טוען קבוצות עבור הסניף שנבחר...",
+                                "Loading groups for the selected branch..."
+                            ),
+                        size = 58.dp
+                    )
+                } else {
+                    Text(
+                        text =
+                            tr(
+                                "לא נמצא מיפוי קבוצות מדויק לסניף הזה",
+                                "No exact group mapping was found for this branch"
+                            ),
+                        color =
+                            KmiFreeSubTextColor,
+                        style =
+                            KmiTypography.caption,
+                        fontWeight =
+                            FontWeight.Bold,
+                        textAlign =
+                            if (isEnglish) {
+                                TextAlign.Start
+                            } else {
+                                TextAlign.Right
+                            },
+                        modifier =
+                            Modifier.fillMaxWidth()
+                    )
+                }
             }
 
             if (groups.size > 1) {
@@ -1997,8 +2548,7 @@ private fun PremiumBranchGroupSelector(
                     text = "${tr("קבוצה", "Group")}: ${groups.first()}",
                     color = KmiFreeTitleColor,
                     fontWeight = FontWeight.ExtraBold,
-                    fontSize = 13.sp,
-                    lineHeight = 15.sp,
+                    style = KmiTypography.caption,
                     textAlign = if (isEnglish) TextAlign.Start else TextAlign.Right,
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis,
@@ -2026,79 +2576,143 @@ private fun PremiumComboPicker(
     val align = if (isEnglish) TextAlign.Start else TextAlign.Right
     val horizontal = if (isEnglish) Alignment.Start else Alignment.End
 
-    Column(
-        modifier = Modifier.fillMaxWidth(),
-        verticalArrangement = Arrangement.spacedBy(7.dp),
-        horizontalAlignment = horizontal
+    ExposedDropdownMenuBox(
+        expanded = expanded,
+        onExpandedChange = {
+            if (values.size > 1) {
+                expanded = !expanded
+            }
+        },
+        modifier = Modifier.fillMaxWidth()
     ) {
-        Text(
-            text = title,
-            color = KmiFreeTitleColor,
-            fontWeight = FontWeight.ExtraBold,
-            fontSize = 12.sp,
-            lineHeight = 14.sp,
-            textAlign = align,
-            maxLines = 2,
-            overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.fillMaxWidth()
-        )
-
-        ExposedDropdownMenuBox(
-            expanded = expanded,
-            onExpandedChange = { expanded = !expanded },
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            OutlinedTextField(
-                value = selected,
-                onValueChange = {},
-                readOnly = true,
-                singleLine = false,
-                minLines = 2,
-                maxLines = 2,
-                modifier = Modifier
+        Surface(
+            modifier =
+                Modifier
                     .fillMaxWidth()
-                    .heightIn(min = 72.dp)
+                    .heightIn(min = 44.dp)
                     .menuAnchor(),
-                textStyle = MaterialTheme.typography.titleSmall.copy(
-                    color = KmiFreeTextColor,
-                    fontWeight = FontWeight.ExtraBold,
-                    fontSize = 11.sp,
-                    lineHeight = 13.sp,
-                    textAlign = align
+            shape = RoundedCornerShape(15.dp),
+            color = KmiFreeCardColorSoft.copy(alpha = 0.86f),
+            border =
+                BorderStroke(
+                    width = 1.dp,
+                    color =
+                        if (expanded) {
+                            KmiFreeBorderColorStrong
+                        } else {
+                            KmiFreeBorderColor
+                        }
                 ),
-                trailingIcon = {
-                    ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded)
-                },
-                colors = OutlinedTextFieldDefaults.colors(
-                    focusedContainerColor = KmiFreeCardColorSoft.copy(alpha = 0.86f),
-                    unfocusedContainerColor = KmiFreeCardColorSoft.copy(alpha = 0.82f),
-                    focusedTextColor = KmiFreeTextColor,
-                    unfocusedTextColor = KmiFreeTextColor,
-                    cursorColor = KmiFreeTitleColor,
-                    focusedBorderColor = KmiFreeBorderColorStrong,
-                    unfocusedBorderColor = KmiFreeBorderColor
-                ),
-                shape = RoundedCornerShape(20.dp)
-            )
-
-            ExposedDropdownMenu(
-                expanded = expanded,
-                onDismissRequest = { expanded = false },
-                containerColor = Color(0xFF0A234A)
+            shadowElevation = 0.dp,
+            tonalElevation = 0.dp
+        ) {
+            Row(
+                modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .padding(
+                            horizontal = 10.dp,
+                            vertical = 5.dp
+                        ),
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                values.forEach { item ->
+                Column(
+                    modifier = Modifier.weight(1f),
+                    horizontalAlignment = horizontal,
+                    verticalArrangement = Arrangement.Center
+                ) {
+                    Text(
+                        text = title,
+                        color = KmiFreeSubTextColor,
+                        fontWeight = FontWeight.Bold,
+                        style = KmiTypography.caption,
+                        textAlign = align,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+
+                    Text(
+                        text = selected.trim().ifBlank { "—" },
+                        color = KmiFreeTextColor,
+                        fontWeight = FontWeight.ExtraBold,
+                        style = KmiTypography.secondary,
+                        textAlign = align,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+
+                Spacer(Modifier.width(6.dp))
+
+                Text(
+                    text =
+                        if (expanded) {
+                            "▲"
+                        } else {
+                            "▼"
+                        },
+                    color = KmiFreeSubTextColor,
+                    fontWeight = FontWeight.Black,
+                    style = KmiTypography.caption
+                )
+            }
+        }
+
+        ExposedDropdownMenu(
+                expanded = expanded,
+                onDismissRequest = {
+                    expanded = false
+                },
+                modifier =
+                    Modifier
+                        .heightIn(max = 280.dp)
+                        .clip(RoundedCornerShape(16.dp))
+                        .border(
+                            width = 1.dp,
+                            color =
+                                Color(0xFF38BDF8)
+                                    .copy(alpha = 0.40f),
+                            shape = RoundedCornerShape(16.dp)
+                        ),
+                containerColor = Color(0xFF0A234A),
+                shadowElevation = 2.dp,
+                tonalElevation = 0.dp
+            ) {
+                values.forEachIndexed { index, item ->
+                    val isSelected =
+                        item.trim() == selected.trim()
+
                     DropdownMenuItem(
+                        modifier =
+                            Modifier
+                                .fillMaxWidth()
+                                .background(
+                                    color =
+                                        if (isSelected) {
+                                            Color(0xFF164E79)
+                                                .copy(alpha = 0.72f)
+                                        } else {
+                                            Color.Transparent
+                                        }
+                                ),
                         text = {
                             Text(
                                 text = item,
-                                color = Color.White,
-                                fontWeight = if (item == selected) {
-                                    FontWeight.Black
-                                } else {
-                                    FontWeight.Bold
-                                },
-                                fontSize = 12.sp,
-                                lineHeight = 14.sp,
+                                color =
+                                    if (isSelected) {
+                                        Color(0xFF67E8F9)
+                                    } else {
+                                        Color.White
+                                    },
+                                fontWeight =
+                                    if (isSelected) {
+                                        FontWeight.Black
+                                    } else {
+                                        FontWeight.Bold
+                                    },
+                                style = KmiTypography.secondary,
                                 textAlign = align,
                                 modifier = Modifier.fillMaxWidth(),
                                 maxLines = 2,
@@ -2110,8 +2724,20 @@ private fun PremiumComboPicker(
                             onSelected(item)
                         }
                     )
+
+                    if (index < values.lastIndex) {
+                        Divider(
+                            modifier =
+                                Modifier.padding(
+                                    horizontal = 12.dp
+                                ),
+                            color =
+                                Color.White.copy(
+                                    alpha = 0.10f
+                                )
+                        )
+                    }
                 }
-            }
         }
     }
 }
@@ -2374,24 +3000,23 @@ private fun WazeStyleLocationSearchField(
     }
 
     Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .bringIntoViewRequester(bringLocationIntoViewRequester),
-        verticalArrangement = Arrangement.spacedBy(7.dp),
-        horizontalAlignment = Alignment.End
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .bringIntoViewRequester(
+                    bringLocationIntoViewRequester
+                ),
+        verticalArrangement = Arrangement.Top,
+        horizontalAlignment =
+            if (isEnglish) {
+                Alignment.Start
+            } else {
+                Alignment.End
+            }
     ) {
-        Text(
-            text = tr("מקום (אופציונלי)", "Location (optional)"),
-            color = KmiFreeTitleColor,
-            fontWeight = FontWeight.ExtraBold,
-            fontSize = 14.sp,
-            textAlign = TextAlign.Right,
-            modifier = Modifier.fillMaxWidth()
-        )
-
         Surface(
             modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(24.dp),
+            shape = RoundedCornerShape(15.dp),
             color = KmiFreeCardColorSoft.copy(alpha = 0.86f),
             border = BorderStroke(
                 1.dp,
@@ -2402,7 +3027,7 @@ private fun WazeStyleLocationSearchField(
                 }
             ),
             tonalElevation = 0.dp,
-            shadowElevation = if (suggestions.isNotEmpty()) 10.dp else 0.dp
+            shadowElevation = 0.dp
         ) {
             Column(
                 modifier = Modifier.fillMaxWidth()
@@ -2411,29 +3036,70 @@ private fun WazeStyleLocationSearchField(
                     value = query,
                     onValueChange = onQueryChange,
                     singleLine = true,
-                    modifier = Modifier.fillMaxWidth(),
-                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
-                    keyboardActions = KeyboardActions(onDone = { }),
+                    modifier =
+                        Modifier
+                            .fillMaxWidth()
+                            .heightIn(min = 52.dp),
+                    keyboardOptions =
+                        KeyboardOptions(
+                            imeAction = ImeAction.Done
+                        ),
+                    keyboardActions =
+                        KeyboardActions(
+                            onDone = {}
+                        ),
                     leadingIcon = {
                         Icon(
                             imageVector = Icons.Filled.Place,
                             contentDescription = null,
-                            tint = Color(0xFF22D3EE)
+                            tint = Color(0xFF22D3EE),
+                            modifier = Modifier.size(20.dp)
                         )
                     },
-                    textStyle = MaterialTheme.typography.titleMedium.copy(
-                        color = KmiFreeTextColor,
-                        fontWeight = FontWeight.ExtraBold,
-                        textAlign = TextAlign.Right
-                    ),
+                    label = {
+                        Text(
+                            text =
+                                tr(
+                                    "מקום (אופציונלי)",
+                                    "Location (optional)"
+                                ),
+                            color = KmiFreeSubTextColor,
+                            fontWeight = FontWeight.Bold,
+                            style = KmiTypography.caption,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    },
+                    textStyle =
+                        KmiTypography.secondary.copy(
+                            color = KmiFreeTextColor,
+                            fontWeight = FontWeight.ExtraBold,
+                            textAlign =
+                                if (isEnglish) {
+                                    TextAlign.Left
+                                } else {
+                                    TextAlign.Right
+                                }
+                        ),
                     placeholder = {
                         Text(
                             text = tr(
                                 "הקלד מקום, כתובת או עיר",
                                 "typing a place, address or city"
                             ),
-                            color = KmiFreeSubTextColor.copy(alpha = 0.78f),
-                            textAlign = TextAlign.Right,
+                            color =
+                                KmiFreeSubTextColor.copy(
+                                    alpha = 0.78f
+                                ),
+                            style = KmiTypography.secondary,
+                            textAlign =
+                                if (isEnglish) {
+                                    TextAlign.Left
+                                } else {
+                                    TextAlign.Right
+                                },
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
                             modifier = Modifier.fillMaxWidth()
                         )
                     },
@@ -2467,7 +3133,7 @@ private fun WazeStyleLocationSearchField(
                         text = "${tr("נבחר", "Selected")}: ${selectedPlace.name}",
                         color = KmiFreeTitleColor,
                         fontWeight = FontWeight.ExtraBold,
-                        fontSize = 12.sp,
+                        style = KmiTypography.caption,
                         textAlign = TextAlign.Right,
                         modifier = Modifier
                             .fillMaxWidth()
@@ -2593,8 +3259,7 @@ private fun WazePlaceSuggestionRow(
                     text = place.name,
                     color = Color.White,
                     fontWeight = FontWeight.ExtraBold,
-                    fontSize = 14.sp,
-                    lineHeight = 17.sp,
+                    style = KmiTypography.secondary,
                     textAlign = align,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
@@ -2608,8 +3273,7 @@ private fun WazePlaceSuggestionRow(
                         text = place.address,
                         color = KmiFreeSubTextColor,
                         fontWeight = FontWeight.SemiBold,
-                        fontSize = 11.sp,
-                        lineHeight = 14.sp,
+                        style = KmiTypography.caption,
                         textAlign = align,
                         maxLines = 2,
                         overflow = TextOverflow.Ellipsis,
@@ -2632,65 +3296,75 @@ private fun PremiumDateTimeCard(
     val horizontal = if (isEnglish) Alignment.Start else Alignment.End
     Surface(
         modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(24.dp),
+        shape = RoundedCornerShape(18.dp),
         color = KmiFreeCardColor.copy(alpha = 0.94f),
-        tonalElevation = 0.dp,
-        border = BorderStroke(
-            1.dp,
-            KmiFreeBorderColor
-        )
+        border =
+            BorderStroke(
+                width = 1.dp,
+                color = KmiFreeBorderColor
+            ),
+        shadowElevation = 0.dp,
+        tonalElevation = 0.dp
     ) {
         Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 14.dp, vertical = 14.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
-            horizontalAlignment = Alignment.End
+            modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .padding(
+                        horizontal = 10.dp,
+                        vertical = 8.dp
+                    ),
+            verticalArrangement = Arrangement.spacedBy(6.dp),
+            horizontalAlignment = horizontal
         ) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.End,
+                horizontalArrangement = Arrangement.Start,
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    text = tr("בחירת יום ושעה", "Choose day and time"),
+                    text =
+                        tr(
+                            "בחירת יום ושעה",
+                            "Choose day and time"
+                        ),
                     color = KmiFreeTitleColor,
-                    fontWeight = FontWeight.Black,
-                    fontSize = 18.sp,
-                    textAlign = TextAlign.Right
+                    style =
+                        KmiTypography.cardTitle.copy(
+                            fontWeight =
+                                FontWeight.ExtraBold
+                        ),
+                    textAlign = align,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
                 )
 
-                Spacer(Modifier.width(8.dp))
+                Spacer(Modifier.width(6.dp))
 
                 Icon(
                     imageVector = Icons.Filled.Schedule,
                     contentDescription = null,
-                    tint = Color(0xFF22D3EE)
+                    tint = Color(0xFF22D3EE),
+                    modifier = Modifier.size(20.dp)
                 )
             }
 
-            Surface(
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(20.dp),
-                color = KmiFreeBgBottom.copy(alpha = 0.92f),
-                tonalElevation = 0.dp,
-                border = BorderStroke(
-                    1.dp,
-                    KmiFreeBorderColorStrong
-                )
-            ) {
-                Text(
-                    text = fmtTime(startsAt, isEnglish),
-                    color = Color.White,
-                    fontWeight = FontWeight.ExtraBold,
-                    fontSize = 17.sp,
-                    lineHeight = 22.sp,
-                    textAlign = TextAlign.Center,
-                    modifier = Modifier
+            Text(
+                text = fmtTime(startsAt, isEnglish),
+                color = KmiFreeTextColor,
+                fontWeight = FontWeight.ExtraBold,
+                style = KmiTypography.secondary,
+                textAlign = align,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+                modifier =
+                    Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 12.dp, vertical = 14.dp)
-                )
-            }
+                        .padding(
+                            horizontal = 4.dp,
+                            vertical = 2.dp
+                        )
+            )
 
             TimeQuickPicker(
                 startsAt = startsAt,
@@ -2710,15 +3384,49 @@ private fun FreeSessionCard(
     onEdit: (() -> Unit)? = null,
     onDelete: (() -> Unit)? = null
 ) {
+    /*
+     * השם האמיתי נשאר בתוך session.
+     * כאן נוצרת רק גרסת התצוגה.
+     */
+    val creatorDisplayName =
+        TraineeDisplayNameMapper
+            .displayName(
+                realName =
+                    session.createdByName,
+                stableKey =
+                    session.createdByUid
+                        .ifBlank {
+                            session.createdByName
+                        },
+                isEnglish =
+                    isEnglish
+            )
+            .ifBlank {
+                if (isEnglish) {
+                    "Coach"
+                } else {
+                    "מאמן"
+                }
+            }
+
     Surface(
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(24.dp))
             .clickable { onClick() },
-        shape = RoundedCornerShape(24.dp),
-        color = Color.White.copy(alpha = 0.96f),
-        shadowElevation = 6.dp,
-        border = BorderStroke(1.dp, KmiFreeBorderColor)
+        shape =
+            RoundedCornerShape(24.dp),
+        color =
+            KmiFreeCardColor.copy(
+                alpha = 0.96f
+            ),
+        shadowElevation = 0.dp,
+        tonalElevation = 0.dp,
+        border =
+            BorderStroke(
+                width = 1.dp,
+                color = KmiFreeBorderColor
+            )
     ) {
         Column(
             modifier = Modifier
@@ -2742,8 +3450,7 @@ private fun FreeSessionCard(
                 ) {
                     Text(
                         text = session.title,
-                        fontSize = 17.sp,
-                        lineHeight = 21.sp,
+                        style = KmiTypography.body,
                         fontWeight = FontWeight.Black,
                         color = KmiFreeTextColor,
                         textAlign = TextAlign.Start,
@@ -2753,14 +3460,29 @@ private fun FreeSessionCard(
                     )
 
                     Text(
-                        text = "נוצר ע״י ${session.createdByName}",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = KmiFreeSubTextColor,
-                        fontWeight = FontWeight.Bold,
-                        textAlign = TextAlign.Start,
+                        text =
+                            if (isEnglish) {
+                                "Created by $creatorDisplayName"
+                            } else {
+                                "נוצר ע״י $creatorDisplayName"
+                            },
+                        style =
+                            KmiTypography.caption,
+                        color =
+                            KmiFreeSubTextColor,
+                        fontWeight =
+                            FontWeight.Bold,
+                        textAlign =
+                            if (isEnglish) {
+                                TextAlign.Left
+                            } else {
+                                TextAlign.Right
+                            },
                         maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.fillMaxWidth()
+                        overflow =
+                            TextOverflow.Ellipsis,
+                        modifier =
+                            Modifier.fillMaxWidth()
                     )
                 }
 
@@ -3230,9 +3952,8 @@ private fun FreeSessionDetailsSheet(
                 Text(
                     text = session.title,
                     color = KmiFreeTextColor,
+                    style = KmiTypography.sectionTitle,
                     fontWeight = FontWeight.Black,
-                    fontSize = 20.sp,
-                    lineHeight = 24.sp,
                     textAlign = detailAlign,
                     modifier = Modifier.fillMaxWidth(),
                     maxLines = 2,
@@ -3264,8 +3985,7 @@ private fun FreeSessionDetailsSheet(
                     text = "${tr("מקום", "Location")}: $loc",
                     color = KmiFreeTextColor,
                     fontWeight = FontWeight.Black,
-                    fontSize = 16.sp,
-                    lineHeight = 20.sp,
+                    style = KmiTypography.body,
                     textAlign = detailAlign,
                     modifier = Modifier.fillMaxWidth()
                 )
@@ -3310,11 +4030,14 @@ private fun FreeSessionDetailsSheet(
         Divider(color = KmiFreeBorderColor)
 
         Text(
-            text = tr("מה הסטטוס שלך?", "What is your status?"),
+            text =
+                tr(
+                    "מה הסטטוס שלך?",
+                    "What is your status?"
+                ),
             color = KmiFreeTextColor,
+            style = KmiTypography.body,
             fontWeight = FontWeight.Black,
-            fontSize = 17.sp,
-            lineHeight = 21.sp,
             textAlign = detailAlign,
             modifier = Modifier.fillMaxWidth()
         )
@@ -3401,23 +4124,46 @@ private fun FreeSessionDetailsSheet(
         Divider(color = KmiFreeBorderColor)
 
         Text(
-            text = tr("מי מגיע?", "Who's coming?"),
+            text =
+                tr(
+                    "מי מגיע?",
+                    "Who's coming?"
+                ),
             color = KmiFreeTextColor,
+            style = KmiTypography.body,
             fontWeight = FontWeight.Black,
-            fontSize = 17.sp,
-            lineHeight = 21.sp,
             textAlign = detailAlign,
             modifier = Modifier.fillMaxWidth()
         )
 
         if (branchUsersLoading) {
-            Text(
-                text = tr("טוען מתאמנים מהסניף...", "Loading branch students..."),
-                color = KmiFreeSubTextColor,
-                fontWeight = FontWeight.Bold,
-                textAlign = detailAlign,
-                modifier = Modifier.fillMaxWidth()
-            )
+            Surface(
+                modifier =
+                    Modifier.fillMaxWidth(),
+                shape =
+                    RoundedCornerShape(20.dp),
+                color =
+                    KmiFreeCardColorSoft.copy(
+                        alpha = 0.86f
+                    ),
+                tonalElevation = 0.dp,
+                shadowElevation = 0.dp,
+                border =
+                    BorderStroke(
+                        width = 1.dp,
+                        color =
+                            KmiFreeBorderColor
+                    )
+            ) {
+                FreeSessionsPremiumLoading(
+                    text =
+                        tr(
+                            "טוען מתאמנים מהסניף...",
+                            "Loading branch students..."
+                        ),
+                    size = 62.dp
+                )
+            }
         } else if (allParticipants.isEmpty()) {
             Text(
                 text = tr("לא נמצאו מתאמנים בסניף הזה.", "No students were found in this branch."),
@@ -3429,16 +4175,26 @@ private fun FreeSessionDetailsSheet(
         } else {
             allParticipants
                 .sortedWith(
-                    compareByDescending<FreeSessionPart> { it.updatedAt }
-                        .thenBy { it.name }
+                    compareByDescending<FreeSessionPart> {
+                        it.updatedAt
+                    }.thenBy {
+                        it.name
+                    }
                 )
                 .take(100)
-                .forEach { p ->
+                .forEachIndexed {
+                        index,
+                        participant ->
+
                     ParticipantRow(
-                        p = p,
+                        p = participant,
+                        demoIndex = index,
                         isEnglish = isEnglish
                     )
-                    Divider(color = KmiFreeBorderColor)
+
+                    Divider(
+                        color = KmiFreeBorderColor
+                    )
                 }
         }
 
@@ -3470,11 +4226,49 @@ private fun StateChip(
 @Composable
 private fun ParticipantRow(
     p: FreeSessionPart,
+    demoIndex: Int,
     isEnglish: Boolean
 ) {
-    fun tr(he: String, en: String): String = if (isEnglish) en else he
+    fun tr(
+        he: String,
+        en: String
+    ): String {
+        return if (isEnglish) {
+            en
+        } else {
+            he
+        }
+    }
 
-    val rowAlign = if (isEnglish) TextAlign.Start else TextAlign.Right
+    /*
+     * החלפת השם מתבצעת בתצוגה בלבד.
+     * p.name נשאר אמיתי לצורך שמירה ומיזוג.
+     */
+    val participantDisplayName =
+        TraineeDisplayNameMapper
+            .displayName(
+                realName = p.name,
+                stableKey =
+                    p.uid.ifBlank {
+                        p.name
+                    },
+                demoIndex = demoIndex,
+                isEnglish = isEnglish
+            )
+            .ifBlank {
+                if (isEnglish) {
+                    "Trainee ${demoIndex + 1}"
+                } else {
+                    "מתאמן ${demoIndex + 1}"
+                }
+            }
+
+    val rowAlign =
+        if (isEnglish) {
+            TextAlign.Start
+        } else {
+            TextAlign.Right
+        }
     val rowHorizontal = if (isEnglish) Alignment.Start else Alignment.End
     val rowArrangement = if (isEnglish) Arrangement.Start else Arrangement.End
 
@@ -3516,22 +4310,30 @@ private fun ParticipantRow(
             horizontalAlignment = rowHorizontal
         ) {
             Text(
-                text = p.name,
-                color = KmiFreeTextColor,
-                fontWeight = FontWeight.Bold,
-                fontSize = 17.sp,
-                lineHeight = 20.sp,
-                textAlign = rowAlign,
-                modifier = Modifier.fillMaxWidth(),
+                text =
+                    participantDisplayName,
+                color =
+                    KmiFreeTextColor,
+                style =
+                    KmiTypography.body,
+                fontWeight =
+                    FontWeight.Bold,
+                textAlign =
+                    rowAlign,
+                modifier =
+                    Modifier.fillMaxWidth(),
                 maxLines = 1,
-                overflow = TextOverflow.Ellipsis
+                overflow =
+                    TextOverflow.Ellipsis
             )
             Text(
                 text = stateLabel,
                 color = stateColor,
-                style = MaterialTheme.typography.labelSmall,
+                style =
+                    KmiTypography.caption,
                 textAlign = rowAlign,
-                modifier = Modifier.fillMaxWidth()
+                modifier =
+                    Modifier.fillMaxWidth()
             )
         }
 
@@ -3624,10 +4426,14 @@ private fun TimeQuickPicker(
 
             showDatePicker = true
         },
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(999.dp),
-        color = Color(0xFF22D3EE),
-        shadowElevation = 6.dp
+        modifier =
+            Modifier.fillMaxWidth(),
+        shape =
+            RoundedCornerShape(999.dp),
+        color =
+            Color(0xFF22D3EE),
+        shadowElevation = 0.dp,
+        tonalElevation = 0.dp
     ) {
         Box(
             modifier = Modifier
@@ -3639,7 +4445,7 @@ private fun TimeQuickPicker(
                 text = tr("בחר יום ושעה", "Choose day and time"),
                 color = Color(0xFF04101F),
                 fontWeight = FontWeight.Black,
-                fontSize = 16.sp,
+                style = KmiTypography.body,
                 textAlign = TextAlign.Center
             )
         }

@@ -1,12 +1,17 @@
 package il.kmi.app.screens.coach
 
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.ui.unit.sp
 import androidx.compose.material3.Checkbox
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExposedDropdownMenuBox
 import androidx.compose.material3.DropdownMenu
@@ -28,7 +33,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.layout.WindowInsets
@@ -53,6 +61,10 @@ import androidx.compose.ui.platform.LocalContext
 import com.google.firebase.firestore.SetOptions
 import il.kmi.shared.localization.AppLanguage
 import il.kmi.shared.localization.AppLanguageManager
+import il.kmi.app.privacy.DemoPrivacy
+import il.kmi.app.privacy.TraineeDisplayNameMapper
+import il.kmi.app.screens.registration.CoachBranchAssignmentsCodec
+import il.kmi.app.ui.KmiTypography
 
 //======================================================================
 
@@ -62,6 +74,115 @@ private fun coachBroadcastTr(isEnglish: Boolean, he: String, en: String): String
 
 private fun coachBroadcastTextAlign(isEnglish: Boolean): TextAlign {
     return if (isEnglish) TextAlign.Left else TextAlign.Right
+}
+
+@Composable
+private fun CoachBroadcastLoadingRings(
+    modifier: Modifier = Modifier,
+    size: Dp = 64.dp
+) {
+    val transition =
+        rememberInfiniteTransition(
+            label = "coachBroadcastLoading"
+        )
+
+    val outerRotation by transition.animateFloat(
+        initialValue = 0f,
+        targetValue = 360f,
+        animationSpec =
+            infiniteRepeatable(
+                animation =
+                    tween(
+                        durationMillis = 1_250,
+                        easing = LinearEasing
+                    )
+            ),
+        label = "coachBroadcastOuterRing"
+    )
+
+    val innerRotation by transition.animateFloat(
+        initialValue = 360f,
+        targetValue = 0f,
+        animationSpec =
+            infiniteRepeatable(
+                animation =
+                    tween(
+                        durationMillis = 1_750,
+                        easing = LinearEasing
+                    )
+            ),
+        label = "coachBroadcastInnerRing"
+    )
+
+    Box(
+        modifier =
+            modifier.size(size),
+        contentAlignment = Alignment.Center
+    ) {
+        Box(
+            modifier =
+                Modifier
+                    .size(size)
+                    .graphicsLayer {
+                        rotationZ = outerRotation
+                    }
+                    .border(
+                        width = 4.dp,
+                        brush =
+                            Brush.sweepGradient(
+                                listOf(
+                                    Color.Transparent,
+                                    Color(0xFFA855F7),
+                                    Color(0xFF38BDF8),
+                                    Color.Transparent
+                                )
+                            ),
+                        shape = CircleShape
+                    )
+        )
+
+        Box(
+            modifier =
+                Modifier
+                    .size(size * 0.68f)
+                    .graphicsLayer {
+                        rotationZ = innerRotation
+                    }
+                    .border(
+                        width = 3.dp,
+                        brush =
+                            Brush.sweepGradient(
+                                listOf(
+                                    Color.Transparent,
+                                    Color(0xFFF59E0B),
+                                    Color(0xFF22C55E),
+                                    Color.Transparent
+                                )
+                            ),
+                        shape = CircleShape
+                    )
+        )
+
+        Box(
+            modifier =
+                Modifier
+                    .size(size * 0.25f)
+                    .background(
+                        color =
+                            Color.White.copy(
+                                alpha = 0.94f
+                            ),
+                        shape = CircleShape
+                    )
+                    .border(
+                        width = 1.dp,
+                        color =
+                            Color(0xFFA78BFA)
+                                .copy(alpha = 0.55f),
+                        shape = CircleShape
+                    )
+        )
+    }
 }
 
 fun persistCoachBroadcast(
@@ -258,13 +379,119 @@ fun CoachBroadcastScreen(
         mutableStateOf(langManager.getCurrentLanguage())
     }
 
-    val isEnglish = currentLanguage == AppLanguage.ENGLISH
-    val screenTextAlign = coachBroadcastTextAlign(isEnglish)
-    val layoutDirection = if (isEnglish) LayoutDirection.Ltr else LayoutDirection.Rtl
+    val isEnglish =
+        currentLanguage ==
+                AppLanguage.ENGLISH
+
+    val screenTextAlign =
+        coachBroadcastTextAlign(isEnglish)
+
+    val layoutDirection =
+        if (isEnglish) {
+            LayoutDirection.Ltr
+        } else {
+            LayoutDirection.Rtl
+        }
+
+    val isDarkMode =
+        androidx.compose.material3.MaterialTheme
+            .colorScheme
+            .background
+            .luminance() < 0.5f
+
+    /*
+     * הקריאה מתבצעת מתוך Composition ולכן
+     * שינוי המתג בהגדרות מעדכן את המסך מיד.
+     */
+    val demoPrivacyEnabled =
+        DemoPrivacy.isEnabled()
 
     val userSp = remember(contextLang) {
-        contextLang.getSharedPreferences("kmi_user", android.content.Context.MODE_PRIVATE)
+        contextLang.getSharedPreferences(
+            "kmi_user",
+            android.content.Context.MODE_PRIVATE
+        )
     }
+
+    /*
+     * המבנה החדש:
+     *
+     * כל סניף מחזיק רק את הקבוצות שאליהן
+     * המאמן משויך באותו סניף.
+     */
+    val coachBranchAssignments =
+        remember(userSp) {
+            CoachBranchAssignmentsCodec.decode(
+                userSp.getString(
+                    "coach_branch_assignments_json",
+                    ""
+                )
+            )
+        }
+
+    fun normalizedAssignmentValue(
+        value: String
+    ): String {
+        return value
+            .trim()
+            .replace('־', '-')
+            .replace('–', '-')
+            .replace('—', '-')
+            .replace(
+                Regex("\\s+"),
+                " "
+            )
+            .lowercase()
+    }
+
+    val assignedBranchNames =
+        remember(coachBranchAssignments) {
+            CoachBranchAssignmentsCodec
+                .flattenBranches(
+                    coachBranchAssignments
+                )
+                .map {
+                    it.trim()
+                }
+                .filter {
+                    it.isNotBlank()
+                }
+                .distinct()
+        }
+
+    /*
+     * אם קיים המבנה החדש, מסננים את רשימת
+     * הסניפים לפי השיוכים האמיתיים של המאמן.
+     *
+     * אם המבנה החדש עדיין ריק, נשמר fallback
+     * למידע הישן כדי לא לפגוע במשתמשים קיימים.
+     */
+    val visibleBranchesByRegion =
+        remember(
+            branchesByRegion,
+            assignedBranchNames
+        ) {
+            if (assignedBranchNames.isEmpty()) {
+                branchesByRegion
+            } else {
+                val assignedNormalized =
+                    assignedBranchNames
+                        .map(::normalizedAssignmentValue)
+                        .toSet()
+
+                branchesByRegion
+                    .mapValues { (_, branches) ->
+                        branches.filter { candidate ->
+                            normalizedAssignmentValue(
+                                candidate
+                            ) in assignedNormalized
+                        }
+                    }
+                    .filterValues {
+                        it.isNotEmpty()
+                    }
+            }
+        }
 
     fun readCoachGroupKey(): String {
         return userSp.getString("active_group", null)
@@ -332,10 +559,56 @@ fun CoachBroadcastScreen(
         effectiveGroupKeys.joinToString(", ")
     }
 
-    var region by remember { mutableStateOf(defaultRegion.orEmpty()) }
-    var branch by remember { mutableStateOf(defaultBranch.orEmpty()) }
-    var message by remember { mutableStateOf("") }
-    var isSending by remember { mutableStateOf(false) }
+    var region by remember {
+        mutableStateOf(
+            defaultRegion.orEmpty()
+        )
+    }
+
+    var branch by remember {
+        mutableStateOf(
+            defaultBranch.orEmpty()
+        )
+    }
+
+    var message by remember {
+        mutableStateOf("")
+    }
+
+    var isSending by remember {
+        mutableStateOf(false)
+    }
+
+    /*
+     * הקבוצות המותרות נקראות מהשיוך של
+     * הסניף שנבחר בלבד.
+     */
+    val assignedGroupsForSelectedBranch =
+        remember(
+            coachBranchAssignments,
+            branch
+        ) {
+            val normalizedBranch =
+                normalizedAssignmentValue(
+                    branch
+                )
+
+            coachBranchAssignments
+                .firstOrNull { assignment ->
+                    normalizedAssignmentValue(
+                        assignment.branch
+                    ) == normalizedBranch
+                }
+                ?.groups
+                ?.map {
+                    it.trim()
+                }
+                ?.filter {
+                    it.isNotBlank()
+                }
+                ?.distinct()
+                .orEmpty()
+        }
 
     var expandedRegion by remember { mutableStateOf(false) }
     var expandedBranch by remember { mutableStateOf(false) }
@@ -354,7 +627,15 @@ fun CoachBroadcastScreen(
     val scope = rememberCoroutineScope()
 
     // ===== טעינת חברי הקבוצה מה- Firestore לפי אזור + סניף + קבוצה =====
-    LaunchedEffect(region, branch, sendScope, selectedTargetGroups, coachGroupKey) {
+    LaunchedEffect(
+        region,
+        branch,
+        sendScope,
+        selectedTargetGroups,
+        coachGroupKey,
+        coachBranchAssignments,
+        assignedGroupsForSelectedBranch
+    ) {
         fun String.norm(): String {
             return trim()
                 .replace('־', '-')
@@ -770,14 +1051,50 @@ fun CoachBroadcastScreen(
                 .filter { matchesAnyToken(it.branchTokensNorm(), branchCandidateSet) }
                 .toList()
 
-            val branchGroups = branchMatchedDocs
-                .flatMap { it.groupDisplayTokens() }
-                .map { it.norm() }
-                .filter { it.isNotBlank() }
-                .distinct()
-                .sorted()
+            val discoveredBranchGroups =
+                branchMatchedDocs
+                    .flatMap {
+                        it.groupDisplayTokens()
+                    }
+                    .map {
+                        it.norm()
+                    }
+                    .filter {
+                        it.isNotBlank()
+                    }
+                    .distinct()
+                    .sorted()
 
-            val groupCounts = branchGroups.associateWith { groupName ->
+            /*
+             * המבנה החדש הוא מקור האמת.
+             *
+             * אם קיימות קבוצות משויכות לסניף,
+             * מציגים רק אותן — גם אם קיימים
+             * במסד מתאמנים מקבוצות אחרות.
+             *
+             * כאשר אין עדיין מבנה חדש, משתמשים
+             * זמנית בקבוצות שהתגלו מהמסמכים.
+             */
+            val branchGroups =
+                if (
+                    coachBranchAssignments
+                        .isNotEmpty()
+                ) {
+                    assignedGroupsForSelectedBranch
+                        .map {
+                            it.norm()
+                        }
+                        .filter {
+                            it.isNotBlank()
+                        }
+                        .distinct()
+                        .sorted()
+                } else {
+                    discoveredBranchGroups
+                }
+
+            val groupCounts =
+                branchGroups.associateWith { groupName ->
                 val groupCandidates = expandGroupAliases(groupName).toSet()
 
                 branchMatchedDocs
@@ -856,9 +1173,48 @@ fun CoachBroadcastScreen(
         }
     }
 
-    // ✅ מסך אמת: אין DemoPrivacy ואין DemoTrainees.
-    // הרשימה המוצגת היא הרשימה האמיתית שנשלפה מ-Firestore.
-    val uiRecipients = recipients
+    /*
+     * הרשימה האמיתית נשארת בזיכרון לצורך שליחה.
+     * החלפת השם מתבצעת בשכבת התצוגה בלבד.
+     */
+    val uiRecipients =
+        remember(
+            recipients,
+            demoPrivacyEnabled,
+            isEnglish
+        ) {
+            recipients.mapIndexed {
+                    index,
+                    recipient ->
+
+                recipient.copy(
+                    name =
+                        TraineeDisplayNameMapper
+                            .displayName(
+                                realName =
+                                    recipient.name,
+                                stableKey =
+                                    recipient.uid
+                                        .ifBlank {
+                                            recipient.email
+                                                .ifBlank {
+                                                    recipient.phone
+                                                }
+                                        },
+                                demoIndex = index,
+                                isEnglish =
+                                    isEnglish
+                            )
+                            .ifBlank {
+                                coachBroadcastTr(
+                                    isEnglish,
+                                    "מתאמן ללא שם",
+                                    "Unnamed trainee"
+                                )
+                            }
+                )
+            }
+        }
 
     // נמענים שנבחרו (גם טלפונים וגם UIDs)
     val selectedRecipients = recipients.filter { it.selected }
@@ -896,7 +1252,7 @@ fun CoachBroadcastScreen(
             "Send message to all trainees"
         )
 
-        selectedNumbers.size == 1 -> coachBroadcastTr(
+        selectedUids.size == 1 -> coachBroadcastTr(
             isEnglish,
             "שליחת הודעה למתאמן שנבחר",
             "Send message to selected trainee"
@@ -904,8 +1260,8 @@ fun CoachBroadcastScreen(
 
         else -> coachBroadcastTr(
             isEnglish,
-            "שליחת הודעה ל-${selectedNumbers.size} מתאמנים",
-            "Send message to ${selectedNumbers.size} trainees"
+            "שליחת הודעה ל-${selectedUids.size} מתאמנים",
+            "Send message to ${selectedUids.size} trainees"
         )
     }
 
@@ -954,35 +1310,159 @@ fun CoachBroadcastScreen(
         )
     }
 
-    // 🔵 רקע אחיד חדש לכל המסכים
-    val gradientBackground = remember {
+    // 🔵 רקע אחיד למצב בהיר וכהה
+    val gradientBackground =
         Brush.verticalGradient(
-            colors = listOf(
-                Color(0xFFF8FBFF),
-                Color(0xFFEAF4FF),
-                Color(0xFFB7DDF7),
-                Color(0xFF1F78B4),
-                Color(0xFF062B4A)
-            )
+            colors =
+                if (isDarkMode) {
+                    listOf(
+                        androidx.compose.material3
+                            .MaterialTheme
+                            .colorScheme
+                            .background,
+                        androidx.compose.material3
+                            .MaterialTheme
+                            .colorScheme
+                            .surface,
+                        Color(0xFF10243A),
+                        Color(0xFF0A3657),
+                        Color(0xFF041E33)
+                    )
+                } else {
+                    listOf(
+                        Color(0xFFF8FBFF),
+                        Color(0xFFEAF4FF),
+                        Color(0xFFB7DDF7),
+                        Color(0xFF1F78B4),
+                        Color(0xFF062B4A)
+                    )
+                }
         )
-    }
 
-    // 🎨 צבעים אחידים לשדות בהירים
-    val fieldColors = OutlinedTextFieldDefaults.colors(
-        focusedContainerColor = Color.White,
-        unfocusedContainerColor = Color.White,
-        disabledContainerColor = Color.White,
-        focusedTextColor = Color(0xFF1E2A3D),
-        unfocusedTextColor = Color(0xFF1E2A3D),
-        disabledTextColor = Color(0xFF1E2A3D),
-        focusedLabelColor = Color(0xFF5E6C80),
-        unfocusedLabelColor = Color(0xFF5E6C80),
-        disabledLabelColor = Color(0xFF5E6C80),
-        focusedBorderColor = Color(0xFFBFD0E8),
-        unfocusedBorderColor = Color(0xFFD8E3F5),
-        disabledBorderColor = Color(0xFFD8E3F5),
-        cursorColor = Color(0xFF1E2A3D)
-    )
+    val fieldContainerColor =
+        if (isDarkMode) {
+            androidx.compose.material3
+                .MaterialTheme
+                .colorScheme
+                .surface
+        } else {
+            Color.White
+        }
+
+    val fieldTextColor =
+        if (isDarkMode) {
+            androidx.compose.material3
+                .MaterialTheme
+                .colorScheme
+                .onSurface
+        } else {
+            Color(0xFF1E2A3D)
+        }
+
+    val fieldLabelColor =
+        if (isDarkMode) {
+            androidx.compose.material3
+                .MaterialTheme
+                .colorScheme
+                .onSurfaceVariant
+        } else {
+            Color(0xFF5E6C80)
+        }
+
+    val fieldBorderColor =
+        if (isDarkMode) {
+            androidx.compose.material3
+                .MaterialTheme
+                .colorScheme
+                .outline
+                .copy(alpha = 0.55f)
+        } else {
+            Color(0xFFD8E3F5)
+        }
+
+    val fieldColors =
+        OutlinedTextFieldDefaults.colors(
+            focusedContainerColor =
+                fieldContainerColor,
+            unfocusedContainerColor =
+                fieldContainerColor,
+            disabledContainerColor =
+                fieldContainerColor,
+            focusedTextColor =
+                fieldTextColor,
+            unfocusedTextColor =
+                fieldTextColor,
+            disabledTextColor =
+                fieldTextColor,
+            focusedLabelColor =
+                fieldLabelColor,
+            unfocusedLabelColor =
+                fieldLabelColor,
+            disabledLabelColor =
+                fieldLabelColor,
+            focusedBorderColor =
+                fieldBorderColor,
+            unfocusedBorderColor =
+                fieldBorderColor,
+            disabledBorderColor =
+                fieldBorderColor,
+            cursorColor =
+                fieldTextColor
+        )
+
+    val cardContainerColor =
+        if (isDarkMode) {
+            androidx.compose.material3
+                .MaterialTheme
+                .colorScheme
+                .surface
+                .copy(alpha = 0.94f)
+        } else {
+            Color(0xFFF4F8FF)
+        }
+
+    val cardBorderColor =
+        if (isDarkMode) {
+            Color(0xFF60A5FA)
+                .copy(alpha = 0.42f)
+        } else {
+            Color(0xFFB8D5F4)
+        }
+
+    val primaryContentColor =
+        if (isDarkMode) {
+            androidx.compose.material3
+                .MaterialTheme
+                .colorScheme
+                .onSurface
+        } else {
+            Color(0xFF1E2A3D)
+        }
+
+    val secondaryContentColor =
+        if (isDarkMode) {
+            androidx.compose.material3
+                .MaterialTheme
+                .colorScheme
+                .onSurfaceVariant
+        } else {
+            Color(0xFF5E6C80)
+        }
+
+    val recipientListColor =
+        if (isDarkMode) {
+            Color(0xFF0F2033)
+                .copy(alpha = 0.96f)
+        } else {
+            Color.White.copy(alpha = 0.95f)
+        }
+
+    val selectedRecipientColor =
+        if (isDarkMode) {
+            Color(0xFF123A56)
+        } else {
+            Color(0xFFE0F2FE)
+        }
 
     androidx.compose.runtime.CompositionLocalProvider(
         androidx.compose.ui.platform.LocalLayoutDirection provides layoutDirection
@@ -1044,11 +1524,12 @@ fun CoachBroadcastScreen(
                 Surface(
                     modifier = Modifier.fillMaxWidth(),
                     shape = androidx.compose.foundation.shape.RoundedCornerShape(22.dp),
-                    color = Color(0xFFEAF2FF),
+                    color = cardContainerColor,
                     tonalElevation = 0.dp,
+                    shadowElevation = 0.dp,
                     border = BorderStroke(
                         width = 1.dp,
-                        color = Color(0xFFD8E3F5)
+                        color = cardBorderColor
                     )
                 ) {
                     Column(
@@ -1075,7 +1556,7 @@ fun CoachBroadcastScreen(
                                 modifier = Modifier
                                     .menuAnchor()
                                     .fillMaxWidth(),
-                                textStyle = androidx.compose.material3.MaterialTheme.typography.bodyLarge.copy(
+                                textStyle = KmiTypography.body.copy(
                                     textAlign = screenTextAlign
                                 ),
                                 shape = androidx.compose.foundation.shape.RoundedCornerShape(16.dp),
@@ -1085,7 +1566,7 @@ fun CoachBroadcastScreen(
                                 expanded = expandedRegion,
                                 onDismissRequest = { expandedRegion = false }
                             ) {
-                                branchesByRegion.keys.forEach { r ->
+                                visibleBranchesByRegion.keys.forEach { r ->
                                     DropdownMenuItem(
                                         text = {
                                             Text(
@@ -1128,10 +1609,13 @@ fun CoachBroadcastScreen(
                                     modifier = Modifier
                                         .menuAnchor()
                                         .fillMaxWidth(),
-                                    textStyle = androidx.compose.material3.MaterialTheme.typography.bodyLarge.copy(
-                                        textAlign = screenTextAlign,
-                                        color = Color(0xFF1E2A3D)
-                                    ),
+                                    textStyle =
+                                        KmiTypography.body.copy(
+                                            textAlign =
+                                                screenTextAlign,
+                                            color =
+                                                fieldTextColor
+                                        ),
                                     shape = androidx.compose.foundation.shape.RoundedCornerShape(16.dp),
                                     colors = fieldColors
                                 )
@@ -1139,7 +1623,10 @@ fun CoachBroadcastScreen(
                                     expanded = expandedBranch,
                                     onDismissRequest = { expandedBranch = false }
                                 ) {
-                                    (branchesByRegion[region] ?: emptyList()).forEach { b ->
+                                    (
+                                            visibleBranchesByRegion[region]
+                                                ?: emptyList()
+                                            ).forEach { b ->
                                         DropdownMenuItem(
                                             text = {
                                                 Text(
@@ -1179,25 +1666,38 @@ fun CoachBroadcastScreen(
                             },
                             minLines = 3,
                             modifier = Modifier.fillMaxWidth(),
-                            textStyle = androidx.compose.material3.MaterialTheme.typography.bodyLarge.copy(
-                                textAlign = screenTextAlign
-                            ),
+                            textStyle =
+                                KmiTypography.body.copy(
+                                    textAlign =
+                                        screenTextAlign,
+                                    color =
+                                        fieldTextColor
+                                ),
                             shape = androidx.compose.foundation.shape.RoundedCornerShape(16.dp),
                             colors = fieldColors
                         )
                     }
                 }
 
-                if (branch.isNotBlank() && availableBranchGroups.isNotEmpty()) {
+                if (
+                    branch.isNotBlank() &&
+                    availableBranchGroups.isNotEmpty()
+                ) {
                     Surface(
-                        modifier = Modifier.fillMaxWidth(),
-                        shape = androidx.compose.foundation.shape.RoundedCornerShape(22.dp),
-                        color = Color(0xFFEAF2FF),
+                        modifier =
+                            Modifier.fillMaxWidth(),
+                        shape =
+                            androidx.compose.foundation
+                                .shape
+                                .RoundedCornerShape(22.dp),
+                        color = cardContainerColor,
                         tonalElevation = 0.dp,
-                        border = BorderStroke(
-                            width = 1.dp,
-                            color = Color(0xFFD8E3F5)
-                        )
+                        shadowElevation = 0.dp,
+                        border =
+                            BorderStroke(
+                                width = 1.dp,
+                                color = cardBorderColor
+                            )
                     ) {
                         Column(
                             modifier = Modifier
@@ -1206,16 +1706,24 @@ fun CoachBroadcastScreen(
                             verticalArrangement = Arrangement.spacedBy(10.dp)
                         ) {
                             Text(
-                                text = coachBroadcastTr(
-                                    isEnglish,
-                                    "בחירת קבוצות לשליחה",
-                                    "Select groups to include"
-                                ),
-                                color = Color(0xFF1E2A3D),
-                                style = androidx.compose.material3.MaterialTheme.typography.titleSmall,
-                                fontWeight = androidx.compose.ui.text.font.FontWeight.ExtraBold,
-                                textAlign = screenTextAlign,
-                                modifier = Modifier.fillMaxWidth()
+                                text =
+                                    coachBroadcastTr(
+                                        isEnglish,
+                                        "בחירת קבוצות לשליחה",
+                                        "Select groups to include"
+                                    ),
+                                color =
+                                    primaryContentColor,
+                                style =
+                                    KmiTypography.cardTitle,
+                                fontWeight =
+                                    androidx.compose.ui.text
+                                        .font
+                                        .FontWeight.ExtraBold,
+                                textAlign =
+                                    screenTextAlign,
+                                modifier =
+                                    Modifier.fillMaxWidth()
                             )
 
                             val areAllGroupsSelected =
@@ -1240,12 +1748,18 @@ fun CoachBroadcastScreen(
                                         recipients = emptyList()
                                         isRecipientsLoading = true
                                     },
-                                    modifier = Modifier
-                                        .widthIn(min = 210.dp, max = 260.dp)
-                                        .height(58.dp),
+                                    modifier =
+                                        Modifier
+                                            .widthIn(
+                                                min = 210.dp,
+                                                max = 280.dp
+                                            )
+                                            .heightIn(
+                                                min = 58.dp
+                                            ),
                                     shape = androidx.compose.foundation.shape.RoundedCornerShape(18.dp),
                                     color = Color.Transparent,
-                                    shadowElevation = 3.dp,
+                                    shadowElevation = 0.dp,
                                     border = BorderStroke(
                                         1.dp,
                                         if (areAllGroupsSelected) {
@@ -1284,14 +1798,18 @@ fun CoachBroadcastScreen(
                                             horizontalArrangement = Arrangement.Center
                                         ) {
                                             Text(
-                                                text = if (areAllGroupsSelected) {
-                                                    "↩️"
-                                                } else {
-                                                    "☑️"
-                                                },
-                                                fontSize = 14.sp,
-                                                lineHeight = 15.sp,
-                                                textAlign = TextAlign.Center,
+                                                text =
+                                                    if (
+                                                        areAllGroupsSelected
+                                                    ) {
+                                                        "↩️"
+                                                    } else {
+                                                        "☑️"
+                                                    },
+                                                style =
+                                                    KmiTypography.action,
+                                                textAlign =
+                                                    TextAlign.Center,
                                                 maxLines = 1
                                             )
 
@@ -1321,12 +1839,15 @@ fun CoachBroadcastScreen(
                                                             "Select all"
                                                         )
                                                     },
-                                                    textAlign = TextAlign.Center,
-                                                    color = Color.White,
-                                                    fontSize = 13.sp,
-                                                    lineHeight = 15.sp,
-                                                    fontWeight = androidx.compose.ui.text.font.FontWeight.ExtraBold,
-                                                    maxLines = 1,
+                                                    textAlign =
+                                                        TextAlign.Center,
+                                                    color =
+                                                        Color.White,
+                                                    style =
+                                                        KmiTypography.action,
+                                                    fontWeight =
+                                                        androidx.compose.ui.text.font.FontWeight.ExtraBold,
+                                                    maxLines = 2,
                                                     overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
                                                 )
 
@@ -1360,10 +1881,11 @@ fun CoachBroadcastScreen(
                                                     } else {
                                                         Color(0xFFE0F2FE)
                                                     },
-                                                    fontSize = 10.sp,
-                                                    lineHeight = 11.sp,
-                                                    fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold,
-                                                    maxLines = 1,
+                                                    style =
+                                                        KmiTypography.caption,
+                                                    fontWeight =
+                                                        androidx.compose.ui.text.font.FontWeight.SemiBold,
+                                                    maxLines = 2,
                                                     overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
                                                 )
                                             }
@@ -1434,7 +1956,8 @@ fun CoachBroadcastScreen(
                                                     } else {
                                                         Color.White
                                                     },
-                                                    style = androidx.compose.material3.MaterialTheme.typography.titleSmall,
+                                                    style =
+                                                        KmiTypography.cardTitle,
                                                     fontWeight = androidx.compose.ui.text.font.FontWeight.ExtraBold,
                                                     textAlign = screenTextAlign,
                                                     modifier = Modifier.fillMaxWidth()
@@ -1451,7 +1974,7 @@ fun CoachBroadcastScreen(
                                                     } else {
                                                         Color(0xFFBAE6FD)
                                                     },
-                                                    style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
+                                                    style = KmiTypography.caption,
                                                     fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,
                                                     textAlign = screenTextAlign,
                                                     modifier = Modifier.fillMaxWidth()
@@ -1481,9 +2004,11 @@ fun CoachBroadcastScreen(
                                                     } else {
                                                         Color(0xFFE0F2FE)
                                                     },
-                                                    fontSize = 11.sp,
-                                                    fontWeight = androidx.compose.ui.text.font.FontWeight.ExtraBold,
-                                                    maxLines = 1
+                                                    style =
+                                                        KmiTypography.secondary,
+                                                    fontWeight =
+                                                        androidx.compose.ui.text.font.FontWeight.ExtraBold,
+                                                    maxLines = 2
                                                 )
 
                                                 Surface(
@@ -1524,10 +2049,14 @@ fun CoachBroadcastScreen(
                                                         if (isSelected) {
                                                             Text(
                                                                 text = "✓",
-                                                                color = Color.White,
-                                                                fontSize = 16.sp,
-                                                                fontWeight = androidx.compose.ui.text.font.FontWeight.ExtraBold,
-                                                                textAlign = TextAlign.Center
+                                                                color =
+                                                                    Color.White,
+                                                                style =
+                                                                    KmiTypography.action,
+                                                                fontWeight =
+                                                                    androidx.compose.ui.text.font.FontWeight.ExtraBold,
+                                                                textAlign =
+                                                                    TextAlign.Center
                                                             )
                                                         }
                                                     }
@@ -1552,12 +2081,21 @@ fun CoachBroadcastScreen(
                                         "The message will be sent only to trainees in the selected groups."
                                     )
                                 },
-                                color = if (selectedTargetGroups.isEmpty()) {
-                                    Color(0xFF0F5E9C)
-                                } else {
-                                    Color(0xFF5E6C80)
-                                },
-                                style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
+                                color =
+                                    if (
+                                        selectedTargetGroups
+                                            .isEmpty()
+                                    ) {
+                                        if (isDarkMode) {
+                                            Color(0xFF7DD3FC)
+                                        } else {
+                                            Color(0xFF0F5E9C)
+                                        }
+                                    } else {
+                                        secondaryContentColor
+                                    },
+                                style =
+                                    KmiTypography.caption,
                                 fontWeight = androidx.compose.ui.text.font.FontWeight.ExtraBold,
                                 textAlign = screenTextAlign,
                                 modifier = Modifier.fillMaxWidth()
@@ -1569,38 +2107,66 @@ fun CoachBroadcastScreen(
                 // ===== רשימת נמענים מהקבוצה =====
                 if (isRecipientsLoading) {
                     Surface(
-                        modifier = Modifier.fillMaxWidth(),
-                        shape = androidx.compose.foundation.shape.RoundedCornerShape(18.dp),
-                        color = Color(0xFF0B1220).copy(alpha = 0.86f),
-                        border = BorderStroke(
-                            1.dp,
-                            Color(0xFF67E8F9).copy(alpha = 0.45f)
-                        )
+                        modifier =
+                            Modifier.fillMaxWidth(),
+                        shape =
+                            androidx.compose.foundation
+                                .shape
+                                .RoundedCornerShape(18.dp),
+                        color = cardContainerColor,
+                        tonalElevation = 0.dp,
+                        shadowElevation = 0.dp,
+                        border =
+                            BorderStroke(
+                                width = 1.dp,
+                                color = cardBorderColor
+                            )
                     ) {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = 14.dp, vertical = 14.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.Center
+                        Column(
+                            modifier =
+                                Modifier
+                                    .fillMaxWidth()
+                                    .padding(
+                                        horizontal = 16.dp,
+                                        vertical = 18.dp
+                                    ),
+                            horizontalAlignment =
+                                Alignment.CenterHorizontally,
+                            verticalArrangement =
+                                Arrangement.spacedBy(10.dp)
                         ) {
-                            CircularProgressIndicator(
-                                modifier = Modifier.size(18.dp),
-                                strokeWidth = 2.dp,
-                                color = Color(0xFF67E8F9)
+                            CoachBroadcastLoadingRings(
+                                size = 64.dp
                             )
 
-                            Spacer(Modifier.width(10.dp))
-
                             Text(
-                                text = coachBroadcastTr(
-                                    isEnglish,
-                                    "טוען מתאמנים לקבוצות שנבחרו...",
-                                    "Loading trainees for selected groups..."
-                                ),
-                                color = Color.White,
-                                style = androidx.compose.material3.MaterialTheme.typography.bodyMedium,
-                                fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,
+                                text =
+                                    coachBroadcastTr(
+                                        isEnglish,
+                                        if (
+                                            selectedTargetGroups
+                                                .isEmpty()
+                                        ) {
+                                            "טוען קבוצות בסניף..."
+                                        } else {
+                                            "טוען מתאמנים בקבוצות שנבחרו..."
+                                        },
+                                        if (
+                                            selectedTargetGroups
+                                                .isEmpty()
+                                        ) {
+                                            "Loading branch groups..."
+                                        } else {
+                                            "Loading trainees in selected groups..."
+                                        }
+                                    ),
+                                color = primaryContentColor,
+                                style =
+                                    KmiTypography.secondary,
+                                fontWeight =
+                                    androidx.compose.ui.text
+                                        .font
+                                        .FontWeight.Bold,
                                 textAlign = TextAlign.Center
                             )
                         }
@@ -1615,7 +2181,11 @@ fun CoachBroadcastScreen(
                                 val newValue = !allSelected
                                 recipients = recipients.map { it.copy(selected = newValue) }
                             },
-                            modifier = Modifier.width(200.dp),
+                            modifier =
+                                Modifier.widthIn(
+                                    min = 200.dp,
+                                    max = 280.dp
+                                ),
                             shape = androidx.compose.foundation.shape.RoundedCornerShape(16.dp),
                             border = BorderStroke(1.dp, Color(0xFF67E8F9)),
                             colors = androidx.compose.material3.ButtonDefaults.outlinedButtonColors(
@@ -1624,14 +2194,26 @@ fun CoachBroadcastScreen(
                             )
                         ) {
                             Text(
-                                text = if (allSelected) {
-                                    coachBroadcastTr(isEnglish, "בטל סימון לכולם", "Unselect all")
-                                } else {
-                                    coachBroadcastTr(isEnglish, "סמן את כל חברי הקבוצה", "Select all group members")
-                                },
-                                style = androidx.compose.material3.MaterialTheme.typography.titleSmall,
-                                fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,
-                                letterSpacing = 0.4.sp
+                                text =
+                                    if (allSelected) {
+                                        coachBroadcastTr(
+                                            isEnglish,
+                                            "בטל סימון לכולם",
+                                            "Unselect all"
+                                        )
+                                    } else {
+                                        coachBroadcastTr(
+                                            isEnglish,
+                                            "סמן את כל חברי הקבוצה",
+                                            "Select all group members"
+                                        )
+                                    },
+                                style =
+                                    KmiTypography.action,
+                                fontWeight =
+                                    androidx.compose.ui.text.font.FontWeight.Bold,
+                                textAlign =
+                                    TextAlign.Center
                             )
                         }
                     }
@@ -1641,7 +2223,21 @@ fun CoachBroadcastScreen(
                     Column(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .background(Color.White.copy(alpha = 0.95f))
+                            .background(
+                                color = recipientListColor,
+                                shape =
+                                    androidx.compose.foundation
+                                        .shape
+                                        .RoundedCornerShape(18.dp)
+                            )
+                            .border(
+                                width = 1.dp,
+                                color = cardBorderColor,
+                                shape =
+                                    androidx.compose.foundation
+                                        .shape
+                                        .RoundedCornerShape(18.dp)
+                            )
                             .padding(8.dp),
                         horizontalAlignment = if (isEnglish) Alignment.Start else Alignment.End
                     ) {
@@ -1653,7 +2249,12 @@ fun CoachBroadcastScreen(
                                     .fillMaxWidth()
                                     .padding(vertical = 3.dp),
                                 shape = androidx.compose.foundation.shape.RoundedCornerShape(14.dp),
-                                color = if (isSelected) Color(0xFFE0F2FE) else Color.Transparent,
+                                color =
+                                    if (isSelected) {
+                                        selectedRecipientColor
+                                    } else {
+                                        Color.Transparent
+                                    },
                                 tonalElevation = 0.dp,
                                 border = if (isSelected) {
                                     BorderStroke(
@@ -1674,15 +2275,40 @@ fun CoachBroadcastScreen(
                                     ) {
                                         Text(
                                             text = r.name,
-                                            color = if (isSelected) Color(0xFF0C4A6E) else Color.Black,
+                                            color =
+                                                if (isSelected) {
+                                                    if (isDarkMode) {
+                                                        Color(0xFFE0F2FE)
+                                                    } else {
+                                                        Color(0xFF0C4A6E)
+                                                    }
+                                                } else {
+                                                    primaryContentColor
+                                                },
                                             textAlign = screenTextAlign,
                                             modifier = Modifier.fillMaxWidth()
                                         )
                                         Text(
-                                            text = r.phone.ifBlank {
-                                                coachBroadcastTr(isEnglish, "ללא מספר טלפון", "No phone number")
-                                            },
-                                            style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
+                                            text =
+                                                if (
+                                                    demoPrivacyEnabled
+                                                ) {
+                                                    coachBroadcastTr(
+                                                        isEnglish,
+                                                        "מספר מוסתר",
+                                                        "Hidden number"
+                                                    )
+                                                } else {
+                                                    r.phone.ifBlank {
+                                                        coachBroadcastTr(
+                                                            isEnglish,
+                                                            "ללא מספר טלפון",
+                                                            "No phone number"
+                                                        )
+                                                    }
+                                                },
+                                            style =
+                                                KmiTypography.caption,
                                             color = if (isSelected) Color(0xFF0369A1) else Color.Gray,
                                             textAlign = screenTextAlign,
                                             modifier = Modifier.fillMaxWidth()
@@ -1728,29 +2354,41 @@ fun CoachBroadcastScreen(
                     verticalArrangement = Arrangement.spacedBy(4.dp)
                 ) {
                     Text(
-                        text = coachBroadcastTr(
-                            isEnglish,
-                            "מתאמנים בקבוצות שנבחרו: ${recipients.size}",
-                            "Trainees in selected groups: ${recipients.size}"
-                        ),
+                        text =
+                            coachBroadcastTr(
+                                isEnglish,
+                                "מתאמנים בקבוצות שנבחרו: ${recipients.size}",
+                                "Trainees in selected groups: ${recipients.size}"
+                            ),
                         color = Color.White,
-                        style = androidx.compose.material3.MaterialTheme.typography.titleSmall,
-                        fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,
+                        style =
+                            KmiTypography.cardTitle,
+                        fontWeight =
+                            androidx.compose.ui.text
+                                .font
+                                .FontWeight.Bold,
                         textAlign = screenTextAlign,
-                        modifier = Modifier.fillMaxWidth()
+                        modifier =
+                            Modifier.fillMaxWidth()
                     )
 
                     Text(
-                        text = coachBroadcastTr(
-                            isEnglish,
-                            "מתאמנים נבחרים: ${selectedNumbers.size}",
-                            "Selected trainees: ${selectedNumbers.size}"
-                        ),
+                        text =
+                            coachBroadcastTr(
+                                isEnglish,
+                                "מתאמנים נבחרים: ${selectedUids.size}",
+                                "Selected trainees: ${selectedUids.size}"
+                            ),
                         color = Color(0xFFE0F2FE),
-                        style = androidx.compose.material3.MaterialTheme.typography.titleSmall,
-                        fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,
+                        style =
+                            KmiTypography.cardTitle,
+                        fontWeight =
+                            androidx.compose.ui.text
+                                .font
+                                .FontWeight.Bold,
                         textAlign = screenTextAlign,
-                        modifier = Modifier.fillMaxWidth()
+                        modifier =
+                            Modifier.fillMaxWidth()
                     )
                 }
 
@@ -1837,43 +2475,60 @@ fun CoachBroadcastScreen(
                         disabledContainerColor = Color(0xFF1E293B),
                         disabledContentColor = Color(0xFF64748B)
                     ),
-                    elevation = androidx.compose.material3.ButtonDefaults.buttonElevation(
-                        defaultElevation = 6.dp,
-                        pressedElevation = 2.dp
-                    ),
+                    elevation =
+                        androidx.compose.material3
+                            .ButtonDefaults
+                            .buttonElevation(
+                                defaultElevation = 0.dp,
+                                pressedElevation = 0.dp,
+                                focusedElevation = 0.dp,
+                                hoveredElevation = 0.dp,
+                                disabledElevation = 0.dp
+                            ),
                     border = BorderStroke(1.dp, Color(0xFF67E8F9))
                 ) {
                     if (isSending) {
                         Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.Center
+                            modifier =
+                                Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = 4.dp),
+                            horizontalArrangement =
+                                Arrangement.Center,
+                            verticalAlignment =
+                                Alignment.CenterVertically
                         ) {
-                            CircularProgressIndicator(
-                                modifier = Modifier.size(18.dp),
-                                strokeWidth = 2.dp,
-                                color = Color.White
+                            CoachBroadcastLoadingRings(
+                                size = 30.dp
                             )
 
-                            Spacer(Modifier.width(8.dp))
+                            Spacer(
+                                Modifier.width(10.dp)
+                            )
 
                             Text(
-                                text = coachBroadcastTr(
-                                    isEnglish,
-                                    "שולח הודעה...",
-                                    "Sending message..."
-                                ),
+                                text =
+                                    coachBroadcastTr(
+                                        isEnglish,
+                                        "שולח הודעה...",
+                                        "Sending message..."
+                                    ),
                                 color = Color.White,
-                                style = androidx.compose.material3.MaterialTheme.typography.titleSmall,
-                                fontWeight = androidx.compose.ui.text.font.FontWeight.Bold
+                                style =
+                                    KmiTypography.action,
+                                fontWeight =
+                                    androidx.compose.ui.text
+                                        .font
+                                        .FontWeight.Bold
                             )
                         }
                     } else {
                         Text(
                             text = sendButtonText,
                             color = Color(0xFFE0F2FE),
-                            style = androidx.compose.material3.MaterialTheme.typography.titleSmall,
-                            fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,
-                            letterSpacing = 0.3.sp,
+                            style = KmiTypography.action,
+                            fontWeight =
+                                androidx.compose.ui.text.font.FontWeight.Bold,
                             maxLines = 2,
                             textAlign = androidx.compose.ui.text.style.TextAlign.Center,
                             modifier = Modifier

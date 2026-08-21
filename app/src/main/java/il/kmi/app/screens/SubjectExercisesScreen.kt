@@ -49,12 +49,12 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import il.kmi.app.KmiViewModel
 import il.kmi.app.domain.ExerciseExplanationResolver
 import il.kmi.app.domain.SubjectTopic as AppSubjectTopic
 import il.kmi.app.domain.TopicsBySubjectRegistry
 import il.kmi.app.ui.KmiTtsManager
+import il.kmi.app.ui.KmiTypography
 import il.kmi.app.ui.color
 import il.kmi.app.ui.rememberClickSound
 import il.kmi.app.ui.rememberHapticsGlobal
@@ -1053,7 +1053,7 @@ fun SubjectExercisesScreen(
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     Text(
                         text = "לא נמצא subject עבור:\n${screenTitle.ifBlank { subjectId }}",
-                        style = MaterialTheme.typography.titleMedium,
+                        style = KmiTypography.sectionTitle,
                         textAlign = TextAlign.Center
                     )
                     Spacer(Modifier.height(12.dp))
@@ -1245,17 +1245,27 @@ fun SubjectExercisesScreen(
         KmiTtsManager.setSpeechProfile(rate = 0.95f, pitch = 1.0f)
     }
 
-    val backgroundBrush = remember {
+    val backgroundBrush =
         Brush.verticalGradient(
-            colors = listOf(
-                Color(0xFFF8FBFF),
-                Color(0xFFEAF4FF),
-                Color(0xFFB7DDF7),
-                Color(0xFF1F78B4),
-                Color(0xFF062B4A)
-            )
+            colors =
+                if (isDarkMode) {
+                    listOf(
+                        MaterialTheme.colorScheme.background,
+                        MaterialTheme.colorScheme.surface,
+                        Color(0xFF10243A),
+                        Color(0xFF0A3657),
+                        Color(0xFF041E33)
+                    )
+                } else {
+                    listOf(
+                        Color(0xFFF8FBFF),
+                        Color(0xFFEAF4FF),
+                        Color(0xFFB7DDF7),
+                        Color(0xFF1F78B4),
+                        Color(0xFF062B4A)
+                    )
+                }
         )
-    }
 
             // נתוני שורה: belt + topic + rawItem (לניווט) + displayName + canonicalId
             data class RowData(
@@ -1671,8 +1681,7 @@ fun SubjectExercisesScreen(
                             "→→ הזז לצד כדי לראות עוד נתונים →→"
                         },
                         color = Color.White.copy(alpha = 0.86f),
-                        fontSize = 10.sp,
-                        lineHeight = 12.sp,
+                        style = KmiTypography.caption,
                         fontWeight = FontWeight.SemiBold,
                         textAlign = TextAlign.Center,
                         modifier = Modifier.fillMaxWidth()
@@ -1747,7 +1756,7 @@ fun SubjectExercisesScreen(
                     Color.White.copy(alpha = 0.97f)
                 },
                 tonalElevation = if (isDarkMode) 0.dp else 4.dp,
-                shadowElevation = if (isDarkMode) 0.dp else 10.dp,
+                shadowElevation = 1.dp,
                 border = if (isDarkMode) {
                     BorderStroke(1.dp, Color.White.copy(alpha = 0.10f))
                 } else {
@@ -1762,7 +1771,7 @@ fun SubjectExercisesScreen(
                     ) {
                         Text(
                             text = "לא נמצאו תרגילים לנושא זה.",
-                            style = MaterialTheme.typography.bodyMedium,
+                            style = KmiTypography.body,
                             color = if (isDarkMode) Color.White.copy(alpha = 0.86f) else Color(0xFF546E7A),
                             textAlign = TextAlign.Center
                         )
@@ -2034,7 +2043,7 @@ fun SubjectExercisesScreen(
                             ) {
                                 Text(
                                     text = row.displayItem,
-                                    style = MaterialTheme.typography.titleMedium,
+                                    style = KmiTypography.sectionTitle,
                                     fontWeight = FontWeight.Bold,
                                     textAlign = TextAlign.Start
                                 )
@@ -2085,7 +2094,7 @@ fun SubjectExercisesScreen(
                     text = {
                         Text(
                             text = explanation,
-                            style = MaterialTheme.typography.bodyMedium,
+                            style = KmiTypography.body,
                             textAlign = TextAlign.Right
                         )
                     },
@@ -2124,19 +2133,21 @@ private fun SubjectTopStatChip(
             Text(
                 text = value,
                 color = contentColor,
-                fontSize = 14.sp,
-                lineHeight = 16.sp,
+                style = KmiTypography.metric,
                 fontWeight = FontWeight.ExtraBold,
                 maxLines = 1
             )
 
             Text(
                 text = label,
-                color = contentColor.copy(alpha = 0.92f),
-                fontSize = 10.sp,
-                lineHeight = 12.sp,
+                color =
+                    contentColor.copy(
+                        alpha = 0.92f
+                    ),
+                style = KmiTypography.caption,
                 fontWeight = FontWeight.SemiBold,
-                maxLines = 1
+                maxLines = 2,
+                textAlign = TextAlign.Center
             )
         }
     }
@@ -2160,11 +2171,15 @@ private fun SubjectExerciseMetaBadge(
         Text(
             text = text,
             color = contentColor,
-            fontSize = 9.sp,
-            lineHeight = 10.5.sp,
+            style = KmiTypography.caption,
             fontWeight = FontWeight.ExtraBold,
-            modifier = Modifier.padding(horizontal = 7.dp, vertical = 2.dp),
-            maxLines = 1
+            modifier =
+                Modifier.padding(
+                    horizontal = 7.dp,
+                    vertical = 3.dp
+                ),
+            maxLines = 2,
+            textAlign = TextAlign.Center
         )
     }
 }
@@ -2177,13 +2192,31 @@ private fun TopFiltersBarModern(
     onPick: (FilterMode) -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val isDarkMode =
+        MaterialTheme.colorScheme.background
+            .luminance() < 0.5f
+
     Surface(
         modifier = modifier.fillMaxWidth(),
         shape = RoundedCornerShape(22.dp),
-        color = Color.White.copy(alpha = 0.92f),
-        tonalElevation = 2.dp,
-        shadowElevation = 6.dp,
-        border = BorderStroke(1.dp, Color(0x14000000))
+        color =
+            if (isDarkMode) {
+                MaterialTheme.colorScheme.surface
+            } else {
+                Color.White.copy(alpha = 0.92f)
+            },
+        tonalElevation = 0.dp,
+        shadowElevation = 0.dp,
+        border = BorderStroke(
+            width = 1.dp,
+            color =
+                if (isDarkMode) {
+                    MaterialTheme.colorScheme.outline
+                        .copy(alpha = 0.45f)
+                } else {
+                    Color(0x14000000)
+                }
+        )
     ) {
         Row(
             modifier = Modifier
@@ -2257,7 +2290,7 @@ private fun FilterChipModern(
 
     Surface(
         modifier = modifier
-            .height(56.dp), // ✅ גובה קבוע – מונע "התמתחות" מטורפת ב-topBar
+            .heightIn(min = 56.dp), // ✅ גובה קבוע – מונע "התמתחות" מטורפת ב-topBar
         shape = RoundedCornerShape(16.dp),
         color = bg,
         border = BorderStroke(1.dp, border)
@@ -2271,7 +2304,7 @@ private fun FilterChipModern(
         ) {
             Text(
                 text = text,
-                style = MaterialTheme.typography.labelMedium,
+                style = KmiTypography.secondary,
                 fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
@@ -2301,7 +2334,7 @@ private fun BeltHeaderRow(
         shape = RoundedCornerShape(22.dp),
         color = belt.color,
         tonalElevation = 2.dp,
-        shadowElevation = 4.dp,
+        shadowElevation = 0.dp,
         modifier = Modifier.fillMaxWidth()
     ) {
         Text(
@@ -2310,7 +2343,7 @@ private fun BeltHeaderRow(
                 .fillMaxWidth()
                 .padding(vertical = 8.dp, horizontal = 14.dp),
             textAlign = TextAlign.Center,
-            style = MaterialTheme.typography.titleMedium,
+            style = KmiTypography.sectionTitle,
             fontWeight = FontWeight.Bold,
             color = onBelt
         )
@@ -2342,7 +2375,7 @@ private fun BeltStickyHeaderModern(
             .padding(bottom = 0.dp),
         shape = RoundedCornerShape(22.dp),
         tonalElevation = if (isDarkMode) 0.dp else 2.dp,
-        shadowElevation = if (isDarkMode) 0.dp else 8.dp,
+        shadowElevation = 0.dp,
         color = if (isDarkMode) Color(0xFF111827) else MaterialTheme.colorScheme.surface,
         border = BorderStroke(
             1.dp,
@@ -2364,7 +2397,7 @@ private fun BeltStickyHeaderModern(
                 ) {
                     Text(
                         text = if (isEnglish) beltTitleEnglishForSticky(belt) else "חגורה $cleanName",
-                        style = MaterialTheme.typography.titleMedium,
+                        style = KmiTypography.sectionTitle,
                         fontWeight = FontWeight.Bold,
                         color = onBelt,
                         modifier = Modifier.weight(1f),
@@ -2377,7 +2410,7 @@ private fun BeltStickyHeaderModern(
                         } else {
                             "$count תרגילים"
                         },
-                        style = MaterialTheme.typography.labelLarge,
+                        style = KmiTypography.secondary,
                         fontWeight = FontWeight.Bold,
                         color = onBelt.copy(alpha = 0.95f)
                     )
@@ -2390,19 +2423,23 @@ private fun BeltStickyHeaderModern(
                     .padding(horizontal = 12.dp, vertical = 10.dp)
             ) {
                 Text(
-                    text = if (isEnglish) {
-                        "← Swipe sideways to see more stats →"
-                    } else {
-                        "→→ הזז לצד כדי לראות עוד נתונים →→"
-                    },
-                    color = if (isDarkMode) {
-                        Color.White.copy(alpha = 0.78f)
-                    } else {
-                        Color(0xFF5B6472)
-                    },
-                    fontSize = 10.sp,
-                    lineHeight = 12.sp,
-                    fontWeight = FontWeight.SemiBold,
+                    text =
+                        if (isEnglish) {
+                            "← Swipe sideways to see more stats →"
+                        } else {
+                            "→→ הזז לצד כדי לראות עוד נתונים →→"
+                        },
+                    color =
+                        if (isDarkMode) {
+                            Color.White.copy(
+                                alpha = 0.78f
+                            )
+                        } else {
+                            Color(0xFF5B6472)
+                        },
+                    style = KmiTypography.caption,
+                    fontWeight =
+                        FontWeight.SemiBold,
                     textAlign = TextAlign.Center,
                     modifier = Modifier.fillMaxWidth()
                 )
@@ -2479,7 +2516,7 @@ private fun BeltSectionCardModern(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(22.dp),
         tonalElevation = if (isDarkMode) 0.dp else 2.dp,
-        shadowElevation = if (isDarkMode) 0.dp else 6.dp,
+        shadowElevation = 0.dp,
         color = if (isDarkMode) Color(0xFF111827) else MaterialTheme.colorScheme.surface,
         border = BorderStroke(
             1.dp,
@@ -2502,7 +2539,7 @@ private fun BeltSectionCardModern(
                 ) {
                     Text(
                         text = "חגורה $cleanName",
-                        style = MaterialTheme.typography.titleMedium,
+                        style = KmiTypography.sectionTitle,
                         fontWeight = FontWeight.Bold,
                         color = onBelt,
                         modifier = Modifier.weight(1f),
@@ -2510,7 +2547,7 @@ private fun BeltSectionCardModern(
                     )
                     Text(
                         text = "$count תרגילים",
-                        style = MaterialTheme.typography.labelLarge,
+                        style = KmiTypography.secondary,
                         fontWeight = FontWeight.Bold,
                         color = onBelt.copy(alpha = 0.95f)
                     )
@@ -2652,10 +2689,7 @@ private fun ExerciseRowCardModern(
 
                     Text(
                         text = item,
-                        style = MaterialTheme.typography.bodySmall.copy(
-                            fontSize = 11.sp,
-                            lineHeight = 13.sp
-                        ),
+                        style = KmiTypography.body,
                         fontWeight = FontWeight.ExtraBold,
                         color = rowTextColor,
                         maxLines = 3,
@@ -2671,10 +2705,7 @@ private fun ExerciseRowCardModern(
 
                             Text(
                                 text = meta,
-                                style = MaterialTheme.typography.bodySmall.copy(
-                                    fontSize = 9.5.sp,
-                                    lineHeight = 11.sp
-                                ),
+                                style = KmiTypography.caption,
                                 color = rowMetaColor,
                                 fontWeight = FontWeight.SemiBold,
                                 maxLines = 1,

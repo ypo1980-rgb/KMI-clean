@@ -37,6 +37,8 @@ import com.google.firebase.ktx.Firebase
 import il.kmi.shared.domain.Belt
 import il.kmi.app.ui.KmiTopBar
 import il.kmi.app.ui.ext.color
+import il.kmi.app.privacy.TraineeDisplayNameMapper
+import il.kmi.app.screens.registration.CoachBranchAssignment
 import kotlinx.coroutines.tasks.await
 import java.util.Calendar
 import java.util.Locale
@@ -127,6 +129,13 @@ data class AdminUserRecord(
     val branch: String?,
     val branches: List<String> = emptyList(),
     val groups: List<String>,
+
+    /*
+     * המבנה החדש: הקבוצות השייכות לכל סניף.
+     */
+    val branchAssignments:
+    List<CoachBranchAssignment> = emptyList(),
+
     val currentBeltId: String?,
     val phone: String?,
     val email: String?,
@@ -620,6 +629,51 @@ private fun mergeAdminUserRecords(
             .filter { it.isNotBlank() }
             .distinctBy { it.lowercase() }
 
+    val mergedBranchAssignments =
+        records
+            .flatMap {
+                it.branchAssignments
+            }
+            .groupBy { assignment ->
+                assignment.branch
+                    .trim()
+                    .replace('־', '-')
+                    .replace('–', '-')
+                    .replace('—', '-')
+                    .replace(Regex("\\s+"), " ")
+                    .lowercase()
+            }
+            .mapNotNull { (_, assignments) ->
+                val branchName =
+                    assignments
+                        .firstOrNull()
+                        ?.branch
+                        ?.trim()
+                        .orEmpty()
+
+                if (branchName.isBlank()) {
+                    null
+                } else {
+                    CoachBranchAssignment(
+                        branch = branchName,
+                        groups =
+                            assignments
+                                .flatMap {
+                                    it.groups
+                                }
+                                .map {
+                                    it.trim()
+                                }
+                                .filter {
+                                    it.isNotBlank()
+                                }
+                                .distinctBy {
+                                    it.lowercase()
+                                }
+                    ).sanitized()
+                }
+            }
+
     return newest.copy(
         uidField = newestNonBlank { it.uidField },
         fullName =
@@ -646,8 +700,37 @@ private fun mergeAdminUserRecords(
             newestNonBlank { it.branch }
                 ?: mergedBranches.firstOrNull(),
 
-        branches = mergedBranches,
-        groups = mergedGroups,
+        branches =
+            if (
+                mergedBranchAssignments
+                    .isNotEmpty()
+            ) {
+                mergedBranchAssignments
+                    .map {
+                        it.branch
+                    }
+            } else {
+                mergedBranches
+            },
+
+        groups =
+            if (
+                mergedBranchAssignments
+                    .isNotEmpty()
+            ) {
+                mergedBranchAssignments
+                    .flatMap {
+                        it.groups
+                    }
+                    .distinctBy {
+                        it.lowercase()
+                    }
+            } else {
+                mergedGroups
+            },
+
+        branchAssignments =
+            mergedBranchAssignments,
 
         currentBeltId =
             newestNonBlank { it.currentBeltId },
@@ -757,6 +840,103 @@ private fun AdminUserRecord.hasRealAdminUserContent(): Boolean {
             cleanRegion.isNotBlank() ||
             cleanBelt.isNotBlank() ||
             groups.isNotEmpty()
+}
+
+private fun DocumentSnapshot
+        .adminBranchAssignments():
+        List<CoachBranchAssignment> {
+
+    val rawAssignments =
+        get("coachBranchAssignments")
+                as? List<*>
+            ?: return emptyList()
+
+    val parsedAssignments =
+        rawAssignments.mapNotNull {
+                rawAssignment ->
+
+            val assignmentMap =
+                rawAssignment as? Map<*, *>
+                    ?: return@mapNotNull null
+
+            val branchName =
+                assignmentMap["branch"]
+                    ?.toString()
+                    ?.trim()
+                    .orEmpty()
+
+            if (branchName.isBlank()) {
+                return@mapNotNull null
+            }
+
+            val groupNames =
+                (
+                        assignmentMap["groups"]
+                                as? List<*>
+                        )
+                    ?.mapNotNull { rawGroup ->
+                        rawGroup
+                            ?.toString()
+                            ?.trim()
+                            ?.takeIf {
+                                it.isNotBlank()
+                            }
+                    }
+                    ?.distinctBy {
+                        it.lowercase()
+                    }
+                    .orEmpty()
+
+            CoachBranchAssignment(
+                branch = branchName,
+                groups = groupNames
+            ).sanitized()
+        }
+
+    /*
+     * אם קיימות כמה רשומות לאותו סניף,
+     * מאחדים את הקבוצות ולא מוחקים אף שיוך.
+     */
+    return parsedAssignments
+        .groupBy { assignment ->
+            assignment.branch
+                .trim()
+                .replace('־', '-')
+                .replace('–', '-')
+                .replace('—', '-')
+                .replace(Regex("\\s+"), " ")
+                .lowercase()
+        }
+        .mapNotNull { (_, assignments) ->
+            val branchName =
+                assignments
+                    .firstOrNull()
+                    ?.branch
+                    ?.trim()
+                    .orEmpty()
+
+            if (branchName.isBlank()) {
+                null
+            } else {
+                CoachBranchAssignment(
+                    branch = branchName,
+                    groups =
+                        assignments
+                            .flatMap {
+                                it.groups
+                            }
+                            .map {
+                                it.trim()
+                            }
+                            .filter {
+                                it.isNotBlank()
+                            }
+                            .distinctBy {
+                                it.lowercase()
+                            }
+                ).sanitized()
+            }
+        }
 }
 
 /**
@@ -909,6 +1089,9 @@ private fun DocumentSnapshot.toAdminUserRecord(): AdminUserRecord? {
         "dojos"
     )
 
+    val branchAssignments =
+        adminBranchAssignments()
+
     return AdminUserRecord(
         id = id,
         uidField = uidField,
@@ -919,9 +1102,35 @@ private fun DocumentSnapshot.toAdminUserRecord(): AdminUserRecord? {
         birthYear = birthYear,
         region = stringOrNull("region", "area", "selectedRegion", "trainingRegion"),
         branch = branchValue,
-        branches = branchList,
-        groups = groupsList,
-        currentBeltId = stringOrNull("currentBeltId", "currentBelt", "belt_current", "beltId", "belt"),
+        branches =
+            if (branchAssignments.isNotEmpty()) {
+                branchAssignments
+                    .map { it.branch }
+                    .distinctBy {
+                        it.lowercase()
+                    }
+            } else {
+                branchList
+            },
+        groups =
+            if (branchAssignments.isNotEmpty()) {
+                branchAssignments
+                    .flatMap { it.groups }
+                    .distinctBy {
+                        it.lowercase()
+                    }
+            } else {
+                groupsList
+            },
+        branchAssignments =
+            branchAssignments,
+        currentBeltId = stringOrNull(
+            "currentBeltId",
+            "currentBelt",
+            "belt_current",
+            "beltId",
+            "belt"
+        ),
         phone = stringOrNull("phone", "phoneNumber"),
         email = stringOrNull("email"),
 
@@ -1699,13 +1908,22 @@ private fun createAdminUsersPdf(
                 "Unknown"
             )
 
-        val regionTitle = user.displayRegionText(isEnglish)
-        val branchesTitle = user.displayBranchesText(isEnglish)
-        val lastSeenTitle = user.displayLastSeenText(isEnglish)
-        val tenureTitle = user.displayAppTenureText(isEnglish)
+        val regionTitle =
+            user.displayRegionText(isEnglish)
+
+        val branchesTitle =
+            user.displayBranchAssignmentsText(
+                isEnglish
+            )
+
+        val lastSeenTitle =
+            user.displayLastSeenText(isEnglish)
+
+        val tenureTitle =
+            user.displayAppTenureText(isEnglish)
 
         val nameLines = splitLines(
-            value = user.fullName,
+            value = user.demoSafeName(isEnglish),
             paint = bodyBoldPaint,
             maxWidth = contentRight - contentLeft - 110f,
             maxLines = 2
@@ -1725,8 +1943,8 @@ private fun createAdminUsersPdf(
 
         val branchesLines = splitLines(
             value = tr(
-                "סניפים: $branchesTitle",
-                "Branches: $branchesTitle"
+                "סניפים וקבוצות: $branchesTitle",
+                "Branches and groups: $branchesTitle"
             ),
             paint = bodyPaint,
             maxWidth = contentRight - contentLeft - 28f,
@@ -3512,6 +3730,92 @@ private fun AdminUserRecord.displayBranchesText(isEnglish: Boolean): String {
     }
 }
 
+private fun AdminUserRecord.demoSafeName(
+    isEnglish: Boolean
+): String {
+    return TraineeDisplayNameMapper.displayName(
+        realName = fullName,
+        stableKey =
+            uidField
+                ?.trim()
+                ?.takeIf {
+                    it.isNotBlank()
+                }
+                ?: id,
+        isEnglish = isEnglish
+    ).ifBlank {
+        adminTr(
+            isEnglish,
+            "משתמש ללא שם",
+            "Unnamed user"
+        )
+    }
+}
+
+private fun AdminUserRecord
+        .displayBranchAssignmentsText(
+    isEnglish: Boolean
+): String {
+
+    if (branchAssignments.isEmpty()) {
+        val branchesText =
+            displayBranchesText(isEnglish)
+
+        val groupsText =
+            groups
+                .joinToString(", ")
+                .ifBlank {
+                    adminTr(
+                        isEnglish,
+                        "ללא קבוצות",
+                        "No groups"
+                    )
+                }
+
+        return adminTr(
+            isEnglish,
+            "$branchesText — $groupsText",
+            "$branchesText — $groupsText"
+        )
+    }
+
+    return branchAssignments
+        .joinToString("\n") { assignment ->
+            val branchName =
+                assignment.branch
+                    .trim()
+                    .ifBlank {
+                        adminTr(
+                            isEnglish,
+                            "סניף לא ידוע",
+                            "Unknown branch"
+                        )
+                    }
+
+            val groupNames =
+                assignment.groups
+                    .map {
+                        it.trim()
+                    }
+                    .filter {
+                        it.isNotBlank()
+                    }
+                    .distinctBy {
+                        it.lowercase()
+                    }
+                    .joinToString(", ")
+                    .ifBlank {
+                        adminTr(
+                            isEnglish,
+                            "ללא קבוצות",
+                            "No groups"
+                        )
+                    }
+
+            "$branchName: $groupNames"
+        }
+}
+
 private fun AdminUserRecord.displayRegionText(isEnglish: Boolean): String {
     return region
         ?.trim()
@@ -3691,6 +3995,9 @@ private fun UserRowCard(
         adminTr(isEnglish, "מתאמן", "Trainee")
     }
 
+    val displayName =
+        user.demoSafeName(isEnglish)
+
     val nowMillis = System.currentTimeMillis()
     val activeWindowMillis =
         30L * 24L * 60L * 60L * 1000L
@@ -3739,7 +4046,10 @@ private fun UserRowCard(
             if (isEnglish) {
                 UserBeltAccent(beltColor)
                 Spacer(Modifier.width(10.dp))
-                UserAvatar(user = user, beltColor = beltColor)
+                UserAvatar(
+                    displayName = displayName,
+                    beltColor = beltColor
+                )
                 Spacer(Modifier.width(10.dp))
             }
 
@@ -3750,7 +4060,7 @@ private fun UserRowCard(
             ) {
                 // שם המתאמן – שורה נפרדת כדי שלא ייחתך בגלל התגים
                 Text(
-                    text = user.fullName,
+                    text = displayName,
                     style = MaterialTheme.typography.bodyLarge,
                     color = Color(0xFFE5E7EB),
                     fontWeight = FontWeight.SemiBold,
@@ -3798,8 +4108,13 @@ private fun UserRowCard(
                 }
 
                 val ageText = user.age?.toString() ?: adminTr(isEnglish, "לא ידוע", "Unknown")
-                val regionText = user.displayRegionText(isEnglish)
-                val branchesText = user.displayBranchesText(isEnglish)
+                val regionText =
+                    user.displayRegionText(isEnglish)
+
+                val assignmentsText =
+                    user.displayBranchAssignmentsText(
+                        isEnglish
+                    )
 
                 Text(
                     text = adminTr(
@@ -3816,8 +4131,8 @@ private fun UserRowCard(
                 Text(
                     text = adminTr(
                         isEnglish,
-                        "סניפים: $branchesText",
-                        "Branches: $branchesText"
+                        "סניפים וקבוצות:\n$assignmentsText",
+                        "Branches and groups:\n$assignmentsText"
                     ),
                     style = MaterialTheme.typography.bodySmall,
                     color = Color(0xFF9CA3AF),
@@ -3852,27 +4167,14 @@ private fun UserRowCard(
                     textAlign = textAlign,
                     modifier = Modifier.fillMaxWidth()
                 )
-
-                val groups = user.groups.joinToString(", ").ifBlank {
-                    adminTr(isEnglish, "ללא קבוצות", "No groups")
-                }
-
-                Text(
-                    text = adminTr(
-                        isEnglish,
-                        "קבוצות: $groups",
-                        "Groups: $groups"
-                    ),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = Color(0xFF6B7280),
-                    textAlign = textAlign,
-                    modifier = Modifier.fillMaxWidth()
-                )
             }
 
             if (!isEnglish) {
                 Spacer(Modifier.width(10.dp))
-                UserAvatar(user = user, beltColor = beltColor)
+                UserAvatar(
+                    displayName = displayName,
+                    beltColor = beltColor
+                )
                 Spacer(Modifier.width(10.dp))
                 UserBeltAccent(beltColor)
             }
@@ -3925,7 +4227,7 @@ private fun UserBeltAccent(
 
 @Composable
 private fun UserAvatar(
-    user: AdminUserRecord,
+    displayName: String,
     beltColor: Color
 ) {
     Box(
@@ -3944,10 +4246,14 @@ private fun UserAvatar(
         contentAlignment = Alignment.Center
     ) {
         Text(
-            text = user.fullName
+            text = displayName
                 .split(" ")
                 .take(2)
-                .joinToString("") { it.firstOrNull()?.toString() ?: "" },
+                .joinToString("") {
+                    it.firstOrNull()
+                        ?.toString()
+                        .orEmpty()
+                },
             style = MaterialTheme.typography.labelMedium,
             color = Color.White,
             fontWeight = FontWeight.Bold

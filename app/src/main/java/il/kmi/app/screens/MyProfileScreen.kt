@@ -40,11 +40,13 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import il.kmi.shared.domain.Belt
 import il.kmi.shared.prefs.KmiPrefs
 import androidx.activity.compose.LocalOnBackPressedDispatcherOwner
 import androidx.compose.foundation.Image
+import il.kmi.app.screens.registration.CoachBranchAssignment
+import il.kmi.app.screens.registration.CoachBranchAssignmentsCodec
+import il.kmi.app.privacy.TraineeDisplayNameMapper
 import il.kmi.app.training.TrainingCatalog
 import il.kmi.app.database.KmiDatabaseProvider
 import androidx.compose.runtime.LaunchedEffect
@@ -68,6 +70,7 @@ import il.kmi.app.reminders.TrainingReminderScheduler
 import il.kmi.app.training.TrainingAlarmReceiver
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import java.util.Locale
 
 
 //-----------------------------------------------------------------------------
@@ -467,6 +470,55 @@ private fun firestoreProfileStringList(
         .distinct()
 }
 
+private fun firestoreProfileBranchAssignments(
+    data: Map<String, Any?>
+): List<CoachBranchAssignment> {
+    return (
+            data["coachBranchAssignments"]
+                    as? List<*>
+            )
+        ?.mapNotNull { rawAssignment ->
+            val assignmentMap =
+                rawAssignment as? Map<*, *>
+                    ?: return@mapNotNull null
+
+            val branch =
+                assignmentMap["branch"]
+                    ?.toString()
+                    ?.trim()
+                    .orEmpty()
+
+            if (branch.isBlank()) {
+                return@mapNotNull null
+            }
+
+            val groups =
+                (
+                        assignmentMap["groups"]
+                                as? List<*>
+                        )
+                    ?.mapNotNull { rawGroup ->
+                        rawGroup
+                            ?.toString()
+                            ?.trim()
+                            ?.takeIf { group ->
+                                group.isNotBlank()
+                            }
+                    }
+                    ?.distinct()
+                    .orEmpty()
+
+            CoachBranchAssignment(
+                branch = branch,
+                groups = groups
+            ).sanitized()
+        }
+        ?.distinctBy { assignment ->
+            assignment.branch
+        }
+        .orEmpty()
+}
+
 private fun firestoreProfileFromMap(data: Map<String, Any?>): FirestoreProfileInfo {
     return FirestoreProfileInfo(
         fullName = firestoreProfileFirstString(
@@ -574,6 +626,15 @@ fun MyProfileScreen(
         mutableStateOf(FirestoreProfileInfo())
     }
 
+    /*
+     * מקור האמת החדש לסניפים ולקבוצות.
+     */
+    var firestoreBranchAssignments by remember {
+        mutableStateOf<
+                List<CoachBranchAssignment>
+                >(emptyList())
+    }
+
     var isLoadingFirestoreProfile by remember {
         mutableStateOf(false)
     }
@@ -591,10 +652,17 @@ fun MyProfileScreen(
                     .get()
                     .await()
             }.onSuccess { snap ->
-                firestoreProfile = firestoreProfileFromMap(snap.data.orEmpty())
+                val data = snap.data.orEmpty()
+
+                firestoreProfile =
+                    firestoreProfileFromMap(data)
+
+                firestoreBranchAssignments =
+                    firestoreProfileBranchAssignments(
+                        data
+                    )
 
                 val p = firestoreProfile
-                val data = snap.data.orEmpty()
 
                 /*
                  * בוחר את המקור העדכני הראשון שאינו ריק.
@@ -622,45 +690,92 @@ fun MyProfileScreen(
     * תחילה מחפשים את השדות הרשימתיים שמכילים את כל
     * הסניפים והקבוצות. השדות היחידים משמשים רק כ־fallback.
     */
-                val branchesFromFirestore = preferredFirestoreList(
-                    "branches",
-                    "branches_json",
-                    "selected_branches",
-                    "branchesCsv",
-                    "branch",
-                    "activeBranch",
-                    "active_branch"
-                )
-                    .map { it.trim() }
-                    .filter { it.isNotBlank() }
-                    .distinct()
-
-                val groupsFromFirestore = preferredFirestoreList(
-                    "age_groups",
-                    "groups",
-                    "groups_json",
-                    "selected_groups",
-                    "groupsCsv",
-                    "group",
-                    "age_group",
-                    "primaryGroup",
-                    "activeGroup",
-                    "active_group",
-                    "groupKey",
-                    "group_key"
-                )
-                    .map {
-                        TrainingCatalog
-                            .normalizeGroupName(it)
-                            .ifBlank { it.trim() }
+                /*
+                 * המבנה החדש קודם לרשימות הישנות.
+                 */
+                val branchesFromFirestore =
+                    if (
+                        firestoreBranchAssignments
+                            .isNotEmpty()
+                    ) {
+                        CoachBranchAssignmentsCodec
+                            .flattenBranches(
+                                firestoreBranchAssignments
+                            )
+                    } else {
+                        preferredFirestoreList(
+                            "branches",
+                            "branches_json",
+                            "selected_branches",
+                            "branchesCsv",
+                            "branch",
+                            "activeBranch",
+                            "active_branch"
+                        )
+                            .map { branch ->
+                                branch.trim()
+                            }
+                            .filter { branch ->
+                                branch.isNotBlank()
+                            }
+                            .distinct()
                     }
-                    .filter { it.isNotBlank() }
-                    .distinct()
 
-                val branchesCsv = branchesFromFirestore.joinToString(", ")
-                val groupsCsv = groupsFromFirestore.joinToString(", ")
-                val branchesJson = org.json.JSONArray(branchesFromFirestore).toString()
-                val groupsJson = org.json.JSONArray(groupsFromFirestore).toString()
+                val groupsFromFirestore =
+                    if (
+                        firestoreBranchAssignments
+                            .isNotEmpty()
+                    ) {
+                        CoachBranchAssignmentsCodec
+                            .flattenGroups(
+                                firestoreBranchAssignments
+                            )
+                    } else {
+                        preferredFirestoreList(
+                            "age_groups",
+                            "groups",
+                            "groups_json",
+                            "selected_groups",
+                            "groupsCsv",
+                            "group",
+                            "age_group",
+                            "primaryGroup",
+                            "activeGroup",
+                            "active_group",
+                            "groupKey",
+                            "group_key"
+                        )
+                            .map { group ->
+                                group.trim()
+                            }
+                            .filter { group ->
+                                group.isNotBlank()
+                            }
+                            .distinct()
+                    }
+
+                val branchAssignmentsJson =
+                    CoachBranchAssignmentsCodec.encode(
+                        firestoreBranchAssignments
+                    )
+
+                val branchesCsv =
+                    branchesFromFirestore
+                        .joinToString(", ")
+
+                val groupsCsv =
+                    groupsFromFirestore
+                        .joinToString(", ")
+
+                val branchesJson =
+                    org.json.JSONArray(
+                        branchesFromFirestore
+                    ).toString()
+
+                val groupsJson =
+                    org.json.JSONArray(
+                        groupsFromFirestore
+                    ).toString()
 
 // מיישר גם את SharedPreferences כדי ששאר המסכים ייהנו מהמידע.
                 val profilePrefsSaved = userSp.edit()
@@ -681,8 +796,22 @@ fun MyProfileScreen(
                     .putString("selected_groups", groupsCsv)
                     .putString("groupKey", groupsFromFirestore.firstOrNull().orEmpty())
                     .putString("age_group", groupsCsv)
-                    .putString("activeGroup", groupsFromFirestore.firstOrNull().orEmpty())
-                    .putString("active_group", groupsFromFirestore.firstOrNull().orEmpty())
+                    .putString(
+                        "activeGroup",
+                        groupsFromFirestore
+                            .firstOrNull()
+                            .orEmpty()
+                    )
+                    .putString(
+                        "active_group",
+                        groupsFromFirestore
+                            .firstOrNull()
+                            .orEmpty()
+                    )
+                    .putString(
+                        "coach_branch_assignments_json",
+                        branchAssignmentsJson
+                    )
 
                     .putString("belt", p.belt)
                     .putString("current_belt", p.belt)
@@ -788,10 +917,63 @@ fun MyProfileScreen(
             firestoreProfile.username
         )
 
+        /*
+         * שם המשתמש המוצג בפרופיל וב־PDF.
+         * הנתון האמיתי אינו משתנה ב־Firestore או בהעדפות.
+         */
+        val profileDisplayName =
+            TraineeDisplayNameMapper.displayName(
+                realName = fullName,
+                stableKey =
+                    FirebaseAuth.getInstance()
+                        .currentUser
+                        ?.uid
+                        .orEmpty()
+                        .ifBlank {
+                            username.ifBlank {
+                                fullName
+                            }
+                        },
+                isEnglish = isEnglish
+            ).ifBlank {
+                profileTr(
+                    isEnglish,
+                    "משתמש ללא שם",
+                    "Unnamed user"
+                )
+            }
+
         val password = prefStr(
             kmiPrefs.password,
             sp.getString("password", "")
         )
+
+        /*
+         * סדר העדיפות:
+         * 1. השיוכים שהתקבלו עכשיו מהשרת.
+         * 2. המבנה החדש שנשמר מקומית.
+         * 3. הרשימות הישנות.
+         */
+        val savedBranchAssignments =
+            firestoreBranchAssignments
+                .ifEmpty {
+                    CoachBranchAssignmentsCodec
+                        .decode(
+                            userSp.getString(
+                                "coach_branch_assignments_json",
+                                ""
+                            )
+                        )
+                }
+                .ifEmpty {
+                    CoachBranchAssignmentsCodec
+                        .decode(
+                            sp.getString(
+                                "coach_branch_assignments_json",
+                                ""
+                            )
+                        )
+                }
 
         val branchRaw = prefStr(
             kmiPrefs.branch,
@@ -803,10 +985,33 @@ fun MyProfileScreen(
             userSp.getString("branch", ""),
             firestoreProfile.branch
         )
-        fun splitBranches(s: String): List<String> =
-            s.split('\n', '|', ';', ',').map { it.trim() }.filter { it.isNotEmpty() }
-        val branchesList: List<String> = splitBranches(branchRaw)
-        val primaryBranch: String = branchesList.firstOrNull().orEmpty()
+
+        fun splitBranches(
+            value: String
+        ): List<String> =
+            value
+                .split('\n', '|', ';', ',')
+                .map { branch ->
+                    branch.trim()
+                }
+                .filter { branch ->
+                    branch.isNotEmpty()
+                }
+                .distinct()
+
+        val branchesList: List<String> =
+            if (savedBranchAssignments.isNotEmpty()) {
+                CoachBranchAssignmentsCodec
+                    .flattenBranches(
+                        savedBranchAssignments
+                    )
+            } else {
+                splitBranches(branchRaw)
+            }
+
+        val primaryBranch: String =
+            branchesList.firstOrNull()
+                .orEmpty()
 
         fun profilePrefsList(vararg values: String?): List<String> {
             val out = mutableListOf<String>()
@@ -844,33 +1049,139 @@ fun MyProfileScreen(
                 .distinct()
         }
 
-        val groupsList = profilePrefsList(
-            kmiPrefs.ageGroup,
-            sp.getString("groups_json", ""),
-            sp.getString("selected_groups", ""),
-            sp.getString("groups", ""),
-            sp.getString("age_groups", ""),
-            sp.getString("activeGroup", ""),
-            sp.getString("active_group", ""),
-            sp.getString("groupKey", ""),
-            sp.getString("group_key", ""),
-            sp.getString("age_group", ""),
-            sp.getString("group", ""),
-            userSp.getString("groups_json", ""),
-            userSp.getString("selected_groups", ""),
-            userSp.getString("groups", ""),
-            userSp.getString("age_groups", ""),
-            userSp.getString("activeGroup", ""),
-            userSp.getString("active_group", ""),
-            userSp.getString("groupKey", ""),
-            userSp.getString("group_key", ""),
-            userSp.getString("age_group", ""),
-            userSp.getString("group", ""),
-            firestoreProfile.group
-        )
+        val groupsList =
+            if (savedBranchAssignments.isNotEmpty()) {
+                CoachBranchAssignmentsCodec
+                    .flattenGroups(
+                        savedBranchAssignments
+                    )
+            } else {
+                profilePrefsList(
+                    kmiPrefs.ageGroup,
+                    sp.getString(
+                        "groups_json",
+                        ""
+                    ),
+                    sp.getString(
+                        "selected_groups",
+                        ""
+                    ),
+                    sp.getString(
+                        "groups",
+                        ""
+                    ),
+                    sp.getString(
+                        "age_groups",
+                        ""
+                    ),
+                    sp.getString(
+                        "activeGroup",
+                        ""
+                    ),
+                    sp.getString(
+                        "active_group",
+                        ""
+                    ),
+                    sp.getString(
+                        "groupKey",
+                        ""
+                    ),
+                    sp.getString(
+                        "group_key",
+                        ""
+                    ),
+                    sp.getString(
+                        "age_group",
+                        ""
+                    ),
+                    sp.getString(
+                        "group",
+                        ""
+                    ),
+                    userSp.getString(
+                        "groups_json",
+                        ""
+                    ),
+                    userSp.getString(
+                        "selected_groups",
+                        ""
+                    ),
+                    userSp.getString(
+                        "groups",
+                        ""
+                    ),
+                    userSp.getString(
+                        "age_groups",
+                        ""
+                    ),
+                    userSp.getString(
+                        "activeGroup",
+                        ""
+                    ),
+                    userSp.getString(
+                        "active_group",
+                        ""
+                    ),
+                    userSp.getString(
+                        "groupKey",
+                        ""
+                    ),
+                    userSp.getString(
+                        "group_key",
+                        ""
+                    ),
+                    userSp.getString(
+                        "age_group",
+                        ""
+                    ),
+                    userSp.getString(
+                        "group",
+                        ""
+                    ),
+                    firestoreProfile.group
+                )
+            }
 
-        val group = groupsList.firstOrNull().orEmpty()
-        val groupDisplay = groupsList.joinToString("\n").ifBlank { "—" }
+        val group =
+            groupsList.firstOrNull()
+                .orEmpty()
+
+        val groupDisplay =
+            groupsList
+                .joinToString("\n")
+                .ifBlank { "—" }
+
+        /*
+         * זוגות מדויקים של סניף וקבוצה.
+         *
+         * במבנה החדש כל קבוצה נבדקת רק מול
+         * הסניף שאליו היא משויכת.
+         *
+         * משתמשים במכפלה הישנה רק כ-fallback
+         * למשתמש שטרם נשמר במבנה החדש.
+         */
+        val branchGroupPairs:
+                List<Pair<String, String>> =
+            if (savedBranchAssignments.isNotEmpty()) {
+                savedBranchAssignments
+                    .flatMap { assignment ->
+                        assignment.groups.map { groupName ->
+                            assignment.branch to
+                                    groupName
+                        }
+                    }
+                    .filter { (branchName, groupName) ->
+                        branchName.isNotBlank() &&
+                                groupName.isNotBlank()
+                    }
+                    .distinct()
+            } else {
+                branchesList.flatMap { branchName ->
+                    groupsList.map { groupName ->
+                        branchName to groupName
+                    }
+                }
+            }
 
         fun dbGroupMatches(
             selectedGroup: String,
@@ -997,30 +1308,50 @@ fun MyProfileScreen(
                 }
             }
 
-        // ✅ אימון הבא + מאמן – בודק את כל הסניפים של המשתמש ולא רק את הראשון
-        val dbUpcoming = branchesList
-            .flatMap { branchName ->
-                groupsList.mapNotNull { groupName ->
+        /*
+         * האימון הבא מחושב רק מתוך שיוכים
+         * חוקיים של סניף וקבוצה.
+         */
+        val dbUpcoming =
+            branchGroupPairs
+                .mapNotNull {
+                        (branchName, groupName) ->
+
                     nextTrainingFromDatabase(
                         branchName = branchName,
                         groupName = groupName
                     )
                 }
-            }
-            .minByOrNull { it.cal.timeInMillis }
+                .minByOrNull { training ->
+                    training.cal.timeInMillis
+                }
 
-        val upcoming = if (dbUpcoming == null && branchesList.isNotEmpty()) {
-            val savedRegion = prefStr(
-                kmiPrefs.region,
-                sp.getString("region", ""),
-                userSp.getString("region", ""),
-                firestoreProfile.region
-            ).ifBlank { "השרון" }
+        val upcoming =
+            if (
+                dbUpcoming == null &&
+                branchGroupPairs.isNotEmpty()
+            ) {
+                val savedRegion =
+                    prefStr(
+                        kmiPrefs.region,
+                        sp.getString(
+                            "region",
+                            ""
+                        ),
+                        userSp.getString(
+                            "region",
+                            ""
+                        ),
+                        firestoreProfile.region
+                    ).ifBlank {
+                        "השרון"
+                    }
 
-            branchesList
-                .asSequence()
-                .flatMap { branchName ->
-                    groupsList.asSequence().mapNotNull { groupName ->
+                branchGroupPairs
+                    .asSequence()
+                    .mapNotNull {
+                            (branchName, groupName) ->
+
                         TrainingCatalog
                             .upcomingFor(
                                 region = savedRegion,
@@ -1030,11 +1361,12 @@ fun MyProfileScreen(
                             )
                             .firstOrNull()
                     }
-                }
-                .minByOrNull { it.cal.timeInMillis }
-        } else {
-            null
-        }
+                    .minByOrNull { training ->
+                        training.cal.timeInMillis
+                    }
+            } else {
+                null
+            }
 
         val coachName: String =
             dbUpcoming?.coach.orEmpty()
@@ -1081,6 +1413,18 @@ fun MyProfileScreen(
             return if (!city.isNullOrBlank() && !venue.isNullOrBlank()) "$venue, $city" else "—"
         }
 
+        fun normalizedProfileBranchKey(
+            value: String
+        ): String {
+            return value
+                .trim()
+                .replace('־', '-')
+                .replace('–', '-')
+                .replace('—', '-')
+                .replace(Regex("\\s+"), " ")
+                .lowercase(Locale("he", "IL"))
+        }
+
         val branchEntriesResolved: List<ProfileBranchEntry> = if (branchesList.isEmpty()) {
             emptyList()
         } else {
@@ -1103,36 +1447,100 @@ fun MyProfileScreen(
                     }
                 }
 
-                val branchMatches = groupsList.mapNotNull { groupName ->
-                    val upcomingForGroup = nextTrainingFromDatabase(
-                        branchName = b,
-                        groupName = groupName
-                    )
-
-                    if (upcomingForGroup != null) {
-                        groupName to upcomingForGroup
+                /*
+                 * הקבוצות השייכות לסניף הזה בלבד.
+                 */
+                val groupsForThisBranch =
+                    if (
+                        savedBranchAssignments
+                            .isNotEmpty()
+                    ) {
+                        savedBranchAssignments
+                            .firstOrNull { assignment ->
+                                normalizedProfileBranchKey(
+                                    assignment.branch
+                                ) ==
+                                        normalizedProfileBranchKey(
+                                            b
+                                        )
+                            }
+                            ?.groups
+                            .orEmpty()
+                            .map { groupName ->
+                                groupName.trim()
+                            }
+                            .filter { groupName ->
+                                groupName.isNotBlank()
+                            }
+                            .distinct()
                     } else {
-                        null
+                        /*
+                         * fallback למשתמש ישן:
+                         * משאירים רק קבוצות שבאמת
+                         * נמצאו בלוח של הסניף.
+                         */
+                        groupsList
+                            .filter { groupName ->
+                                nextTrainingFromDatabase(
+                                    branchName = b,
+                                    groupName =
+                                        groupName
+                                ) != null
+                            }
+                            .distinct()
+                            .ifEmpty {
+                                if (group.isNotBlank()) {
+                                    listOf(group)
+                                } else {
+                                    emptyList()
+                                }
+                            }
                     }
-                }
 
-                val branchUpcoming = branchMatches
-                    .map { it.second }
-                    .minByOrNull { it.cal.timeInMillis }
+                val branchMatches =
+                    groupsForThisBranch
+                        .mapNotNull { groupName ->
+                            val upcomingForGroup =
+                                nextTrainingFromDatabase(
+                                    branchName = b,
+                                    groupName =
+                                        groupName
+                                )
 
-                val branchCoach = branchUpcoming?.coach.orEmpty().ifBlank { "—" }
+                            if (
+                                upcomingForGroup != null
+                            ) {
+                                groupName to
+                                        upcomingForGroup
+                            } else {
+                                null
+                            }
+                        }
 
-                val groupsForThisBranch = branchMatches
-                    .map { it.first }
-                    .distinct()
-                    .ifEmpty {
-                        if (group.isNotBlank()) listOf(group) else emptyList()
-                    }
+                val branchUpcoming =
+                    branchMatches
+                        .map { match ->
+                            match.second
+                        }
+                        .minByOrNull { training ->
+                            training.cal.timeInMillis
+                        }
+
+                val branchCoach =
+                    branchUpcoming
+                        ?.coach
+                        .orEmpty()
+                        .ifBlank { "—" }
 
                 ProfileBranchEntry(
                     branch = b.trim(),
-                    address = resolvedAddress.ifBlank { "—" },
-                    group = groupsForThisBranch.joinToString("\n").ifBlank { "—" },
+                    address =
+                        resolvedAddress
+                            .ifBlank { "—" },
+                    group =
+                        groupsForThisBranch
+                            .joinToString("\n")
+                            .ifBlank { "—" },
                     coach = branchCoach
                 )
             }
@@ -1146,13 +1554,16 @@ fun MyProfileScreen(
 // --- סוף תיקון הכתובת ---
 
         val info = UserProfileInfo(
-            userName = if (fullName.isNotBlank()) {
-                fullName
-            } else {
-                username.ifBlank {
-                    profileTr(isEnglish, "שם המשתמש", "User name")
-                }
-            },
+            userName =
+                profileDisplayName.ifBlank {
+                    username.ifBlank {
+                        profileTr(
+                            isEnglish,
+                            "שם המשתמש",
+                            "User name"
+                        )
+                    }
+                },
             belt = beltHeb,
             currentBeltId = beltId,
             trainingTowardsBeltId = nextBeltId,

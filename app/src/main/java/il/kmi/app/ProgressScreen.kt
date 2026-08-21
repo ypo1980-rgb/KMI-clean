@@ -19,10 +19,12 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -50,6 +52,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -498,6 +501,32 @@ fun ProgressScreen(
         }
     }
 
+    val isDarkMode =
+        MaterialTheme.colorScheme.background
+            .luminance() < 0.5f
+
+    val screenBackgroundBrush =
+        Brush.verticalGradient(
+            colors =
+                if (isDarkMode) {
+                    listOf(
+                        MaterialTheme.colorScheme.background,
+                        MaterialTheme.colorScheme.surface,
+                        Color(0xFF10243A),
+                        Color(0xFF0A3657),
+                        Color(0xFF041E33)
+                    )
+                } else {
+                    listOf(
+                        Color(0xFFF8FBFF),
+                        Color(0xFFEAF4FF),
+                        Color(0xFFB7DDF7),
+                        Color(0xFF1F78B4),
+                        Color(0xFF062B4A)
+                    )
+                }
+        )
+
     Scaffold(
         topBar = {
             il.kmi.app.ui.KmiTopBar(
@@ -549,8 +578,11 @@ fun ProgressScreen(
                         modifier = Modifier
                             .fillMaxWidth()
                             .navigationBarsPadding()
-                            .padding(horizontal = 18.dp, vertical = 10.dp)
-                            .height(52.dp),
+                            .padding(
+                                horizontal = 18.dp,
+                                vertical = 10.dp
+                            )
+                            .heightIn(min = 52.dp),
                         shape = RoundedCornerShape(18.dp),
                         colors = ButtonDefaults.buttonColors(
                             containerColor = Color(0xFF1F2937),
@@ -562,18 +594,23 @@ fun ProgressScreen(
                             style = KmiTypography.action.copy(
                                 fontWeight = FontWeight.ExtraBold
                             ),
-                            maxLines = 1
+                            textAlign = TextAlign.Center,
+                            maxLines = 2
                         )
                     }
                 }
             }
-        }
+        },
+        containerColor = Color.Transparent,
+        contentWindowInsets = WindowInsets(0)
     ) { padding ->
-        Surface(
+        Box(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(padding),
-            color = MaterialTheme.colorScheme.background
+                .padding(padding)
+                .background(
+                    screenBackgroundBrush
+                )
         ) {
             if (beltsData.isEmpty()) {
                 Box(
@@ -589,7 +626,10 @@ fun ProgressScreen(
                         Text(
                             text = "טוען נתוני התקדמות...",
                             style = KmiTypography.sectionTitle,
-                            color = Color(0xFF3F3A4A),
+                            color =
+                                MaterialTheme
+                                    .colorScheme
+                                    .onBackground,
                             textAlign = TextAlign.Center,
                             maxLines = 2
                         )
@@ -599,7 +639,10 @@ fun ProgressScreen(
                             style = KmiTypography.secondary.copy(
                                 fontWeight = FontWeight.SemiBold
                             ),
-                            color = Color(0xFF7A7288),
+                            color =
+                                MaterialTheme
+                                    .colorScheme
+                                    .onSurfaceVariant,
                             textAlign = TextAlign.Center,
                             maxLines = 2
                         )
@@ -701,27 +744,58 @@ private fun PremiumProgressLoading() {
                 )
         )
 
+        val isDarkMode =
+            MaterialTheme.colorScheme.background
+                .luminance() < 0.5f
+
         Surface(
             modifier = Modifier.size(26.dp),
             shape = CircleShape,
-            color = Color.White,
-            shadowElevation = 8.dp,
+            color =
+                MaterialTheme
+                    .colorScheme
+                    .surface,
+            tonalElevation = 0.dp,
+            shadowElevation = 0.dp,
             border = BorderStroke(
                 width = 1.dp,
-                color = Color(0xFFE9D5FF)
+                color =
+                    Color(0xFF7C3AED)
+                        .copy(
+                            alpha =
+                                if (isDarkMode) {
+                                    0.65f
+                                } else {
+                                    0.30f
+                                }
+                        )
             )
         ) {
             Box(
                 modifier = Modifier
                     .fillMaxSize()
                     .background(
-                        brush = Brush.radialGradient(
-                            colors = listOf(
-                                Color(0xFFFFFFFF),
-                                Color(0xFFF3E8FF),
-                                Color(0xFFE0F2FE)
-                            )
-                        ),
+                        brush =
+                            Brush.radialGradient(
+                                colors =
+                                    if (isDarkMode) {
+                                        listOf(
+                                            MaterialTheme
+                                                .colorScheme
+                                                .surfaceVariant,
+                                            Color(0xFF312E81),
+                                            MaterialTheme
+                                                .colorScheme
+                                                .surface
+                                        )
+                                    } else {
+                                        listOf(
+                                            Color(0xFFFFFFFF),
+                                            Color(0xFFF3E8FF),
+                                            Color(0xFFE0F2FE)
+                                        )
+                                    }
+                            ),
                         shape = CircleShape
                     )
             )
@@ -748,9 +822,25 @@ private fun ProgressCard(
     }
 
     val percentBubbleColor = when (belt) {
-        Belt.WHITE -> MaterialTheme.colorScheme.onSurface.copy(alpha = 0.82f)
-        else -> belt.color.copy(alpha = 0.9f)
+        Belt.WHITE ->
+            MaterialTheme.colorScheme
+                .onSurface
+                .copy(alpha = 0.82f)
+
+        else ->
+            belt.color.copy(alpha = 0.9f)
     }
+
+    val isDarkMode =
+        MaterialTheme.colorScheme.background
+            .luminance() < 0.5f
+
+    val cardBackgroundColor =
+        if (isDarkMode) {
+            MaterialTheme.colorScheme.surfaceVariant
+        } else {
+            belt.lightColor.copy(alpha = 0.55f)
+        }
 
     ElevatedCard(
         modifier = Modifier
@@ -762,9 +852,12 @@ private fun ProgressCard(
             .clip(RoundedCornerShape(16.dp)),
         shape = RoundedCornerShape(16.dp),
         colors = CardDefaults.elevatedCardColors(
-            containerColor = belt.lightColor.copy(alpha = 0.55f)
+            containerColor = cardBackgroundColor
         ),
-        elevation = CardDefaults.elevatedCardElevation(defaultElevation = 2.dp)
+        elevation =
+            CardDefaults.elevatedCardElevation(
+                defaultElevation = 0.dp
+            )
     ) {
         Column(Modifier.padding(14.dp)) {
 

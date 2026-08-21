@@ -2061,12 +2061,18 @@ private fun ReportAttendanceDetailsCard(
         }
     }
 
-    fun demoSafeName(member: il.kmi.app.attendance.data.GroupMember): String {
+    fun demoSafeName(
+        member: il.kmi.app.attendance.data.GroupMember
+    ): String {
         return TraineeDisplayNameMapper.displayName(
             realName = member.displayName,
-            stableKey = member.id.toString()
+            stableKey = member.id.toString(),
+            isEnglish = isEnglish
         ).ifBlank {
-            tr("מתאמן ללא שם", "Unnamed trainee")
+            tr(
+                "מתאמן ללא שם",
+                "Unnamed trainee"
+            )
         }
     }
 

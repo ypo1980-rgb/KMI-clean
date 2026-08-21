@@ -106,6 +106,7 @@ import il.kmi.app.database.KmiDatabaseProvider
 import il.kmi.app.domain.ExerciseExplanationResolver
 import il.kmi.app.training.TrainingCatalog
 import il.kmi.app.training.TrainingDirectory
+import il.kmi.app.screens.registration.CoachBranchAssignmentsCodec
 import il.kmi.app.ui.KmiTopBar
 import il.kmi.app.ui.KmiTypography
 import il.kmi.shared.domain.content.ExerciseTitlesEn
@@ -1901,12 +1902,85 @@ fun HomeScreen(
 
                 val isAbroadBranch = branchTypeHome == "abroad"
 
-                val branchesEffective = remember(selectedBranches, isAbroadBranch) {
-                    selectedBranches
-                        .map { it.trim() }
-                        .filter { it.isNotBlank() }
-                        .distinct()
-                }
+                val branchesEffective =
+                    remember(
+                        selectedBranches,
+                        isAbroadBranch
+                    ) {
+                        selectedBranches
+                            .map { it.trim() }
+                            .filter { it.isNotBlank() }
+                            .distinct()
+                    }
+
+                /*
+                 * המבנה החדש שבו כל סניף מחזיק רק
+                 * את הקבוצות ששויכו אליו ברישום.
+                 */
+                val homeBranchAssignments =
+                    remember(
+                        userSp,
+                        branchesRefreshTick,
+                        groupsRefreshTick
+                    ) {
+                        CoachBranchAssignmentsCodec
+                            .decode(
+                                userSp.getString(
+                                    "coach_branch_assignments_json",
+                                    ""
+                                )
+                            )
+                    }
+
+                /*
+                 * זוגות מדויקים של סניף וקבוצה.
+                 *
+                 * רק משתמשים ישנים, שעדיין לא נשמר אצלם
+                 * המבנה החדש, משתמשים ברשימות הישנות.
+                 */
+                val branchGroupPairsEffective:
+                        List<Pair<String, String>> =
+                    remember(
+                        homeBranchAssignments,
+                        branchesEffective,
+                        groupsEffective
+                    ) {
+                        if (
+                            homeBranchAssignments
+                                .isNotEmpty()
+                        ) {
+                            homeBranchAssignments
+                                .flatMap { assignment ->
+                                    assignment.groups.map {
+                                            groupName ->
+
+                                        assignment.branch.trim() to
+                                                groupName.trim()
+                                    }
+                                }
+                                .filter {
+                                        (branchName, groupName) ->
+
+                                    branchName.isNotBlank() &&
+                                            groupName.isNotBlank()
+                                }
+                                .distinct()
+                        } else {
+                            /*
+                             * תאימות זמנית למשתמשים שנשמרו
+                             * לפני יצירת המבנה החדש.
+                             */
+                            branchesEffective.flatMap {
+                                    branchName ->
+
+                                groupsEffective.map {
+                                        groupName ->
+
+                                    branchName to groupName
+                                }
+                            }
+                        }
+                    }
 
                 // ✅ name להצגה + פרמטרים לניווט אימונים חופשיים (נעדכן state כדי שה-FAB יוכל להשתמש גם מחוץ ל-Column)
                 val freeName = remember(userSp) {
@@ -1917,19 +1991,22 @@ fun HomeScreen(
                 }.orEmpty()
 
                 LaunchedEffect(
-                    branchesEffective,
-                    groupsEffective,
+                    branchGroupPairsEffective,
                     currentUid,
                     freeName
                 ) {
-                    freeBranchUi =
-                        branchesEffective
+                    val firstAssignment =
+                        branchGroupPairsEffective
                             .firstOrNull()
+
+                    freeBranchUi =
+                        firstAssignment
+                            ?.first
                             .orEmpty()
 
                     freeGroupKeyUi =
-                        groupsEffective
-                            .firstOrNull()
+                        firstAssignment
+                            ?.second
                             .orEmpty()
 
                     freeUidUi =
@@ -2356,10 +2433,10 @@ fun HomeScreen(
                     }
                 }
 
-                val currentWeekCandidates: List<HomeTrainingCandidate> =
+                val currentWeekCandidates:
+                        List<HomeTrainingCandidate> =
                     remember(
-                        branchesEffective,
-                        groupsEffective,
+                        branchGroupPairsEffective,
                         coachFromPrefs,
                         isEnglish,
                         trainingStatusNowMillis
@@ -2367,14 +2444,23 @@ fun HomeScreen(
                         val all =
                             mutableListOf<HomeTrainingCandidate>()
 
-                        branchesEffective.forEach { branchName ->
-                            val parts = branchName.split('–', '-').map { it.trim() }
-                            val city = parts.getOrNull(0) ?: branchName
-                            val venue = parts.getOrNull(1) ?: ""
+                        branchGroupPairsEffective.forEach {
+                                (branchName, grp) ->
 
-                            groupsEffective.forEach { grp ->
+                            val parts =
+                                branchName
+                                    .split('–', '-')
+                                    .map { it.trim() }
 
-                                // ✅ 1) ניסיון ראשון: branches.json דרך KmiDatabaseProvider
+                            val city =
+                                parts.getOrNull(0)
+                                    ?: branchName
+
+                            val venue =
+                                parts.getOrNull(1)
+                                    .orEmpty()
+
+                            // ✅ 1) ניסיון ראשון: branches.json דרך KmiDatabaseProvider
                                 val dbItems = trainingsFromDatabaseForHome(
                                     branchName = branchName,
                                     groupName = grp,
@@ -2469,8 +2555,7 @@ fun HomeScreen(
                                         )
                                     }
 
-                                all += validFallbackItems
-                            }
+                            all += validFallbackItems
                         }
 
                         /*

@@ -33,6 +33,7 @@ import il.kmi.app.screens.IntroScreen
 import il.kmi.app.ui.loading.KmiStartupLoadingScreen
 import il.kmi.app.ui.KmiTtsManager
 import il.kmi.app.reminders.TrainingReminderScheduler
+import il.kmi.app.privacy.DemoPrivacy
 import il.yuval.ui.theme.AppTheme
 
 // 👇 חדש: מיגרציית העדפות ל-KMP (חוצה-פלטפורמות)
@@ -63,6 +64,16 @@ class MainActivity : androidx.fragment.app.FragmentActivity() {
         installSplashScreen()
 
         super.onCreate(savedInstanceState)
+
+        /*
+         * טוענים את מצב ההדגמה השמור לפני יצירת ממשק המשתמש.
+         *
+         * כך, אם מצב ההדגמה היה פעיל בזמן סגירת האפליקציה,
+         * השמות האמיתיים לא יוצגו אפילו לרגע בפתיחה הבאה.
+         */
+        DemoPrivacy.initialize(
+            applicationContext
+        )
 
         // Crashlytics test removed
         // 🌍 Language Manager

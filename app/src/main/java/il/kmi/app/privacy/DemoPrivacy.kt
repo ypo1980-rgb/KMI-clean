@@ -1,12 +1,17 @@
 package il.kmi.app.privacy
 
 import android.content.Context
+import androidx.compose.runtime.mutableStateOf
 
 /**
  * מנהל את מצב הפרטיות בזמן הצגת האפליקציה.
  *
  * המצב נשמר במכשיר ולכן נשאר פעיל גם לאחר
  * סגירה ופתיחה מחדש של האפליקציה.
+ *
+ * הערך נשמר גם כ־Compose State, ולכן כל מסך
+ * שקורא ל־isEnabled() בזמן Composition מתעדכן
+ * מיד כאשר מצב ההדגמה משתנה.
  */
 object DemoPrivacy {
 
@@ -19,8 +24,8 @@ object DemoPrivacy {
     @Volatile
     private var initialized = false
 
-    @Volatile
-    private var enabled = false
+    private val enabledState =
+        mutableStateOf(false)
 
     /**
      * יש לקרוא לפונקציה פעם אחת בעת פתיחת
@@ -39,7 +44,7 @@ object DemoPrivacy {
             val appContext =
                 context.applicationContext
 
-            enabled =
+            enabledState.value =
                 appContext
                     .getSharedPreferences(
                         PREFS_FILE,
@@ -58,12 +63,15 @@ object DemoPrivacy {
      * האם מצב ההדגמה פעיל כרגע.
      */
     fun isEnabled(): Boolean {
-        return enabled
+        return enabledState.value
     }
 
     /**
      * מפעיל או מכבה את מצב ההדגמה ושומר
      * את הבחירה במכשיר.
+     *
+     * שינוי enabledState גורם גם למסכי Compose
+     * הפתוחים להתעדכן מיד.
      */
     fun setEnabled(
         context: Context,
@@ -72,7 +80,7 @@ object DemoPrivacy {
         val appContext =
             context.applicationContext
 
-        enabled = value
+        enabledState.value = value
         initialized = true
 
         appContext

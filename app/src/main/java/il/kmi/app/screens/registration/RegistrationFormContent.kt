@@ -12,15 +12,21 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
@@ -34,6 +40,7 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextDirection
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.text.style.TextAlign
@@ -185,8 +192,21 @@ fun RegistrationFormContent(
     onRegionsChange: (List<String>) -> Unit,
     selectedBranches: List<String>,
     onBranchesChange: (List<String>) -> Unit,
+
+    /*
+     * הרשימה השטוחה נשארת זמנית לתאימות.
+     */
     selectedGroups: List<String>,
     onGroupsChange: (List<String>) -> Unit,
+
+    /*
+     * מקור האמת החדש: קבוצות לפי סניף.
+     */
+    selectedGroupsByBranch:
+    Map<String, List<String>>,
+    onGroupsByBranchChange:
+        (Map<String, List<String>>) -> Unit,
+
     regionError: Boolean,
     branchError: Boolean,
     groupError: Boolean,
@@ -248,19 +268,33 @@ fun RegistrationFormContent(
         }
     }
 
-    val shouldShowGroupsPicker = selectedBranches.isNotEmpty() &&
-            allGroupsAcrossBranches.isNotEmpty()
+    /*
+     * לכל סניף שנבחר חייבת להיות לפחות
+     * קבוצה אחת שנבחרה עבורו.
+     */
+    val shouldShowGroupsPicker =
+        selectedBranches.isNotEmpty()
 
-    val showFullNameMissing = (fullNameError || highlightMissingRequired) && fullName.isBlank()
+    val hasBranchWithoutGroups =
+        selectedBranches.any { branch ->
+            selectedGroupsByBranch[
+                branch
+            ].isNullOrEmpty()
+        }
+
+    val showFullNameMissing =
+        (fullNameError || highlightMissingRequired) &&
+                fullName.isBlank()
     val showPhoneMissing = (phoneError || highlightMissingRequired) && phone.isBlank()
     val showEmailMissing = (emailError || highlightMissingRequired) && email.isBlank()
     val showGenderMissing = (genderError || highlightMissingRequired) && gender.isBlank()
     val showRegionMissing =
         (regionError || highlightMissingRequired) && selectedRegions.isEmpty()
     val showBranchMissing = (branchError || highlightMissingRequired) && selectedBranches.isEmpty()
-    val showGroupMissing = (groupError || highlightMissingRequired) &&
-            shouldShowGroupsPicker &&
-            selectedGroups.isEmpty()
+    val showGroupMissing =
+        (groupError || highlightMissingRequired) &&
+                shouldShowGroupsPicker &&
+                hasBranchWithoutGroups
 
     CompositionLocalProvider(
         LocalTextStyle provides MaterialTheme.typography.bodySmall,
@@ -648,12 +682,15 @@ fun RegistrationFormContent(
                 )
 
                 if (shouldShowGroupsPicker) {
-                    MultiGroupsPicker(
-                        allGroupsAcrossBranches = allGroupsAcrossBranches,
-                        selectedGroups = selectedGroups,
-                        onGroupsChange = onGroupsChange,
-                        groupError = groupError,
-                        highlightMissingRequired = highlightMissingRequired,
+                    BranchGroupsAssignmentsPicker(
+                        selectedBranches =
+                            selectedBranches,
+                        selectedGroupsByBranch =
+                            selectedGroupsByBranch,
+                        onGroupsByBranchChange =
+                            onGroupsByBranchChange,
+                        showGroupMissing =
+                            showGroupMissing,
                         isEnglish = isEnglish
                     )
                 }
@@ -1465,10 +1502,30 @@ private fun RegionAndMultiBranchPicker(
                     },
                     onClick = {
                         tempSelection =
-                            if (checked) {
-                                tempSelection.filterNot { it == branch }
-                            } else {
-                                tempSelection + branch
+                            when {
+                                checked -> {
+                                    tempSelection
+                                        .filterNot {
+                                            it == branch
+                                        }
+                                }
+
+                                tempSelection.size < 10 -> {
+                                    tempSelection + branch
+                                }
+
+                                else -> {
+                                    Toast.makeText(
+                                        ctx,
+                                        trLocal(
+                                            "ניתן לבחור עד 10 סניפים",
+                                            "You can select up to 10 branches"
+                                        ),
+                                        Toast.LENGTH_SHORT
+                                    ).show()
+
+                                    tempSelection
+                                }
                             }
                     }
                 )
@@ -1514,6 +1571,635 @@ private fun RegionAndMultiBranchPicker(
             textAlign = align,
             modifier = Modifier.fillMaxWidth()
         )
+    }
+}
+
+@Composable
+private fun BranchGroupsAssignmentsPicker(
+    selectedBranches: List<String>,
+    selectedGroupsByBranch:
+    Map<String, List<String>>,
+    onGroupsByBranchChange:
+        (Map<String, List<String>>) -> Unit,
+    showGroupMissing: Boolean,
+    isEnglish: Boolean
+) {
+    val ctx = LocalContext.current
+
+    fun trLocal(
+        he: String,
+        en: String
+    ): String {
+        return if (isEnglish) en else he
+    }
+
+    fun String.normalizedBranchValue(): String =
+        trim()
+            .replace('־', '-')
+            .replace('–', '-')
+            .replace('—', '-')
+            .replace(Regex("\\s+"), " ")
+
+    Column(
+        modifier = Modifier.fillMaxWidth(),
+        verticalArrangement =
+            Arrangement.spacedBy(8.dp)
+    ) {
+        Text(
+            text =
+                trLocal(
+                    "בחירת קבוצות לפי סניף",
+                    "Select groups by branch"
+                ),
+            color = Color(0xFF172036),
+            style =
+                MaterialTheme
+                    .typography
+                    .titleSmall,
+            fontWeight = FontWeight.ExtraBold,
+            textAlign =
+                if (isEnglish) {
+                    TextAlign.Left
+                } else {
+                    TextAlign.Right
+                },
+            modifier = Modifier.fillMaxWidth()
+        )
+
+        Text(
+            text =
+                trLocal(
+                    "פתח כל סניף ובחר את הקבוצות שבהן אתה מאמן",
+                    "Open each branch and select the groups you coach"
+                ),
+            color = Color(0xFF64748B),
+            style =
+                MaterialTheme
+                    .typography
+                    .bodySmall,
+            textAlign =
+                if (isEnglish) {
+                    TextAlign.Left
+                } else {
+                    TextAlign.Right
+                },
+            modifier = Modifier.fillMaxWidth()
+        )
+
+        selectedBranches
+            .take(10)
+            .forEach { branch ->
+
+                key(branch) {
+                    /*
+                     * הבחירות כפי שהגיעו מהנתונים
+                     * השמורים, כולל ערכי legacy.
+                     */
+                    val storedSelectedForBranch =
+                        selectedGroupsByBranch[
+                            branch
+                        ].orEmpty()
+
+                    val availableGroups =
+                        remember(ctx, branch) {
+                            val cleanBranch =
+                                branch.trim()
+
+                            val databaseGroups =
+                                KmiDatabaseProvider
+                                    .branchByName(
+                                        ctx,
+                                        cleanBranch
+                                    )
+                                    ?.trainingDays
+                                    ?.map { trainingDay ->
+                                        trainingDay
+                                            .groupHe
+                                            .trim()
+                                    }
+                                    ?.filter { group ->
+                                        group.isNotBlank()
+                                    }
+                                    ?.distinct()
+                                    .orEmpty()
+
+                            if (
+                                databaseGroups
+                                    .isNotEmpty()
+                            ) {
+                                databaseGroups
+                            } else {
+                                val normalizedBranch =
+                                    cleanBranch
+                                        .normalizedBranchValue()
+
+                                TrainingCatalog
+                                    .ageGroupsByBranch
+                                    .entries
+                                    .firstOrNull {
+                                            entry ->
+
+                                        entry.key
+                                            .normalizedBranchValue() ==
+                                                normalizedBranch
+                                    }
+                                    ?.value
+                                    .orEmpty()
+                                    .map { group ->
+                                        group.trim()
+                                    }
+                                    .filter { group ->
+                                        group.isNotBlank()
+                                    }
+                                    .distinct()
+                            }
+                        }
+
+                    fun String.normalizedGroupOption(): String =
+                        trim()
+                            .replace('־', '-')
+                            .replace('–', '-')
+                            .replace('—', '-')
+                            .replace('’', '\'')
+                            .replace(Regex("\\s+"), " ")
+
+                    /*
+                     * סופרים ומציגים רק בחירות שקיימות
+                     * בפועל ברשימת הקבוצות של הסניף.
+                     */
+                    val selectedForBranch =
+                        storedSelectedForBranch
+                            .filter { selectedGroup ->
+                                availableGroups.any {
+                                        availableGroup ->
+
+                                    availableGroup
+                                        .normalizedGroupOption() ==
+                                            selectedGroup
+                                                .normalizedGroupOption()
+                                }
+                            }
+                            .distinct()
+
+                    /*
+                     * מנקים אוטומטית בחירות ישנות
+                     * שאינן קיימות יותר ברשימה.
+                     *
+                     * לדוגמה: ערך legacy כללי "ילדים"
+                     * כאשר האפשרויות החדשות הן לפי כיתות.
+                     */
+                    LaunchedEffect(
+                        branch,
+                        availableGroups,
+                        storedSelectedForBranch
+                    ) {
+                        if (
+                            selectedForBranch !=
+                            storedSelectedForBranch
+                        ) {
+                            val cleanedMap =
+                                selectedGroupsByBranch
+                                    .toMutableMap()
+
+                            cleanedMap[branch] =
+                                selectedForBranch
+
+                            onGroupsByBranchChange(
+                                cleanedMap
+                            )
+                        }
+                    }
+
+                    var expanded by
+                    rememberSaveable(branch) {
+                        mutableStateOf(
+                            selectedForBranch
+                                .isEmpty()
+                        )
+                    }
+
+                    val branchMissing =
+                        showGroupMissing &&
+                                selectedForBranch.isEmpty()
+
+                    val cardShape =
+                        RoundedCornerShape(18.dp)
+
+                    Surface(
+                        color =
+                            if (branchMissing) {
+                                Color(0xFFFFF1F2)
+                            } else {
+                                Color(0xFFF8FAFF)
+                            },
+                        shape = cardShape,
+                        shadowElevation = 0.dp,
+                        tonalElevation = 0.dp,
+                        border =
+                            BorderStroke(
+                                width =
+                                    if (branchMissing) {
+                                        1.5.dp
+                                    } else {
+                                        1.dp
+                                    },
+                                color =
+                                    if (branchMissing) {
+                                        Color(0xFFE11D48)
+                                    } else if (
+                                        expanded
+                                    ) {
+                                        Color(0xFF8057E8)
+                                    } else {
+                                        Color(0xFFD3DCEC)
+                                    }
+                            ),
+                        modifier =
+                            Modifier.fillMaxWidth()
+                    ) {
+                        Column(
+                            modifier =
+                                Modifier.fillMaxWidth()
+                        ) {
+                            Row(
+                                modifier =
+                                    Modifier
+                                        .fillMaxWidth()
+                                        .clickable {
+                                            expanded =
+                                                !expanded
+                                        }
+                                        .padding(
+                                            horizontal = 12.dp,
+                                            vertical = 10.dp
+                                        ),
+                                verticalAlignment =
+                                    Alignment.CenterVertically
+                            ) {
+                                Surface(
+                                    color =
+                                        if (
+                                            selectedForBranch
+                                                .isNotEmpty()
+                                        ) {
+                                            Color(0xFFECE5FF)
+                                        } else {
+                                            Color(0xFFE8EEF8)
+                                        },
+                                    shape = CircleShape,
+                                    shadowElevation = 0.dp,
+                                    tonalElevation = 0.dp,
+                                    modifier =
+                                        Modifier.size(36.dp)
+                                ) {
+                                    Box(
+                                        contentAlignment =
+                                            Alignment.Center
+                                    ) {
+                                        Text(
+                                            text =
+                                                selectedForBranch
+                                                    .size
+                                                    .toString(),
+                                            color =
+                                                if (
+                                                    selectedForBranch
+                                                        .isNotEmpty()
+                                                ) {
+                                                    Color(
+                                                        0xFF6842D6
+                                                    )
+                                                } else {
+                                                    Color(
+                                                        0xFF64748B
+                                                    )
+                                                },
+                                            fontWeight =
+                                                FontWeight
+                                                    .ExtraBold
+                                        )
+                                    }
+                                }
+
+                                Spacer(
+                                    Modifier.width(10.dp)
+                                )
+
+                                Column(
+                                    modifier =
+                                        Modifier.weight(1f)
+                                ) {
+                                    Text(
+                                        text = branch,
+                                        color =
+                                            Color(
+                                                0xFF172036
+                                            ),
+                                        style =
+                                            MaterialTheme
+                                                .typography
+                                                .bodyMedium,
+                                        fontWeight =
+                                            FontWeight
+                                                .ExtraBold,
+                                        maxLines = 2,
+                                        overflow =
+                                            TextOverflow
+                                                .Ellipsis,
+                                        textAlign =
+                                            if (isEnglish) {
+                                                TextAlign.Left
+                                            } else {
+                                                TextAlign.Right
+                                            },
+                                        modifier =
+                                            Modifier
+                                                .fillMaxWidth()
+                                    )
+
+                                    Text(
+                                        text =
+                                            when {
+                                                branchMissing ->
+                                                    trLocal(
+                                                        "חובה לבחור לפחות קבוצה אחת",
+                                                        "Select at least one group"
+                                                    )
+
+                                                selectedForBranch
+                                                    .isEmpty() ->
+                                                    trLocal(
+                                                        "לא נבחרו קבוצות",
+                                                        "No groups selected"
+                                                    )
+
+                                                selectedForBranch
+                                                    .size == 1 ->
+                                                    trLocal(
+                                                        "נבחרה קבוצה אחת",
+                                                        "One group selected"
+                                                    )
+
+                                                else ->
+                                                    trLocal(
+                                                        "נבחרו ${selectedForBranch.size} קבוצות",
+                                                        "${selectedForBranch.size} groups selected"
+                                                    )
+                                            },
+                                        color =
+                                            if (
+                                                branchMissing
+                                            ) {
+                                                Color(
+                                                    0xFFBE123C
+                                                )
+                                            } else {
+                                                Color(
+                                                    0xFF64748B
+                                                )
+                                            },
+                                        style =
+                                            MaterialTheme
+                                                .typography
+                                                .labelSmall,
+                                        textAlign =
+                                            if (isEnglish) {
+                                                TextAlign.Left
+                                            } else {
+                                                TextAlign.Right
+                                            },
+                                        modifier =
+                                            Modifier
+                                                .fillMaxWidth()
+                                    )
+                                }
+
+                                Spacer(
+                                    Modifier.width(8.dp)
+                                )
+
+                                Icon(
+                                    imageVector =
+                                        if (expanded) {
+                                            Icons.Default
+                                                .KeyboardArrowUp
+                                        } else {
+                                            Icons.Default
+                                                .KeyboardArrowDown
+                                        },
+                                    contentDescription = null,
+                                    tint =
+                                        Color(0xFF6842D6),
+                                    modifier =
+                                        Modifier.size(22.dp)
+                                )
+                            }
+
+                            if (expanded) {
+                                Divider(
+                                    color =
+                                        Color(
+                                            0xFFD9E2F2
+                                        ),
+                                    thickness = 1.dp
+                                )
+
+                                if (
+                                    availableGroups.isEmpty()
+                                ) {
+                                    Text(
+                                        text =
+                                            trLocal(
+                                                "לא נמצאו קבוצות בסניף זה",
+                                                "No groups were found for this branch"
+                                            ),
+                                        color =
+                                            Color(
+                                                0xFF64748B
+                                            ),
+                                        style =
+                                            MaterialTheme
+                                                .typography
+                                                .bodySmall,
+                                        textAlign =
+                                            if (isEnglish) {
+                                                TextAlign.Left
+                                            } else {
+                                                TextAlign.Right
+                                            },
+                                        modifier =
+                                            Modifier
+                                                .fillMaxWidth()
+                                                .padding(
+                                                    14.dp
+                                                )
+                                    )
+                                } else {
+                                    Column(
+                                        modifier =
+                                            Modifier
+                                                .fillMaxWidth()
+                                                .padding(
+                                                    horizontal =
+                                                        8.dp,
+                                                    vertical =
+                                                        8.dp
+                                                ),
+                                        verticalArrangement =
+                                            Arrangement.spacedBy(
+                                                6.dp
+                                            )
+                                    ) {
+                                        availableGroups.forEach {
+                                                group ->
+
+                                            val checked =
+                                                group in
+                                                        selectedForBranch
+
+                                            val groupShape =
+                                                RoundedCornerShape(
+                                                    14.dp
+                                                )
+
+                                            Row(
+                                                modifier =
+                                                    Modifier
+                                                        .fillMaxWidth()
+                                                        .clip(
+                                                            groupShape
+                                                        )
+                                                        .background(
+                                                            if (
+                                                                checked
+                                                            ) {
+                                                                Color(
+                                                                    0xFFF0EBFF
+                                                                )
+                                                            } else {
+                                                                Color.White
+                                                            }
+                                                        )
+                                                        .clickable {
+                                                            val updatedGroups =
+                                                                if (
+                                                                    checked
+                                                                ) {
+                                                                    selectedForBranch
+                                                                        .filterNot {
+                                                                                selected ->
+                                                                            selected ==
+                                                                                    group
+                                                                        }
+                                                                } else {
+                                                                    selectedForBranch +
+                                                                            group
+                                                                }
+                                                                    .distinct()
+
+                                                            val updatedMap =
+                                                                selectedGroupsByBranch
+                                                                    .toMutableMap()
+
+                                                            updatedMap[
+                                                                branch
+                                                            ] =
+                                                                updatedGroups
+
+                                                            onGroupsByBranchChange(
+                                                                updatedMap
+                                                            )
+                                                        }
+                                                        .padding(
+                                                            horizontal =
+                                                                8.dp,
+                                                            vertical =
+                                                                4.dp
+                                                        ),
+                                                verticalAlignment =
+                                                    Alignment
+                                                        .CenterVertically
+                                            ) {
+                                                Checkbox(
+                                                    checked =
+                                                        checked,
+                                                    onCheckedChange =
+                                                        null,
+                                                    colors =
+                                                        CheckboxDefaults
+                                                            .colors(
+                                                                checkedColor =
+                                                                    Color(
+                                                                        0xFF7650DD
+                                                                    )
+                                                            )
+                                                )
+
+                                                Spacer(
+                                                    Modifier.width(
+                                                        6.dp
+                                                    )
+                                                )
+
+                                                Text(
+                                                    text =
+                                                        registrationGroupLabelForUi(
+                                                            group =
+                                                                group,
+                                                            isEnglish =
+                                                                isEnglish
+                                                        ),
+                                                    color =
+                                                        if (
+                                                            checked
+                                                        ) {
+                                                            Color(
+                                                                0xFF5634B5
+                                                            )
+                                                        } else {
+                                                            Color(
+                                                                0xFF172036
+                                                            )
+                                                        },
+                                                    style =
+                                                        MaterialTheme
+                                                            .typography
+                                                            .bodySmall,
+                                                    fontWeight =
+                                                        if (
+                                                            checked
+                                                        ) {
+                                                            FontWeight
+                                                                .ExtraBold
+                                                        } else {
+                                                            FontWeight
+                                                                .SemiBold
+                                                        },
+                                                    textAlign =
+                                                        if (
+                                                            isEnglish
+                                                        ) {
+                                                            TextAlign
+                                                                .Left
+                                                        } else {
+                                                            TextAlign
+                                                                .Right
+                                                        },
+                                                    modifier =
+                                                        Modifier
+                                                            .weight(
+                                                                1f
+                                                            )
+                                                )
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
     }
 }
 

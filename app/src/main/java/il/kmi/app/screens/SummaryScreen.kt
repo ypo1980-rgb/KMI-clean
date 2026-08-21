@@ -55,7 +55,6 @@ import kotlinx.coroutines.CancellationException
 import android.app.Activity
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.ui.unit.sp
 import il.kmi.shared.localization.AppLanguage
 import il.kmi.shared.localization.AppLanguageManager
 import il.kmi.shared.domain.content.ExerciseTitlesEn
@@ -1154,7 +1153,7 @@ private fun PremiumSummaryLoading() {
             modifier = Modifier.size(25.dp),
             shape = CircleShape,
             color = Color.White.copy(alpha = 0.96f),
-            shadowElevation = 8.dp,
+            shadowElevation = 0.dp,
             border = BorderStroke(
                 width = 1.dp,
                 color = Color.White.copy(alpha = 0.42f)
@@ -1177,7 +1176,7 @@ private fun PremiumSummaryLoading() {
             ) {
                 Text(
                     text = "✓",
-                    fontSize = 13.sp,
+                    style = KmiTypography.caption,
                     fontWeight = FontWeight.Black,
                     color = Color(0xFF0F5E9C),
                     textAlign = TextAlign.Center
@@ -1209,7 +1208,7 @@ private fun CoachGroupsProgressCard(
         modifier = modifier,
         shape = RoundedCornerShape(24.dp),
         color = surfaceColor,
-        shadowElevation = 5.dp,
+        shadowElevation = 0.dp,
         tonalElevation = 1.dp,
         border = BorderStroke(
             width = 1.dp,
@@ -1327,8 +1326,7 @@ private fun CoachGroupsProgressCard(
                             Text(
                                 text =
                                     "${summary.averageKnownPercent}%",
-                                fontSize = 34.sp,
-                                lineHeight = 38.sp,
+                                style = KmiTypography.metric,
                                 fontWeight = FontWeight.Black,
                                 color = primaryTextColor,
                                 textAlign = TextAlign.Center
@@ -1383,7 +1381,7 @@ private fun CoachGroupsProgressCard(
                         ) {
                             Text(
                                 text = summary.groupsCount.toString(),
-                                fontSize = 22.sp,
+                                style = KmiTypography.metric,
                                 fontWeight = FontWeight.Black,
                                 color = belt.color
                             )
@@ -1418,7 +1416,7 @@ private fun CoachGroupsProgressCard(
                         ) {
                             Text(
                                 text = summary.totalTrainees.toString(),
-                                fontSize = 22.sp,
+                                style = KmiTypography.metric,
                                 fontWeight = FontWeight.Black,
                                 color = belt.color
                             )
@@ -1456,7 +1454,7 @@ private fun CoachGroupsProgressCard(
                                     summary
                                         .traineesWithProgress
                                         .toString(),
-                                fontSize = 22.sp,
+                                style = KmiTypography.metric,
                                 fontWeight = FontWeight.Black,
                                 color = belt.color
                             )
@@ -2552,7 +2550,7 @@ fun SummaryScreen(
                 Surface(
                     onClick = onBack,
                     shape = RoundedCornerShape(14.4.dp),
-                    shadowElevation = 4.5.dp,
+                    shadowElevation = 0.dp,
                     modifier = Modifier
                         .fillMaxWidth(0.90f)
                         .height(46.8.dp)
@@ -2654,7 +2652,7 @@ fun SummaryScreen(
                     shape = RoundedCornerShape(26.dp),
                     color = summaryCardColor,
                     tonalElevation = 8.dp,
-                    shadowElevation = 12.dp
+                    shadowElevation = 0.dp
                 ) {
                     Column(
                         modifier = Modifier.padding(
@@ -3823,7 +3821,7 @@ fun SummaryScreen(
                                                                                     color = Color.White,
                                                                                     fontWeight = FontWeight.ExtraBold,
                                                                                     textAlign = TextAlign.Center,
-                                                                                    fontSize = 18.sp
+                                                                                    style = KmiTypography.action
                                                                                 )
                                                                             }
                                                                         }
@@ -3945,7 +3943,7 @@ fun SummaryScreen(
                                                                                                 FontWeight.ExtraBold,
                                                                                             textAlign =
                                                                                                 TextAlign.Center,
-                                                                                            fontSize = 18.sp
+                                                                                            style = KmiTypography.action
                                                                                         )
                                                                                     }
                                                                                 }
@@ -4032,12 +4030,14 @@ fun SummaryScreen(
                                                                                                     "○"
                                                                                             }
                                                                                         },
-                                                                                    color = statusForegroundColor,
+                                                                                    color =
+                                                                                        statusForegroundColor,
+                                                                                    style =
+                                                                                        KmiTypography.action,
                                                                                     fontWeight =
                                                                                         FontWeight.ExtraBold,
                                                                                     textAlign =
-                                                                                        TextAlign.Center,
-                                                                                    fontSize = 14.sp
+                                                                                        TextAlign.Center
                                                                                 )
                                                                             }
                                                                         }

@@ -39,6 +39,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
@@ -48,7 +49,11 @@ import com.google.firebase.ktx.Firebase
 import il.kmi.app.attendance.data.AttendanceRepository
 import il.kmi.app.attendance.data.AttendanceStatus
 import il.kmi.app.attendance.data.GroupMember
+import il.kmi.app.privacy.DemoPrivacy
 import il.kmi.app.privacy.TraineeDisplayNameMapper
+import il.kmi.app.screens.registration.CoachBranchAssignment
+import il.kmi.app.screens.registration.CoachBranchAssignmentsCodec
+import il.kmi.app.training.TrainingCatalog
 import il.kmi.app.ui.KmiTopBar
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.firstOrNull
@@ -73,6 +78,309 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.sp
 import androidx.compose.runtime.saveable.rememberSaveable
+
+//=========================================================================
+
+@Composable
+private fun PremiumCoachPickerHeader(
+    title: String,
+    subtitle: String,
+    itemsCount: Int,
+    isDarkMode: Boolean,
+    textAlign: TextAlign,
+    horizontalAlignment: Alignment.Horizontal
+) {
+    Column(
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .padding(
+                    horizontal = 10.dp,
+                    vertical = 8.dp
+                ),
+        verticalArrangement =
+            Arrangement.spacedBy(8.dp)
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Surface(
+                color =
+                    if (isDarkMode) {
+                        MaterialTheme
+                            .colorScheme
+                            .primaryContainer
+                    } else {
+                        Color(0xFFEEE9FF)
+                    },
+                shape = CircleShape,
+                shadowElevation = 0.dp,
+                tonalElevation = 0.dp,
+                modifier = Modifier.size(32.dp)
+            ) {
+                Box(
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = itemsCount.toString(),
+                        color =
+                            if (isDarkMode) {
+                                MaterialTheme
+                                    .colorScheme
+                                    .onPrimaryContainer
+                            } else {
+                                Color(0xFF6842D6)
+                            },
+                        style =
+                            MaterialTheme
+                                .typography
+                                .labelMedium,
+                        fontWeight = FontWeight.ExtraBold
+                    )
+                }
+            }
+
+            Spacer(Modifier.width(10.dp))
+
+            Column(
+                modifier = Modifier.weight(1f),
+                horizontalAlignment = horizontalAlignment
+            ) {
+                Text(
+                    text = title,
+                    color =
+                        if (isDarkMode) {
+                            MaterialTheme
+                                .colorScheme
+                                .onSurface
+                        } else {
+                            Color(0xFF172036)
+                        },
+                    style =
+                        MaterialTheme
+                            .typography
+                            .titleSmall,
+                    fontWeight = FontWeight.ExtraBold,
+                    textAlign = textAlign,
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+                Text(
+                    text = subtitle,
+                    color =
+                        if (isDarkMode) {
+                            MaterialTheme
+                                .colorScheme
+                                .onSurfaceVariant
+                        } else {
+                            Color(0xFF68758A)
+                        },
+                    style =
+                        MaterialTheme
+                            .typography
+                            .labelSmall,
+                    textAlign = textAlign,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
+        }
+
+        Divider(
+            color =
+                if (isDarkMode) {
+                    MaterialTheme
+                        .colorScheme
+                        .outline
+                        .copy(alpha = 0.35f)
+                } else {
+                    Color(0xFFD9E2F2)
+                },
+            thickness = 1.dp
+        )
+    }
+}
+
+@Composable
+private fun PremiumCoachPickerItem(
+    text: String,
+    badgeText: String,
+    isSelected: Boolean,
+    isDarkMode: Boolean,
+    textAlign: TextAlign,
+    maxLines: Int = 1,
+    onClick: () -> Unit
+) {
+    val itemShape = RoundedCornerShape(16.dp)
+
+    Row(
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .clip(itemShape)
+                .background(
+                    brush =
+                        if (isSelected) {
+                            Brush.horizontalGradient(
+                                colors =
+                                    if (isDarkMode) {
+                                        listOf(
+                                            MaterialTheme
+                                                .colorScheme
+                                                .primaryContainer,
+                                            MaterialTheme
+                                                .colorScheme
+                                                .secondaryContainer
+                                        )
+                                    } else {
+                                        listOf(
+                                            Color(0xFFF2ECFF),
+                                            Color(0xFFE8F4FF)
+                                        )
+                                    }
+                            )
+                        } else {
+                            Brush.horizontalGradient(
+                                colors = listOf(
+                                    MaterialTheme
+                                        .colorScheme
+                                        .surface,
+                                    MaterialTheme
+                                        .colorScheme
+                                        .surface
+                                )
+                            )
+                        }
+                )
+                .border(
+                    width =
+                        if (isSelected) {
+                            1.5.dp
+                        } else {
+                            1.dp
+                        },
+                    color =
+                        if (isSelected) {
+                            Color(0xFF8057E8)
+                        } else if (isDarkMode) {
+                            MaterialTheme
+                                .colorScheme
+                                .outline
+                                .copy(alpha = 0.40f)
+                        } else {
+                            Color(0xFFD7E1F0)
+                        },
+                    shape = itemShape
+                )
+                .clickable(onClick = onClick)
+                .padding(
+                    horizontal = 10.dp,
+                    vertical = 8.dp
+                ),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Surface(
+            color =
+                if (isSelected) {
+                    Color(0xFF7650DD)
+                } else if (isDarkMode) {
+                    MaterialTheme
+                        .colorScheme
+                        .surfaceVariant
+                } else {
+                    Color(0xFFE9EEFA)
+                },
+            shape = CircleShape,
+            shadowElevation = 0.dp,
+            tonalElevation = 0.dp,
+            modifier = Modifier.size(36.dp)
+        ) {
+            Box(
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = badgeText,
+                    color =
+                        if (isSelected) {
+                            Color.White
+                        } else {
+                            MaterialTheme
+                                .colorScheme
+                                .onSurfaceVariant
+                        },
+                    style =
+                        MaterialTheme
+                            .typography
+                            .bodyMedium,
+                    fontWeight = FontWeight.ExtraBold
+                )
+            }
+        }
+
+        Spacer(Modifier.width(10.dp))
+
+        Text(
+            text = text,
+            style =
+                MaterialTheme
+                    .typography
+                    .bodyMedium
+                    .copy(
+                        fontSize = 14.sp,
+                        lineHeight = 18.sp
+                    ),
+            fontWeight =
+                if (isSelected) {
+                    FontWeight.ExtraBold
+                } else {
+                    FontWeight.Bold
+                },
+            color =
+                if (isSelected && !isDarkMode) {
+                    Color(0xFF5634B5)
+                } else {
+                    MaterialTheme
+                        .colorScheme
+                        .onSurface
+                },
+            textAlign = textAlign,
+            maxLines = maxLines,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.weight(1f)
+        )
+
+        if (isSelected) {
+            Spacer(Modifier.width(8.dp))
+
+            Surface(
+                color =
+                    if (isDarkMode) {
+                        MaterialTheme
+                            .colorScheme
+                            .tertiaryContainer
+                    } else {
+                        Color(0xFFE4F8EA)
+                    },
+                shape = CircleShape,
+                shadowElevation = 0.dp,
+                tonalElevation = 0.dp,
+                modifier = Modifier.size(28.dp)
+            ) {
+                Box(
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector =
+                            Icons.Default.CheckCircle,
+                        contentDescription = null,
+                        tint = Color(0xFF16A34A),
+                        modifier = Modifier.size(19.dp)
+                    )
+                }
+            }
+        }
+    }
+}
 
 //=========================================================================
 
@@ -122,6 +430,29 @@ fun CoachTraineesScreen(
 
     // כל הסניפים והקבוצות שהמאמן רשום אליהם.
     var availableBranches by remember {
+        mutableStateOf<List<String>>(emptyList())
+    }
+
+    /*
+     * הרשימה המלאה של קבוצות המאמן נשמרת בנפרד.
+     * availableGroups תכיל רק קבוצות השייכות
+     * לסניף שנבחר כרגע.
+     */
+    /*
+     * מקור האמת החדש:
+     * סניף והקבוצות שאליהן המאמן משויך בו.
+     */
+    var coachGroupsByBranch by remember {
+        mutableStateOf<Map<String, List<String>>>(
+            emptyMap()
+        )
+    }
+
+    /*
+     * רשימה שטוחה נשמרת רק עבור fallback
+     * למשתמשים במבנה הישן.
+     */
+    var allCoachGroups by remember {
         mutableStateOf<List<String>>(emptyList())
     }
 
@@ -209,6 +540,17 @@ fun CoachTraineesScreen(
      */
     LaunchedEffect(Unit) {
 
+        /*
+         * המבנה החדש שנשמר מקומית.
+         */
+        val localAssignments =
+            CoachBranchAssignmentsCodec.decode(
+                sp.getString(
+                    "coach_branch_assignments_json",
+                    ""
+                )
+            )
+
         val localBranches =
             (
                     readCoachPrefList(
@@ -261,6 +603,9 @@ fun CoachTraineesScreen(
         var serverGroups =
             emptyList<String>()
 
+        var serverAssignments =
+            emptyList<CoachBranchAssignment>()
+
         val uid =
             FirebaseAuth
                 .getInstance()
@@ -275,6 +620,61 @@ fun CoachTraineesScreen(
                         .document(uid)
                         .get()
                         .await()
+
+                /*
+ * קוראים את המבנה החדש מ-Firestore.
+ */
+                serverAssignments =
+                    (
+                            snap.get(
+                                "coachBranchAssignments"
+                            ) as? List<*>
+                            )
+                        ?.mapNotNull { rawAssignment ->
+                            val assignmentMap =
+                                rawAssignment as?
+                                        Map<*, *>
+                                    ?: return@mapNotNull null
+
+                            val assignmentBranch =
+                                assignmentMap["branch"]
+                                    ?.toString()
+                                    ?.trim()
+                                    .orEmpty()
+
+                            if (
+                                assignmentBranch.isBlank()
+                            ) {
+                                return@mapNotNull null
+                            }
+
+                            val assignmentGroups =
+                                (
+                                        assignmentMap["groups"]
+                                                as? List<*>
+                                        )
+                                    ?.mapNotNull { rawGroup ->
+                                        rawGroup
+                                            ?.toString()
+                                            ?.trim()
+                                            ?.takeIf { group ->
+                                                group.isNotBlank()
+                                            }
+                                    }
+                                    ?.distinct()
+                                    .orEmpty()
+
+                            CoachBranchAssignment(
+                                branch =
+                                    assignmentBranch,
+                                groups =
+                                    assignmentGroups
+                            ).sanitized()
+                        }
+                        ?.distinctBy { assignment ->
+                            assignment.branch
+                        }
+                        .orEmpty()
 
                 serverBranches =
                     buildList {
@@ -375,17 +775,86 @@ fun CoachTraineesScreen(
             }
         }
 
+        /*
+         * נתוני השרת קודמים לנתונים המקומיים.
+         * אם השדה החדש אינו קיים, משתמשים
+         * במבנה המקומי החדש.
+         */
+        val resolvedAssignments =
+            if (serverAssignments.isNotEmpty()) {
+                serverAssignments
+            } else {
+                localAssignments
+            }
+
+        coachGroupsByBranch =
+            resolvedAssignments
+                .associate { assignment ->
+                    assignment.branch to
+                            assignment.groups
+                }
+
         availableBranches =
-            (localBranches + serverBranches)
-                .map { it.trim() }
-                .filter { it.isNotBlank() }
+            if (coachGroupsByBranch.isNotEmpty()) {
+                /*
+                 * במבנה החדש רק הסניפים שיש להם
+                 * שיוך מפורש משתתפים במסך.
+                 */
+                coachGroupsByBranch
+                    .keys
+                    .map { branch ->
+                        branch.trim()
+                    }
+                    .filter { branch ->
+                        branch.isNotBlank()
+                    }
+                    .distinct()
+            } else {
+                /*
+                 * תאימות למשתמש שלא שמר עדיין
+                 * במבנה החדש.
+                 */
+                (localBranches + serverBranches)
+                    .map { branch ->
+                        branch.trim()
+                    }
+                    .filter { branch ->
+                        branch.isNotBlank()
+                    }
+                    .distinct()
+            }
+
+        val mergedLegacyGroups =
+            (localGroups + serverGroups)
+                .map { group ->
+                    group.trim()
+                }
+                .filter { group ->
+                    group.isNotBlank()
+                }
                 .distinct()
 
-        availableGroups =
-            (localGroups + serverGroups)
-                .map { it.trim() }
-                .filter { it.isNotBlank() }
-                .distinct()
+        allCoachGroups =
+            if (coachGroupsByBranch.isNotEmpty()) {
+                coachGroupsByBranch
+                    .values
+                    .flatten()
+                    .map { group ->
+                        group.trim()
+                    }
+                    .filter { group ->
+                        group.isNotBlank()
+                    }
+                    .distinct()
+            } else {
+                mergedLegacyGroups
+            }
+
+        /*
+         * הערך המדויק יסונן לפי הסניף
+         * ב-LaunchedEffect הבא.
+         */
+        availableGroups = allCoachGroups
 
         /*
          * אם קיבלנו branch/group בכניסה למסך –
@@ -438,6 +907,167 @@ fun CoachTraineesScreen(
                 activeGroup
                     ?: availableGroups.firstOrNull()
                         .orEmpty()
+        }
+    }
+
+    /*
+  * TrainingCatalog הוא מקור האמת לקשר
+  * בין סניף לבין הקבוצות הפעילות בו.
+  *
+  * attendanceGroups עשוי להכיל מסמכים ישנים,
+  * ולכן אינו משמש לקביעת רשימת הקבוצות.
+  */
+    LaunchedEffect(
+        effectiveBranch,
+        coachGroupsByBranch,
+        allCoachGroups
+    ) {
+        val cleanBranch =
+            effectiveBranch.trim()
+
+        if (cleanBranch.isBlank()) {
+            availableGroups = emptyList()
+            effectiveGroupKey = ""
+            return@LaunchedEffect
+        }
+
+        fun String.normalizedGroupValue(): String =
+            trim()
+                .replace('־', '-')
+                .replace('–', '-')
+                .replace('—', '-')
+                .replace(Regex("\\s+"), " ")
+                .lowercase(Locale("he", "IL"))
+
+        fun String.normalizedBranchValue(): String =
+            trim()
+                .replace('־', '-')
+                .replace('–', '-')
+                .replace('—', '-')
+                .replace(Regex("\\s+"), " ")
+                .lowercase(Locale("he", "IL"))
+
+        /*
+         * אם קיים המבנה החדש, אין צורך להסיק
+         * קבוצות מהקטלוג או מהרשימה השטוחה.
+         */
+        if (coachGroupsByBranch.isNotEmpty()) {
+            val assignedGroups =
+                coachGroupsByBranch
+                    .entries
+                    .firstOrNull { entry ->
+                        entry.key
+                            .normalizedBranchValue() ==
+                                cleanBranch
+                                    .normalizedBranchValue()
+                    }
+                    ?.value
+                    .orEmpty()
+                    .map { group ->
+                        group.trim()
+                    }
+                    .filter { group ->
+                        group.isNotBlank()
+                    }
+                    .distinct()
+
+            availableGroups = assignedGroups
+
+            val selectedGroupStillExists =
+                assignedGroups.any { group ->
+                    group.normalizedGroupValue() ==
+                            effectiveGroupKey
+                                .normalizedGroupValue()
+                }
+
+            if (!selectedGroupStillExists) {
+                effectiveGroupKey = ""
+            }
+
+            return@LaunchedEffect
+        }
+
+        /*
+         * הקבוצות המוגדרות בפועל עבור הסניף
+         * לפי קטלוג האימונים המרכזי.
+         */
+        val catalogGroups =
+            TrainingCatalog.groupsForBranch(
+                branch = cleanBranch,
+                isEnglish = false
+            )
+                .map { group ->
+                    group.trim()
+                }
+                .filter { group ->
+                    group.isNotBlank()
+                }
+                .distinct()
+
+        /*
+   * הנרמול משמש רק כדי לבדוק שהקטגוריה
+   * קיימת בסניף. את שמות הקבוצות המקוריים
+   * שומרים בנפרד ולא מאחדים קבוצות שונות
+   * השייכות לאותה קטגוריית-על.
+   */
+        availableGroups =
+            allCoachGroups
+                .filter { coachGroup ->
+                    val normalizedCoachGroup =
+                        TrainingCatalog.normalizeGroupName(
+                            coachGroup
+                        ).normalizedGroupValue()
+
+                    catalogGroups.any { catalogGroup ->
+                        val normalizedCatalogGroup =
+                            TrainingCatalog.normalizeGroupName(
+                                catalogGroup
+                            ).normalizedGroupValue()
+
+                        normalizedCoachGroup ==
+                                normalizedCatalogGroup
+                    }
+                }
+                .map { group ->
+                    group.trim()
+                }
+                .filter { group ->
+                    group.isNotBlank()
+                }
+                .distinct()
+
+        /*
+         * אם שיוכי המאמן עדיין לא נטענו, משתמשים
+         * בקטגוריות הקבוצות מהקטלוג ללא כפילויות.
+         */
+        if (
+            availableGroups.isEmpty() &&
+            catalogGroups.isNotEmpty()
+        ) {
+            /*
+             * גם במצב הגיבוי שומרים את שמות
+             * הקבוצות המקוריים מהקטלוג.
+             */
+            availableGroups =
+                catalogGroups
+                    .map { group ->
+                        group.trim()
+                    }
+                    .filter { group ->
+                        group.isNotBlank()
+                    }
+                    .distinct()
+        }
+
+        val selectedGroupStillExists =
+            availableGroups.any { group ->
+                group.normalizedGroupValue() ==
+                        effectiveGroupKey
+                            .normalizedGroupValue()
+            }
+
+        if (!selectedGroupStillExists) {
+            effectiveGroupKey = ""
         }
     }
 
@@ -1101,23 +1731,70 @@ fun CoachTraineesScreen(
                     }
                 }
 
-                val distinctDirect = directDocs.distinctBy { it.id }
+                val distinctDirect =
+                    directDocs.distinctBy { it.id }
 
-                if (distinctDirect.isNotEmpty()) {
-                    distinctDirect
-                } else {
-                    Firebase.firestore.collection("users")
+                /*
+                 * שאילתה ישירה יכולה למצוא רק חלק מהמתאמנים,
+                 * משום שבמסמכי משתמש ישנים הסניף והקבוצה
+                 * נשמרו בשמות שדות או במבנים שונים.
+                 *
+                 * לכן קוראים גם את מסמכי users ומצרפים כל
+                 * מסמך ששמו תואם למתאמן ברשימת הקבוצה.
+                 */
+                val memberNameKeys =
+                    members
+                        .map { member ->
+                            member.displayName.normKey()
+                        }
+                        .filter { nameKey ->
+                            nameKey.isNotBlank()
+                        }
+                        .toSet()
+
+                val fallbackDocs =
+                    Firebase.firestore
+                        .collection("users")
                         .get()
                         .await()
                         .documents
                         .filter { doc ->
-                            userDocMatchesBranchAndGroup(
-                                doc = doc,
-                                branchCandidates = branchKeys,
-                                groupCandidate = groupName
-                            )
+                            val documentNameKey =
+                                (
+                                        doc.getString("fullName")
+                                            ?: doc.getString("name")
+                                            ?: doc.getString(
+                                                "displayName"
+                                            )
+                                            ?: ""
+                                        ).normKey()
+
+                            val matchesMemberName =
+                                documentNameKey.isNotBlank() &&
+                                        documentNameKey in
+                                        memberNameKeys
+
+                            val matchesBranchAndGroup =
+                                userDocMatchesBranchAndGroup(
+                                    doc = doc,
+                                    branchCandidates =
+                                        branchKeys,
+                                    groupCandidate =
+                                        groupName
+                                )
+
+                            matchesMemberName ||
+                                    matchesBranchAndGroup
                         }
-                }
+
+                /*
+                 * מאחדים את תוצאות השאילתות הישירות
+                 * עם מסמכי ההתאמה ומסירים כפילויות.
+                 */
+                (distinctDirect + fallbackDocs)
+                    .distinctBy { document ->
+                        document.id
+                    }
             }.getOrNull().orEmpty()
 
             val mergedUserDocs = userDocs
@@ -1140,15 +1817,59 @@ fun CoachTraineesScreen(
                 .map { (_, docs) ->
                     docs.maxWithOrNull(
                         compareBy<com.google.firebase.firestore.DocumentSnapshot> {
-                            if (primaryEmailFromDoc(it).isNotBlank()) 1 else 0
+                            /*
+                             * נותנים עדיפות למסמך המכיל
+                             * את נתוני הפרופיל המלאים.
+                             */
+                            var profileScore = 0
+
+                            if (
+                                beltFromDoc(it).isNotBlank()
+                            ) {
+                                profileScore += 4
+                            }
+
+                            if (ageFromDoc(it) > 0) {
+                                profileScore += 3
+                            }
+
+                            if (
+                                seniorityFromDoc(it)
+                                    .isNotBlank()
+                            ) {
+                                profileScore += 2
+                            }
+
+                            if (
+                                primaryEmailFromDoc(it)
+                                    .isNotBlank()
+                            ) {
+                                profileScore += 1
+                            }
+
+                            if (
+                                primaryPhoneFromDoc(it)
+                                    .isNotBlank()
+                            ) {
+                                profileScore += 1
+                            }
+
+                            profileScore
                         }.thenBy {
-                            if (primaryPhoneFromDoc(it).isNotBlank()) 1 else 0
-                        }.thenBy {
-                            if ((it.getString("fullName")
-                                    ?: it.getString("name")
-                                    ?: it.getString("displayName")
-                                    ?: "").isNotBlank()
-                            ) 1 else 0
+                            if (
+                                (
+                                        it.getString("fullName")
+                                            ?: it.getString("name")
+                                            ?: it.getString(
+                                                "displayName"
+                                            )
+                                            ?: ""
+                                        ).isNotBlank()
+                            ) {
+                                1
+                            } else {
+                                0
+                            }
                         }.thenBy {
                             it.id
                         }
@@ -1427,86 +2148,166 @@ fun CoachTraineesScreen(
             .replace(Regex("\\s+"), " ")
             .lowercase(Locale("he", "IL"))
 
-    val uiProfiles = remember(traineeProfiles, traineeSearchQuery) {
-        val query = normalizeCoachSearchText(traineeSearchQuery)
-
-        val mergedProfiles = traineeProfiles
-            .groupBy { profile ->
-                val emailKey = profile.email.trim().lowercase(Locale.US)
-
-                val phoneKey = profile.phone.filter { it.isDigit() }
-                    .let { digits ->
-                        when {
-                            digits.startsWith("972") && digits.length >= 11 -> "0" + digits.drop(3)
-                            digits.startsWith("05") -> digits
-                            digits.length == 9 && digits.startsWith("5") -> "0$digits"
-                            else -> digits
-                        }
-                    }
-
-                val nameKey = normalizeCoachSearchText(profile.fullName)
-
-                when {
-                    emailKey.isNotBlank() -> "email:$emailKey"
-                    phoneKey.isNotBlank() -> "phone:$phoneKey"
-                    else -> "name:$nameKey"
-                }
-            }
-            .map { (_, duplicates) ->
-                duplicates.maxWithOrNull(
-                    compareBy<TraineeProfile> {
-                        if (it.userDocId.isNotBlank()) 1 else 0
-                    }.thenBy {
-                        it.attendancePct
-                    }.thenBy {
-                        it.belt.length
-                    }
-                ) ?: duplicates.first()
-            }
-            .sortedBy { it.fullName.trim() }
-
-        if (query.isBlank()) {
-            mergedProfiles
-        } else {
-            mergedProfiles.filter { trainee ->
-                listOf(
-                    trainee.fullName,
-                    trainee.belt,
-                    trainee.branch,
-                    trainee.groupKey,
-                    trainee.seniority,
-                    trainee.age.takeIf { it > 0 }?.toString().orEmpty(),
-                    trainee.attendancePct.takeIf { it > 0 }?.toString().orEmpty()
-                ).any { value ->
-                    normalizeCoachSearchText(value).contains(query)
-                }
-            }
-        }
-    }
+    /*
+     * הקריאה מתבצעת מתוך Composition ולכן שינוי המתג
+     * במסך ההגדרות גורם לעדכון מיידי של המסך.
+     */
+    val demoPrivacyEnabled =
+        DemoPrivacy.isEnabled()
 
     fun demoSafeName(profile: TraineeProfile): String {
-        val stableKey = profile.id.ifBlank {
+        /*
+         * userDocId הוא המזהה המועדף מפני שהוא נשאר
+         * עקבי גם כאשר אותו מתאמן מופיע במסכים שונים.
+         */
+        val stableKey =
             profile.userDocId.ifBlank {
-                profile.fullName
+                profile.id.ifBlank {
+                    profile.fullName
+                }
             }
-        }
 
         return TraineeDisplayNameMapper.displayName(
             realName = profile.fullName,
-            stableKey = stableKey
+            stableKey = stableKey,
+            isEnglish = isEnglish
         ).ifBlank {
-            coachTr(isEnglish, "מתאמן ללא שם", "Unnamed trainee")
+            coachTr(
+                isEnglish,
+                "מתאמן ללא שם",
+                "Unnamed trainee"
+            )
         }
     }
 
+    val uiProfiles =
+        remember(
+            traineeProfiles,
+            traineeSearchQuery,
+            demoPrivacyEnabled,
+            isEnglish
+        ) {
+            val query =
+                normalizeCoachSearchText(
+                    traineeSearchQuery
+                )
+
+            val mergedProfiles =
+                traineeProfiles
+                    .groupBy { profile ->
+                        val emailKey =
+                            profile.email
+                                .trim()
+                                .lowercase(Locale.US)
+
+                        val phoneKey =
+                            profile.phone
+                                .filter { it.isDigit() }
+                                .let { digits ->
+                                    when {
+                                        digits.startsWith("972") &&
+                                                digits.length >= 11 ->
+                                            "0" + digits.drop(3)
+
+                                        digits.startsWith("05") ->
+                                            digits
+
+                                        digits.length == 9 &&
+                                                digits.startsWith("5") ->
+                                            "0$digits"
+
+                                        else ->
+                                            digits
+                                    }
+                                }
+
+                        val nameKey =
+                            normalizeCoachSearchText(
+                                profile.fullName
+                            )
+
+                        when {
+                            emailKey.isNotBlank() ->
+                                "email:$emailKey"
+
+                            phoneKey.isNotBlank() ->
+                                "phone:$phoneKey"
+
+                            else ->
+                                "name:$nameKey"
+                        }
+                    }
+                    .map { (_, duplicates) ->
+                        duplicates.maxWithOrNull(
+                            compareBy<TraineeProfile> {
+                                if (
+                                    it.userDocId.isNotBlank()
+                                ) {
+                                    1
+                                } else {
+                                    0
+                                }
+                            }.thenBy {
+                                it.attendancePct
+                            }.thenBy {
+                                it.belt.length
+                            }
+                        ) ?: duplicates.first()
+                    }
+                    .sortedBy { profile ->
+                        demoSafeName(profile)
+                            .trim()
+                    }
+
+            if (query.isBlank()) {
+                mergedProfiles
+            } else {
+                mergedProfiles.filter { trainee ->
+                    /*
+                     * במצב הדגמה מחפשים לפי שם הדמה בלבד.
+                     * השם האמיתי אינו משתתף בחיפוש ואינו
+                     * נחשף בעקיפין למי שמציג את האפליקציה.
+                     */
+                    listOf(
+                        demoSafeName(trainee),
+                        trainee.belt,
+                        trainee.branch,
+                        trainee.groupKey,
+                        trainee.seniority,
+                        trainee.age
+                            .takeIf { it > 0 }
+                            ?.toString()
+                            .orEmpty(),
+                        trainee.attendancePct
+                            .takeIf { it > 0 }
+                            ?.toString()
+                            .orEmpty()
+                    ).any { value ->
+                        normalizeCoachSearchText(
+                            value
+                        ).contains(query)
+                    }
+                }
+            }
+        }
+
     // בחירה נוכחית
-    var selectedId by remember { mutableStateOf<String?>(null) }
+    // לא בוחרים מתאמן אוטומטית בכניסה למסך.
+    var selectedId by remember {
+        mutableStateOf<String?>(null)
+    }
+
     val selected: TraineeProfile? =
-        if (isProfilesLoading || isInitialServerSyncRunning || !didFinishInitialProfilesLoad) {
+        if (
+            isProfilesLoading ||
+            isInitialServerSyncRunning ||
+            !didFinishInitialProfilesLoad
+        ) {
             null
         } else {
-            uiProfiles.firstOrNull { it.id == selectedId }
-                ?: uiProfiles.firstOrNull()
+            uiProfiles.firstOrNull { trainee ->
+                trainee.id == selectedId
+            }
         }
 
     // הערות מאמן לפי מתאמן
@@ -1534,6 +2335,14 @@ fun CoachTraineesScreen(
 // אחרי בחירת מתאמן הכרטיס נסגר אוטומטית כדי לפנות מקום למסך.
     var isTraineePickerExpanded by rememberSaveable {
         mutableStateOf(true)
+    }
+
+    /*
+     * רשימת המתאמנים נפתחת כתפריט צף.
+     * לכן היא אינה מגדילה את גובה כרטיס הבחירה.
+     */
+    var isTraineeMenuExpanded by rememberSaveable {
+        mutableStateOf(false)
     }
 
 // ✅ החלק התחתון עובד כאקורדיון: רק נושא אחד פתוח בכל רגע.
@@ -1711,12 +2520,10 @@ fun CoachTraineesScreen(
     }
 
     LaunchedEffect(uiProfiles) {
-        if (selectedId == null && uiProfiles.isNotEmpty()) {
-            selectedId = uiProfiles.first().id
-        } else if (selectedId != null && uiProfiles.isNotEmpty() && uiProfiles.none { it.id == selectedId }) {
-            selectedId = uiProfiles.firstOrNull()?.id
-        }
-
+        /*
+         * טעינת הרשימה אינה בוחרת מתאמן אוטומטית.
+         * מתאמן נבחר רק בעקבות לחיצה מפורשת של המאמן.
+         */
         uiProfiles.forEach { trainee ->
             if (beltAwardDatesState[trainee.id] == null) {
                 beltAwardDatesState[trainee.id] = trainee.beltAwardDates
@@ -2041,23 +2848,43 @@ fun CoachTraineesScreen(
                 }
 
                 item {
+                    val isDarkMode =
+                        MaterialTheme.colorScheme.background
+                            .luminance() < 0.5f
+
                     Surface(
-                        color = Color(0xFFF4F8FF),
-                        shape = RoundedCornerShape(24.dp),
-                        shadowElevation = 6.dp,
+                        color =
+                            if (isDarkMode) {
+                                MaterialTheme.colorScheme.surface
+                            } else {
+                                Color(0xFFF4F8FF)
+                            },
+                        shape = RoundedCornerShape(20.dp),
+                        shadowElevation = 0.dp,
                         tonalElevation = 0.dp,
                         border = BorderStroke(
                             width = 1.dp,
-                            color = Color(0xFFD8E4F4)
+                            color =
+                                if (isDarkMode) {
+                                    MaterialTheme.colorScheme.outline
+                                        .copy(alpha = 0.45f)
+                                } else {
+                                    Color(0xFFD8E4F4)
+                                }
                         ),
                         modifier = Modifier.fillMaxWidth()
                     ) {
                         Column(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(horizontal = 12.dp, vertical = 12.dp),
-                            verticalArrangement = Arrangement.spacedBy(10.dp),
-                            horizontalAlignment = screenHorizontalAlignment
+                                .padding(
+                                    horizontal = 10.dp,
+                                    vertical = 8.dp
+                                ),
+                            verticalArrangement =
+                                Arrangement.spacedBy(6.dp),
+                            horizontalAlignment =
+                                screenHorizontalAlignment
                         ) {
                             Row(
                                 modifier = Modifier
@@ -2080,38 +2907,49 @@ fun CoachTraineesScreen(
                                     modifier = Modifier.size(24.dp)
                                 )
 
-                                Spacer(Modifier.width(8.dp))
+                                Spacer(Modifier.width(6.dp))
 
-                                Column(
-                                    modifier = Modifier.weight(1f),
-                                    horizontalAlignment = screenHorizontalAlignment
-                                ) {
-                                    Text(
-                                        text = coachTr(isEnglish, "בחירת מתאמן", "Select trainee"),
-                                        style = MaterialTheme.typography.titleMedium.copy(
-                                            fontSize = 17.sp,
-                                            lineHeight = 20.sp
-                                        ),
-                                        fontWeight = FontWeight.ExtraBold,
-                                        color = Color(0xFF172036),
-                                        textAlign = screenTextAlign,
-                                        modifier = Modifier.fillMaxWidth()
-                                    )
+                                Text(
+                                    text = buildString {
+                                        append(
+                                            coachTr(
+                                                isEnglish,
+                                                "בחירת מתאמן",
+                                                "Select trainee"
+                                            )
+                                        )
 
-                                    Text(
-                                        text = selected?.let(::demoSafeName)
-                                            ?: coachTr(isEnglish, "לא נבחר מתאמן", "No trainee selected"),
-                                        style = MaterialTheme.typography.bodySmall.copy(
-                                            fontSize = 12.sp,
-                                            lineHeight = 14.sp
-                                        ),
-                                        color = Color(0xFF64748B),
-                                        textAlign = screenTextAlign,
-                                        maxLines = 1,
-                                        overflow = TextOverflow.Ellipsis,
-                                        modifier = Modifier.fillMaxWidth()
-                                    )
-                                }
+                                        selected
+                                            ?.let(::demoSafeName)
+                                            ?.takeIf {
+                                                it.isNotBlank()
+                                            }
+                                            ?.let { selectedName ->
+                                                append("  •  ")
+                                                append(selectedName)
+                                            }
+                                    },
+                                    modifier =
+                                        Modifier.weight(1f),
+                                    style =
+                                        MaterialTheme.typography
+                                            .titleMedium,
+                                    fontWeight =
+                                        FontWeight.ExtraBold,
+                                    color =
+                                        if (isDarkMode) {
+                                            MaterialTheme
+                                                .colorScheme
+                                                .onSurface
+                                        } else {
+                                            Color(0xFF172036)
+                                        },
+                                    textAlign =
+                                        screenTextAlign,
+                                    maxLines = 1,
+                                    overflow =
+                                        TextOverflow.Ellipsis
+                                )
                             }
 
                             if (isTraineePickerExpanded) {
@@ -2193,58 +3031,117 @@ fun CoachTraineesScreen(
                                         modifier = Modifier
                                             .menuAnchor()
                                             .fillMaxWidth()
+                                            .heightIn(min = 52.dp)
                                     )
 
                                     ExposedDropdownMenu(
-                                        expanded = branchPickerExpanded,
+                                        expanded =
+                                            branchPickerExpanded,
                                         onDismissRequest = {
                                             branchPickerExpanded = false
-                                        }
-                                    ) {
-                                        availableBranches.forEach { branchItem ->
-                                            DropdownMenuItem(
-                                                text = {
-                                                    Text(
-                                                        text = branchItem,
-                                                        fontWeight =
-                                                            if (
-                                                                branchItem ==
-                                                                effectiveBranch
-                                                            ) {
-                                                                FontWeight.ExtraBold
-                                                            } else {
-                                                                FontWeight.Medium
-                                                            },
-                                                        textAlign =
-                                                            coachTextAlign(
-                                                                isEnglish
-                                                            ),
-                                                        modifier =
-                                                            Modifier.fillMaxWidth()
-                                                    )
-                                                },
-                                                onClick = {
-                                                    if (
-                                                        branchItem !=
-                                                        effectiveBranch
-                                                    ) {
-                                                        effectiveBranch =
-                                                            branchItem
-
-                                                        /*
-                                                         * החלפת סניף מאפסת
-                                                         * את בחירת המתאמן.
-                                                         */
-                                                        selectedId = null
-                                                        traineeSearchQuery = ""
-                                                        expandedCoachSection =
-                                                            null
-                                                    }
-
-                                                    branchPickerExpanded =
-                                                        false
-                                                }
+                                        },
+                                        modifier =
+                                            Modifier.heightIn(
+                                                max = 300.dp
                                             )
+                                    ) {
+                                        Column(
+                                            modifier =
+                                                Modifier
+                                                    .fillMaxWidth()
+                                                    .background(
+                                                        color =
+                                                            if (
+                                                                isDarkMode
+                                                            ) {
+                                                                MaterialTheme
+                                                                    .colorScheme
+                                                                    .surface
+                                                            } else {
+                                                                Color(
+                                                                    0xFFF8FAFF
+                                                                )
+                                                            }
+                                                    )
+                                                    .padding(
+                                                        horizontal = 8.dp,
+                                                        vertical = 8.dp
+                                                    ),
+                                            verticalArrangement =
+                                                Arrangement.spacedBy(
+                                                    6.dp
+                                                )
+                                        ) {
+                                            PremiumCoachPickerHeader(
+                                                title =
+                                                    coachTr(
+                                                        isEnglish,
+                                                        "הסניפים שלי",
+                                                        "My branches"
+                                                    ),
+                                                subtitle =
+                                                    coachTr(
+                                                        isEnglish,
+                                                        "בחר את הסניף להצגת הקבוצות",
+                                                        "Select a branch to view its groups"
+                                                    ),
+                                                itemsCount =
+                                                    availableBranches.size,
+                                                isDarkMode = isDarkMode,
+                                                textAlign =
+                                                    screenTextAlign,
+                                                horizontalAlignment =
+                                                    screenHorizontalAlignment
+                                            )
+
+                                            availableBranches.forEach {
+                                                    branchItem ->
+
+                                                PremiumCoachPickerItem(
+                                                    text = branchItem,
+                                                    badgeText =
+                                                        branchItem
+                                                            .trim()
+                                                            .firstOrNull()
+                                                            ?.toString()
+                                                            .orEmpty(),
+                                                    isSelected =
+                                                        branchItem ==
+                                                                effectiveBranch,
+                                                    isDarkMode =
+                                                        isDarkMode,
+                                                    textAlign =
+                                                        screenTextAlign,
+                                                    maxLines = 2,
+                                                    onClick = {
+                                                        if (
+                                                            branchItem !=
+                                                            effectiveBranch
+                                                        ) {
+                                                            effectiveBranch =
+                                                                branchItem
+
+                                                            /*
+                                                             * החלפת סניף מאפסת
+                                                             * גם את הקבוצה הקודמת
+                                                             * וגם את המתאמן שנבחר.
+                                                             */
+                                                            effectiveGroupKey =
+                                                                ""
+                                                            availableGroups =
+                                                                emptyList()
+                                                            selectedId = null
+                                                            traineeSearchQuery =
+                                                                ""
+                                                            expandedCoachSection =
+                                                                null
+                                                        }
+
+                                                        branchPickerExpanded =
+                                                            false
+                                                    }
+                                                )
+                                            }
                                         }
                                     }
                                 }
@@ -2329,287 +3226,839 @@ fun CoachTraineesScreen(
                                     )
 
                                     ExposedDropdownMenu(
-                                        expanded = groupPickerExpanded,
+                                        expanded =
+                                            groupPickerExpanded,
                                         onDismissRequest = {
                                             groupPickerExpanded = false
-                                        }
-                                    ) {
-                                        availableGroups.forEach { groupItem ->
-                                            DropdownMenuItem(
-                                                text = {
-                                                    Text(
-                                                        text = groupItem,
-                                                        fontWeight =
-                                                            if (
-                                                                groupItem ==
-                                                                effectiveGroupKey
-                                                            ) {
-                                                                FontWeight.ExtraBold
-                                                            } else {
-                                                                FontWeight.Medium
-                                                            },
-                                                        textAlign =
-                                                            coachTextAlign(
-                                                                isEnglish
-                                                            ),
-                                                        modifier =
-                                                            Modifier.fillMaxWidth()
-                                                    )
-                                                },
-                                                onClick = {
-                                                    if (
-                                                        groupItem !=
-                                                        effectiveGroupKey
-                                                    ) {
-                                                        effectiveGroupKey =
-                                                            groupItem
-
-                                                        selectedId = null
-                                                        traineeSearchQuery = ""
-                                                        expandedCoachSection =
-                                                            null
-                                                    }
-
-                                                    groupPickerExpanded =
-                                                        false
-                                                }
+                                        },
+                                        modifier =
+                                            Modifier.heightIn(
+                                                max = 300.dp
                                             )
+                                    ) {
+                                        Column(
+                                            modifier =
+                                                Modifier
+                                                    .fillMaxWidth()
+                                                    .background(
+                                                        color =
+                                                            if (
+                                                                isDarkMode
+                                                            ) {
+                                                                MaterialTheme
+                                                                    .colorScheme
+                                                                    .surface
+                                                            } else {
+                                                                Color(
+                                                                    0xFFF8FAFF
+                                                                )
+                                                            }
+                                                    )
+                                                    .padding(
+                                                        horizontal = 8.dp,
+                                                        vertical = 8.dp
+                                                    ),
+                                            verticalArrangement =
+                                                Arrangement.spacedBy(
+                                                    6.dp
+                                                )
+                                        ) {
+                                            PremiumCoachPickerHeader(
+                                                title =
+                                                    coachTr(
+                                                        isEnglish,
+                                                        "קבוצות בסניף",
+                                                        "Branch groups"
+                                                    ),
+                                                subtitle =
+                                                    coachTr(
+                                                        isEnglish,
+                                                        "בחר קבוצה להצגת המתאמנים",
+                                                        "Select a group to view its trainees"
+                                                    ),
+                                                itemsCount =
+                                                    availableGroups.size,
+                                                isDarkMode = isDarkMode,
+                                                textAlign =
+                                                    screenTextAlign,
+                                                horizontalAlignment =
+                                                    screenHorizontalAlignment
+                                            )
+
+                                            availableGroups.forEach {
+                                                    groupItem ->
+
+                                                PremiumCoachPickerItem(
+                                                    text = groupItem,
+                                                    badgeText =
+                                                        groupItem
+                                                            .trim()
+                                                            .firstOrNull()
+                                                            ?.toString()
+                                                            .orEmpty(),
+                                                    isSelected =
+                                                        groupItem ==
+                                                                effectiveGroupKey,
+                                                    isDarkMode =
+                                                        isDarkMode,
+                                                    textAlign =
+                                                        screenTextAlign,
+                                                    onClick = {
+                                                        if (
+                                                            groupItem !=
+                                                            effectiveGroupKey
+                                                        ) {
+                                                            effectiveGroupKey =
+                                                                groupItem
+                                                            selectedId = null
+                                                            traineeSearchQuery =
+                                                                ""
+                                                            expandedCoachSection =
+                                                                null
+                                                        }
+
+                                                        groupPickerExpanded =
+                                                            false
+                                                    }
+                                                )
+                                            }
                                         }
                                     }
                                 }
 
                                 // =====================================================
-                                // חיפוש מתאמן
+                                // בחירת מתאמן – רשימה צפה שאינה מגדילה את הכרטיס
                                 // =====================================================
 
-                                OutlinedTextField(
-                                    value = traineeSearchQuery,
-                                    onValueChange = { traineeSearchQuery = it },
-                                    singleLine = true,
-                                    textStyle = MaterialTheme.typography.bodySmall.copy(
-                                        fontSize = 13.sp,
-                                        textAlign = coachTextAlign(isEnglish),
-                                        color = Color(0xFF172036)
-                                    ),
-                                    placeholder = {
-                                        Text(
-                                            text = coachTr(isEnglish, "חיפוש מתאמן", "Search trainee"),
-                                            style = MaterialTheme.typography.bodySmall.copy(
-                                                fontSize = 12.sp,
-                                                color = Color(0xFF7C879B)
-                                            )
-                                        )
-                                    },
-                                    leadingIcon = {
-                                        Text(
-                                            text = "🔎",
-                                            fontSize = 15.sp,
-                                            color = Color(0xFF64748B)
-                                        )
-                                    },
-                                    trailingIcon = {
-                                        if (traineeSearchQuery.isNotBlank()) {
-                                            Icon(
-                                                imageVector = Icons.Default.Close,
-                                                contentDescription = coachTr(isEnglish, "נקה חיפוש", "Clear search"),
-                                                modifier = Modifier
-                                                    .size(18.dp)
-                                                    .clickable {
-                                                        traineeSearchQuery = ""
-                                                    },
-                                                tint = Color(0xFF64748B)
-                                            )
+                                val canChooseTrainee =
+                                    effectiveBranch.isNotBlank() &&
+                                            effectiveGroupKey.isNotBlank()
+
+                                ExposedDropdownMenuBox(
+                                    expanded = isTraineeMenuExpanded,
+                                    onExpandedChange = { shouldExpand ->
+                                        if (
+                                            canChooseTrainee &&
+                                            !isProfilesLoading &&
+                                            !isInitialServerSyncRunning &&
+                                            didFinishInitialProfilesLoad
+                                        ) {
+                                            isTraineeMenuExpanded =
+                                                shouldExpand
                                         }
                                     },
-                                    shape = RoundedCornerShape(18.dp),
-                                    colors = OutlinedTextFieldDefaults.colors(
-                                        focusedTextColor = Color(0xFF172036),
-                                        unfocusedTextColor = Color(0xFF172036),
-                                        disabledTextColor = Color(0xFF94A3B8),
-                                        cursorColor = Color(0xFF4F46E5),
-                                        focusedBorderColor = Color(0xFF7C5CE7),
-                                        unfocusedBorderColor = Color(0xFFCBD8EA),
-                                        focusedContainerColor = Color.White,
-                                        unfocusedContainerColor = Color.White,
-                                        disabledContainerColor = Color(0xFFF8FAFC),
-                                        focusedPlaceholderColor = Color(0xFF7C879B),
-                                        unfocusedPlaceholderColor = Color(0xFF7C879B),
-                                        focusedLeadingIconColor = Color(0xFF64748B),
-                                        unfocusedLeadingIconColor = Color(0xFF64748B),
-                                        focusedTrailingIconColor = Color(0xFF64748B),
-                                        unfocusedTrailingIconColor = Color(0xFF64748B)
-                                    ),
                                     modifier = Modifier.fillMaxWidth()
-                                )
+                                ) {
+                                    OutlinedTextField(
+                                        value = traineeSearchQuery,
+                                        onValueChange = { newValue ->
+                                            traineeSearchQuery = newValue
 
-                                when {
-                                    effectiveBranch.isBlank() || effectiveGroupKey.isBlank() -> {
-                                        Text(
-                                            text = coachTr(
-                                                isEnglish,
-                                                "לא אותרו סניף או קבוצה עבור המאמן.",
-                                                "No branch or group was found for this coach."
-                                            ),
-                                            color = Color(0xFFB42318),
-                                            textAlign = screenTextAlign,
-                                            style = MaterialTheme.typography.bodySmall,
-                                            modifier = Modifier.fillMaxWidth()
-                                        )
-                                    }
-
-                                    isProfilesLoading || isInitialServerSyncRunning || !didFinishInitialProfilesLoad -> {
-                                        Column(
-                                            modifier = Modifier
-                                                .fillMaxWidth()
-                                                .padding(vertical = 8.dp),
-                                            horizontalAlignment = Alignment.CenterHorizontally,
-                                            verticalArrangement = Arrangement.spacedBy(10.dp)
-                                        ) {
-                                            PremiumCoachLoading()
-
-                                            Text(
-                                                text = coachTr(
-                                                    isEnglish,
-                                                    "טוען מתאמנים מהשרת...",
-                                                    "Loading trainees from the server..."
-                                                ),
-                                                color = Color(0xFF334155),
-                                                textAlign = TextAlign.Center,
-                                                style = MaterialTheme.typography.bodyMedium.copy(
-                                                    fontSize = 15.sp,
-                                                    lineHeight = 18.sp
-                                                ),
-                                                fontWeight = FontWeight.ExtraBold
-                                            )
-
-                                            Text(
-                                                text = coachTr(
-                                                    isEnglish,
-                                                    "מסדר את נתוני הסניף והקבוצה",
-                                                    "Preparing branch and group data"
-                                                ),
-                                                color = Color(0xFF64748B),
-                                                textAlign = TextAlign.Center,
-                                                style = MaterialTheme.typography.labelSmall.copy(
-                                                    fontSize = 11.sp,
-                                                    lineHeight = 13.sp
-                                                ),
-                                                fontWeight = FontWeight.SemiBold
-                                            )
-                                        }
-                                    }
-
-                                    uiProfiles.isEmpty() -> {
-                                        Text(
-                                            text = coachTr(
-                                                isEnglish,
-                                                "לא נמצאו מתאמנים פעילים לסניף ולקבוצה שנבחרו.",
-                                                "No active trainees were found for the selected branch and group."
-                                            ),
-                                            color = Color(0xFF64748B),
-                                            textAlign = screenTextAlign,
-                                            style = MaterialTheme.typography.bodySmall,
-                                            modifier = Modifier.fillMaxWidth()
-                                        )
-                                    }
-
-                                    else -> {
-                                        Column(
-                                            modifier = Modifier.fillMaxWidth(),
-                                            verticalArrangement = Arrangement.spacedBy(6.dp)
-                                        ) {
-                                            uiProfiles.forEach { trainee ->
-                                                val isSelected = selectedId == trainee.id
-
-                                                Surface(
-                                                    color = if (isSelected) {
-                                                        Color(0xFFF0EEFF)
-                                                    } else {
-                                                        Color.White
-                                                    },
-                                                    shape = RoundedCornerShape(16.dp),
-                                                    shadowElevation = if (isSelected) {
-                                                        3.dp
-                                                    } else {
-                                                        1.dp
-                                                    },
-                                                    tonalElevation = 0.dp,
-                                                    border = if (isSelected) {
-                                                        BorderStroke(
-                                                            width = 1.5.dp,
-                                                            color = Color(0xFF8B6DE9)
-                                                        )
-                                                    } else {
-                                                        BorderStroke(
-                                                            width = 1.dp,
-                                                            color = Color(0xFFD6E0EE)
-                                                        )
-                                                    },
-                                                    modifier = Modifier
-                                                        .fillMaxWidth()
-                                                        .clickable {
-                                                            selectedId = trainee.id
-                                                            isTraineePickerExpanded = false
-                                                            traineeSearchQuery = ""
-                                                            expandedCoachSection = null
-                                                        }
-                                                ) {
-                                                    Row(
-                                                        modifier = Modifier
-                                                            .fillMaxWidth()
-                                                            .padding(horizontal = 12.dp, vertical = 9.dp),
-                                                        verticalAlignment = Alignment.CenterVertically,
-                                                        horizontalArrangement = Arrangement.SpaceBetween
-                                                    ) {
-                                                        if (isSelected) {
-                                                            Icon(
-                                                                imageVector = Icons.Default.CheckCircle,
-                                                                contentDescription = null,
-                                                                tint = Color(0xFF16A34A),
-                                                                modifier = Modifier.size(18.dp)
-                                                            )
+                                            if (canChooseTrainee) {
+                                                isTraineeMenuExpanded = true
+                                            }
+                                        },
+                                        enabled =
+                                            canChooseTrainee &&
+                                                    !isProfilesLoading &&
+                                                    !isInitialServerSyncRunning &&
+                                                    didFinishInitialProfilesLoad,
+                                        singleLine = true,
+                                        textStyle =
+                                            MaterialTheme.typography
+                                                .bodySmall
+                                                .copy(
+                                                    fontSize = 13.sp,
+                                                    textAlign =
+                                                        coachTextAlign(
+                                                            isEnglish
+                                                        ),
+                                                    color =
+                                                        if (isDarkMode) {
+                                                            MaterialTheme
+                                                                .colorScheme
+                                                                .onSurface
                                                         } else {
-                                                            Spacer(Modifier.size(18.dp))
+                                                            Color(0xFF172036)
                                                         }
+                                                ),
+                                        placeholder = {
+                                            Text(
+                                                text =
+                                                    when {
+                                                        !canChooseTrainee ->
+                                                            coachTr(
+                                                                isEnglish,
+                                                                "בחר סניף וקבוצה",
+                                                                "Select branch and group"
+                                                            )
 
-                                                        Spacer(Modifier.width(8.dp))
+                                                        isProfilesLoading ||
+                                                                isInitialServerSyncRunning ||
+                                                                !didFinishInitialProfilesLoad ->
+                                                            coachTr(
+                                                                isEnglish,
+                                                                "טוען מתאמנים...",
+                                                                "Loading trainees..."
+                                                            )
 
+                                                        else ->
+                                                            coachTr(
+                                                                isEnglish,
+                                                                "בחר או חפש מתאמן",
+                                                                "Select or search trainee"
+                                                            )
+                                                    },
+                                                style =
+                                                    MaterialTheme.typography
+                                                        .bodySmall
+                                                        .copy(
+                                                            fontSize = 12.sp
+                                                        ),
+                                                color =
+                                                    if (isDarkMode) {
+                                                        MaterialTheme
+                                                            .colorScheme
+                                                            .onSurfaceVariant
+                                                    } else {
+                                                        Color(0xFF7C879B)
+                                                    },
+                                                textAlign =
+                                                    coachTextAlign(
+                                                        isEnglish
+                                                    )
+                                            )
+                                        },
+                                        leadingIcon = {
+                                            Text(
+                                                text = "🔎",
+                                                fontSize = 15.sp
+                                            )
+                                        },
+                                        trailingIcon = {
+                                            if (
+                                                traineeSearchQuery
+                                                    .isNotBlank()
+                                            ) {
+                                                Icon(
+                                                    imageVector =
+                                                        Icons.Default.Close,
+                                                    contentDescription =
+                                                        coachTr(
+                                                            isEnglish,
+                                                            "נקה חיפוש",
+                                                            "Clear search"
+                                                        ),
+                                                    tint =
+                                                        if (isDarkMode) {
+                                                            MaterialTheme
+                                                                .colorScheme
+                                                                .onSurfaceVariant
+                                                        } else {
+                                                            Color(0xFF64748B)
+                                                        },
+                                                    modifier =
+                                                        Modifier
+                                                            .size(18.dp)
+                                                            .clickable {
+                                                                traineeSearchQuery =
+                                                                    ""
+                                                                isTraineeMenuExpanded =
+                                                                    true
+                                                            }
+                                                )
+                                            } else {
+                                                ExposedDropdownMenuDefaults
+                                                    .TrailingIcon(
+                                                        expanded =
+                                                            isTraineeMenuExpanded
+                                                    )
+                                            }
+                                        },
+                                        shape =
+                                            RoundedCornerShape(18.dp),
+                                        colors =
+                                            OutlinedTextFieldDefaults
+                                                .colors(
+                                                    focusedTextColor =
+                                                        if (isDarkMode) {
+                                                            MaterialTheme
+                                                                .colorScheme
+                                                                .onSurface
+                                                        } else {
+                                                            Color(0xFF172036)
+                                                        },
+                                                    unfocusedTextColor =
+                                                        if (isDarkMode) {
+                                                            MaterialTheme
+                                                                .colorScheme
+                                                                .onSurface
+                                                        } else {
+                                                            Color(0xFF172036)
+                                                        },
+                                                    cursorColor =
+                                                        Color(0xFF4F46E5),
+                                                    focusedBorderColor =
+                                                        Color(0xFF7C5CE7),
+                                                    unfocusedBorderColor =
+                                                        if (isDarkMode) {
+                                                            MaterialTheme
+                                                                .colorScheme
+                                                                .outline
+                                                        } else {
+                                                            Color(0xFFCBD8EA)
+                                                        },
+                                                    focusedContainerColor =
+                                                        MaterialTheme
+                                                            .colorScheme
+                                                            .surface,
+                                                    unfocusedContainerColor =
+                                                        MaterialTheme
+                                                            .colorScheme
+                                                            .surface,
+                                                    disabledContainerColor =
+                                                        MaterialTheme
+                                                            .colorScheme
+                                                            .surfaceVariant
+                                                ),
+                                        modifier =
+                                            Modifier
+                                                .menuAnchor()
+                                                .fillMaxWidth()
+                                                .heightIn(min = 50.dp)
+                                    )
+
+                                    ExposedDropdownMenu(
+                                        expanded =
+                                            isTraineeMenuExpanded,
+                                        onDismissRequest = {
+                                            isTraineeMenuExpanded = false
+                                        },
+                                        modifier =
+                                            Modifier.heightIn(
+                                                max = 300.dp
+                                            )
+                                    ) {
+                                        Column(
+                                            modifier =
+                                                Modifier
+                                                    .fillMaxWidth()
+                                                    .background(
+                                                        brush =
+                                                            Brush.verticalGradient(
+                                                                colors =
+                                                                    if (
+                                                                        isDarkMode
+                                                                    ) {
+                                                                        listOf(
+                                                                            MaterialTheme
+                                                                                .colorScheme
+                                                                                .surface,
+                                                                            MaterialTheme
+                                                                                .colorScheme
+                                                                                .surfaceVariant
+                                                                        )
+                                                                    } else {
+                                                                        listOf(
+                                                                            Color(
+                                                                                0xFFFBFCFF
+                                                                            ),
+                                                                            Color(
+                                                                                0xFFF2F5FF
+                                                                            )
+                                                                        )
+                                                                    }
+                                                            )
+                                                    )
+                                                    .padding(
+                                                        horizontal = 8.dp,
+                                                        vertical = 8.dp
+                                                    ),
+                                            verticalArrangement =
+                                                Arrangement.spacedBy(
+                                                    6.dp
+                                                )
+                                        ) {
+                                            Row(
+                                                modifier =
+                                                    Modifier
+                                                        .fillMaxWidth()
+                                                        .padding(
+                                                            horizontal = 8.dp,
+                                                            vertical = 4.dp
+                                                        ),
+                                                verticalAlignment =
+                                                    Alignment.CenterVertically,
+                                                horizontalArrangement =
+                                                    Arrangement.SpaceBetween
+                                            ) {
+                                                Surface(
+                                                    color =
+                                                        Color(0xFFEEE9FF),
+                                                    shape = CircleShape,
+                                                    shadowElevation = 0.dp,
+                                                    tonalElevation = 0.dp,
+                                                    modifier =
+                                                        Modifier.size(
+                                                            30.dp
+                                                        )
+                                                ) {
+                                                    Box(
+                                                        contentAlignment =
+                                                            Alignment.Center
+                                                    ) {
                                                         Text(
-                                                            text = demoSafeName(trainee),
-                                                            style = MaterialTheme.typography.bodyMedium.copy(
-                                                                fontSize = 15.sp,
-                                                                lineHeight = 17.sp
-                                                            ),
-                                                            fontWeight = FontWeight.ExtraBold,
-                                                            color = if (isSelected) {
-                                                                Color(0xFF4B369D)
-                                                            } else {
-                                                                Color(0xFF172036)
-                                                            },
-                                                            textAlign = screenTextAlign,
-                                                            maxLines = 1,
-                                                            overflow = TextOverflow.Ellipsis,
-                                                            modifier = Modifier.weight(1f)
+                                                            text =
+                                                                uiProfiles
+                                                                    .size
+                                                                    .toString(),
+                                                            color =
+                                                                Color(
+                                                                    0xFF6842D6
+                                                                ),
+                                                            style =
+                                                                MaterialTheme
+                                                                    .typography
+                                                                    .labelMedium,
+                                                            fontWeight =
+                                                                FontWeight
+                                                                    .ExtraBold
                                                         )
                                                     }
                                                 }
+
+                                                Spacer(
+                                                    Modifier.width(
+                                                        8.dp
+                                                    )
+                                                )
+
+                                                Column(
+                                                    modifier =
+                                                        Modifier.weight(
+                                                            1f
+                                                        ),
+                                                    horizontalAlignment =
+                                                        screenHorizontalAlignment
+                                                ) {
+                                                    Text(
+                                                        text =
+                                                            coachTr(
+                                                                isEnglish,
+                                                                "מתאמני הקבוצה",
+                                                                "Group trainees"
+                                                            ),
+                                                        color =
+                                                            if (
+                                                                isDarkMode
+                                                            ) {
+                                                                MaterialTheme
+                                                                    .colorScheme
+                                                                    .onSurface
+                                                            } else {
+                                                                Color(
+                                                                    0xFF172036
+                                                                )
+                                                            },
+                                                        style =
+                                                            MaterialTheme
+                                                                .typography
+                                                                .titleSmall,
+                                                        fontWeight =
+                                                            FontWeight
+                                                                .ExtraBold,
+                                                        textAlign =
+                                                            screenTextAlign,
+                                                        modifier =
+                                                            Modifier
+                                                                .fillMaxWidth()
+                                                    )
+
+                                                    Text(
+                                                        text =
+                                                            coachTr(
+                                                                isEnglish,
+                                                                "בחר מתאמן לצפייה בנתונים",
+                                                                "Select a trainee to view details"
+                                                            ),
+                                                        color =
+                                                            if (
+                                                                isDarkMode
+                                                            ) {
+                                                                MaterialTheme
+                                                                    .colorScheme
+                                                                    .onSurfaceVariant
+                                                            } else {
+                                                                Color(
+                                                                    0xFF68758A
+                                                                )
+                                                            },
+                                                        style =
+                                                            MaterialTheme
+                                                                .typography
+                                                                .labelSmall,
+                                                        textAlign =
+                                                            screenTextAlign,
+                                                        modifier =
+                                                            Modifier
+                                                                .fillMaxWidth()
+                                                    )
+                                                }
                                             }
 
-                                            if (uiProfiles.size > 8) {
-                                                Text(
-                                                    text = coachTr(
-                                                        isEnglish,
-                                                        "מוצגים 8 ראשונים. השתמש בחיפוש למציאת מתאמן נוסף.",
-                                                        "Showing first 8. Use search to find another trainee."
-                                                    ),
-                                                    style = MaterialTheme.typography.labelSmall.copy(
-                                                        fontSize = 11.sp,
-                                                        lineHeight = 13.sp
-                                                    ),
-                                                    color = Color(0xFF64748B),
-                                                    textAlign = screenTextAlign,
-                                                    modifier = Modifier.fillMaxWidth()
-                                                )
+                                            Divider(
+                                                color =
+                                                    if (isDarkMode) {
+                                                        MaterialTheme
+                                                            .colorScheme
+                                                            .outline
+                                                            .copy(
+                                                                alpha = 0.35f
+                                                            )
+                                                    } else {
+                                                        Color(
+                                                            0xFFD9E2F2
+                                                        )
+                                                    },
+                                                thickness = 1.dp
+                                            )
+
+                                            if (uiProfiles.isEmpty()) {
+                                                Surface(
+                                                    color =
+                                                        if (isDarkMode) {
+                                                            MaterialTheme
+                                                                .colorScheme
+                                                                .surfaceVariant
+                                                        } else {
+                                                            Color(
+                                                                0xFFF4F6FB
+                                                            )
+                                                        },
+                                                    shape =
+                                                        RoundedCornerShape(
+                                                            16.dp
+                                                        ),
+                                                    shadowElevation = 0.dp,
+                                                    tonalElevation = 0.dp,
+                                                    border =
+                                                        BorderStroke(
+                                                            width = 1.dp,
+                                                            color =
+                                                                if (
+                                                                    isDarkMode
+                                                                ) {
+                                                                    MaterialTheme
+                                                                        .colorScheme
+                                                                        .outline
+                                                                        .copy(
+                                                                            alpha =
+                                                                                0.35f
+                                                                        )
+                                                                } else {
+                                                                    Color(
+                                                                        0xFFD9E2F2
+                                                                    )
+                                                                }
+                                                        ),
+                                                    modifier =
+                                                        Modifier
+                                                            .fillMaxWidth()
+                                                ) {
+                                                    Text(
+                                                        text =
+                                                            coachTr(
+                                                                isEnglish,
+                                                                "לא נמצאו מתאמנים בקבוצה שנבחרה",
+                                                                "No trainees were found in the selected group"
+                                                            ),
+                                                        color =
+                                                            MaterialTheme
+                                                                .colorScheme
+                                                                .onSurfaceVariant,
+                                                        style =
+                                                            MaterialTheme
+                                                                .typography
+                                                                .bodySmall,
+                                                        textAlign =
+                                                            screenTextAlign,
+                                                        modifier =
+                                                            Modifier.padding(
+                                                                horizontal =
+                                                                    14.dp,
+                                                                vertical =
+                                                                    14.dp
+                                                            )
+                                                    )
+                                                }
+                                            } else {
+                                                uiProfiles.forEach {
+                                                        trainee ->
+
+                                                    val traineeName =
+                                                        demoSafeName(
+                                                            trainee
+                                                        )
+
+                                                    val traineeInitial =
+                                                        traineeName
+                                                            .trim()
+                                                            .firstOrNull()
+                                                            ?.toString()
+                                                            .orEmpty()
+
+                                                    val isSelected =
+                                                        selectedId ==
+                                                                trainee.id
+
+                                                    val itemShape =
+                                                        RoundedCornerShape(
+                                                            16.dp
+                                                        )
+
+                                                    Row(
+                                                        modifier =
+                                                            Modifier
+                                                                .fillMaxWidth()
+                                                                .clip(
+                                                                    itemShape
+                                                                )
+                                                                .background(
+                                                                    brush =
+                                                                        if (
+                                                                            isSelected
+                                                                        ) {
+                                                                            Brush
+                                                                                .horizontalGradient(
+                                                                                    listOf(
+                                                                                        Color(
+                                                                                            0xFFF2ECFF
+                                                                                        ),
+                                                                                        Color(
+                                                                                            0xFFE8F4FF
+                                                                                        )
+                                                                                    )
+                                                                                )
+                                                                        } else {
+                                                                            Brush
+                                                                                .horizontalGradient(
+                                                                                    listOf(
+                                                                                        MaterialTheme
+                                                                                            .colorScheme
+                                                                                            .surface,
+                                                                                        MaterialTheme
+                                                                                            .colorScheme
+                                                                                            .surface
+                                                                                    )
+                                                                                )
+                                                                        }
+                                                                )
+                                                                .border(
+                                                                    width =
+                                                                        if (
+                                                                            isSelected
+                                                                        ) {
+                                                                            1.5.dp
+                                                                        } else {
+                                                                            1.dp
+                                                                        },
+                                                                    color =
+                                                                        if (
+                                                                            isSelected
+                                                                        ) {
+                                                                            Color(
+                                                                                0xFF8057E8
+                                                                            )
+                                                                        } else if (
+                                                                            isDarkMode
+                                                                        ) {
+                                                                            MaterialTheme
+                                                                                .colorScheme
+                                                                                .outline
+                                                                                .copy(
+                                                                                    alpha =
+                                                                                        0.40f
+                                                                                )
+                                                                        } else {
+                                                                            Color(
+                                                                                0xFFD7E1F0
+                                                                            )
+                                                                        },
+                                                                    shape =
+                                                                        itemShape
+                                                                )
+                                                                .clickable {
+                                                                    selectedId =
+                                                                        trainee.id
+                                                                    traineeSearchQuery =
+                                                                        ""
+                                                                    isTraineeMenuExpanded =
+                                                                        false
+                                                                    isTraineePickerExpanded =
+                                                                        false
+                                                                    expandedCoachSection =
+                                                                        null
+                                                                }
+                                                                .padding(
+                                                                    horizontal =
+                                                                        10.dp,
+                                                                    vertical =
+                                                                        8.dp
+                                                                ),
+                                                        verticalAlignment =
+                                                            Alignment
+                                                                .CenterVertically
+                                                    ) {
+                                                        Surface(
+                                                            color =
+                                                                if (
+                                                                    isSelected
+                                                                ) {
+                                                                    Color(
+                                                                        0xFF7650DD
+                                                                    )
+                                                                } else {
+                                                                    Color(
+                                                                        0xFFE9EEFA
+                                                                    )
+                                                                },
+                                                            shape =
+                                                                CircleShape,
+                                                            shadowElevation =
+                                                                0.dp,
+                                                            tonalElevation =
+                                                                0.dp,
+                                                            modifier =
+                                                                Modifier.size(
+                                                                    36.dp
+                                                                )
+                                                        ) {
+                                                            Box(
+                                                                contentAlignment =
+                                                                    Alignment
+                                                                        .Center
+                                                            ) {
+                                                                Text(
+                                                                    text =
+                                                                        traineeInitial,
+                                                                    color =
+                                                                        if (
+                                                                            isSelected
+                                                                        ) {
+                                                                            Color
+                                                                                .White
+                                                                        } else {
+                                                                            Color(
+                                                                                0xFF4A5870
+                                                                            )
+                                                                        },
+                                                                    style =
+                                                                        MaterialTheme
+                                                                            .typography
+                                                                            .bodyMedium,
+                                                                    fontWeight =
+                                                                        FontWeight
+                                                                            .ExtraBold
+                                                                )
+                                                            }
+                                                        }
+
+                                                        Spacer(
+                                                            Modifier.width(
+                                                                10.dp
+                                                            )
+                                                        )
+
+                                                        Text(
+                                                            text =
+                                                                traineeName,
+                                                            style =
+                                                                MaterialTheme
+                                                                    .typography
+                                                                    .bodyMedium,
+                                                            fontWeight =
+                                                                if (
+                                                                    isSelected
+                                                                ) {
+                                                                    FontWeight
+                                                                        .ExtraBold
+                                                                } else {
+                                                                    FontWeight
+                                                                        .Bold
+                                                                },
+                                                            color =
+                                                                if (
+                                                                    isSelected
+                                                                ) {
+                                                                    Color(
+                                                                        0xFF5634B5
+                                                                    )
+                                                                } else {
+                                                                    MaterialTheme
+                                                                        .colorScheme
+                                                                        .onSurface
+                                                                },
+                                                            textAlign =
+                                                                screenTextAlign,
+                                                            maxLines = 1,
+                                                            overflow =
+                                                                TextOverflow
+                                                                    .Ellipsis,
+                                                            modifier =
+                                                                Modifier.weight(
+                                                                    1f
+                                                                )
+                                                        )
+
+                                                        if (isSelected) {
+                                                            Spacer(
+                                                                Modifier.width(
+                                                                    8.dp
+                                                                )
+                                                            )
+
+                                                            Surface(
+                                                                color =
+                                                                    Color(
+                                                                        0xFFE4F8EA
+                                                                    ),
+                                                                shape =
+                                                                    CircleShape,
+                                                                shadowElevation =
+                                                                    0.dp,
+                                                                tonalElevation =
+                                                                    0.dp,
+                                                                modifier =
+                                                                    Modifier.size(
+                                                                        28.dp
+                                                                    )
+                                                            ) {
+                                                                Box(
+                                                                    contentAlignment =
+                                                                        Alignment
+                                                                            .Center
+                                                                ) {
+                                                                    Icon(
+                                                                        imageVector =
+                                                                            Icons
+                                                                                .Default
+                                                                                .CheckCircle,
+                                                                        contentDescription =
+                                                                            null,
+                                                                        tint =
+                                                                            Color(
+                                                                                0xFF16A34A
+                                                                            ),
+                                                                        modifier =
+                                                                            Modifier.size(
+                                                                                19.dp
+                                                                            )
+                                                                    )
+                                                                }
+                                                            }
+                                                        }
+                                                    }
+                                                }
                                             }
                                         }
                                     }
@@ -2619,7 +4068,11 @@ fun CoachTraineesScreen(
                     }
                 }
 
-                if (uiProfiles.isNotEmpty()) {
+                /*
+                 * כרטיס פרטי המתאמן מוצג רק לאחר
+                 * שהמאמן בחר מתאמן מהרשימה.
+                 */
+                if (selected != null) {
                     item {
                         // כרטיס פרטי מתאמן
                         Surface(

@@ -46,6 +46,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.style.TextDirection
 import il.kmi.app.ui.KmiIconSize
+import il.kmi.app.ui.KmiPremiumDropdown
 import il.kmi.app.ui.KmiTopBar
 import il.kmi.app.ui.KmiTypography
 import androidx.compose.material.icons.filled.Star
@@ -57,7 +58,6 @@ import il.kmi.shared.questions.model.util.ExerciseTitleFormatter
 import il.kmi.app.screens.parseSearchKey
 import android.app.Activity
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import il.kmi.app.attendance.data.GroupMember
 import il.kmi.app.training.TrainingCatalog
@@ -269,10 +269,18 @@ fun AttendanceScreen(
                 AttendanceStatus.EXCUSED -> tr("מוצדק", "Excused")
                 else                     -> tr("לא סומן", "Not marked")
             }
-            val reportName = TraineeDisplayNameMapper.displayName(
-                realName = m.displayName,
-                stableKey = m.id.toString()
-            ).ifBlank { tr("מתאמן ללא שם", "Unnamed trainee") }
+            val reportName =
+                TraineeDisplayNameMapper.displayName(
+                    realName = m.displayName,
+                    stableKey = m.id.toString(),
+                    isEnglish = isEnglish
+                ).ifBlank {
+                    tr(
+                        "מתאמן ללא שם",
+                        "Unnamed trainee"
+                    )
+                }
+
             "• $reportName - $st"
         }
 
@@ -588,12 +596,17 @@ fun AttendanceScreen(
                         CompositionLocalProvider(LocalLayoutDirection provides screenLayoutDirection) {
                             Column(Modifier.fillMaxWidth()) {
 
-                                val uiName = TraineeDisplayNameMapper.displayName(
-                                    realName = m.displayName,
-                                    stableKey = m.id.toString()
-                                ).ifBlank {
-                                    tr("מתאמן ללא שם", "Unnamed trainee")
-                                }
+                                val uiName =
+                                    TraineeDisplayNameMapper.displayName(
+                                        realName = m.displayName,
+                                        stableKey = m.id.toString(),
+                                        isEnglish = isEnglish
+                                    ).ifBlank {
+                                        tr(
+                                            "מתאמן ללא שם",
+                                            "Unnamed trainee"
+                                        )
+                                    }
 
                                 Text(
                                     text = uiName,
@@ -729,14 +742,32 @@ fun AttendanceScreen(
                                             verticalAlignment = Alignment.CenterVertically
                                         ) {
                                             IconButton(onClick = {
-                                                val mid: Long? = (m.id as? Long) ?: (m.id as? String)?.toLongOrNull()
-                                                val uiName = TraineeDisplayNameMapper.displayName(
-                                                    realName = m.displayName,
-                                                    stableKey = m.id.toString()
-                                                ).ifBlank {
-                                                    tr("מתאמן ללא שם", "Unnamed trainee")
-                                                }
-                                                onOpenMemberStats(mid, uiName)
+                                                val mid: Long? =
+                                                    (m.id as? Long)
+                                                        ?: (m.id as? String)
+                                                            ?.toLongOrNull()
+
+                                                val uiName =
+                                                    TraineeDisplayNameMapper
+                                                        .displayName(
+                                                            realName =
+                                                                m.displayName,
+                                                            stableKey =
+                                                                m.id.toString(),
+                                                            isEnglish =
+                                                                isEnglish
+                                                        )
+                                                        .ifBlank {
+                                                            tr(
+                                                                "מתאמן ללא שם",
+                                                                "Unnamed trainee"
+                                                            )
+                                                        }
+
+                                                onOpenMemberStats(
+                                                    mid,
+                                                    uiName
+                                                )
                                             }) {
                                                 Icon(
                                                     imageVector =
@@ -758,14 +789,31 @@ fun AttendanceScreen(
                                             }
 
                                             IconButton(onClick = {
-                                                val id = (m.id as? Long) ?: (m.id as? String)?.toLongOrNull() ?: return@IconButton
-                                                val uiName = TraineeDisplayNameMapper.displayName(
-                                                    realName = m.displayName,
-                                                    stableKey = m.id.toString()
-                                                ).ifBlank {
-                                                    tr("מתאמן ללא שם", "Unnamed trainee")
-                                                }
-                                                pendingDelete = id to uiName
+                                                val id =
+                                                    (m.id as? Long)
+                                                        ?: (m.id as? String)
+                                                            ?.toLongOrNull()
+                                                        ?: return@IconButton
+
+                                                val uiName =
+                                                    TraineeDisplayNameMapper
+                                                        .displayName(
+                                                            realName =
+                                                                m.displayName,
+                                                            stableKey =
+                                                                m.id.toString(),
+                                                            isEnglish =
+                                                                isEnglish
+                                                        )
+                                                        .ifBlank {
+                                                            tr(
+                                                                "מתאמן ללא שם",
+                                                                "Unnamed trainee"
+                                                            )
+                                                        }
+
+                                                pendingDelete =
+                                                    id to uiName
                                             }) {
                                                 Icon(
                                                     imageVector =
@@ -1813,139 +1861,29 @@ private fun AttendanceSelectionCard(
         displayText: String = selected,
         onSelected: (String) -> Unit
     ) {
-        var expanded by rememberSaveable { mutableStateOf(false) }
-
-        val cleanOptions = remember(options, selected) {
-            (options + selected)
-                .map { it.trim() }
-                .filter { it.isNotBlank() }
-                .distinct()
-        }
-
-        ExposedDropdownMenuBox(
-            expanded = expanded,
-            onExpandedChange = {
-                if (cleanOptions.size > 1) expanded = !expanded
-            },
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .heightIn(min = 38.dp)
-                    .menuAnchor()
+        val cleanOptions =
+            remember(
+                options,
+                selected
             ) {
-                Surface(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .heightIn(min = 44.dp)
-                        .padding(end = 10.dp),
-                    shape = RoundedCornerShape(15.dp),
-                    color = fieldContainerColor,
-                    border = BorderStroke(
-                        width = 1.dp,
-                        color = fieldBorderColor
-                    ),
-                    tonalElevation = 0.dp,
-                    shadowElevation = 0.dp
-                ) {
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 6.dp, vertical = 5.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.Center
-                    ) {
-                        Text(
-                            text = label,
-                            style = KmiTypography.caption.copy(
-                                fontWeight = FontWeight.Bold
-                            ),
-                            color = labelColor,
-                            textAlign = TextAlign.Center,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                            modifier = Modifier.fillMaxWidth()
-                        )
-
-                        Text(
-                            text =
-                                displayText
-                                    .trim()
-                                    .ifBlank { "—" },
-                            style = KmiTypography.secondary.copy(
-                                fontWeight = FontWeight.ExtraBold
-                            ),
-                            color = valueColor,
-                            textAlign = TextAlign.Center,
-                            maxLines = 2,
-                            overflow = TextOverflow.Ellipsis,
-                            modifier = Modifier.fillMaxWidth()
-                        )
-                    }
-                }
-
-                Surface(
-                    modifier = Modifier
-                        .size(KmiIconSize.medium)
-                        .align(Alignment.CenterEnd),
-                    shape = CircleShape,
-                    color =
-                        if (isDarkMode) {
-                            MaterialTheme.colorScheme.surface
-                        } else {
-                            Color(0xFFEAF2FF)
-                        },
-                    border = BorderStroke(
-                        width = 1.dp,
-                        color = fieldBorderColor
-                    ),
-                    tonalElevation = 0.dp,
-                    shadowElevation = 0.dp
-                ) {
-                    Box(
-                        modifier = Modifier.fillMaxSize(),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text(
-                            text = "▼",
-                            style = KmiTypography.caption.copy(
-                                fontWeight = FontWeight.Black
-                            ),
-                            color = labelColor
-                        )
-                    }
-                }
+                (options + selected)
+                    .map { it.trim() }
+                    .filter { it.isNotBlank() }
+                    .distinct()
             }
 
-            ExposedDropdownMenu(
-                expanded = expanded,
-                onDismissRequest = { expanded = false },
-                modifier = Modifier.widthIn(min = 260.dp, max = 320.dp)
-            ) {
-                cleanOptions.forEach { option ->
-                    DropdownMenuItem(
-                        text = {
-                            Text(
-                                text = option,
-                                style = KmiTypography.secondary.copy(
-                                    fontWeight = FontWeight.SemiBold
-                                ),
-                                color = MaterialTheme.colorScheme.onSurface,
-                                textAlign = align,
-                                maxLines = 2,
-                                overflow = TextOverflow.Ellipsis,
-                                modifier = Modifier.fillMaxWidth()
-                            )
-                        },
-                        onClick = {
-                            expanded = false
-                            onSelected(option)
-                        }
-                    )
-                }
-            }
-        }
+        KmiPremiumDropdown(
+            title = label,
+            options = cleanOptions,
+            selectedValue =
+                displayText
+                    .trim()
+                    .ifBlank { selected.trim() },
+            isEnglish = isEnglish,
+            placeholder = "—",
+            enabled = cleanOptions.size > 1,
+            onSelected = onSelected
+        )
     }
 
     Surface(
@@ -2077,188 +2015,6 @@ private fun AttendanceSelectionCard(
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.fillMaxWidth()
-                )
-            }
-        }
-    }
-}
-
-@Composable
-private fun AttendanceReadonlyPickerField(
-    label: String,
-    value: String,
-    isEnglish: Boolean,
-    onClick: () -> Unit
-) {
-    val align = if (isEnglish) TextAlign.Left else TextAlign.Right
-    val horizontal = if (isEnglish) Alignment.Start else Alignment.End
-    val textDirection = if (isEnglish) TextDirection.Ltr else TextDirection.Rtl
-    val layoutDirection = if (isEnglish) LayoutDirection.Ltr else LayoutDirection.Rtl
-
-    Surface(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(12.dp))
-            .clickable { onClick() },
-        shape = RoundedCornerShape(12.dp),
-        color = Color.Transparent,
-        border = BorderStroke(
-            width = 1.dp,
-            color = Color(0xFFD8E3F5)
-        )
-    ) {
-        CompositionLocalProvider(LocalLayoutDirection provides layoutDirection) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 12.dp, vertical = 8.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Column(
-                    modifier = Modifier.weight(1f),
-                    horizontalAlignment = horizontal,
-                    verticalArrangement = Arrangement.spacedBy(4.dp)
-                ) {
-                    Text(
-                        text = label,
-                        color = Color(0xFF5E6C80),
-                        fontWeight = FontWeight.SemiBold,
-                        style = MaterialTheme.typography.labelSmall.merge(
-                            TextStyle(
-                                textDirection = textDirection,
-                                fontSize = 10.sp,
-                                lineHeight = 12.sp
-                            )
-                        ),
-                        textAlign = align,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.fillMaxWidth()
-                    )
-
-                    Text(
-                        text = value.ifBlank { "—" },
-                        color = Color(0xFF1E2A3D),
-                        fontWeight = FontWeight.SemiBold,
-                        style = MaterialTheme.typography.bodySmall.merge(
-                            TextStyle(
-                                textDirection = textDirection,
-                                fontSize = 12.sp,
-                                lineHeight = 15.sp
-                            )
-                        ),
-                        textAlign = align,
-                        maxLines = 2,
-                        overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                }
-
-                Spacer(Modifier.width(10.dp))
-
-                Text(
-                    text = "▼",
-                    color = Color(0xFF6B778B),
-                    fontWeight = FontWeight.Bold
-                )
-            }
-        }
-    }
-}
-
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-private fun AttendanceDropdownField(
-    label: String,
-    selected: String,
-    options: List<String>,
-    isEnglish: Boolean,
-    onSelected: (String) -> Unit
-) {
-    var expanded by rememberSaveable { mutableStateOf(false) }
-
-    val cleanOptions = remember(options, selected) {
-        (options + selected)
-            .map { it.trim() }
-            .filter { it.isNotBlank() }
-            .distinct()
-    }
-
-    val align = if (isEnglish) TextAlign.Left else TextAlign.Right
-    val textDirection = if (isEnglish) TextDirection.Ltr else TextDirection.Rtl
-
-    ExposedDropdownMenuBox(
-        expanded = expanded,
-        onExpandedChange = {
-            if (cleanOptions.size > 1) expanded = !expanded
-        },
-        modifier = Modifier.fillMaxWidth()
-    ) {
-        OutlinedTextField(
-            value = selected.ifBlank { "—" },
-            onValueChange = {},
-            readOnly = true,
-            singleLine = false,
-            minLines = 1,
-            maxLines = 2,
-            label = {
-                Text(
-                    text = label,
-                    fontSize = 10.sp,
-                    lineHeight = 12.sp,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-            },
-            textStyle = LocalTextStyle.current.copy(
-                textAlign = align,
-                textDirection = textDirection,
-                fontSize = 12.sp,
-                lineHeight = 15.sp
-            ),
-            trailingIcon = {
-                Text(
-                    text = "▼",
-                    color = Color(0xFF6B778B),
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 16.sp
-                )
-            },
-            colors = OutlinedTextFieldDefaults.colors(
-                focusedContainerColor = Color.White,
-                unfocusedContainerColor = Color.White,
-                disabledContainerColor = Color.White,
-                focusedTextColor = Color(0xFF1E2A3D),
-                unfocusedTextColor = Color(0xFF1E2A3D),
-                focusedLabelColor = Color(0xFF5E6C80),
-                unfocusedLabelColor = Color(0xFF5E6C80),
-                focusedBorderColor = Color(0xFFBFD0E8),
-                unfocusedBorderColor = Color(0xFFD8E3F5),
-                cursorColor = Color(0xFF1E2A3D)
-            ),
-            modifier = Modifier
-                .menuAnchor()
-                .fillMaxWidth()
-                .heightIn(min = 54.dp)
-        )
-
-        ExposedDropdownMenu(
-            expanded = expanded,
-            onDismissRequest = { expanded = false }
-        ) {
-            cleanOptions.forEach { option ->
-                DropdownMenuItem(
-                    text = {
-                        Text(
-                            text = option,
-                            textAlign = align,
-                            modifier = Modifier.fillMaxWidth()
-                        )
-                    },
-                    onClick = {
-                        expanded = false
-                        onSelected(option)
-                    }
                 )
             }
         }
@@ -3141,10 +2897,17 @@ private fun createAttendancePdf(
 
         paint.color = android.graphics.Color.rgb(15, 23, 42)
         paint.textAlign = if (isEnglish) Paint.Align.LEFT else Paint.Align.RIGHT
-        val pdfDisplayName = TraineeDisplayNameMapper.displayName(
-            realName = member.displayName,
-            stableKey = member.id.toString()
-        ).ifBlank { tr("מתאמן ללא שם", "Unnamed trainee") }
+        val pdfDisplayName =
+            TraineeDisplayNameMapper.displayName(
+                realName = member.displayName,
+                stableKey = member.id.toString(),
+                isEnglish = isEnglish
+            ).ifBlank {
+                tr(
+                    "מתאמן ללא שם",
+                    "Unnamed trainee"
+                )
+            }
 
         canvas.drawText(
             pdfDisplayName.take(38),
