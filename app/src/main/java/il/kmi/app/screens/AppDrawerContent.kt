@@ -45,7 +45,6 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.LayoutDirection
-import androidx.compose.ui.unit.sp
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.platform.LocalLayoutDirection
 import com.google.firebase.auth.FirebaseAuth
@@ -76,7 +75,6 @@ import il.kmi.app.voicecommands.VoiceDrawerDestination
 import kotlinx.coroutines.delay
 import androidx.compose.runtime.rememberCoroutineScope
 
-
 //===========================================================================
 
 private const val FORUM_UNREAD_LIMIT = 100L
@@ -104,53 +102,6 @@ object DrawerVoiceActionsBridge {
 
 private fun forumLastReadKey(branch: String): String =
     "forum_last_read_at_${branch.trim()}"
-
-@Composable
-fun DrawerMenuCard(
-    text: String,
-    leading: (@Composable () -> Unit)? = null,
-    trailing: (@Composable () -> Unit)? = null,
-    modifier: Modifier = Modifier,
-    containerColor: Color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.28f),
-    textColor: Color = MaterialTheme.colorScheme.onSurface,
-    border: BorderStroke? = BorderStroke(
-        1.dp,
-        MaterialTheme.colorScheme.outline.copy(alpha = 0.35f)
-    ),
-    onClick: () -> Unit
-) {
-    Surface(
-        modifier = modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(24.dp))
-            .clickable(onClick = onClick),
-        color = containerColor,
-        contentColor = textColor,
-        tonalElevation = 0.dp,
-        shadowElevation = 0.dp,
-        shape = RoundedCornerShape(24.dp),
-        border = border
-    ) {
-        Row(
-            modifier = Modifier.padding(horizontal = 20.dp, vertical = 16.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            if (leading != null) {
-                leading()
-                Spacer(Modifier.width(12.dp))
-            }
-            Text(
-                text = text,
-                style = KmiTypography.cardTitle,
-                color = textColor,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis
-            )
-            Spacer(Modifier.weight(1f))
-            trailing?.invoke()
-        }
-    }
-}
 
 // ─────────────────────────────────────────────
 // 🎬 סרטוני הדגמה (אפשר להוסיף עוד בהמשך)
@@ -306,8 +257,13 @@ fun AppDrawerContent(
         Surface(
             shape = CircleShape,
             color = Color.White.copy(alpha = 0.12f),
-            border = BorderStroke(1.dp, Color.White.copy(alpha = 0.18f)),
-            shadowElevation = 2.dp,
+            border =
+                BorderStroke(
+                    1.dp,
+                    Color.White.copy(alpha = 0.18f)
+                ),
+            tonalElevation = 0.dp,
+            shadowElevation = 0.dp,
             modifier = Modifier.size(30.dp)
         ) {
             Box(
@@ -341,8 +297,13 @@ fun AppDrawerContent(
             modifier = modifier,
             shape = CircleShape,
             color = Color(0xFF25D366),
-            shadowElevation = 4.dp,
-            border = BorderStroke(1.dp, Color.White.copy(alpha = 0.55f))
+            tonalElevation = 0.dp,
+            shadowElevation = 0.dp,
+            border =
+                BorderStroke(
+                    1.dp,
+                    Color.White.copy(alpha = 0.55f)
+                )
         ) {
             Box(
                 modifier = Modifier
@@ -644,28 +605,33 @@ fun AppDrawerContent(
         resolvedIsAdmin = isAdm
     }
 
-    // רקע גרדיאנט אטום (ללא שקיפות)
-    CompositionLocalProvider(LocalLayoutDirection provides drawerLayoutDirection) {
+    // רקע כחול־נייבי אחיד ועדין לכל המגירה
+    CompositionLocalProvider(
+        LocalLayoutDirection provides drawerLayoutDirection
+    ) {
         val scroll = rememberScrollState()
 
-        // ✅ כשמחליפים שפה או מרעננים את הסרגל,
+        // כשמחליפים שפה או מרעננים את הסרגל,
         // פותחים את התפריט מההתחלה ולא מאמצע הרשימה.
-        LaunchedEffect(isEnglish, languageRefreshKey, isCoach, effectiveIsAdmin) {
+        LaunchedEffect(
+            isEnglish,
+            languageRefreshKey,
+            isCoach,
+            effectiveIsAdmin
+        ) {
             scroll.scrollTo(0)
         }
 
+        val drawerBackgroundColor =
+            Color(0xFF102A43)
+
         Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(
-                    Brush.verticalGradient(
-                        colors = listOf(
-                            Color(0xFF0E1630),
-                            Color(0xFF1F2A52),
-                            Color(0xFF2575BC)
-                        )
+            modifier =
+                Modifier
+                    .fillMaxSize()
+                    .background(
+                        drawerBackgroundColor
                     )
-                )
         ) {
 
             @Composable
@@ -679,8 +645,7 @@ fun AppDrawerContent(
                 titleTextStyle: TextStyle =
                     KmiTypography.cardTitle.copy(
                         color = Color.White,
-                        fontWeight = FontWeight.ExtraBold,
-                        letterSpacing = (-0.12).sp
+                        fontWeight = FontWeight.ExtraBold
                     )
             ) {
                 val autoIcon = drawerIconForTitle(title)
@@ -732,8 +697,7 @@ fun AppDrawerContent(
                                     overflow = TextOverflow.Ellipsis,
                                     style = KmiTypography.secondary.copy(
                                         color = Color.White.copy(alpha = 0.72f),
-                                        fontWeight = FontWeight.SemiBold,
-                                        letterSpacing = (-0.08).sp
+                                        fontWeight = FontWeight.SemiBold
                                     ),
                                     textAlign = TextAlign.Right,
                                     modifier = Modifier.fillMaxWidth()
@@ -765,8 +729,7 @@ fun AppDrawerContent(
                 titleTextStyle: TextStyle =
                     KmiTypography.cardTitle.copy(
                         color = Color.White,
-                        fontWeight = FontWeight.ExtraBold,
-                        letterSpacing = (-0.12).sp
+                        fontWeight = FontWeight.ExtraBold
                     )
             ) {
                 val autoIcon = drawerIconForTitle(title)
@@ -818,8 +781,7 @@ fun AppDrawerContent(
                                     overflow = TextOverflow.Ellipsis,
                                     style = KmiTypography.secondary.copy(
                                         color = Color.White.copy(alpha = 0.72f),
-                                        fontWeight = FontWeight.SemiBold,
-                                        letterSpacing = (-0.08).sp
+                                        fontWeight = FontWeight.SemiBold
                                     ),
                                     textAlign = TextAlign.Start,
                                     modifier = Modifier.fillMaxWidth()
@@ -876,11 +838,12 @@ fun AppDrawerContent(
                         ) {
                             Text(
                                 text = title,
-                                style = KmiTypography.cardTitle.copy(
-                                    color = Color.White,
-                                    fontWeight = FontWeight.ExtraBold,
-                                    letterSpacing = (-0.12).sp
-                                ),
+                                style =
+                                    KmiTypography.cardTitle.copy(
+                                        color = Color.White,
+                                        fontWeight =
+                                            FontWeight.ExtraBold
+                                    ),
                                 textAlign = TextAlign.Right,
                                 modifier = Modifier.fillMaxWidth(),
                                 maxLines = 2,
@@ -895,8 +858,7 @@ fun AppDrawerContent(
                                     style = KmiTypography.secondary.copy(
                                         color =
                                             Color.White.copy(alpha = 0.82f),
-                                        fontWeight = FontWeight.Medium,
-                                        letterSpacing = (-0.08).sp
+                                        fontWeight = FontWeight.Medium
                                     ),
                                     textAlign = TextAlign.Right,
                                     modifier = Modifier.fillMaxWidth(),
@@ -956,11 +918,12 @@ fun AppDrawerContent(
                         ) {
                             Text(
                                 text = title,
-                                style = KmiTypography.cardTitle.copy(
-                                    color = Color.White,
-                                    fontWeight = FontWeight.ExtraBold,
-                                    letterSpacing = (-0.12).sp
-                                ),
+                                style =
+                                    KmiTypography.cardTitle.copy(
+                                        color = Color.White,
+                                        fontWeight =
+                                            FontWeight.ExtraBold
+                                    ),
                                 textAlign = TextAlign.Start,
                                 modifier = Modifier.fillMaxWidth(),
                                 maxLines = 2,
@@ -975,8 +938,7 @@ fun AppDrawerContent(
                                     style = KmiTypography.secondary.copy(
                                         color =
                                             Color.White.copy(alpha = 0.82f),
-                                        fontWeight = FontWeight.Medium,
-                                        letterSpacing = (-0.08).sp
+                                        fontWeight = FontWeight.Medium
                                     ),
                                     textAlign = TextAlign.Start,
                                     modifier = Modifier.fillMaxWidth(),
@@ -1004,18 +966,27 @@ fun AppDrawerContent(
                     modifier = Modifier.fillMaxWidth()
                 ) {
                         // ←—— כותרת + כפתור X קבועים מעל אזור הגלילה ——→
-                        val topInset =
-                            WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(start = 8.dp, end = 8.dp, top = 8.dp)
-                                .height(42.dp),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
+                    val topInset =
+                        WindowInsets.statusBars
+                            .asPaddingValues()
+                            .calculateTopPadding()
 
-                            Text(
+                    Row(
+                        modifier =
+                            Modifier
+                                .fillMaxWidth()
+                                .padding(
+                                    start = 8.dp,
+                                    end = 8.dp,
+                                    top = topInset + 8.dp
+                                )
+                                .heightIn(min = 42.dp),
+                        horizontalArrangement =
+                            Arrangement.SpaceBetween,
+                        verticalAlignment =
+                            Alignment.CenterVertically
+                    ) {
+                        Text(
                                 text = tr("תפריט", "Menu"),
                                 style = KmiTypography.screenTitle,
                                 color = Color.White,
@@ -1034,18 +1005,21 @@ fun AppDrawerContent(
                             }
                         }
 
-                        Column(
-                            modifier = Modifier
+                    Column(
+                        modifier =
+                            Modifier
                                 .fillMaxWidth()
                                 .verticalScroll(scroll)
+                                .navigationBarsPadding()
                                 .padding(
                                     start = 8.dp,
                                     end = 8.dp,
                                     top = 0.dp,
-                                    bottom = 24.dp
+                                    bottom = 72.dp
                                 ),
-                            horizontalAlignment = Alignment.Start
-                        ) {
+                        horizontalAlignment =
+                            Alignment.Start
+                    ) {
 
                             //------------------------------------------------------------------------
                             // ===== כפתורי מאמן — ורק למאמן =====
@@ -1094,9 +1068,7 @@ fun AppDrawerContent(
                                                 style =
                                                     KmiTypography.sectionTitle.copy(
                                                         fontWeight =
-                                                            FontWeight.Black,
-                                                        letterSpacing =
-                                                            (-0.12).sp
+                                                            FontWeight.Black
                                                     ),
                                                 color = Color.White,
                                                 textAlign =
@@ -1278,9 +1250,7 @@ fun AppDrawerContent(
                                                 style =
                                                     KmiTypography.sectionTitle.copy(
                                                         fontWeight =
-                                                            FontWeight.Black,
-                                                        letterSpacing =
-                                                            (-0.12).sp
+                                                            FontWeight.Black
                                                     ),
                                                 color = Color.White,
                                                 textAlign =
@@ -1400,9 +1370,7 @@ fun AppDrawerContent(
                                             style =
                                                 KmiTypography.sectionTitle.copy(
                                                     fontWeight =
-                                                        FontWeight.Black,
-                                                    letterSpacing =
-                                                        (-0.12).sp
+                                                        FontWeight.Black
                                                 ),
                                             color = Color.White,
                                             textAlign =
@@ -2361,7 +2329,8 @@ private fun DrawerScrollAffordance(
             Surface(
                 shape = CircleShape,
                 color = Color.White.copy(alpha = 0.92f),
-                shadowElevation = 6.dp
+                tonalElevation = 0.dp,
+                shadowElevation = 0.dp
             ) {
                 Icon(
                     imageVector = Icons.Filled.ExpandMore,

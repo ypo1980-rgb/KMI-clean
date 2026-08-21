@@ -22,6 +22,7 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -47,12 +48,15 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import androidx.core.content.edit
+import il.kmi.shared.localization.AppLanguage
+import il.kmi.shared.localization.AppLanguageManager
 import java.time.DateTimeException
 import java.time.LocalDate
 import java.time.YearMonth
@@ -88,6 +92,13 @@ fun BirthdayGate(
     sp: SharedPreferences,
     content: @Composable () -> Unit
 ) {
+    val context = LocalContext.current
+
+    val isEnglish = remember(context) {
+        AppLanguageManager(context).getCurrentLanguage() ==
+                AppLanguage.ENGLISH
+    }
+
     val fullName =
         sp.getString(
             KEY_FULL_NAME,
@@ -168,21 +179,22 @@ fun BirthdayGate(
     if (showBirthday) {
         BirthdayCelebrationDialog(
             fullName = fullName,
+            isEnglish = isEnglish,
             onContinue = {
                 val shownYear =
                     birthdayYearToSave
                         ?: LocalDate.now().year
 
-                sp.edit()
-                    .putInt(
+                sp.edit {
+                    putInt(
                         KEY_LAST_BIRTHDAY_SHOWN_YEAR,
                         shownYear
                     )
-                    .putString(
+                    putString(
                         KEY_LAST_BIRTHDAY_SHOWN,
                         LocalDate.now().toString()
                     )
-                    .apply()
+                }
 
                 showBirthday = false
             }
@@ -193,6 +205,7 @@ fun BirthdayGate(
 @Composable
 private fun BirthdayCelebrationDialog(
     fullName: String,
+    isEnglish: Boolean,
     onContinue: () -> Unit
 ) {
     /*
@@ -217,6 +230,7 @@ private fun BirthdayCelebrationDialog(
     ) {
         BirthdayCelebrationContent(
             fullName = fullName,
+            isEnglish = isEnglish,
             onContinue = onContinue
         )
     }
@@ -225,6 +239,7 @@ private fun BirthdayCelebrationDialog(
 @Composable
 private fun BirthdayCelebrationContent(
     fullName: String,
+    isEnglish: Boolean,
     onContinue: () -> Unit
 ) {
     val celebrationTransition =
@@ -289,10 +304,11 @@ private fun BirthdayCelebrationContent(
                 .background(
                     Brush.verticalGradient(
                         colors = listOf(
-                            Color(0xFF061A35),
-                            Color(0xFF102B58),
-                            Color(0xFF4338A8),
-                            Color(0xFF7252D4)
+                            MaterialTheme.colorScheme.background,
+                            MaterialTheme.colorScheme.primaryContainer,
+                            MaterialTheme.colorScheme.primary.copy(
+                                alpha = 0.88f
+                            )
                         )
                     )
                 )
@@ -344,10 +360,17 @@ private fun BirthdayCelebrationContent(
                     modifier = Modifier
                         .fillMaxWidth()
                         .fillMaxHeight(),
-                    shape = RoundedCornerShape(34.dp),
-                    color = Color.White.copy(alpha = 0.96f),
+                    shape = RoundedCornerShape(30.dp),
+                    color = MaterialTheme.colorScheme.surface.copy(
+                        alpha = 0.97f
+                    ),
+                    contentColor = MaterialTheme.colorScheme.onSurface,
                     tonalElevation = 0.dp,
-                    shadowElevation = 22.dp
+                    shadowElevation = 2.dp,
+                    border = androidx.compose.foundation.BorderStroke(
+                        width = 1.dp,
+                        color = MaterialTheme.colorScheme.outlineVariant
+                    )
                 ) {
                     Column(
                         modifier = Modifier
@@ -398,7 +421,7 @@ private fun BirthdayCelebrationContent(
                             ) {
                                 Text(
                                     text = "🏆",
-                                    fontSize = 42.sp
+                                    style = KmiTypography.metric
                                 )
                             }
 
@@ -408,16 +431,25 @@ private fun BirthdayCelebrationContent(
 
                             Text(
                                 text =
-                                    if (fullName.isNotBlank()) {
-                                        "מזל טוב, $fullName!"
-                                    } else {
-                                        "מזל טוב!"
+                                    when {
+                                        isEnglish &&
+                                                fullName.isNotBlank() ->
+                                            "Congratulations, $fullName!"
+
+                                        isEnglish ->
+                                            "Congratulations!"
+
+                                        fullName.isNotBlank() ->
+                                            "מזל טוב, $fullName!"
+
+                                        else ->
+                                            "מזל טוב!"
                                     },
                                 modifier = Modifier.fillMaxWidth(),
-                                color = Color(0xFF14213D),
-                                fontSize = 25.sp,
-                                lineHeight = 29.sp,
-                                fontWeight = FontWeight.Black,
+                                color = MaterialTheme.colorScheme.onSurface,
+                                style = KmiTypography.screenTitle.copy(
+                                    fontWeight = FontWeight.Black
+                                ),
                                 textAlign = TextAlign.Center
                             )
 
@@ -426,13 +458,17 @@ private fun BirthdayCelebrationContent(
                             )
 
                             Text(
-                                text = "יום הולדת שמח 🎉",
+                                text =
+                                    if (isEnglish) {
+                                        "Happy Birthday 🎉"
+                                    } else {
+                                        "יום הולדת שמח 🎉"
+                                    },
                                 modifier = Modifier.fillMaxWidth(),
-                                color = Color(0xFF6246C7),
-                                fontSize = 19.sp,
-                                lineHeight = 23.sp,
-                                fontWeight =
-                                    FontWeight.ExtraBold,
+                                color = MaterialTheme.colorScheme.primary,
+                                style = KmiTypography.sectionTitle.copy(
+                                    fontWeight = FontWeight.ExtraBold
+                                ),
                                 textAlign = TextAlign.Center
                             )
 
@@ -442,26 +478,41 @@ private fun BirthdayCelebrationContent(
 
                             Surface(
                                 modifier = Modifier.fillMaxWidth(),
-                                shape = RoundedCornerShape(22.dp),
-                                color = Color(0xFFF3F6FF),
-                                tonalElevation = 0.dp
+                                shape = RoundedCornerShape(20.dp),
+                                color = MaterialTheme.colorScheme.surfaceVariant.copy(
+                                    alpha = 0.72f
+                                ),
+                                contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                                tonalElevation = 0.dp,
+                                shadowElevation = 0.dp,
+                                border = androidx.compose.foundation.BorderStroke(
+                                    width = 1.dp,
+                                    color = MaterialTheme.colorScheme.outlineVariant
+                                )
                             ) {
                                 Text(
                                     text =
-                                        "מאחלים לך שנה של בריאות, " +
-                                                "הצלחה, התמדה והתקדמות.\n\n" +
-                                                "שתמשיך להתחזק, ללמוד " +
-                                                "ולהגיע לכל יעד — " +
-                                                "באימון ובחיים.",
+                                        if (isEnglish) {
+                                            "Wishing you a year of health, " +
+                                                    "success, perseverance and progress.\n\n" +
+                                                    "May you continue to grow stronger, " +
+                                                    "learn and achieve every goal — " +
+                                                    "in training and in life."
+                                        } else {
+                                            "מאחלים לך שנה של בריאות, " +
+                                                    "הצלחה, התמדה והתקדמות.\n\n" +
+                                                    "שתמשיך להתחזק, ללמוד " +
+                                                    "ולהגיע לכל יעד — " +
+                                                    "באימון ובחיים."
+                                        },
                                     modifier = Modifier.padding(
                                         horizontal = 16.dp,
                                         vertical = 15.dp
                                     ),
-                                    color = Color(0xFF26354D),
-                                    fontSize = 16.sp,
-                                    lineHeight = 22.sp,
-                                    fontWeight =
-                                        FontWeight.SemiBold,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    style = KmiTypography.body.copy(
+                                        fontWeight = FontWeight.SemiBold
+                                    ),
                                     textAlign = TextAlign.Center
                                 )
                             }
@@ -475,7 +526,7 @@ private fun BirthdayCelebrationContent(
                             text =
                                 "🎂  🎈  ✨  🥋  ✨  🎈  🎂",
                             modifier = Modifier.fillMaxWidth(),
-                            fontSize = 18.sp,
+                            style = KmiTypography.action,
                             textAlign = TextAlign.Center
                         )
 
@@ -487,24 +538,31 @@ private fun BirthdayCelebrationContent(
                             onClick = onContinue,
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .height(56.dp),
-                            shape = RoundedCornerShape(20.dp),
+                                .heightIn(min = 54.dp),
+                            shape = RoundedCornerShape(18.dp),
                             colors = ButtonDefaults.buttonColors(
                                 containerColor =
-                                    Color(0xFF4F46C8),
-                                contentColor = Color.White
+                                    MaterialTheme.colorScheme.primary,
+                                contentColor =
+                                    MaterialTheme.colorScheme.onPrimary
                             ),
-                            elevation =
-                                ButtonDefaults.buttonElevation(
-                                    defaultElevation = 8.dp,
-                                    pressedElevation = 2.dp
-                                )
+                            elevation = ButtonDefaults.buttonElevation(
+                                defaultElevation = 0.dp,
+                                pressedElevation = 1.dp,
+                                disabledElevation = 0.dp
+                            )
                         ) {
                             Text(
-                                text = "המשך לאפליקציה",
-                                fontSize = 17.sp,
-                                fontWeight =
-                                    FontWeight.ExtraBold
+                                text =
+                                    if (isEnglish) {
+                                        "Continue to the app"
+                                    } else {
+                                        "המשך לאפליקציה"
+                                    },
+                                style = KmiTypography.action.copy(
+                                    fontWeight = FontWeight.ExtraBold
+                                ),
+                                textAlign = TextAlign.Center
                             )
                         }
                     }

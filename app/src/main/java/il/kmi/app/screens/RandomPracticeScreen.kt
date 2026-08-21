@@ -16,7 +16,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import il.kmi.shared.domain.Belt
 import kotlinx.coroutines.delay
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -54,6 +53,7 @@ import il.kmi.shared.domain.ContentRepo as SharedContentRepo
 import android.app.Activity
 import android.media.AudioManager
 import android.media.ToneGenerator
+import androidx.compose.foundation.border
 import androidx.compose.ui.platform.LocalContext
 import il.kmi.shared.localization.AppLanguage
 import il.kmi.shared.localization.AppLanguageManager
@@ -61,6 +61,8 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.ui.text.style.TextOverflow
+import il.kmi.app.ui.KmiTypography
 import il.kmi.shared.domain.content.ExerciseTitlesEn
 import il.kmi.shared.domain.content.ExerciseIdentityRegistry
 
@@ -144,38 +146,6 @@ private fun savePracticeNote(
 private fun decTokenPart(s: String): String =
     runCatching { URLDecoder.decode(s, "UTF-8") }.getOrDefault(s)
 
-/**
- * פורמט הטוקן:
- * __TOPICS_PICK__:<beltId>|<topicEnc>,<topicEnc>;<beltId>|<topicEnc>...
- *
- * מחזיר: Map<Belt, List<String>>
- */
-private fun parseTopicsPickToken(token: String): Map<Belt, List<String>> {
-    if (!token.startsWith("$TOPICS_PICK_TOKEN:")) return emptyMap()
-    val payload = token.removePrefix("$TOPICS_PICK_TOKEN:").trim()
-    if (payload.isBlank()) return emptyMap()
-
-    return payload
-        .split(';')
-        .mapNotNull { seg ->
-            val parts = seg.split('|', limit = 2)
-            if (parts.size != 2) return@mapNotNull null
-
-            val beltId = parts[0].trim()
-            val belt = Belt.fromId(beltId) ?: return@mapNotNull null
-
-            val topics = parts[1]
-                .split(',')
-                .map { it.trim() }
-                .filter { it.isNotEmpty() }
-                .map { decTokenPart(it) }
-
-            if (topics.isEmpty()) return@mapNotNull null
-            belt to topics
-        }
-        .groupBy({ it.first }, { it.second })
-        .mapValues { (_, lists) -> lists.flatten().distinct() }
-}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -254,12 +224,6 @@ fun RandomPracticeScreen(
             topicTitle = topicTitle,
             subTopicTitle = subTopicTitle
         )
-    }
-
-    // <<< נוסיף גם את רשימת שמות הנושאים כדי לקרוא את המועדפים/לא-יודע מה-SharedPreferences
-    val allTopicTitles: List<String> = remember(belt) {
-        runCatching { il.kmi.app.search.KmiSearchBridge.topicTitlesFor(belt) }
-            .getOrDefault(emptyList())
     }
 
     // 🔎 מאגר חיפוש גלובלי – כל החגורות, כל הנושאים
@@ -1133,7 +1097,11 @@ fun RandomPracticeScreen(
                 onBack = null,
                 showBottomActions = true,
                 onHome = onHome,
-                onSearch = { showSearch = true },
+                onSettings = onOpenSettings,
+                onSearch = {
+                    showSearch = true
+                    onSearch()
+                },
                 lockSearch = false,
                 showTopHome = false,
                 showTopSearch = false,
@@ -1153,11 +1121,19 @@ fun RandomPracticeScreen(
         },
     ) { padding ->
 
-        Surface(
+        Box(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(padding),
-            color = belt.lightColor
+                .padding(padding)
+                .background(
+                    brush = Brush.verticalGradient(
+                        colors = listOf(
+                            MaterialTheme.colorScheme.background,
+                            MaterialTheme.colorScheme.surface,
+                            belt.color.copy(alpha = 0.16f)
+                        )
+                    )
+                )
         ) {
             if (weightedItems.isEmpty()) {
                 Box(
@@ -1171,7 +1147,8 @@ fun RandomPracticeScreen(
                             } else {
                                 "אין תרגילים זמינים לנושא זה"
                             },
-                            style = MaterialTheme.typography.titleMedium,
+                            style = KmiTypography.sectionTitle,
+                            color = MaterialTheme.colorScheme.onSurface,
                             textAlign = TextAlign.Center,
                             modifier = Modifier.padding(horizontal = 16.dp)
                         )
@@ -1195,16 +1172,22 @@ fun RandomPracticeScreen(
                             horizontalArrangement = Arrangement.Center,
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Text("⏳", fontSize = 30.sp)
+                            Text(
+                                text = "⏳",
+                                style = KmiTypography.metric
+                            )
 
                             Spacer(Modifier.width(10.dp))
 
                             Text(
-                                text = String.format("%02d:%02d", timeLeft / 60, timeLeft % 60),
-                                style = MaterialTheme.typography.displaySmall.copy(
-                                    color = Color(0xFF6D56B8),
-                                    fontWeight = FontWeight.Black,
-                                    letterSpacing = 0.4.sp
+                                text = String.format(
+                                    "%02d:%02d",
+                                    timeLeft / 60,
+                                    timeLeft % 60
+                                ),
+                                style = KmiTypography.metric.copy(
+                                    color = MaterialTheme.colorScheme.primary,
+                                    fontWeight = FontWeight.Black
                                 )
                             )
                         }
@@ -1212,29 +1195,47 @@ fun RandomPracticeScreen(
                         Spacer(Modifier.height(14.dp))
 
                         if (currentIndex in weightedItems.indices) {
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .background(Color(0xFFFFF9C4), RoundedCornerShape(20.dp))
-                                    .clickable {
-                                        showHelp = true
-                                    }
-                                    .padding(horizontal = 22.dp, vertical = 30.dp),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Text(
-                                    text = weightedPracticeItems
-                                        .getOrNull(currentIndex)
-                                        ?.let { uiTitleFor(it) }
-                                        .orEmpty(),
-                                    style = MaterialTheme.typography.titleLarge.copy(
-                                        fontSize = 28.sp,
-                                        fontWeight = FontWeight.Black,
-                                        color = Color(0xFF171717)
-                                    ),
-                                    textAlign = TextAlign.Center,
-                                    modifier = Modifier.fillMaxWidth()
+                            Surface(
+                                onClick = {
+                                    showHelp = true
+                                },
+                                modifier = Modifier.fillMaxWidth(),
+                                shape = RoundedCornerShape(20.dp),
+                                color = MaterialTheme.colorScheme.surfaceVariant.copy(
+                                    alpha = 0.82f
+                                ),
+                                contentColor = MaterialTheme.colorScheme.onSurface,
+                                tonalElevation = 0.dp,
+                                shadowElevation = 0.dp,
+                                border = BorderStroke(
+                                    width = 1.dp,
+                                    color = belt.color.copy(alpha = 0.30f)
                                 )
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(
+                                            horizontal = 18.dp,
+                                            vertical = 22.dp
+                                        ),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text(
+                                        text = weightedPracticeItems
+                                            .getOrNull(currentIndex)
+                                            ?.let { uiTitleFor(it) }
+                                            .orEmpty(),
+                                        style = KmiTypography.screenTitle.copy(
+                                            fontWeight = FontWeight.Black
+                                        ),
+                                        color = MaterialTheme.colorScheme.onSurface,
+                                        textAlign = TextAlign.Center,
+                                        maxLines = 4,
+                                        overflow = TextOverflow.Ellipsis,
+                                        modifier = Modifier.fillMaxWidth()
+                                    )
+                                }
                             }
 
                             Spacer(Modifier.height(18.dp))
@@ -1267,7 +1268,7 @@ fun RandomPracticeScreen(
                                     Box(modifier = Modifier.align(Alignment.Center)) {
                                         PracticeStatusCircle(
                                             status = currentPracticeStatus,
-                                            beltColor = belt.lightColor,
+                                            beltColor = belt.color,
                                             isEnglish = isEnglish,
                                             onClick = {
                                                 val nextStatus = when (currentPracticeStatus) {
@@ -1570,7 +1571,12 @@ fun RandomPracticeScreen(
                             } else {
                                 "חפש תרגיל (למשל: \"בעיטה\", \"הגנה\")"
                             },
-                            style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.ExtraBold)
+                            style = KmiTypography.sectionTitle.copy(
+                                fontWeight = FontWeight.ExtraBold
+                            ),
+                            color = MaterialTheme.colorScheme.onSurface,
+                            textAlign = TextAlign.Center,
+                            modifier = Modifier.fillMaxWidth()
                         )
 
                         Spacer(Modifier.height(10.dp))
@@ -1578,17 +1584,33 @@ fun RandomPracticeScreen(
                         OutlinedTextField(
                             value = searchQuery,
                             onValueChange = { searchQuery = it },
-                            modifier = Modifier.fillMaxWidth(),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .heightIn(min = 52.dp),
                             singleLine = true,
-                            label = { Text(if (isEnglish) "Type exercise name" else "הקלד/י שם תרגיל") }
+                            textStyle = KmiTypography.body,
+                            label = {
+                                Text(
+                                    text = if (isEnglish) {
+                                        "Type exercise name"
+                                    } else {
+                                        "הקלד/י שם תרגיל"
+                                    },
+                                    style = KmiTypography.secondary
+                                )
+                            }
                         )
 
                         Spacer(Modifier.height(8.dp))
 
                         if (searchQuery.isNotBlank() && searchResults.isEmpty()) {
                             Text(
-                                if (isEnglish) "No matching exercises found." else "לא נמצאו תרגילים תואמים.",
-                                style = MaterialTheme.typography.bodyMedium,
+                                text = if (isEnglish) {
+                                    "No matching exercises found."
+                                } else {
+                                    "לא נמצאו תרגילים תואמים."
+                                },
+                                style = KmiTypography.body,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 modifier = Modifier.fillMaxWidth(),
                                 textAlign = TextAlign.Center
@@ -1625,14 +1647,26 @@ fun RandomPracticeScreen(
                                         ) {
                                             Text(
                                                 text = hitItemUi,
-                                                style = MaterialTheme.typography.titleMedium,
+                                                style = KmiTypography.cardTitle,
+                                                color = MaterialTheme.colorScheme.onSurface,
                                                 textAlign = resultTextAlign,
+                                                maxLines = 2,
+                                                overflow = TextOverflow.Ellipsis,
                                                 modifier = Modifier.fillMaxWidth()
                                             )
+
                                             Text(
-                                                text = "$hitTopicUi • ${if (isEnglish) hitBelt.en else hitBelt.heb}",
-                                                style = MaterialTheme.typography.labelSmall,
+                                                text = "$hitTopicUi • ${
+                                                    if (isEnglish) {
+                                                        hitBelt.en
+                                                    } else {
+                                                        hitBelt.heb
+                                                    }
+                                                }",
+                                                style = KmiTypography.caption,
                                                 textAlign = resultTextAlign,
+                                                maxLines = 2,
+                                                overflow = TextOverflow.Ellipsis,
                                                 modifier = Modifier.fillMaxWidth(),
                                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                                             )
@@ -1643,10 +1677,19 @@ fun RandomPracticeScreen(
                         }
 
                         Spacer(Modifier.height(12.dp))
-                        TextButton(onClick = {
-                            showSearch = false
-                            searchQuery = ""
-                        }) { Text(if (isEnglish) "Close" else "סגור") }
+
+                        TextButton(
+                            onClick = {
+                                showSearch = false
+                                searchQuery = ""
+                            }
+                        ) {
+                            Text(
+                                text = if (isEnglish) "Close" else "סגור",
+                                style = KmiTypography.action
+                            )
+                        }
+
                         Spacer(Modifier.height(6.dp))
                     }
                 }
@@ -1689,15 +1732,19 @@ private fun DurationPickerDialog(
         onDismissRequest = onDismiss,
         sheetState = sheetState,
         containerColor = MaterialTheme.colorScheme.surface,
-        tonalElevation = 4.dp,
+        contentColor = MaterialTheme.colorScheme.onSurface,
+        tonalElevation = 0.dp,
         dragHandle = {
-            // ידית שקופה ונקייה
             Box(
                 modifier = Modifier
-                    .padding(top = 6.dp)
-                    .size(width = 48.dp, height = 5.dp)
+                    .padding(top = 8.dp, bottom = 4.dp)
+                    .size(width = 44.dp, height = 4.dp)
                     .clip(RoundedCornerShape(100))
-                    .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.14f))
+                    .background(
+                        MaterialTheme.colorScheme.primary.copy(
+                            alpha = 0.35f
+                        )
+                    )
             )
         }
     ) {
@@ -1712,11 +1759,19 @@ private fun DurationPickerDialog(
             Surface(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 16.dp)
-                    .clip(RoundedCornerShape(24.dp))
-                    .background(Color.Transparent),
-                tonalElevation = 2.dp,
-                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f)
+                    .padding(horizontal = 16.dp),
+                shape = RoundedCornerShape(24.dp),
+                color = MaterialTheme.colorScheme.surfaceVariant.copy(
+                    alpha = 0.55f
+                ),
+                tonalElevation = 0.dp,
+                shadowElevation = 0.dp,
+                border = BorderStroke(
+                    width = 1.dp,
+                    color = MaterialTheme.colorScheme.primary.copy(
+                        alpha = 0.24f
+                    )
+                )
             ) {
                 Box(
                     modifier = Modifier
@@ -1728,10 +1783,13 @@ private fun DurationPickerDialog(
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {
                         Text(
-                            if (isEnglish) "Choose Practice Duration" else "בחר זמן תרגול",
-                            style = MaterialTheme.typography.titleLarge.copy(
-                                fontWeight = FontWeight.ExtraBold,
-                                letterSpacing = 0.2.sp
+                            text = if (isEnglish) {
+                                "Choose Practice Duration"
+                            } else {
+                                "בחר זמן תרגול"
+                            },
+                            style = KmiTypography.sectionTitle.copy(
+                                fontWeight = FontWeight.ExtraBold
                             ),
                             textAlign = TextAlign.Center
                         )
@@ -1749,7 +1807,7 @@ private fun DurationPickerDialog(
                         ) { m ->
                             Text(
                                 text = String.format("%02d:00", m),
-                                style = MaterialTheme.typography.displaySmall.copy(
+                                style = KmiTypography.metric.copy(
                                     color = MaterialTheme.colorScheme.primary,
                                     fontWeight = FontWeight.Black
                                 )
@@ -1771,21 +1829,77 @@ private fun DurationPickerDialog(
 
             Spacer(Modifier.height(10.dp))
 
-            // ===== מתגים עם תיאור משנה =====
-            SettingRow(
-                title = if (isEnglish) "Mid-time alert" else "התראה באמצע הזמן",
-                subtitle = if (isEnglish) "Beep + voice announcement at halfway point" else "צפצוף + הודעה קולית בחצי הזמן",
-                checked = playHalf,
-                isEnglish = isEnglish,
-                onCheckedChange = { playHalf = it }
-            )
-            SettingRow(
-                title = if (isEnglish) "Sound in the last 10 seconds" else "צליל ב־10 השניות האחרונות",
-                subtitle = if (isEnglish) "Short beep every second until the end" else "צפצוף קצר כל שנייה עד לסיום",
-                checked = playCountdown,
-                isEnglish = isEnglish,
-                onCheckedChange = { playCountdown = it }
-            )
+            // ===== הגדרות שמע בכרטיס פרמיום מאוחד =====
+            Surface(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp),
+                shape = RoundedCornerShape(22.dp),
+                color = MaterialTheme.colorScheme.surfaceVariant.copy(
+                    alpha = 0.38f
+                ),
+                tonalElevation = 0.dp,
+                shadowElevation = 0.dp,
+                border = BorderStroke(
+                    width = 1.dp,
+                    color = MaterialTheme.colorScheme.outlineVariant.copy(
+                        alpha = 0.75f
+                    )
+                )
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 4.dp)
+                ) {
+                    SettingRow(
+                        title =
+                            if (isEnglish) {
+                                "Mid-time alert"
+                            } else {
+                                "התראה באמצע הזמן"
+                            },
+                        subtitle =
+                            if (isEnglish) {
+                                "Beep + voice announcement at halfway point"
+                            } else {
+                                "צפצוף + הודעה קולית בחצי הזמן"
+                            },
+                        checked = playHalf,
+                        isEnglish = isEnglish,
+                        onCheckedChange = {
+                            playHalf = it
+                        }
+                    )
+
+                    HorizontalDivider(
+                        modifier = Modifier.padding(horizontal = 16.dp),
+                        color = MaterialTheme.colorScheme.outlineVariant.copy(
+                            alpha = 0.55f
+                        )
+                    )
+
+                    SettingRow(
+                        title =
+                            if (isEnglish) {
+                                "Sound in the last 10 seconds"
+                            } else {
+                                "צליל ב־10 השניות האחרונות"
+                            },
+                        subtitle =
+                            if (isEnglish) {
+                                "Short beep every second until the end"
+                            } else {
+                                "צפצוף קצר כל שנייה עד לסיום"
+                            },
+                        checked = playCountdown,
+                        isEnglish = isEnglish,
+                        onCheckedChange = {
+                            playCountdown = it
+                        }
+                    )
+                }
+            }
 
             Spacer(Modifier.height(6.dp))
 
@@ -1799,12 +1913,22 @@ private fun DurationPickerDialog(
                 TextButton(
                     onClick = {
                         onDismiss()
-                        scope.launch { runCatching { sheetState.hide() } }
+                        scope.launch {
+                            runCatching {
+                                sheetState.hide()
+                            }
+                        }
                     },
-                    modifier = Modifier.height(52.dp)
+                    modifier = Modifier.heightIn(min = 52.dp)
                 ) {
-                    Text(if (isEnglish) "Cancel" else "בטל", fontWeight = FontWeight.SemiBold)
+                    Text(
+                        text = if (isEnglish) "Cancel" else "בטל",
+                        style = KmiTypography.action.copy(
+                            fontWeight = FontWeight.SemiBold
+                        )
+                    )
                 }
+
 
                 Button(
                     onClick = {
@@ -1814,12 +1938,21 @@ private fun DurationPickerDialog(
                         }
                     },
                     modifier = Modifier
-                        .height(52.dp)
-                        .weight(1f),
+                        .weight(1f)
+                        .heightIn(min = 52.dp),
                     shape = RoundedCornerShape(16.dp),
-                    elevation = ButtonDefaults.buttonElevation(defaultElevation = 1.dp, pressedElevation = 3.dp)
+                    elevation = ButtonDefaults.buttonElevation(
+                        defaultElevation = 0.dp,
+                        pressedElevation = 1.dp,
+                        disabledElevation = 0.dp
+                    )
                 ) {
-                    Text(if (isEnglish) "Start" else "התחל", fontWeight = FontWeight.ExtraBold)
+                    Text(
+                        text = if (isEnglish) "Start" else "התחל",
+                        style = KmiTypography.action.copy(
+                            fontWeight = FontWeight.ExtraBold
+                        )
+                    )
                 }
             }
 
@@ -1830,7 +1963,7 @@ private fun DurationPickerDialog(
 
 /* ---------- רכיבים קטנים ומלוטשים ---------- */
 
-/** Segmented control בעיצוב עגול/מודרני (1,3,5 דקות) */
+/** בורר זמן פרמיום קומפקטי */
 @Composable
 private fun SegmentedTimeChooser(
     values: List<Int>,
@@ -1838,37 +1971,112 @@ private fun SegmentedTimeChooser(
     isEnglish: Boolean,
     onSelect: (Int) -> Unit
 ) {
-    Row(
+    Surface(
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 16.dp),
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
-        verticalAlignment = Alignment.CenterVertically
+        shape = RoundedCornerShape(22.dp),
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(
+            alpha = 0.42f
+        ),
+        tonalElevation = 0.dp,
+        shadowElevation = 0.dp,
+        border = BorderStroke(
+            width = 1.dp,
+            color = MaterialTheme.colorScheme.outlineVariant.copy(
+                alpha = 0.75f
+            )
+        )
     ) {
-        values.sortedDescending().forEach { v ->
-            val isSelected = selected == v
-            val container = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant
-            val content = if (isSelected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(6.dp),
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            values
+                .distinct()
+                .sorted()
+                .forEach { value ->
+                    val isSelected = selected == value
 
-            Surface(
-                color = container,
-                contentColor = content,
-                tonalElevation = if (isSelected) 6.dp else 0.dp,
-                shadowElevation = if (isSelected) 2.dp else 0.dp,
-                shape = RoundedCornerShape(24.dp),
-                modifier = Modifier
-                    .weight(1f)
-                    .height(68.dp)
-                    .clip(RoundedCornerShape(24.dp))
-                    .clickable { onSelect(v) }
-            ) {
-                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text("$v", fontSize = 22.sp, fontWeight = FontWeight.ExtraBold, letterSpacing = 0.5.sp)
-                        Text(if (isEnglish) "min" else "דק׳", modifier = Modifier.alpha(0.9f), fontSize = 12.sp)
+                    val itemBrush =
+                        if (isSelected) {
+                            Brush.linearGradient(
+                                colors = listOf(
+                                    MaterialTheme.colorScheme.primary,
+                                    MaterialTheme.colorScheme.tertiary
+                                )
+                            )
+                        } else {
+                            Brush.linearGradient(
+                                colors = listOf(
+                                    MaterialTheme.colorScheme.surface,
+                                    MaterialTheme.colorScheme.surface
+                                )
+                            )
+                        }
+
+                    val contentColor =
+                        if (isSelected) {
+                            MaterialTheme.colorScheme.onPrimary
+                        } else {
+                            MaterialTheme.colorScheme.onSurfaceVariant
+                        }
+
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .heightIn(min = 58.dp)
+                            .clip(RoundedCornerShape(17.dp))
+                            .background(itemBrush)
+                            .border(
+                                width = 1.dp,
+                                color =
+                                    if (isSelected) {
+                                        MaterialTheme.colorScheme.primary.copy(
+                                            alpha = 0.55f
+                                        )
+                                    } else {
+                                        MaterialTheme.colorScheme.outlineVariant
+                                    },
+                                shape = RoundedCornerShape(17.dp)
+                            )
+                            .clickable {
+                                onSelect(value)
+                            }
+                            .padding(
+                                horizontal = 6.dp,
+                                vertical = 8.dp
+                            ),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.Center
+                        ) {
+                            Text(
+                                text = "$value",
+                                style = KmiTypography.metric.copy(
+                                    color = contentColor,
+                                    fontWeight = FontWeight.ExtraBold
+                                ),
+                                maxLines = 1
+                            )
+
+                            Text(
+                                text = if (isEnglish) "min" else "דק׳",
+                                style = KmiTypography.caption.copy(
+                                    color = contentColor
+                                ),
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                modifier = Modifier.alpha(0.9f)
+                            )
+                        }
                     }
                 }
-            }
         }
     }
 }
@@ -1884,53 +2092,45 @@ private fun ModernActionsRow(
 ) {
     Row(
         modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(14.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         ModernPillButton(
             text = if (isEnglish) "Help" else "עזרה",
-            leading = { Icon(Icons.Outlined.Info, contentDescription = null) },
-            container = Color(0xFFEEE7FF),
-            content = Color(0xFF6D56B8),
-            overlayGradient = Brush.linearGradient(
-                listOf(
-                    Color.White.copy(alpha = 0.65f),
-                    Color.White.copy(alpha = 0.22f),
-                    Color(0xFF6D56B8).copy(alpha = 0.10f)
+            leading = {
+                Icon(
+                    imageVector = Icons.Outlined.Info,
+                    contentDescription =
+                        if (isEnglish) "Help" else "עזרה"
                 )
-            ),
+            },
+            container = MaterialTheme.colorScheme.secondaryContainer,
+            content = MaterialTheme.colorScheme.onSecondaryContainer,
+            overlayGradient = null,
             onClick = onHelp,
             modifier = Modifier.weight(1f)
         )
 
         if (showSkip) {
             ModernPillButton(
-                text =
-                    if (isEnglish) {
-                        "Skip"
-                    } else {
-                        "דלג"
-                    },
+                text = if (isEnglish) "Skip" else "דלג",
                 leading = {
                     Icon(
-                        Icons.Filled.PlayArrow,
-                        contentDescription = null
+                        imageVector = Icons.Filled.PlayArrow,
+                        contentDescription =
+                            if (isEnglish) "Skip" else "דלג"
                     )
                 },
-                container = Color(0xFF6D56B8),
-                content = Color.White,
-                overlayGradient =
-                    Brush.horizontalGradient(
-                        listOf(
-                            Color.White.copy(
-                                alpha = 0.24f
-                            ),
-                            Color.White.copy(
-                                alpha = 0.08f
-                            ),
-                            Color.Transparent
-                        )
-                    ),
+                container = MaterialTheme.colorScheme.primary,
+                content = MaterialTheme.colorScheme.onPrimary,
+                overlayGradient = Brush.horizontalGradient(
+                    colors = listOf(
+                        MaterialTheme.colorScheme.onPrimary.copy(
+                            alpha = 0.18f
+                        ),
+                        Color.Transparent
+                    )
+                ),
                 onClick = onSkip,
                 modifier = Modifier.weight(1f)
             )
@@ -1950,11 +2150,16 @@ private fun PracticeBottomActionCard(
         modifier = Modifier
             .fillMaxWidth()
             .navigationBarsPadding(),
-        shape = RoundedCornerShape(30.dp),
-        color = Color.White.copy(alpha = 0.92f),
-        tonalElevation = 3.dp,
-        shadowElevation = 12.dp,
-        border = BorderStroke(1.dp, Color.White.copy(alpha = 0.80f))
+        shape = RoundedCornerShape(26.dp),
+        color = MaterialTheme.colorScheme.surface.copy(
+            alpha = 0.96f
+        ),
+        tonalElevation = 0.dp,
+        shadowElevation = 0.dp,
+        border = BorderStroke(
+            width = 1.dp,
+            color = MaterialTheme.colorScheme.outlineVariant
+        )
     ) {
         Column(
             modifier = Modifier
@@ -1962,14 +2167,19 @@ private fun PracticeBottomActionCard(
                 .background(
                     brush = Brush.verticalGradient(
                         colors = listOf(
-                            Color.White.copy(alpha = 0.98f),
-                            Color(0xFFF7F4FF).copy(alpha = 0.72f),
-                            Color.White.copy(alpha = 0.96f)
+                            MaterialTheme.colorScheme.surface,
+                            MaterialTheme.colorScheme.surfaceVariant.copy(
+                                alpha = 0.58f
+                            ),
+                            MaterialTheme.colorScheme.surface
                         )
                     )
                 )
-                .padding(horizontal = 16.dp, vertical = 14.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp)
+                .padding(
+                    horizontal = 14.dp,
+                    vertical = 12.dp
+                ),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             ModernActionsRow(
                 isEnglish = isEnglish,
@@ -1980,29 +2190,43 @@ private fun PracticeBottomActionCard(
 
             Surface(
                 onClick = onFinish,
-                color = Color.White.copy(alpha = 0.97f),
-                contentColor = Color(0xFF111827),
-                shape = RoundedCornerShape(24.dp),
-                shadowElevation = 7.dp,
-                tonalElevation = 2.dp,
-                border = BorderStroke(1.dp, Color(0xFFE5E7EB).copy(alpha = 0.92f)),
+                color = MaterialTheme.colorScheme.primaryContainer,
+                contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                shape = RoundedCornerShape(20.dp),
+                shadowElevation = 0.dp,
+                tonalElevation = 0.dp,
+                border = BorderStroke(
+                    width = 1.dp,
+                    color = MaterialTheme.colorScheme.primary.copy(
+                        alpha = 0.30f
+                    )
+                ),
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(58.dp)
+                    .heightIn(min = 54.dp)
             ) {
                 Box(
-                    modifier = Modifier.fillMaxSize(),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(
+                            horizontal = 16.dp,
+                            vertical = 10.dp
+                        ),
                     contentAlignment = Alignment.Center
                 ) {
                     Text(
-                        text = if (isEnglish) "Finish and Return" else "סיום וחזרה",
-                        style = MaterialTheme.typography.titleLarge.copy(
-                            fontSize = 20.sp,
-                            fontWeight = FontWeight.Black,
-                            color = Color(0xFF111827),
-                            letterSpacing = 0.sp
+                        text = if (isEnglish) {
+                            "Finish and Return"
+                        } else {
+                            "סיום וחזרה"
+                        },
+                        style = KmiTypography.action.copy(
+                            fontWeight = FontWeight.Black
                         ),
-                        textAlign = TextAlign.Center
+                        color = MaterialTheme.colorScheme.onPrimaryContainer,
+                        textAlign = TextAlign.Center,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis
                     )
                 }
             }
@@ -2017,28 +2241,51 @@ private fun PremiumSoundIconButton(
     modifier: Modifier = Modifier,
     onClick: () -> Unit
 ) {
+    val containerColor =
+        if (isMuted) {
+            MaterialTheme.colorScheme.surfaceVariant
+        } else {
+            MaterialTheme.colorScheme.secondaryContainer
+        }
+
+    val iconColor =
+        if (isMuted) {
+            MaterialTheme.colorScheme.onSurfaceVariant
+        } else {
+            MaterialTheme.colorScheme.onSecondaryContainer
+        }
+
     Surface(
         onClick = onClick,
-        shape = RoundedCornerShape(20.dp),
-        color = Color.White.copy(alpha = 0.88f),
-        contentColor = if (isMuted) Color(0xFF94A3B8) else Color(0xFF6D56B8),
-        shadowElevation = 8.dp,
-        tonalElevation = 2.dp,
-        border = BorderStroke(1.dp, Color.White.copy(alpha = 0.80f)),
-        modifier = modifier.size(58.dp)
+        shape = RoundedCornerShape(18.dp),
+        color = containerColor,
+        contentColor = iconColor,
+        shadowElevation = 0.dp,
+        tonalElevation = 0.dp,
+        border = BorderStroke(
+            width = 1.dp,
+            color = MaterialTheme.colorScheme.outlineVariant
+        ),
+        modifier = modifier.size(54.dp)
     ) {
         Box(
             modifier = Modifier.fillMaxSize(),
             contentAlignment = Alignment.Center
         ) {
             Icon(
-                imageVector = if (isMuted) Icons.Filled.VolumeOff else Icons.Filled.VolumeUp,
-                contentDescription = if (isMuted) {
-                    if (isEnglish) "Resume audio" else "המשך קול"
-                } else {
-                    if (isEnglish) "Mute" else "השתק"
-                },
-                modifier = Modifier.size(28.dp)
+                imageVector =
+                    if (isMuted) {
+                        Icons.Filled.VolumeOff
+                    } else {
+                        Icons.Filled.VolumeUp
+                    },
+                contentDescription =
+                    if (isMuted) {
+                        if (isEnglish) "Resume audio" else "המשך קול"
+                    } else {
+                        if (isEnglish) "Mute" else "השתק"
+                    },
+                modifier = Modifier.size(26.dp)
             )
         }
     }
@@ -2053,26 +2300,37 @@ private fun PremiumPauseResumeButton(
 ) {
     Surface(
         onClick = onClick,
-        shape = RoundedCornerShape(20.dp),
-        color = Color.White.copy(alpha = 0.88f),
-        contentColor = Color(0xFF111827),
-        shadowElevation = 8.dp,
-        tonalElevation = 2.dp,
-        border = BorderStroke(1.dp, Color.White.copy(alpha = 0.80f)),
-        modifier = modifier.size(58.dp)
+        shape = RoundedCornerShape(18.dp),
+        color = MaterialTheme.colorScheme.primaryContainer,
+        contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+        shadowElevation = 0.dp,
+        tonalElevation = 0.dp,
+        border = BorderStroke(
+            width = 1.dp,
+            color = MaterialTheme.colorScheme.primary.copy(
+                alpha = 0.30f
+            )
+        ),
+        modifier = modifier.size(54.dp)
     ) {
         Box(
             modifier = Modifier.fillMaxSize(),
             contentAlignment = Alignment.Center
         ) {
             Icon(
-                imageVector = if (isRunning) Icons.Filled.Pause else Icons.Filled.PlayArrow,
-                contentDescription = if (isRunning) {
-                    if (isEnglish) "Pause" else "השהה"
-                } else {
-                    if (isEnglish) "Resume" else "המשך"
-                },
-                modifier = Modifier.size(28.dp)
+                imageVector =
+                    if (isRunning) {
+                        Icons.Filled.Pause
+                    } else {
+                        Icons.Filled.PlayArrow
+                    },
+                contentDescription =
+                    if (isRunning) {
+                        if (isEnglish) "Pause" else "השהה"
+                    } else {
+                        if (isEnglish) "Resume" else "המשך"
+                    },
+                modifier = Modifier.size(26.dp)
             )
         }
     }
@@ -2100,12 +2358,17 @@ private fun ModernPillButton(
         shape = shape,
         color = container,
         contentColor = content,
-        shadowElevation = 9.dp,
-        tonalElevation = 3.dp,
-        border = BorderStroke(1.dp, Color.White.copy(alpha = 0.52f)),
-        modifier = modifier.height(58.dp)
+        shadowElevation = 0.dp,
+        tonalElevation = 0.dp,
+        border = BorderStroke(
+            width = 1.dp,
+            color = content.copy(alpha = 0.20f)
+        ),
+        modifier = modifier.heightIn(min = 54.dp)
     ) {
-        Box(modifier = Modifier.fillMaxSize()) {
+        Box(
+            modifier = Modifier.fillMaxWidth()
+        ) {
             if (overlayGradient != null) {
                 Box(
                     modifier = Modifier
@@ -2116,8 +2379,11 @@ private fun ModernPillButton(
 
             Row(
                 modifier = Modifier
-                    .fillMaxSize()
-                    .padding(horizontal = 14.dp),
+                    .fillMaxWidth()
+                    .padding(
+                        horizontal = 12.dp,
+                        vertical = 10.dp
+                    ),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.Center
             ) {
@@ -2129,10 +2395,9 @@ private fun ModernPillButton(
                 Text(
                     text = text,
                     maxLines = 1,
-                    style = MaterialTheme.typography.titleMedium.copy(
-                        fontSize = 15.sp,
-                        fontWeight = FontWeight.ExtraBold,
-                        letterSpacing = 0.sp
+                    overflow = TextOverflow.Ellipsis,
+                    style = KmiTypography.action.copy(
+                        fontWeight = FontWeight.ExtraBold
                     )
                 )
             }
@@ -2146,42 +2411,55 @@ private fun PremiumSoundButton(
     isEnglish: Boolean,
     onClick: () -> Unit
 ) {
-    val shape = RoundedCornerShape(22.dp)
-
     Surface(
         onClick = onClick,
-        shape = shape,
-        color = Color.White.copy(alpha = 0.72f),
-        contentColor = Color(0xFF111827),
-        shadowElevation = 8.dp,
-        tonalElevation = 2.dp,
-        border = BorderStroke(1.dp, Color.White.copy(alpha = 0.75f)),
-        modifier = Modifier.height(52.dp)
+        shape = RoundedCornerShape(18.dp),
+        color = MaterialTheme.colorScheme.secondaryContainer,
+        contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
+        shadowElevation = 0.dp,
+        tonalElevation = 0.dp,
+        border = BorderStroke(
+            width = 1.dp,
+            color = MaterialTheme.colorScheme.outlineVariant
+        ),
+        modifier = Modifier.heightIn(min = 52.dp)
     ) {
         Row(
-            modifier = Modifier.padding(horizontal = 16.dp),
+            modifier = Modifier.padding(
+                horizontal = 14.dp,
+                vertical = 8.dp
+            ),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(10.dp)
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             Icon(
-                imageVector = if (isMuted) Icons.Filled.VolumeOff else Icons.Filled.VolumeUp,
-                contentDescription = if (isMuted) {
-                    if (isEnglish) "Resume audio" else "המשך קול"
-                } else {
-                    if (isEnglish) "Mute" else "השתק"
-                },
-                modifier = Modifier.size(28.dp)
+                imageVector =
+                    if (isMuted) {
+                        Icons.Filled.VolumeOff
+                    } else {
+                        Icons.Filled.VolumeUp
+                    },
+                contentDescription =
+                    if (isMuted) {
+                        if (isEnglish) "Resume audio" else "המשך קול"
+                    } else {
+                        if (isEnglish) "Mute" else "השתק"
+                    },
+                modifier = Modifier.size(26.dp)
             )
 
             Text(
-                text = if (isMuted) {
-                    if (isEnglish) "Audio off" else "קול כבוי"
-                } else {
-                    if (isEnglish) "Audio on" else "קול פעיל"
-                },
-                style = MaterialTheme.typography.bodyMedium.copy(
+                text =
+                    if (isMuted) {
+                        if (isEnglish) "Audio off" else "קול כבוי"
+                    } else {
+                        if (isEnglish) "Audio on" else "קול פעיל"
+                    },
+                style = KmiTypography.action.copy(
                     fontWeight = FontWeight.ExtraBold
-                )
+                ),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
             )
         }
     }
@@ -2192,34 +2470,50 @@ private fun GlassHelpButton(
     label: String = "עזרה",
     onClick: () -> Unit
 ) {
-    val shape = RoundedCornerShape(18.dp)
-    // “זכוכית”: שכבה חצי-שקופה + קו מתאר בהיר + צל עדין
     Surface(
         onClick = onClick,
-        shape = shape,
-        color = MaterialTheme.colorScheme.primary.copy(alpha = 0.12f),
-        contentColor = MaterialTheme.colorScheme.primary,
-        shadowElevation = 8.dp,
+        shape = RoundedCornerShape(18.dp),
+        color = MaterialTheme.colorScheme.primaryContainer.copy(
+            alpha = 0.72f
+        ),
+        contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+        shadowElevation = 0.dp,
         tonalElevation = 0.dp,
-        border = BorderStroke(1.dp, Color.White.copy(alpha = 0.65f))
+        border = BorderStroke(
+            width = 1.dp,
+            color = MaterialTheme.colorScheme.primary.copy(
+                alpha = 0.28f
+            )
+        )
     ) {
         Row(
             modifier = Modifier
-                .height(56.dp)
-                .padding(horizontal = 18.dp),
+                .heightIn(min = 52.dp)
+                .padding(
+                    horizontal = 14.dp,
+                    vertical = 8.dp
+                ),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(10.dp)
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            Icon(Icons.Outlined.Info, contentDescription = null)
+            Icon(
+                imageVector = Icons.Outlined.Info,
+                contentDescription = label
+            )
+
             Text(
                 text = label,
-                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.ExtraBold)
+                style = KmiTypography.action.copy(
+                    fontWeight = FontWeight.ExtraBold
+                ),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
             )
         }
     }
 }
 
-/** שורת הגדרה עם סוויץ’ ותיאור משנה */
+/** שורת הגדרה קומפקטית בתוך כרטיס ההגדרות המאוחד */
 @Composable
 private fun SettingRow(
     title: String,
@@ -2228,57 +2522,78 @@ private fun SettingRow(
     isEnglish: Boolean,
     onCheckedChange: (Boolean) -> Unit
 ) {
-    val rowTextAlign = if (isEnglish) TextAlign.Left else TextAlign.Right
-    val rowHorizontalAlignment = if (isEnglish) Alignment.Start else Alignment.End
+    val rowTextAlign =
+        if (isEnglish) {
+            TextAlign.Left
+        } else {
+            TextAlign.Right
+        }
 
-    Surface(
+    val rowHorizontalAlignment =
+        if (isEnglish) {
+            Alignment.Start
+        } else {
+            Alignment.End
+        }
+
+    Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 6.dp),
-        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
-        tonalElevation = 1.dp,
-        shape = RoundedCornerShape(18.dp)
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 14.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Column(
-                modifier = Modifier.weight(1f),
-                verticalArrangement = Arrangement.spacedBy(2.dp),
-                horizontalAlignment = rowHorizontalAlignment
-            ) {
-                Text(
-                    text = title,
-                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
-                    textAlign = rowTextAlign,
-                    modifier = Modifier.fillMaxWidth()
-                )
-                Text(
-                    text = subtitle,
-                    style = MaterialTheme.typography.bodySmall.copy(
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    ),
-                    textAlign = rowTextAlign,
-                    modifier = Modifier.fillMaxWidth()
-                )
+            .clickable {
+                onCheckedChange(!checked)
             }
+            .padding(
+                horizontal = 14.dp,
+                vertical = 10.dp
+            ),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Column(
+            modifier = Modifier.weight(1f),
+            verticalArrangement = Arrangement.spacedBy(2.dp),
+            horizontalAlignment = rowHorizontalAlignment
+        ) {
+            Text(
+                text = title,
+                style = KmiTypography.cardTitle.copy(
+                    fontWeight = FontWeight.SemiBold
+                ),
+                color = MaterialTheme.colorScheme.onSurface,
+                textAlign = rowTextAlign,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.fillMaxWidth()
+            )
 
-            Spacer(Modifier.width(12.dp))
+            Text(
+                text = subtitle,
+                style = KmiTypography.caption,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                textAlign = rowTextAlign,
+                maxLines = 3,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.fillMaxWidth()
+            )
+        }
 
-            Switch(checked = checked, onCheckedChange = onCheckedChange, thumbContent = {
+        Spacer(Modifier.width(10.dp))
+
+        Switch(
+            checked = checked,
+            onCheckedChange = onCheckedChange,
+            thumbContent = {
                 if (checked) {
                     Box(
                         modifier = Modifier
                             .size(10.dp)
                             .clip(CircleShape)
-                            .background(MaterialTheme.colorScheme.onPrimary)
+                            .background(
+                                MaterialTheme.colorScheme.onPrimary
+                            )
                     )
                 }
-            })
-        }
+            }
+        )
     }
 }
 
@@ -2297,33 +2612,35 @@ private fun PracticeStatusCircle(
 
     val circleColor = when (status) {
         true -> Color(0xFF22C55E)
-        false -> Color(0xFFDC2626)
-        null -> Color.White
+        false -> MaterialTheme.colorScheme.error
+        null -> MaterialTheme.colorScheme.surfaceVariant
     }
 
     val borderColor = when (status) {
         true -> Color(0xFF16A34A)
-        false -> Color(0xFFB91C1C)
+        false -> MaterialTheme.colorScheme.error
         null -> beltColor.copy(alpha = 0.42f)
     }
 
     val iconColor = when (status) {
         true, false -> Color.White
-        null -> beltColor.copy(alpha = 0.72f)
+        null -> MaterialTheme.colorScheme.onSurfaceVariant
     }
 
-    val textColor = when (status) {
-        true -> Color(0xFF15803D)
-        false -> Color(0xFFB91C1C)
-        null -> Color(0xFF334155)
-    }
+    val textColor = MaterialTheme.colorScheme.onSurface
 
     Surface(
         onClick = onClick,
         shape = RoundedCornerShape(999.dp),
-        color = Color.White.copy(alpha = 0.86f),
-        shadowElevation = 8.dp,
-        border = BorderStroke(1.dp, beltColor.copy(alpha = 0.18f))
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(
+            alpha = 0.72f
+        ),
+        shadowElevation = 0.dp,
+        tonalElevation = 0.dp,
+        border = BorderStroke(
+            width = 1.dp,
+            color = beltColor.copy(alpha = 0.28f)
+        )
     ) {
         Row(
             modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
@@ -2370,8 +2687,11 @@ private fun PracticeStatusCircle(
             Text(
                 text = label,
                 color = textColor,
-                fontWeight = FontWeight.ExtraBold,
-                style = MaterialTheme.typography.bodyMedium
+                style = KmiTypography.action.copy(
+                    fontWeight = FontWeight.ExtraBold
+                ),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
             )
         }
     }

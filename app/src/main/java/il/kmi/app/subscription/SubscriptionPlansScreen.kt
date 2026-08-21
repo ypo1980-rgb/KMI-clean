@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
@@ -51,12 +52,10 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.layout.size
-import androidx.compose.ui.draw.shadow
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
@@ -65,11 +64,146 @@ import androidx.compose.animation.core.tween
 import androidx.compose.ui.graphics.graphicsLayer
 import android.media.AudioManager
 import android.media.ToneGenerator
+import androidx.compose.foundation.border
+import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.foundation.layout.navigationBarsPadding
 import il.kmi.app.ui.KmiIconSize
 import il.kmi.app.ui.KmiTypography
 import il.kmi.app.ui.scaledIconSize
 
 //==================================================================
+
+@Composable
+private fun SubscriptionPremiumLoading(
+    text: String,
+    modifier: Modifier = Modifier
+) {
+    val transition =
+        rememberInfiniteTransition(
+            label = "subscriptionPremiumLoading"
+        )
+
+    val outerRotation by transition.animateFloat(
+        initialValue = 0f,
+        targetValue = 360f,
+        animationSpec =
+            infiniteRepeatable(
+                animation =
+                    tween(
+                        durationMillis = 1_250
+                    )
+            ),
+        label = "subscriptionOuterRing"
+    )
+
+    val innerRotation by transition.animateFloat(
+        initialValue = 360f,
+        targetValue = 0f,
+        animationSpec =
+            infiniteRepeatable(
+                animation =
+                    tween(
+                        durationMillis = 1_750
+                    )
+            ),
+        label = "subscriptionInnerRing"
+    )
+
+    Column(
+        modifier =
+            modifier
+                .fillMaxWidth()
+                .padding(vertical = 12.dp),
+        horizontalAlignment =
+            Alignment.CenterHorizontally,
+        verticalArrangement =
+            Arrangement.spacedBy(8.dp)
+    ) {
+        Box(
+            modifier = Modifier.size(58.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            Box(
+                modifier =
+                    Modifier
+                        .size(58.dp)
+                        .graphicsLayer {
+                            rotationZ = outerRotation
+                        }
+                        .border(
+                            width = 4.dp,
+                            brush =
+                                Brush.sweepGradient(
+                                    listOf(
+                                        Color.Transparent,
+                                        Color(0xFFA855F7),
+                                        Color(0xFF38BDF8),
+                                        Color.Transparent
+                                    )
+                                ),
+                            shape = CircleShape
+                        )
+            )
+
+            Box(
+                modifier =
+                    Modifier
+                        .size(40.dp)
+                        .graphicsLayer {
+                            rotationZ = innerRotation
+                        }
+                        .border(
+                            width = 3.dp,
+                            brush =
+                                Brush.sweepGradient(
+                                    listOf(
+                                        Color.Transparent,
+                                        Color(0xFFF59E0B),
+                                        Color(0xFF22C55E),
+                                        Color.Transparent
+                                    )
+                                ),
+                            shape = CircleShape
+                        )
+            )
+
+            Box(
+                modifier =
+                    Modifier
+                        .size(14.dp)
+                        .background(
+                            color =
+                                MaterialTheme
+                                    .colorScheme
+                                    .surface,
+                            shape = CircleShape
+                        )
+                        .border(
+                            width = 1.dp,
+                            color =
+                                Color(0xFFA78BFA)
+                                    .copy(alpha = 0.55f),
+                            shape = CircleShape
+                        )
+            )
+        }
+
+        Text(
+            text = text,
+            color =
+                MaterialTheme
+                    .colorScheme
+                    .onSurfaceVariant,
+            style =
+                KmiTypography.secondary.copy(
+                    fontWeight =
+                        FontWeight.Bold
+                ),
+            textAlign = TextAlign.Center,
+            modifier = Modifier.fillMaxWidth()
+        )
+    }
+}
 
 private fun formatStorePriceNoTrailingZeros(raw: String): String {
     return raw
@@ -116,10 +250,12 @@ fun SubscriptionPlansScreen(
     val isEnglish = langManager.getCurrentLanguage() ==
             il.kmi.shared.localization.AppLanguage.ENGLISH
 
-    val textAlign = if (isEnglish) TextAlign.Left else TextAlign.Right
-    val horizontalAlign = if (isEnglish) Alignment.Start else Alignment.End
-    val layoutDirection = if (isEnglish) androidx.compose.ui.unit.LayoutDirection.Ltr
-    else androidx.compose.ui.unit.LayoutDirection.Rtl
+    val layoutDirection =
+        if (isEnglish) {
+            androidx.compose.ui.unit.LayoutDirection.Ltr
+        } else {
+            androidx.compose.ui.unit.LayoutDirection.Rtl
+        }
 
     val userSp = remember {
         ctx.getSharedPreferences("kmi_user", android.content.Context.MODE_PRIVATE)
@@ -168,20 +304,13 @@ fun SubscriptionPlansScreen(
     }
 
     // כרגע קיימים ב-Google Play רק שני Product IDs רגילים.
-    // לכן גם אם בעתיד המשתמש יסומן כחבר עמותה, הרכישה כאן משתמשת במוצרים הקיימים בפועל.
-    val monthlyProductId = remember(isAssociationMember) {
-        if (isAssociationMember)
-            SubscriptionProducts.MEMBER_MONTHLY
-        else
-            SubscriptionProducts.REGULAR_MONTHLY
-    }
+    // סטטוס חבר העמותה משפיע על התצוגה בלבד, עד שיוגדרו בחנות
+    // מוצרים נפרדים ומאומתים לחברי העמותה.
+    val monthlyProductId =
+        SubscriptionProducts.REGULAR_MONTHLY
 
-    val yearlyProductId = remember(isAssociationMember) {
-        if (isAssociationMember)
-            SubscriptionProducts.MEMBER_YEARLY
-        else
-            SubscriptionProducts.REGULAR_YEARLY
-    }
+    val yearlyProductId =
+        SubscriptionProducts.REGULAR_YEARLY
 
     // Billing – חיבור לשירות
     val repo = remember { BillingRepository(ctx) }
@@ -261,7 +390,37 @@ fun SubscriptionPlansScreen(
         }
     }
 
+    val isDarkMode =
+        isSystemInDarkTheme()
+
+    val subscriptionBackgroundBrush =
+        if (isDarkMode) {
+            Brush.verticalGradient(
+                colors =
+                    listOf(
+                        MaterialTheme
+                            .colorScheme
+                            .background,
+                        MaterialTheme
+                            .colorScheme
+                            .surface,
+                        Color(0xFF041E33)
+                    )
+            )
+        } else {
+            Brush.verticalGradient(
+                colors =
+                    listOf(
+                        Color(0xFFF8FBFF),
+                        Color(0xFFEAF4FF),
+                        Color(0xFFD7E9FF),
+                        Color(0xFF0EA5D7)
+                    )
+            )
+        }
+
     Scaffold(
+        containerColor = Color.Transparent,
         topBar = {
             // כותרת יחידה – בלי חץ חזור (החזרה תתבצע מהכפתור למטה / back של המכשיר)
             il.kmi.app.ui.KmiTopBar(
@@ -289,35 +448,37 @@ fun SubscriptionPlansScreen(
         }
     ) { padding ->
         Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(padding)
+            modifier =
+                Modifier
+                    .fillMaxSize()
+                    .background(
+                        subscriptionBackgroundBrush
+                    )
+                    .padding(padding)
         ) {
             val scrollState = rememberScrollState()
 
             Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .verticalScroll(scrollState)
-                    .padding(horizontal = 20.dp),
-                horizontalAlignment = Alignment.CenterHorizontally
+                modifier =
+                    Modifier
+                        .fillMaxSize()
+                        .verticalScroll(scrollState)
+                        .navigationBarsPadding()
+                        .padding(
+                            horizontal = 16.dp,
+                            vertical = 10.dp
+                        ),
+                horizontalAlignment =
+                    Alignment.CenterHorizontally
             ) {
-                Spacer(Modifier.height(16.dp))
+                Spacer(Modifier.height(4.dp))
 
                 Text(
                     text =
-                        if (isAssociationMember) {
-                            if (isEnglish) {
-                                "Association member pricing detected"
-                            } else {
-                                "זוהתה זכאות למחיר חבר עמותה"
-                            }
+                        if (isEnglish) {
+                            "Choose the plan that fits you:"
                         } else {
-                            if (isEnglish) {
-                                "Choose the plan that fits you:"
-                            } else {
-                                "בחר/י במסלול המתאים לך:"
-                            }
+                            "בחר/י במסלול המתאים לך:"
                         },
                     style = KmiTypography.sectionTitle.copy(
                         fontWeight = FontWeight.SemiBold
@@ -329,36 +490,75 @@ fun SubscriptionPlansScreen(
 
                 Spacer(Modifier.height(12.dp))
 
-                if (!state.productsLoaded || state.error != null) {
+                if (
+                    !state.productsLoaded &&
+                    state.error == null
+                ) {
                     Card(
-                        shape = RoundedCornerShape(16.dp),
-                        colors = CardDefaults.cardColors(
-                            containerColor = Color(0xFFFFF7ED)
-                        ),
+                        shape =
+                            RoundedCornerShape(18.dp),
+                        colors =
+                            CardDefaults.cardColors(
+                                containerColor =
+                                    MaterialTheme
+                                        .colorScheme
+                                        .surface
+                            ),
+                        elevation =
+                            CardDefaults.cardElevation(
+                                defaultElevation = 0.dp
+                            ),
                         modifier = Modifier.fillMaxWidth()
                     ) {
-                        Text(
-                            text = if (state.error != null) {
-                                if (isEnglish) {
-                                    "Purchases are temporarily unavailable. Please try again later."
-                                } else {
-                                    "הרכישות אינן זמינות כרגע. נסה שוב מאוחר יותר."
-                                }
-                            } else {
+                        SubscriptionPremiumLoading(
+                            text =
                                 if (isEnglish) {
                                     "Loading subscription prices from Google Play..."
                                 } else {
                                     "טוען מחירי מנויים מ־Google Play..."
                                 }
-                            },
-                            color = Color(0xFF9A3412),
-                            style = KmiTypography.caption.copy(
-                                fontWeight = FontWeight.SemiBold
+                        )
+                    }
+
+                    Spacer(Modifier.height(12.dp))
+                } else if (state.error != null) {
+                    Card(
+                        shape =
+                            RoundedCornerShape(16.dp),
+                        colors =
+                            CardDefaults.cardColors(
+                                containerColor =
+                                    MaterialTheme
+                                        .colorScheme
+                                        .errorContainer
                             ),
+                        elevation =
+                            CardDefaults.cardElevation(
+                                defaultElevation = 0.dp
+                            ),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text(
+                            text =
+                                if (isEnglish) {
+                                    "Purchases are temporarily unavailable. Please try again later."
+                                } else {
+                                    "הרכישות אינן זמינות כרגע. נסה שוב מאוחר יותר."
+                                },
+                            color =
+                                MaterialTheme
+                                    .colorScheme
+                                    .onErrorContainer,
+                            style =
+                                KmiTypography.caption.copy(
+                                    fontWeight =
+                                        FontWeight.SemiBold
+                                ),
                             textAlign = TextAlign.Center,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(12.dp)
+                            modifier =
+                                Modifier
+                                    .fillMaxWidth()
+                                    .padding(12.dp)
                         )
                     }
 
@@ -366,10 +566,8 @@ fun SubscriptionPlansScreen(
                 }
 
                 TariffCard(
-                    regularMonthlyPriceText = state.regularMonthlyPriceText?.let(::formatStorePriceNoTrailingZeros) ?: "₪25",
-                    regularYearlyPriceText = state.regularYearlyPriceText?.let(::formatStorePriceNoTrailingZeros) ?: "₪250",
-                    memberMonthlyPriceText = state.memberMonthlyPriceText?.let(::formatStorePriceNoTrailingZeros) ?: "₪20",
-                    memberYearlyPriceText = state.memberYearlyPriceText?.let(::formatStorePriceNoTrailingZeros) ?: "₪220"
+                    monthlyPriceText = monthlyPriceText,
+                    yearlyPriceText = yearlyPriceText
                 )
 
                 if (!isAssociationMember) {
@@ -384,37 +582,40 @@ fun SubscriptionPlansScreen(
 
                 // -------- מנוי חודשי --------
                 PlanCard(
-                    title = if (isAssociationMember) {
-                        if (isEnglish) {
-                            "Monthly plan for association members\n(full access to all content)"
-                        } else {
-                            "מנוי חודשי לחבר עמותה\n(גישה מלאה לכל התכנים)"
-                        }
-                    } else {
+                    title =
                         if (isEnglish) {
                             "Recurring monthly subscription\n(full access to all content)"
                         } else {
                             "מנוי חודשי מתחדש\n(גישה מלאה לכל התכנים)"
-                        }
-                    },
-                    priceLine = if (monthlyStorePrice != null) {
-                        if (isEnglish) {
-                            "$monthlyStorePrice / month"
+                        },
+                    priceLine =
+                        if (monthlyStorePrice != null) {
+                            if (isEnglish) {
+                                "$monthlyStorePrice / month"
+                            } else {
+                                "$monthlyStorePrice / חודש"
+                            }
                         } else {
-                            "$monthlyStorePrice / חודש"
-                        }
-                    } else {
-                        monthlyPriceText
-                    },
-                    points = listOf(
-                        if (isEnglish) "Full access to all app content" else "גישה מלאה לכל התכנים באפליקציה",
-                        if (isEnglish) "Renews automatically every month" else "מתחדש אוטומטית מדי חודש",
-                        if (isAssociationMember) {
-                            if (isEnglish) "Includes discounted member pricing" else "כולל מחיר מוזל לחבר עמותה"
-                        } else {
-                            if (isEnglish) "Can be canceled anytime under Google Play policy" else "ניתן לבטל בכל עת בהתאם למדיניות Google Play"
-                        }
-                    ),
+                            monthlyPriceText
+                        },
+                    points =
+                        listOf(
+                            if (isEnglish) {
+                                "Full access to all app content"
+                            } else {
+                                "גישה מלאה לכל התכנים באפליקציה"
+                            },
+                            if (isEnglish) {
+                                "Renews automatically every month"
+                            } else {
+                                "מתחדש אוטומטית מדי חודש"
+                            },
+                            if (isEnglish) {
+                                "Can be canceled anytime under Google Play policy"
+                            } else {
+                                "ניתן לבטל בכל עת בהתאם למדיניות Google Play"
+                            }
+                        ),
                     containerColor = Color(0xFF0EA5E9),
                     showTrialBadge = false,
                     buyEnabled = monthlyBuyReady,
@@ -461,37 +662,40 @@ fun SubscriptionPlansScreen(
 
                 // -------- מנוי שנתי --------
                 PlanCard(
-                    title = if (isAssociationMember) {
-                        if (isEnglish) {
-                            "Yearly plan for association members\n(full access to all content)"
-                        } else {
-                            "מנוי שנתי לחבר עמותה\n(גישה מלאה לכל התכנים)"
-                        }
-                    } else {
+                    title =
                         if (isEnglish) {
                             "Recurring yearly subscription\n(full access to all content)"
                         } else {
                             "מנוי שנתי\n(גישה מלאה לכל התכנים)"
-                        }
-                    },
-                    priceLine = if (yearlyStorePrice != null) {
-                        if (isEnglish) {
-                            "$yearlyStorePrice / year"
+                        },
+                    priceLine =
+                        if (yearlyStorePrice != null) {
+                            if (isEnglish) {
+                                "$yearlyStorePrice / year"
+                            } else {
+                                "$yearlyStorePrice / שנה"
+                            }
                         } else {
-                            "$yearlyStorePrice / שנה"
-                        }
-                    } else {
-                        yearlyPriceText
-                    },
-                    points = listOf(
-                        if (isEnglish) "One yearly payment" else "תשלום חד־שנתי אחד",
-                        if (isEnglish) "No monthly renewal" else "ללא חידוש חודשי",
-                        if (isAssociationMember) {
-                            if (isEnglish) "Includes discounted member pricing" else "כולל מחיר מוזל לחבר עמותה"
-                        } else {
-                            if (isEnglish) "Access to all content for the full year" else "גישה לכל התכנים לאורך כל השנה"
-                        }
-                    ),
+                            yearlyPriceText
+                        },
+                    points =
+                        listOf(
+                            if (isEnglish) {
+                                "One yearly payment"
+                            } else {
+                                "תשלום חד־שנתי אחד"
+                            },
+                            if (isEnglish) {
+                                "No monthly renewal"
+                            } else {
+                                "ללא חידוש חודשי"
+                            },
+                            if (isEnglish) {
+                                "Access to all content for the full year"
+                            } else {
+                                "גישה לכל התכנים לאורך כל השנה"
+                            }
+                        ),
                     containerColor = Color(0xFFFFA000),
                     buyEnabled = yearlyBuyReady,
                     buyText = if (yearlyBuyReady) {
@@ -539,7 +743,7 @@ fun SubscriptionPlansScreen(
                     onClick = onBack,
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(48.dp),
+                        .heightIn(min = 48.dp),
                     shape = RoundedCornerShape(24.dp)
                 ) {
                     Text(
@@ -646,16 +850,17 @@ private fun PremiumPurchaseSuccessDialog(
                     )
                 )
             ),
-            colors = CardDefaults.cardColors(containerColor = Color.Transparent),
-            elevation = CardDefaults.cardElevation(defaultElevation = 22.dp),
-            modifier = Modifier
-                .fillMaxWidth()
-                .graphicsLayer {
-                    scaleX = 1.0f
-                    scaleY = 1.0f
-                    alpha = 1.0f
-                }
-                .shadow(24.dp, RoundedCornerShape(36.dp))
+            colors =
+                CardDefaults.cardColors(
+                    containerColor =
+                        Color.Transparent
+                ),
+            elevation =
+                CardDefaults.cardElevation(
+                    defaultElevation = 0.dp
+                ),
+            modifier =
+                Modifier.fillMaxWidth()
         ) {
             Box(
                 modifier = Modifier
@@ -673,13 +878,17 @@ private fun PremiumPurchaseSuccessDialog(
             ) {
                 Text(
                     text = "✦   ✧   ✦   ✧",
-                    color = Color(0xFFFFD978).copy(alpha = 0.65f),
-                    fontSize = 18.sp,
-                    modifier = Modifier
-                        .align(Alignment.TopCenter)
-                        .graphicsLayer {
-                            translationY = sparkleOffset
-                        }
+                    color =
+                        Color(0xFFFFD978)
+                            .copy(alpha = 0.65f),
+                    style = KmiTypography.action,
+                    modifier =
+                        Modifier
+                            .align(Alignment.TopCenter)
+                            .graphicsLayer {
+                                translationY =
+                                    sparkleOffset
+                            }
                 )
 
                 Column(
@@ -709,10 +918,7 @@ private fun PremiumPurchaseSuccessDialog(
                     ) {
                         Text(
                             text = "👑",
-                            style = KmiTypography.metric.copy(
-                                fontSize = 36.sp,
-                                lineHeight = 40.sp
-                            )
+                            style = KmiTypography.metric
                         )
                     }
 
@@ -735,10 +941,17 @@ private fun PremiumPurchaseSuccessDialog(
                             horizontalArrangement = Arrangement.Center
                         ) {
                             Text(
-                                text = if (isEnglish) "Purchase approved" else "רכישה אושרה",
+                                text =
+                                    if (isEnglish) {
+                                        "Purchase approved"
+                                    } else {
+                                        "רכישה אושרה"
+                                    },
                                 color = Color.White,
-                                fontWeight = FontWeight.ExtraBold,
-                                fontSize = 24.sp
+                                fontWeight =
+                                    FontWeight.ExtraBold,
+                                style =
+                                    KmiTypography.sectionTitle
                             )
                             Spacer(Modifier.width(10.dp))
                             Icon(
@@ -753,23 +966,33 @@ private fun PremiumPurchaseSuccessDialog(
                     }
 
                     Text(
-                        text = if (isEnglish) "Congratulations!" else "ברכות!",
+                        text =
+                            if (isEnglish) {
+                                "Congratulations!"
+                            } else {
+                                "ברכות!"
+                            },
                         color = Color(0xFFFFD978),
                         fontWeight = FontWeight.Black,
-                        fontSize = 40.sp,
-                        textAlign = TextAlign.Center
+                        style =
+                            KmiTypography.screenTitle,
+                        textAlign = TextAlign.Center,
+                        maxLines = 2
                     )
 
                     Text(
-                        text = if (isEnglish) {
-                            "Your $planLabel purchase was completed successfully. You can now continue to the content."
-                        } else {
-                            "הרכישה של $planLabel בוצעה בהצלחה. כעת ניתן להמשיך לתוכן."
-                        },
-                        color = Color.White.copy(alpha = 0.93f),
+                        text =
+                            if (isEnglish) {
+                                "Your $planLabel purchase was completed successfully. You can now continue to the content."
+                            } else {
+                                "הרכישה של $planLabel בוצעה בהצלחה. כעת ניתן להמשיך לתוכן."
+                            },
+                        color =
+                            Color.White.copy(
+                                alpha = 0.93f
+                            ),
                         fontWeight = FontWeight.Bold,
-                        fontSize = 22.sp,
-                        lineHeight = 32.sp,
+                        style = KmiTypography.body,
                         textAlign = TextAlign.Center,
                         modifier = Modifier.fillMaxWidth()
                     )
@@ -781,19 +1004,27 @@ private fun PremiumPurchaseSuccessDialog(
                             containerColor = Color(0xFFE9B949),
                             contentColor = Color(0xFF111827)
                         ),
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(60.dp)
+                        modifier =
+                            Modifier
+                                .fillMaxWidth()
+                                .heightIn(
+                                    min = 52.dp,
+                                    max = 64.dp
+                                )
                     ) {
                         Box(
                             modifier = Modifier.fillMaxWidth(),
                             contentAlignment = Alignment.Center
                         ) {
                             Box(
-                                modifier = Modifier
-                                    .width(90.dp)
-                                    .height(60.dp)
-                                    .graphicsLayer {
+                                modifier =
+                                    Modifier
+                                        .width(90.dp)
+                                        .heightIn(
+                                            min = 52.dp,
+                                            max = 64.dp
+                                        )
+                                        .graphicsLayer {
                                         translationX = shimmer
                                     }
                                     .background(
@@ -808,9 +1039,16 @@ private fun PremiumPurchaseSuccessDialog(
                             )
 
                             Text(
-                                text = if (isEnglish) "Continue to content" else "המשך לתוכן",
-                                fontSize = 23.sp,
-                                fontWeight = FontWeight.Black
+                                text =
+                                    if (isEnglish) {
+                                        "Continue to content"
+                                    } else {
+                                        "המשך לתוכן"
+                                    },
+                                style =
+                                    KmiTypography.action,
+                                fontWeight =
+                                    FontWeight.Black
                             )
                         }
                     }
@@ -829,21 +1067,20 @@ private fun PremiumPurchaseSuccessDialog(
                     ) {
                         Text(
                             text = "🛡️",
-                            style = KmiTypography.metric.copy(
-                                fontSize = 26.sp,
-                                lineHeight = 30.sp
-                            )
+                            style = KmiTypography.metric
                         )
                         Spacer(Modifier.width(10.dp))
                         Text(
-                            text = if (isEnglish) {
-                                "Secure purchase • Full content access"
-                            } else {
-                                "רכישה מאובטחת • גישה מלאה לתכנים"
-                            },
+                            text =
+                                if (isEnglish) {
+                                    "Secure purchase • Full content access"
+                                } else {
+                                    "רכישה מאובטחת • גישה מלאה לתכנים"
+                                },
                             color = Color(0xFFFFD978),
                             fontWeight = FontWeight.Bold,
-                            fontSize = 16.sp,
+                            style =
+                                KmiTypography.secondary,
                             textAlign = TextAlign.Center
                         )
                     }
@@ -854,40 +1091,58 @@ private fun PremiumPurchaseSuccessDialog(
 }
 
 @Composable
-    private fun TariffCard(
-    regularMonthlyPriceText: String,
-    regularYearlyPriceText: String,
-    memberMonthlyPriceText: String,
-    memberYearlyPriceText: String
+private fun TariffCard(
+    monthlyPriceText: String,
+    yearlyPriceText: String
 ) {
     val ctx = LocalContext.current
-    val langManager = remember { il.kmi.shared.localization.AppLanguageManager(ctx) }
-    val isEnglish = langManager.getCurrentLanguage() ==
-            il.kmi.shared.localization.AppLanguage.ENGLISH
+    val langManager =
+        remember {
+            il.kmi.shared.localization.AppLanguageManager(ctx)
+        }
+    val isEnglish =
+        langManager.getCurrentLanguage() ==
+                il.kmi.shared.localization.AppLanguage.ENGLISH
 
-    val layoutDirection = if (isEnglish) {
-        androidx.compose.ui.unit.LayoutDirection.Ltr
-    } else {
-        androidx.compose.ui.unit.LayoutDirection.Rtl
-    }
-
-    val horizontalAlign = if (isEnglish) Alignment.Start else Alignment.End
+    val layoutDirection =
+        if (isEnglish) {
+            androidx.compose.ui.unit.LayoutDirection.Ltr
+        } else {
+            androidx.compose.ui.unit.LayoutDirection.Rtl
+        }
 
     ElevatedCard(
-        shape = RoundedCornerShape(24.dp),
-        colors = CardDefaults.elevatedCardColors(
-            containerColor = Color(0xFF111827)
-        ),
-        elevation = CardDefaults.elevatedCardElevation(defaultElevation = 8.dp),
+        shape = RoundedCornerShape(22.dp),
+        colors =
+            CardDefaults.elevatedCardColors(
+                containerColor =
+                    if (isSystemInDarkTheme()) {
+                        Color(0xFF0B2344)
+                    } else {
+                        Color(0xFF111827)
+                    }
+            ),
+        elevation =
+            CardDefaults.elevatedCardElevation(
+                defaultElevation = 0.dp
+            ),
         modifier = Modifier.fillMaxWidth()
     ) {
-        CompositionLocalProvider(LocalLayoutDirection provides layoutDirection) {
+        CompositionLocalProvider(
+            LocalLayoutDirection provides layoutDirection
+        ) {
             Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(18.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp),
-                horizontalAlignment = horizontalAlign
+                modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .padding(
+                            horizontal = 14.dp,
+                            vertical = 10.dp
+                        ),
+                verticalArrangement =
+                    Arrangement.spacedBy(8.dp),
+                horizontalAlignment =
+                    Alignment.CenterHorizontally
             ) {
                 Text(
                     text =
@@ -896,87 +1151,85 @@ private fun PremiumPurchaseSuccessDialog(
                         } else {
                             "תעריפון האפליקציה"
                         },
-                    style = KmiTypography.screenTitle,
+                    style = KmiTypography.sectionTitle,
                     color = Color.White,
                     modifier = Modifier.fillMaxWidth(),
                     textAlign = TextAlign.Center
                 )
 
                 Text(
-                    text = if (isEnglish) {
-                        "Prices are loaded directly from Google Play according to your subscription eligibility."
-                    } else {
-                        "המחירים נטענים ישירות מ־Google Play בהתאם לזכאות המנוי שלך."
-                    },
-                    style = KmiTypography.body,
-                    color = Color.White.copy(alpha = 0.78f),
+                    text =
+                        if (isEnglish) {
+                            "Prices are loaded directly from Google Play."
+                        } else {
+                            "המחירים נטענים ישירות מ־Google Play."
+                        },
+                    style = KmiTypography.secondary,
+                    color = Color.White.copy(alpha = 0.82f),
                     modifier = Modifier.fillMaxWidth(),
                     textAlign = TextAlign.Center
                 )
 
-                Spacer(modifier = Modifier.height(4.dp))
-
                 Card(
-                    shape = RoundedCornerShape(18.dp),
-                    colors = CardDefaults.cardColors(
-                        containerColor = Color.White.copy(alpha = 0.08f)
-                    ),
+                    shape = RoundedCornerShape(16.dp),
+                    colors =
+                        CardDefaults.cardColors(
+                            containerColor =
+                                Color.White.copy(alpha = 0.08f)
+                        ),
+                    elevation =
+                        CardDefaults.cardElevation(
+                            defaultElevation = 0.dp
+                        ),
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 10.dp, vertical = 12.dp),
-                        verticalArrangement = Arrangement.spacedBy(10.dp)
+                        modifier =
+                            Modifier
+                                .fillMaxWidth()
+                                .padding(
+                                    horizontal = 10.dp,
+                                    vertical = 10.dp
+                                ),
+                        verticalArrangement =
+                            Arrangement.spacedBy(8.dp)
                     ) {
                         PremiumTariffRow(
-                            label = if (isEnglish) "Plan" else "מסלול",
-                            monthly = if (isEnglish) "Monthly" else "חודשי",
-                            yearly = if (isEnglish) "Yearly" else "שנתי",
+                            label =
+                                if (isEnglish) {
+                                    "Plan"
+                                } else {
+                                    "מסלול"
+                                },
+                            monthly =
+                                if (isEnglish) {
+                                    "Monthly"
+                                } else {
+                                    "חודשי"
+                                },
+                            yearly =
+                                if (isEnglish) {
+                                    "Yearly"
+                                } else {
+                                    "שנתי"
+                                },
                             isHeader = true
                         )
 
                         PremiumTariffDivider()
 
                         PremiumTariffRow(
-                            label = if (isEnglish) "Regular user plan" else "מסלול משתמש רגיל",
-                            monthly = regularMonthlyPriceText,
-                            yearly = regularYearlyPriceText,
-                            highlight = true
-                        )
-
-                        PremiumTariffDivider()
-
-                        PremiumTariffRow(
-                            label = if (isEnglish) "KAMI member plan" else "מסלול חבר עמותת ק.מ.י",
-                            monthly = memberMonthlyPriceText,
-                            yearly = memberYearlyPriceText,
+                            label =
+                                if (isEnglish) {
+                                    "Google Play"
+                                } else {
+                                    "Google Play"
+                                },
+                            monthly = monthlyPriceText,
+                            yearly = yearlyPriceText,
                             highlight = true
                         )
                     }
-                }
-
-                Card(
-                    shape = RoundedCornerShape(18.dp),
-                    colors = CardDefaults.cardColors(
-                        containerColor = Color(0xFF065F46).copy(alpha = 0.22f)
-                    ),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Text(
-                        text = if (isEnglish) {
-                            "Association members may receive discounted pricing after membership verification."
-                        } else {
-                            "חברי עמותה יכולים לקבל מחיר מוזל לאחר אימות סטטוס החברות."
-                        },
-                        style = KmiTypography.caption,
-                        fontWeight = FontWeight.SemiBold,
-                        color = Color.White,
-                        textAlign = TextAlign.Center,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 14.dp, vertical = 12.dp)
-                    )
                 }
             }
         }
@@ -1096,23 +1349,36 @@ private fun JoinAssociationCard(
 
     ElevatedCard(
         shape = RoundedCornerShape(22.dp),
-        colors = CardDefaults.elevatedCardColors(
-            containerColor = MaterialTheme.colorScheme.surface,
-            contentColor = MaterialTheme.colorScheme.onSurface
-        ),
-        elevation = CardDefaults.elevatedCardElevation(
-            defaultElevation = 4.dp
-        ),
+        colors =
+            CardDefaults.elevatedCardColors(
+                containerColor =
+                    MaterialTheme
+                        .colorScheme
+                        .surface,
+                contentColor =
+                    MaterialTheme
+                        .colorScheme
+                        .onSurface
+            ),
+        elevation =
+            CardDefaults.elevatedCardElevation(
+                defaultElevation = 0.dp
+            ),
         modifier = Modifier.fillMaxWidth()
     ) {
         CompositionLocalProvider(
             LocalLayoutDirection provides layoutDirection
         ) {
             Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 16.dp),
-                verticalArrangement = Arrangement.spacedBy(10.dp),
+                modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .padding(
+                            horizontal = 14.dp,
+                            vertical = 12.dp
+                        ),
+                verticalArrangement =
+                    Arrangement.spacedBy(8.dp),
                 horizontalAlignment = horizontalAlign
             ) {
                 Text(
@@ -1178,7 +1444,7 @@ private fun JoinAssociationCard(
                     shape = RoundedCornerShape(22.dp),
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(48.dp)
+                        .heightIn(min = 48.dp)
                 ) {
                     Text(
                         text =
@@ -1222,17 +1488,30 @@ private fun PlanCard(
 
     ElevatedCard(
         shape = RoundedCornerShape(20.dp),
-        colors = CardDefaults.elevatedCardColors(containerColor = containerColor),
-        elevation = CardDefaults.elevatedCardElevation(defaultElevation = 2.dp),
+        colors =
+            CardDefaults.elevatedCardColors(
+                containerColor =
+                    containerColor
+            ),
+        elevation =
+            CardDefaults.elevatedCardElevation(
+                defaultElevation = 0.dp
+            ),
         modifier = Modifier.fillMaxWidth()
     ) {
         CompositionLocalProvider(LocalLayoutDirection provides layoutDirection) {
             Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(18.dp),
-                horizontalAlignment = horizontalAlign,
-                verticalArrangement = Arrangement.spacedBy(10.dp)
+                modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .padding(
+                            horizontal = 14.dp,
+                            vertical = 12.dp
+                        ),
+                horizontalAlignment =
+                    horizontalAlign,
+                verticalArrangement =
+                    Arrangement.spacedBy(8.dp)
             ) {
 
                 if (showTrialBadge) {
@@ -1341,7 +1620,7 @@ private fun PlanCard(
                     ),
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(48.dp)
+                        .heightIn(min = 48.dp)
                 ) {
                     Row(
                         verticalAlignment = Alignment.CenterVertically,

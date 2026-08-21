@@ -3,11 +3,7 @@
 package il.kmi.app.screens.coach
 
 import androidx.compose.animation.core.FastOutSlowInEasing
-import androidx.compose.animation.core.RepeatMode
-import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.infiniteRepeatable
-import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
@@ -40,7 +36,6 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import il.kmi.app.screens.coach.statistics.NationalStatisticsScreen
 import il.kmi.app.ui.KmiTypography
 
@@ -74,11 +69,12 @@ internal fun CoachGroupStatsPremiumScreen(
                 .background(
                     Brush.verticalGradient(
                         colors = listOf(
-                            Color(0xFFF8FBFF),
-                            Color(0xFFEAF4FF),
-                            Color(0xFFB7DDF7),
-                            Color(0xFF1F78B4),
-                            Color(0xFF062B4A)
+                            MaterialTheme.colorScheme.background,
+                            MaterialTheme.colorScheme.surface,
+                            MaterialTheme.colorScheme.primaryContainer,
+                            MaterialTheme.colorScheme.primary.copy(
+                                alpha = 0.34f
+                            )
                         )
                     )
                 )
@@ -117,19 +113,18 @@ internal fun CoachGroupStatsPremiumScreen(
 
     val statsTextAlign =
         coachTextAlign(isEnglish)
-    val statsHorizontalAlignment = coachHorizontalAlignment(isEnglish)
 
-    val statsAccent = Color(0xFF4F46E5)
-    val glassTop = Color.White.copy(alpha = 0.72f)
-    val glassBottom = Color.White.copy(alpha = 0.38f)
+    val statsHorizontalAlignment =
+        coachHorizontalAlignment(isEnglish)
 
     val statsBgBrush = Brush.verticalGradient(
         colors = listOf(
-            Color(0xFFF8FBFF),
-            Color(0xFFEAF4FF),
-            Color(0xFFB7DDF7),
-            Color(0xFF1F78B4),
-            Color(0xFF062B4A)
+            MaterialTheme.colorScheme.background,
+            MaterialTheme.colorScheme.surface,
+            MaterialTheme.colorScheme.primaryContainer,
+            MaterialTheme.colorScheme.primary.copy(
+                alpha = 0.34f
+            )
         )
     )
 
@@ -159,17 +154,6 @@ internal fun CoachGroupStatsPremiumScreen(
             easing = FastOutSlowInEasing
         ),
         label = "avgAttendanceAnim"
-    )
-
-    val glowTransition = rememberInfiniteTransition(label = "glassGlow")
-    val glowShift by glowTransition.animateFloat(
-        initialValue = -160f,
-        targetValue = 460f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(durationMillis = 3200, easing = FastOutSlowInEasing),
-            repeatMode = RepeatMode.Restart
-        ),
-        label = "glassGlowShift"
     )
 
     val sparklineData = remember(profiles) {
@@ -222,13 +206,15 @@ internal fun CoachGroupStatsPremiumScreen(
                 ) {
 
                     Surface(
-                        color = Color(0xFFFCFDFF),
-                        shape = RoundedCornerShape(28.dp),
-                        shadowElevation = 7.dp,
+                        color = MaterialTheme.colorScheme.surface.copy(
+                            alpha = 0.96f
+                        ),
+                        shape = RoundedCornerShape(24.dp),
+                        shadowElevation = 2.dp,
                         tonalElevation = 0.dp,
                         border = BorderStroke(
-                            1.dp,
-                            Color(0xFFE7ECF7)
+                            width = 1.dp,
+                            color = MaterialTheme.colorScheme.outlineVariant
                         ),
                         modifier = Modifier.fillMaxWidth()
                     ) {
@@ -238,13 +224,18 @@ internal fun CoachGroupStatsPremiumScreen(
                                 .background(
                                     brush = Brush.verticalGradient(
                                         colors = listOf(
-                                            Color.White,
-                                            Color(0xFFFAFBFF),
-                                            Color(0xFFF7FAFF)
+                                            MaterialTheme.colorScheme.surface,
+                                            MaterialTheme.colorScheme.surfaceVariant.copy(
+                                                alpha = 0.52f
+                                            ),
+                                            MaterialTheme.colorScheme.surface
                                         )
                                     )
                                 )
-                                .padding(horizontal = 16.dp, vertical = 16.dp),
+                                .padding(
+                                    horizontal = 14.dp,
+                                    vertical = 14.dp
+                                ),
                             verticalArrangement = Arrangement.spacedBy(14.dp)
                         ) {
                             Row(
@@ -255,27 +246,36 @@ internal fun CoachGroupStatsPremiumScreen(
                                     Alignment.CenterVertically
                             ) {
                                 Surface(
-                                    color = Color(0xFFFCFDFF),
-                                shape = RoundedCornerShape(24.dp),
-                                shadowElevation = 5.dp,
-                                tonalElevation = 0.dp,
-                                border = BorderStroke(1.dp, Color(0xFFE7ECF7)),
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .height(132.dp)
-                            ) {
-                                Column(
+                                    color = MaterialTheme.colorScheme.surface,
+                                    shape = RoundedCornerShape(20.dp),
+                                    shadowElevation = 0.dp,
+                                    tonalElevation = 0.dp,
+                                    border = BorderStroke(
+                                        width = 1.dp,
+                                        color = Color(0xFF4F46E5).copy(
+                                            alpha = 0.24f
+                                        )
+                                    ),
                                     modifier = Modifier
-                                        .fillMaxSize()
-                                        .background(
-                                            Brush.horizontalGradient(
-                                                listOf(
-                                                    Color.White,
-                                                    Color(0xFFFAFBFF),
-                                                    Color(0xFF4F46E5).copy(alpha = 0.07f)
+                                        .weight(1f)
+                                        .heightIn(min = 132.dp)
+                                ) {
+                                    Column(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .background(
+                                                Brush.horizontalGradient(
+                                                    listOf(
+                                                        MaterialTheme.colorScheme.surface,
+                                                        MaterialTheme.colorScheme.surfaceVariant.copy(
+                                                            alpha = 0.50f
+                                                        ),
+                                                        Color(0xFF4F46E5).copy(
+                                                            alpha = 0.10f
+                                                        )
+                                                    )
                                                 )
                                             )
-                                        )
                                         .padding(horizontal = 12.dp, vertical = 12.dp),
                                     horizontalAlignment = statsHorizontalAlignment,
                                     verticalArrangement = Arrangement.Center
@@ -289,17 +289,15 @@ internal fun CoachGroupStatsPremiumScreen(
                                             text = stats.highAttendanceCount.toString(),
                                             textAlign = statsTextAlign,
                                             maxLines = 1,
-                                            style = MaterialTheme.typography.headlineMedium.copy(
-                                                fontSize = 32.sp,
-                                                lineHeight = 34.sp,
+                                            style = KmiTypography.metric.copy(
                                                 fontWeight = FontWeight.Black,
-                                                color = Color(0xFF4F46E5)
+                                                color = MaterialTheme.colorScheme.primary
                                             )
                                         )
 
                                         Text(
                                             text = "🏆",
-                                            fontSize = 22.sp,
+                                            style = KmiTypography.action,
                                             textAlign = TextAlign.Left
                                         )
                                     }
@@ -307,57 +305,70 @@ internal fun CoachGroupStatsPremiumScreen(
                                     Spacer(Modifier.height(8.dp))
 
                                     Text(
-                                        text = coachTr(isEnglish, "מעל 80%", "Above 80%"),
+                                        text = coachTr(
+                                            isEnglish,
+                                            "מעל 80%",
+                                            "Above 80%"
+                                        ),
                                         modifier = Modifier.fillMaxWidth(),
                                         textAlign = statsTextAlign,
                                         maxLines = 1,
-                                        style = MaterialTheme.typography.bodyMedium.copy(
-                                            fontSize = 14.sp,
-                                            lineHeight = 17.sp,
+                                        style = KmiTypography.action.copy(
                                             fontWeight = FontWeight.Black,
-                                            color = Color(0xFF4F46E5)
+                                            color = MaterialTheme.colorScheme.primary
                                         )
                                     )
 
                                     Spacer(Modifier.height(2.dp))
 
                                     Text(
-                                        text = coachTr(isEnglish, "נוכחות", "Attendance"),
+                                        text = coachTr(
+                                            isEnglish,
+                                            "נוכחות",
+                                            "Attendance"
+                                        ),
                                         modifier = Modifier.fillMaxWidth(),
                                         textAlign = statsTextAlign,
                                         maxLines = 1,
-                                        style = MaterialTheme.typography.bodyMedium.copy(
-                                            fontSize = 14.sp,
-                                            lineHeight = 17.sp,
+                                        style = KmiTypography.secondary.copy(
                                             fontWeight = FontWeight.Bold,
-                                            color = Color(0xFF64748B)
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
                                         )
                                     )
                                 }
                             }
 
-                            Surface(
-                                color = Color(0xFFFCFDFF),
-                                shape = RoundedCornerShape(24.dp),
-                                shadowElevation = 5.dp,
-                                tonalElevation = 0.dp,
-                                border = BorderStroke(1.dp, Color(0xFFE7ECF7)),
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .height(132.dp)
-                            ) {
-                                Column(
+                                Surface(
+                                    color = MaterialTheme.colorScheme.surface,
+                                    shape = RoundedCornerShape(20.dp),
+                                    shadowElevation = 0.dp,
+                                    tonalElevation = 0.dp,
+                                    border = BorderStroke(
+                                        width = 1.dp,
+                                        color = Color(0xFF22C55E).copy(
+                                            alpha = 0.24f
+                                        )
+                                    ),
                                     modifier = Modifier
-                                        .fillMaxSize()
-                                        .background(
-                                            Brush.horizontalGradient(
-                                                listOf(
-                                                    Color.White,
-                                                    Color(0xFFFAFBFF),
-                                                    Color(0xFF22C55E).copy(alpha = 0.07f)
+                                        .weight(1f)
+                                        .heightIn(min = 132.dp)
+                                ) {
+                                    Column(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .background(
+                                                Brush.horizontalGradient(
+                                                    listOf(
+                                                        MaterialTheme.colorScheme.surface,
+                                                        MaterialTheme.colorScheme.surfaceVariant.copy(
+                                                            alpha = 0.50f
+                                                        ),
+                                                        Color(0xFF22C55E).copy(
+                                                            alpha = 0.10f
+                                                        )
+                                                    )
                                                 )
                                             )
-                                        )
                                         .padding(horizontal = 12.dp, vertical = 12.dp),
                                     horizontalAlignment = Alignment.CenterHorizontally,
                                     verticalArrangement = Arrangement.Center
@@ -375,21 +386,13 @@ internal fun CoachGroupStatsPremiumScreen(
                                             "נוכחות ממוצעת",
                                             "Average attendance"
                                         ),
-                                        modifier =
-                                            Modifier.fillMaxWidth(),
-                                        textAlign =
-                                            TextAlign.Center,
-                                        maxLines = 1,
-                                        style =
-                                            MaterialTheme.typography
-                                                .bodySmall.copy(
-                                                    fontSize = 12.sp,
-                                                    lineHeight = 14.sp,
-                                                    fontWeight =
-                                                        FontWeight.Bold,
-                                                    color =
-                                                        Color(0xFF64748B)
-                                                )
+                                        modifier = Modifier.fillMaxWidth(),
+                                        textAlign = TextAlign.Center,
+                                        maxLines = 2,
+                                        style = KmiTypography.caption.copy(
+                                            fontWeight = FontWeight.Bold,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
                                     )
                                 }
                             }
@@ -501,51 +504,64 @@ internal fun CoachGroupStatsPremiumScreen(
                  * מאותו תוכן גלול.
                  */
                 Surface(
-                    color = Color(0xFFFCFDFF),
-                    shape = RoundedCornerShape(28.dp),
-                shadowElevation = 7.dp,
-                tonalElevation = 0.dp,
-                border = BorderStroke(
-                    1.dp,
-                    Color(0xFFE7ECF7)
-                ),
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .background(
-                            brush = Brush.verticalGradient(
-                                colors = listOf(
-                                    Color.White,
-                                    Color(0xFFFAFBFF),
-                                    Color(0xFFF7FAFF)
+                    color = MaterialTheme.colorScheme.surface.copy(
+                        alpha = 0.96f
+                    ),
+                    shape = RoundedCornerShape(24.dp),
+                    shadowElevation = 2.dp,
+                    tonalElevation = 0.dp,
+                    border = BorderStroke(
+                        width = 1.dp,
+                        color = MaterialTheme.colorScheme.outlineVariant
+                    ),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .background(
+                                brush = Brush.verticalGradient(
+                                    colors = listOf(
+                                        MaterialTheme.colorScheme.surface,
+                                        MaterialTheme.colorScheme.surfaceVariant.copy(
+                                            alpha = 0.52f
+                                        ),
+                                        MaterialTheme.colorScheme.surface
+                                    )
                                 )
                             )
-                        )
-                        .padding(horizontal = 16.dp, vertical = 16.dp),
+                            .padding(
+                                horizontal = 14.dp,
+                                vertical = 14.dp
+                            ),
                     verticalArrangement = Arrangement.spacedBy(14.dp)
                 ) {
                     Text(
-                        text = coachTr(isEnglish, "התפלגות חגורות בסניף", "Belt distribution"),
+                        text = coachTr(
+                            isEnglish,
+                            "התפלגות חגורות בסניף",
+                            "Belt distribution"
+                        ),
                         modifier = Modifier.fillMaxWidth(),
                         textAlign = statsTextAlign,
-                        maxLines = 1,
-                        style = MaterialTheme.typography.titleMedium.copy(
-                            fontSize = 20.sp,
-                            lineHeight = 23.sp,
+                        maxLines = 2,
+                        style = KmiTypography.sectionTitle.copy(
                             fontWeight = FontWeight.Black,
-                            color = Color(0xFF0F172A)
+                            color = MaterialTheme.colorScheme.onSurface
                         )
                     )
 
                     if (stats.beltCounts.isEmpty()) {
                         Text(
-                            text = coachTr(isEnglish, "אין נתונים להצגה", "No data to display"),
+                            text = coachTr(
+                                isEnglish,
+                                "אין נתונים להצגה",
+                                "No data to display"
+                            ),
                             modifier = Modifier.fillMaxWidth(),
                             textAlign = statsTextAlign,
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = Color(0xFF64748B)
+                            style = KmiTypography.body,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     } else {
                         stats.beltCounts.forEach { (belt, count) ->
@@ -575,9 +591,11 @@ internal fun CoachGroupStatsPremiumScreen(
                                         ) {
                                             Text(
                                                 text = "$count",
+                                                style = KmiTypography.metric.copy(
+                                                    fontWeight = FontWeight.Black
+                                                ),
                                                 color = labelColor,
-                                                fontWeight = FontWeight.Black,
-                                                fontSize = 16.sp
+                                                maxLines = 1
                                             )
                                         }
                                     }
@@ -585,13 +603,14 @@ internal fun CoachGroupStatsPremiumScreen(
                                     Spacer(modifier = Modifier.width(10.dp))
 
                                     Text(
-                                        text = coachBeltNameForUi(belt, isEnglish),
+                                        text = coachBeltNameForUi(
+                                            belt,
+                                            isEnglish
+                                        ),
                                         modifier = Modifier.weight(1f),
                                         textAlign = statsTextAlign,
-                                        maxLines = 1,
-                                        style = MaterialTheme.typography.titleSmall.copy(
-                                            fontSize = 18.sp,
-                                            lineHeight = 21.sp,
+                                        maxLines = 2,
+                                        style = KmiTypography.cardTitle.copy(
                                             fontWeight = FontWeight.ExtraBold,
                                             color = labelColor
                                         )
@@ -861,12 +880,13 @@ private fun NationalStatisticsEntryCard(
     Surface(
         onClick = onClick,
         modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(24.dp),
+        shape = RoundedCornerShape(22.dp),
         color = Color.Transparent,
-        shadowElevation = 8.dp,
+        shadowElevation = 2.dp,
+        tonalElevation = 0.dp,
         border = BorderStroke(
             width = 1.dp,
-            color = Color.White.copy(alpha = 0.65f)
+            color = Color.White.copy(alpha = 0.42f)
         )
     ) {
         Row(
@@ -897,7 +917,10 @@ private fun NationalStatisticsEntryCard(
                     modifier = Modifier.fillMaxSize(),
                     contentAlignment = Alignment.Center
                 ) {
-                    Text(text = "📊", fontSize = 24.sp)
+                    Text(
+                        text = "📊",
+                        style = KmiTypography.action
+                    )
                 }
             }
 
@@ -905,7 +928,8 @@ private fun NationalStatisticsEntryCard(
 
             Column(
                 modifier = Modifier.weight(1f),
-                horizontalAlignment = coachHorizontalAlignment(isEnglish)
+                horizontalAlignment =
+                    coachHorizontalAlignment(isEnglish)
             ) {
                 Text(
                     text = coachTr(
@@ -915,10 +939,11 @@ private fun NationalStatisticsEntryCard(
                     ),
                     modifier = Modifier.fillMaxWidth(),
                     textAlign = coachTextAlign(isEnglish),
-                    fontSize = 19.sp,
-                    lineHeight = 22.sp,
-                    fontWeight = FontWeight.Black,
-                    color = Color.White
+                    style = KmiTypography.cardTitle.copy(
+                        fontWeight = FontWeight.Black
+                    ),
+                    color = Color.White,
+                    maxLines = 2
                 )
 
                 Spacer(Modifier.height(3.dp))
@@ -931,10 +956,11 @@ private fun NationalStatisticsEntryCard(
                     ),
                     modifier = Modifier.fillMaxWidth(),
                     textAlign = coachTextAlign(isEnglish),
-                    fontSize = 12.sp,
-                    lineHeight = 15.sp,
-                    fontWeight = FontWeight.Medium,
-                    color = Color.White.copy(alpha = 0.82f)
+                    style = KmiTypography.caption.copy(
+                        fontWeight = FontWeight.Medium
+                    ),
+                    color = Color.White.copy(alpha = 0.82f),
+                    maxLines = 3
                 )
             }
 
@@ -942,8 +968,9 @@ private fun NationalStatisticsEntryCard(
 
             Text(
                 text = if (isEnglish) "›" else "‹",
-                fontSize = 30.sp,
-                fontWeight = FontWeight.Light,
+                style = KmiTypography.metric.copy(
+                    fontWeight = FontWeight.Light
+                ),
                 color = Color.White
             )
         }
@@ -988,16 +1015,16 @@ private fun PremiumStatChip(
     val accent = gradient.getOrNull(1) ?: Color(0xFF4F46E5)
 
     Surface(
-        shape = RoundedCornerShape(24.dp),
-        color = Color(0xFFFCFDFF),
-        shadowElevation = 6.dp,
+        shape = RoundedCornerShape(20.dp),
+        color = MaterialTheme.colorScheme.surface,
+        shadowElevation = 0.dp,
         tonalElevation = 0.dp,
         border = BorderStroke(
             width = 1.dp,
-            color = Color(0xFFE7ECF7)
+            color = accent.copy(alpha = 0.24f)
         ),
         modifier = modifier
-            .height(96.dp)
+            .heightIn(min = 96.dp)
             .graphicsLayer {
                 scaleX = chipScale
                 scaleY = chipScale
@@ -1014,9 +1041,11 @@ private fun PremiumStatChip(
                 .background(
                     brush = Brush.horizontalGradient(
                         colors = listOf(
-                            Color.White,
-                            Color(0xFFFAFBFF),
-                            accent.copy(alpha = 0.08f)
+                            MaterialTheme.colorScheme.surface,
+                            MaterialTheme.colorScheme.surfaceVariant.copy(
+                                alpha = 0.48f
+                            ),
+                            accent.copy(alpha = 0.10f)
                         )
                     )
                 )
@@ -1024,9 +1053,10 @@ private fun PremiumStatChip(
             verticalAlignment = Alignment.CenterVertically
         ) {
             Surface(
-                shape = RoundedCornerShape(15.dp),
+                shape = RoundedCornerShape(14.dp),
                 color = accent.copy(alpha = 0.13f),
-                shadowElevation = 2.dp,
+                shadowElevation = 0.dp,
+                tonalElevation = 0.dp,
                 modifier = Modifier.size(34.dp)
             ) {
                 Box(
@@ -1035,7 +1065,7 @@ private fun PremiumStatChip(
                 ) {
                     Text(
                         text = icon,
-                        fontSize = 17.sp,
+                        style = KmiTypography.action,
                         textAlign = TextAlign.Center
                     )
                 }
@@ -1052,25 +1082,26 @@ private fun PremiumStatChip(
                     text = label,
                     modifier = Modifier.fillMaxWidth(),
                     textAlign = coachTextAlign(isEnglish),
-                    maxLines = 1,
-                    style = MaterialTheme.typography.bodySmall.copy(
-                        fontSize = 12.sp,
-                        lineHeight = 15.sp,
+                    maxLines = 2,
+                    style = KmiTypography.caption.copy(
                         fontWeight = FontWeight.Bold,
-                        color = Color(0xFF64748B)
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 )
 
                 Spacer(Modifier.height(4.dp))
 
                 Text(
-                    text = if (valueNumber > 0f) animatedValue.toInt().toString() else value,
+                    text =
+                        if (valueNumber > 0f) {
+                            animatedValue.toInt().toString()
+                        } else {
+                            value
+                        },
                     modifier = Modifier.fillMaxWidth(),
                     textAlign = coachTextAlign(isEnglish),
                     maxLines = 1,
-                    style = MaterialTheme.typography.headlineSmall.copy(
-                        fontSize = 28.sp,
-                        lineHeight = 31.sp,
+                    style = KmiTypography.metric.copy(
                         fontWeight = FontWeight.Black,
                         color = accent
                     )
@@ -1200,16 +1231,16 @@ private fun PremiumMiniPill(
     )
 
     Surface(
-        color = Color(0xFFFCFDFF),
-        shape = RoundedCornerShape(24.dp),
-        shadowElevation = 7.dp,
+        color = MaterialTheme.colorScheme.surface,
+        shape = RoundedCornerShape(20.dp),
+        shadowElevation = 0.dp,
         tonalElevation = 0.dp,
         border = BorderStroke(
-            1.dp,
-            Color(0xFFE7ECF7)
+            width = 1.dp,
+            color = accent.copy(alpha = 0.24f)
         ),
         modifier = modifier
-            .height(78.dp)
+            .heightIn(min = 78.dp)
             .graphicsLayer {
                 scaleX = scale
                 scaleY = scale
@@ -1225,9 +1256,11 @@ private fun PremiumMiniPill(
                 .background(
                     brush = Brush.horizontalGradient(
                         colors = listOf(
-                            Color.White,
-                            Color(0xFFFAFBFF),
-                            accent.copy(alpha = 0.06f)
+                            MaterialTheme.colorScheme.surface,
+                            MaterialTheme.colorScheme.surfaceVariant.copy(
+                                alpha = 0.48f
+                            ),
+                            accent.copy(alpha = 0.09f)
                         )
                     )
                 )
@@ -1245,7 +1278,7 @@ private fun PremiumMiniPill(
                 ) {
                     Text(
                         text = icon,
-                        fontSize = 19.sp,
+                        style = KmiTypography.action,
                         textAlign = TextAlign.Center
                     )
                 }
@@ -1262,23 +1295,24 @@ private fun PremiumMiniPill(
                     text = title,
                     modifier = Modifier.fillMaxWidth(),
                     textAlign = coachTextAlign(isEnglish),
-                    maxLines = 1,
-                    style = MaterialTheme.typography.bodySmall.copy(
-                        fontSize = 12.sp,
-                        lineHeight = 14.sp,
+                    maxLines = 2,
+                    style = KmiTypography.caption.copy(
                         fontWeight = FontWeight.SemiBold,
-                        color = Color(0xFF64748B)
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 )
 
                 Text(
-                    text = if (valueNumber > 0f) animatedValue.toInt().toString() else value,
+                    text =
+                        if (valueNumber > 0f) {
+                            animatedValue.toInt().toString()
+                        } else {
+                            value
+                        },
                     modifier = Modifier.fillMaxWidth(),
                     textAlign = coachTextAlign(isEnglish),
                     maxLines = 1,
-                    style = MaterialTheme.typography.titleLarge.copy(
-                        fontSize = 21.sp,
-                        lineHeight = 24.sp,
+                    style = KmiTypography.metric.copy(
                         fontWeight = FontWeight.Black,
                         color = accent
                     )
@@ -1295,9 +1329,15 @@ private fun AttendanceRing(
 ) {
     val animated by animateFloatAsState(
         targetValue = percent / 100f,
-        animationSpec = tween(1200, easing = FastOutSlowInEasing),
+        animationSpec = tween(
+            durationMillis = 1200,
+            easing = FastOutSlowInEasing
+        ),
         label = "attendanceRing"
     )
+
+    val ringTrackColor =
+        MaterialTheme.colorScheme.outlineVariant
 
     Box(
         modifier = modifier.size(96.dp),
@@ -1309,7 +1349,7 @@ private fun AttendanceRing(
         ) {
 
             drawCircle(
-                color = Color(0xFFE5E7EB),
+                color = ringTrackColor,
                 style = Stroke(width = 12f)
             )
 
@@ -1333,9 +1373,10 @@ private fun AttendanceRing(
 
         Text(
             text = "$percent%",
-            style = MaterialTheme.typography.titleLarge,
-            fontWeight = FontWeight.Bold,
-            color = Color(0xFF111827)
+            style = KmiTypography.metric.copy(
+                fontWeight = FontWeight.Bold
+            ),
+            color = MaterialTheme.colorScheme.onSurface
         )
     }
 }

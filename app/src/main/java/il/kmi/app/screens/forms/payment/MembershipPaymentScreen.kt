@@ -1,5 +1,10 @@
 package il.kmi.app.screens.forms.payment
 
+import androidx.activity.compose.BackHandler
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -8,16 +13,17 @@ import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Badge
-import androidx.compose.material.icons.filled.Business
-import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.CreditCard
 import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.Email
@@ -26,7 +32,6 @@ import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.PhoneIphone
 import androidx.compose.material.icons.filled.Wallet
 import androidx.compose.material.icons.filled.AccountCircle
-import androidx.compose.material.icons.filled.Event
 import androidx.compose.material.icons.filled.MarkEmailRead
 import androidx.compose.material.icons.filled.LocalPhone
 import androidx.compose.material.icons.filled.Domain
@@ -38,13 +43,9 @@ import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Checkbox
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.ExposedDropdownMenuBox
-import androidx.compose.material3.ExposedDropdownMenuDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
@@ -62,27 +63,245 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
+import com.google.firebase.firestore.Source
 import kotlinx.coroutines.tasks.await
 import androidx.compose.foundation.border
+import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.CheckboxDefaults
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.text.font.FontWeight
 import il.kmi.app.ui.DrawerBridge
+import il.kmi.app.ui.KmiPremiumDropdown
 import il.kmi.app.ui.KmiTopBar
 import il.kmi.app.ui.KmiTypography
+import java.time.LocalDate
+import java.time.format.DateTimeFormatter
 
 //==========================================================================
 
+@Composable
+private fun MembershipPaymentPremiumLoading(
+    text: String,
+    modifier: Modifier = Modifier
+) {
+    val transition =
+        rememberInfiniteTransition(
+            label = "membershipPaymentLoading"
+        )
+
+    val outerRotation by transition.animateFloat(
+        initialValue = 0f,
+        targetValue = 360f,
+        animationSpec =
+            infiniteRepeatable(
+                animation =
+                    tween(
+                        durationMillis = 1_250
+                    )
+            ),
+        label = "membershipPaymentOuterRing"
+    )
+
+    val innerRotation by transition.animateFloat(
+        initialValue = 360f,
+        targetValue = 0f,
+        animationSpec =
+            infiniteRepeatable(
+                animation =
+                    tween(
+                        durationMillis = 1_750
+                    )
+            ),
+        label = "membershipPaymentInnerRing"
+    )
+
+    Column(
+        modifier =
+            modifier
+                .fillMaxWidth()
+                .padding(vertical = 16.dp),
+        horizontalAlignment =
+            Alignment.CenterHorizontally,
+        verticalArrangement =
+            Arrangement.spacedBy(8.dp)
+    ) {
+        Box(
+            modifier = Modifier.size(58.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            Box(
+                modifier =
+                    Modifier
+                        .size(58.dp)
+                        .graphicsLayer {
+                            rotationZ = outerRotation
+                        }
+                        .border(
+                            width = 4.dp,
+                            brush =
+                                Brush.sweepGradient(
+                                    listOf(
+                                        Color.Transparent,
+                                        Color(0xFFA855F7),
+                                        Color(0xFF38BDF8),
+                                        Color.Transparent
+                                    )
+                                ),
+                            shape = CircleShape
+                        )
+            )
+
+            Box(
+                modifier =
+                    Modifier
+                        .size(40.dp)
+                        .graphicsLayer {
+                            rotationZ = innerRotation
+                        }
+                        .border(
+                            width = 3.dp,
+                            brush =
+                                Brush.sweepGradient(
+                                    listOf(
+                                        Color.Transparent,
+                                        Color(0xFFF59E0B),
+                                        Color(0xFF22C55E),
+                                        Color.Transparent
+                                    )
+                                ),
+                            shape = CircleShape
+                        )
+            )
+
+            Box(
+                modifier =
+                    Modifier
+                        .size(14.dp)
+                        .background(
+                            color =
+                                MaterialTheme.colorScheme.surface,
+                            shape = CircleShape
+                        )
+                        .border(
+                            width = 1.dp,
+                            color =
+                                Color(0xFFA78BFA).copy(
+                                    alpha = 0.55f
+                                ),
+                            shape = CircleShape
+                        )
+            )
+        }
+
+        Text(
+            text = text,
+            style =
+                KmiTypography.secondary.copy(
+                    fontWeight = FontWeight.Bold
+                ),
+            color =
+                MaterialTheme.colorScheme.onSurfaceVariant,
+            textAlign = TextAlign.Center,
+            modifier = Modifier.fillMaxWidth()
+        )
+    }
+}
+
 private const val MISSING_BRANCH_HE = "הסניף שלי לא מופיע"
 private const val MISSING_BRANCH_EN = "My branch is not listed"
+
+private val membershipBirthDateFormatter =
+    DateTimeFormatter.ofPattern("dd/MM/yyyy")
+
+private fun parseMembershipBirthDate(
+    raw: String
+): LocalDate? {
+    val cleanRaw = raw.trim()
+
+    if (cleanRaw.isBlank()) {
+        return null
+    }
+
+    return runCatching {
+        LocalDate.parse(
+            cleanRaw,
+            membershipBirthDateFormatter
+        )
+    }.getOrNull()
+        ?: runCatching {
+            LocalDate.parse(
+                cleanRaw,
+                DateTimeFormatter.ISO_LOCAL_DATE
+            )
+        }.getOrNull()
+}
+
+private fun membershipBirthDateParts(
+    raw: String
+): Triple<String, String, String> {
+    val date =
+        parseMembershipBirthDate(raw)
+            ?: return Triple("", "", "")
+
+    return Triple(
+        date.dayOfMonth
+            .toString()
+            .padStart(2, '0'),
+        date.monthValue
+            .toString()
+            .padStart(2, '0'),
+        date.year.toString()
+    )
+}
+
+private fun buildMembershipBirthDate(
+    day: String,
+    month: String,
+    year: String
+): String {
+    if (
+        day.length != 2 ||
+        month.length != 2 ||
+        year.length != 4
+    ) {
+        return ""
+    }
+
+    val date =
+        runCatching {
+            LocalDate.of(
+                year.toInt(),
+                month.toInt(),
+                day.toInt()
+            )
+        }.getOrNull()
+            ?: return ""
+
+    if (date.isAfter(LocalDate.now())) {
+        return ""
+    }
+
+    return date.format(
+        membershipBirthDateFormatter
+    )
+}
 
 data class MembershipPaymentPrefill(
     val traineeFirstName: String = "",
@@ -181,15 +400,37 @@ private suspend fun loadMembershipPaymentPrefillFromServer(): MembershipPaymentP
 
     val firestore = FirebaseFirestore.getInstance()
 
-    val possibleDocuments = listOf(
-        firestore.collection("users").document(uid),
-        firestore.collection("trainees").document(uid),
-        firestore.collection("members").document(uid)
-    )
+    val possibleDocuments =
+        listOf(
+            firestore.collection("users").document(uid),
+            firestore.collection("trainees").document(uid),
+            firestore.collection("members").document(uid)
+        )
+
+    var completedServerRead = false
+    var lastServerError: Throwable? = null
 
     for (documentRef in possibleDocuments) {
-        val snapshot = runCatching { documentRef.get().await() }.getOrNull()
-        val data = snapshot?.data ?: continue
+        val snapshotResult =
+            runCatching {
+                documentRef
+                    .get(Source.SERVER)
+                    .await()
+            }
+
+        snapshotResult
+            .onSuccess {
+                completedServerRead = true
+            }
+            .onFailure { error ->
+                lastServerError = error
+            }
+
+        val snapshot =
+            snapshotResult.getOrNull()
+                ?: continue
+        val data = snapshot.data
+            ?: continue
 
         val serverFullName = data.stringValue(
             "fullName",
@@ -368,6 +609,13 @@ private suspend fun loadMembershipPaymentPrefillFromServer(): MembershipPaymentP
         }
     }
 
+    if (!completedServerRead) {
+        throw lastServerError
+            ?: IllegalStateException(
+                "Membership payment prefill could not be loaded"
+            )
+    }
+
     return MembershipPaymentPrefill(
         traineeFirstName = authNameParts.first,
         traineeLastName = authNameParts.second,
@@ -389,26 +637,89 @@ fun MembershipPaymentScreen(
     onReadFullPolicy: () -> Unit = {},
     onContinueToPayment: (MembershipPaymentFormData) -> Unit = {}
 ) {
-    var serverPrefill by remember { mutableStateOf(prefill) }
-    var didApplyServerPrefill by rememberSaveable { mutableStateOf(false) }
+    var serverPrefill by remember {
+        mutableStateOf(prefill)
+    }
+    var didApplyServerPrefill by rememberSaveable {
+        mutableStateOf(false)
+    }
+    var isLoadingServerPrefill by rememberSaveable {
+        mutableStateOf(true)
+    }
+    var serverPrefillLoadFailed by rememberSaveable {
+        mutableStateOf(false)
+    }
+    var serverPrefillReloadKey by rememberSaveable {
+        mutableStateOf(0)
+    }
 
-    LaunchedEffect(Unit) {
-        val loadedPrefill = loadMembershipPaymentPrefillFromServer()
+    LaunchedEffect(
+        prefill,
+        serverPrefillReloadKey
+    ) {
+        isLoadingServerPrefill = true
+        serverPrefillLoadFailed = false
 
-        serverPrefill = MembershipPaymentPrefill(
-            traineeFirstName = loadedPrefill.traineeFirstName.orFallback(prefill.traineeFirstName),
-            traineeLastName = loadedPrefill.traineeLastName.orFallback(prefill.traineeLastName),
-            traineeIdNumber = loadedPrefill.traineeIdNumber.orFallback(prefill.traineeIdNumber),
-            traineeBirthDate = loadedPrefill.traineeBirthDate.orFallback(prefill.traineeBirthDate),
-            traineeEmail = loadedPrefill.traineeEmail.orFallback(prefill.traineeEmail),
-            traineePhone = loadedPrefill.traineePhone.orFallback(prefill.traineePhone),
-            traineeBranch = loadedPrefill.traineeBranch.orFallback(prefill.traineeBranch),
-            traineeOtherBranch = loadedPrefill.traineeOtherBranch.orFallback(prefill.traineeOtherBranch),
-            payerFirstName = loadedPrefill.payerFirstName.orFallback(prefill.payerFirstName),
-            payerLastName = loadedPrefill.payerLastName.orFallback(prefill.payerLastName),
-            payerEmail = loadedPrefill.payerEmail.orFallback(prefill.payerEmail),
-            payerPhone = loadedPrefill.payerPhone.orFallback(prefill.payerPhone)
-        )
+        try {
+            val loadedPrefill =
+                loadMembershipPaymentPrefillFromServer()
+
+            serverPrefill =
+                MembershipPaymentPrefill(
+                    traineeFirstName =
+                        loadedPrefill.traineeFirstName.orFallback(
+                            prefill.traineeFirstName
+                        ),
+                    traineeLastName =
+                        loadedPrefill.traineeLastName.orFallback(
+                            prefill.traineeLastName
+                        ),
+                    traineeIdNumber =
+                        loadedPrefill.traineeIdNumber.orFallback(
+                            prefill.traineeIdNumber
+                        ),
+                    traineeBirthDate =
+                        loadedPrefill.traineeBirthDate.orFallback(
+                            prefill.traineeBirthDate
+                        ),
+                    traineeEmail =
+                        loadedPrefill.traineeEmail.orFallback(
+                            prefill.traineeEmail
+                        ),
+                    traineePhone =
+                        loadedPrefill.traineePhone.orFallback(
+                            prefill.traineePhone
+                        ),
+                    traineeBranch =
+                        loadedPrefill.traineeBranch.orFallback(
+                            prefill.traineeBranch
+                        ),
+                    traineeOtherBranch =
+                        loadedPrefill.traineeOtherBranch.orFallback(
+                            prefill.traineeOtherBranch
+                        ),
+                    payerFirstName =
+                        loadedPrefill.payerFirstName.orFallback(
+                            prefill.payerFirstName
+                        ),
+                    payerLastName =
+                        loadedPrefill.payerLastName.orFallback(
+                            prefill.payerLastName
+                        ),
+                    payerEmail =
+                        loadedPrefill.payerEmail.orFallback(
+                            prefill.payerEmail
+                        ),
+                    payerPhone =
+                        loadedPrefill.payerPhone.orFallback(
+                            prefill.payerPhone
+                        )
+                )
+        } catch (_: Exception) {
+            serverPrefillLoadFailed = true
+        } finally {
+            isLoadingServerPrefill = false
+        }
     }
 
     val title = if (isEnglish) "Membership Payment" else "תשלום דמי חבר"
@@ -425,12 +736,57 @@ fun MembershipPaymentScreen(
                 listOf(if (isEnglish) MISSING_BRANCH_EN else MISSING_BRANCH_HE)
     }
 
-    var traineeFirstName by rememberSaveable { mutableStateOf(prefill.traineeFirstName) }
-    var traineeLastName by rememberSaveable { mutableStateOf(prefill.traineeLastName) }
-    var traineeIdNumber by rememberSaveable { mutableStateOf(prefill.traineeIdNumber) }
-    var traineeBirthDate by rememberSaveable { mutableStateOf(prefill.traineeBirthDate) }
-    var traineeEmail by rememberSaveable { mutableStateOf(prefill.traineeEmail) }
-    var traineePhone by rememberSaveable { mutableStateOf(prefill.traineePhone) }
+    var traineeFirstName by rememberSaveable {
+        mutableStateOf(prefill.traineeFirstName)
+    }
+    var traineeLastName by rememberSaveable {
+        mutableStateOf(prefill.traineeLastName)
+    }
+    var traineeIdNumber by rememberSaveable {
+        mutableStateOf(prefill.traineeIdNumber)
+    }
+    var traineeBirthDate by rememberSaveable {
+        mutableStateOf(prefill.traineeBirthDate)
+    }
+
+    val initialBirthDateParts =
+        remember(prefill.traineeBirthDate) {
+            membershipBirthDateParts(
+                prefill.traineeBirthDate
+            )
+        }
+
+    var birthDay by rememberSaveable {
+        mutableStateOf(initialBirthDateParts.first)
+    }
+    var birthMonth by rememberSaveable {
+        mutableStateOf(initialBirthDateParts.second)
+    }
+    var birthYear by rememberSaveable {
+        mutableStateOf(initialBirthDateParts.third)
+    }
+
+    val birthDayFocusRequester =
+        remember {
+            FocusRequester()
+        }
+    val birthMonthFocusRequester =
+        remember {
+            FocusRequester()
+        }
+    val birthYearFocusRequester =
+        remember {
+            FocusRequester()
+        }
+    val focusManager =
+        LocalFocusManager.current
+
+    var traineeEmail by rememberSaveable {
+        mutableStateOf(prefill.traineeEmail)
+    }
+    var traineePhone by rememberSaveable {
+        mutableStateOf(prefill.traineePhone)
+    }
 
     var traineeBranch by rememberSaveable {
         mutableStateOf(
@@ -462,12 +818,27 @@ fun MembershipPaymentScreen(
         )
     }
 
-    var policyAccepted by rememberSaveable { mutableStateOf(false) }
-    var showFullRefundPolicy by rememberSaveable { mutableStateOf(false) }
-    var branchExpanded by remember { mutableStateOf(false) }
+    var policyAccepted by rememberSaveable {
+        mutableStateOf(false)
+    }
+    var showFullRefundPolicy by rememberSaveable {
+        mutableStateOf(false)
+    }
 
-    val missingBranchValue = if (isEnglish) MISSING_BRANCH_EN else MISSING_BRANCH_HE
-    val shouldShowOtherBranch = traineeBranch == missingBranchValue
+    BackHandler(
+        enabled = !showFullRefundPolicy
+    ) {
+        onClose()
+    }
+
+    val missingBranchValue =
+        if (isEnglish) {
+            MISSING_BRANCH_EN
+        } else {
+            MISSING_BRANCH_HE
+        }
+    val shouldShowOtherBranch =
+        traineeBranch == missingBranchValue
 
     LaunchedEffect(serverPrefill, branchOptions) {
         if (!didApplyServerPrefill && serverPrefill.hasAnyValue()) {
@@ -475,6 +846,15 @@ fun MembershipPaymentScreen(
             traineeLastName = serverPrefill.traineeLastName
             traineeIdNumber = serverPrefill.traineeIdNumber
             traineeBirthDate = serverPrefill.traineeBirthDate
+
+            val loadedBirthDateParts =
+                membershipBirthDateParts(
+                    serverPrefill.traineeBirthDate
+                )
+            birthDay = loadedBirthDateParts.first
+            birthMonth = loadedBirthDateParts.second
+            birthYear = loadedBirthDateParts.third
+
             traineeEmail = serverPrefill.traineeEmail
             traineePhone = serverPrefill.traineePhone
 
@@ -529,6 +909,31 @@ fun MembershipPaymentScreen(
                 payerPhone.isNotBlank() &&
                 policyAccepted
 
+    val isDarkMode =
+        isSystemInDarkTheme()
+
+    val paymentBackgroundBrush =
+        if (isDarkMode) {
+            Brush.verticalGradient(
+                colors =
+                    listOf(
+                        MaterialTheme.colorScheme.background,
+                        MaterialTheme.colorScheme.surface,
+                        Color(0xFF041E33)
+                    )
+            )
+        } else {
+            Brush.verticalGradient(
+                colors =
+                    listOf(
+                        Color(0xFFF8FBFF),
+                        Color(0xFFEAF4FF),
+                        Color(0xFFD7E9FF),
+                        Color(0xFF0EA5D7)
+                    )
+            )
+        }
+
     Scaffold(
         containerColor = Color.Transparent,
         topBar = {
@@ -557,33 +962,109 @@ fun MembershipPaymentScreen(
         }
     ) { innerPadding ->
         Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(
-                    Brush.verticalGradient(
-                        colors = listOf(
-                            MaterialTheme.colorScheme.background,
-                            MaterialTheme.colorScheme.surfaceVariant,
-                            MaterialTheme.colorScheme.primaryContainer.copy(
-                                alpha = 0.55f
-                            ),
-                            MaterialTheme.colorScheme.background
-                        )
+            modifier =
+                Modifier
+                    .fillMaxSize()
+                    .background(
+                        paymentBackgroundBrush
                     )
-                )
         ) {
             Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(innerPadding)
-                    .verticalScroll(rememberScrollState())
-                    .padding(horizontal = 16.dp, vertical = 12.dp),
-                verticalArrangement = Arrangement.spacedBy(10.dp)
+                modifier =
+                    Modifier
+                        .fillMaxSize()
+                        .padding(innerPadding)
+                        .verticalScroll(rememberScrollState())
+                        .imePadding()
+                        .navigationBarsPadding()
+                        .padding(
+                            horizontal = 14.dp,
+                            vertical = 10.dp
+                        ),
+                verticalArrangement =
+                    Arrangement.spacedBy(8.dp)
             ) {
+                if (serverPrefillLoadFailed) {
+                    Card(
+                        shape = RoundedCornerShape(18.dp),
+                        colors =
+                            CardDefaults.cardColors(
+                                containerColor =
+                                    MaterialTheme
+                                        .colorScheme
+                                        .errorContainer
+                            ),
+                        elevation =
+                            CardDefaults.cardElevation(
+                                defaultElevation = 0.dp
+                            ),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Column(
+                            modifier =
+                                Modifier
+                                    .fillMaxWidth()
+                                    .padding(12.dp),
+                            verticalArrangement =
+                                Arrangement.spacedBy(8.dp),
+                            horizontalAlignment =
+                                Alignment.CenterHorizontally
+                        ) {
+                            Text(
+                                text =
+                                    if (isEnglish) {
+                                        "We couldn't load your latest details. Check your connection and try again."
+                                    } else {
+                                        "לא הצלחנו לטעון את הפרטים העדכניים שלך. בדוק את החיבור ונסה שוב."
+                                    },
+                                style =
+                                    KmiTypography.body.copy(
+                                        fontWeight =
+                                            FontWeight.SemiBold
+                                    ),
+                                color =
+                                    MaterialTheme
+                                        .colorScheme
+                                        .onErrorContainer,
+                                textAlign = TextAlign.Center,
+                                modifier = Modifier.fillMaxWidth()
+                            )
+
+                            TextButton(
+                                onClick = {
+                                    serverPrefillReloadKey += 1
+                                },
+                                colors =
+                                    ButtonDefaults.textButtonColors(
+                                        contentColor =
+                                            MaterialTheme
+                                                .colorScheme
+                                                .onErrorContainer
+                                    )
+                            ) {
+                                Text(
+                                    text =
+                                        if (isEnglish) {
+                                            "Try again"
+                                        } else {
+                                            "נסה שוב"
+                                        },
+                                    style =
+                                        KmiTypography.action
+                                )
+                            }
+                        }
+                    }
+                }
+
                 ProductHeroCard(
                     isEnglish = isEnglish,
-                    amountText = if (isEnglish) "₪150.00" else "150.00 ₪",
-                    onClose = onClose
+                    amountText =
+                        if (isEnglish) {
+                            "₪150.00"
+                        } else {
+                            "150.00 ₪"
+                        }
                 )
 
                 SectionCard(
@@ -616,14 +1097,166 @@ fun MembershipPaymentScreen(
                         isEnglish = isEnglish
                     )
 
-                    FormTextField(
-                        value = traineeBirthDate,
-                        onValueChange = { traineeBirthDate = it },
-                        label = if (isEnglish) "Birth Date" else "תאריך לידה",
-                        placeholder = "DD/MM/YYYY",
-                        leadingIcon = Icons.Default.Event,
-                        isEnglish = isEnglish
-                    )
+                    Column(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalArrangement =
+                            Arrangement.spacedBy(6.dp),
+                        horizontalAlignment =
+                            if (isEnglish) {
+                                Alignment.Start
+                            } else {
+                                Alignment.End
+                            }
+                    ) {
+                        Text(
+                            text =
+                                if (isEnglish) {
+                                    "Birth Date"
+                                } else {
+                                    "תאריך לידה"
+                                },
+                            style =
+                                KmiTypography.body.copy(
+                                    fontWeight =
+                                        FontWeight.ExtraBold
+                                ),
+                            color =
+                                MaterialTheme.colorScheme.onSurface,
+                            textAlign =
+                                if (isEnglish) {
+                                    TextAlign.Left
+                                } else {
+                                    TextAlign.Right
+                                },
+                            modifier = Modifier.fillMaxWidth()
+                        )
+
+                        CompositionLocalProvider(
+                            LocalLayoutDirection provides
+                                    LayoutDirection.Ltr
+                        ) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment =
+                                    Alignment.CenterVertically,
+                                horizontalArrangement =
+                                    Arrangement.spacedBy(6.dp)
+                            ) {
+                                BirthDatePartField(
+                                    value = birthDay,
+                                    onValueChange = { value ->
+                                        birthDay = value
+                                        traineeBirthDate =
+                                            buildMembershipBirthDate(
+                                                day = value,
+                                                month = birthMonth,
+                                                year = birthYear
+                                            )
+                                    },
+                                    label =
+                                        if (isEnglish) {
+                                            "Day"
+                                        } else {
+                                            "יום"
+                                        },
+                                    placeholder = "DD",
+                                    maxLength = 2,
+                                    focusRequester =
+                                        birthDayFocusRequester,
+                                    imeAction = ImeAction.Next,
+                                    onCompleted = {
+                                        birthMonthFocusRequester
+                                            .requestFocus()
+                                    },
+                                    modifier = Modifier.weight(1f)
+                                )
+
+                                Text(
+                                    text = "/",
+                                    style =
+                                        KmiTypography.action.copy(
+                                            fontWeight =
+                                                FontWeight.Bold
+                                        ),
+                                    color =
+                                        MaterialTheme
+                                            .colorScheme
+                                            .onSurfaceVariant
+                                )
+
+                                BirthDatePartField(
+                                    value = birthMonth,
+                                    onValueChange = { value ->
+                                        birthMonth = value
+                                        traineeBirthDate =
+                                            buildMembershipBirthDate(
+                                                day = birthDay,
+                                                month = value,
+                                                year = birthYear
+                                            )
+                                    },
+                                    label =
+                                        if (isEnglish) {
+                                            "Month"
+                                        } else {
+                                            "חודש"
+                                        },
+                                    placeholder = "MM",
+                                    maxLength = 2,
+                                    focusRequester =
+                                        birthMonthFocusRequester,
+                                    imeAction = ImeAction.Next,
+                                    onCompleted = {
+                                        birthYearFocusRequester
+                                            .requestFocus()
+                                    },
+                                    modifier = Modifier.weight(1f)
+                                )
+
+                                Text(
+                                    text = "/",
+                                    style =
+                                        KmiTypography.action.copy(
+                                            fontWeight =
+                                                FontWeight.Bold
+                                        ),
+                                    color =
+                                        MaterialTheme
+                                            .colorScheme
+                                            .onSurfaceVariant
+                                )
+
+                                BirthDatePartField(
+                                    value = birthYear,
+                                    onValueChange = { value ->
+                                        birthYear = value
+                                        traineeBirthDate =
+                                            buildMembershipBirthDate(
+                                                day = birthDay,
+                                                month = birthMonth,
+                                                year = value
+                                            )
+                                    },
+                                    label =
+                                        if (isEnglish) {
+                                            "Year"
+                                        } else {
+                                            "שנה"
+                                        },
+                                    placeholder = "YYYY",
+                                    maxLength = 4,
+                                    focusRequester =
+                                        birthYearFocusRequester,
+                                    imeAction = ImeAction.Done,
+                                    onCompleted = {
+                                        focusManager.clearFocus()
+                                    },
+                                    modifier =
+                                        Modifier.weight(1.2f)
+                                )
+                            }
+                        }
+                    }
 
                     FormTextField(
                         value = traineeEmail,
@@ -643,174 +1276,39 @@ fun MembershipPaymentScreen(
                         isEnglish = isEnglish
                     )
 
-                    ExposedDropdownMenuBox(
-                        expanded = branchExpanded,
-                        onExpandedChange = { branchExpanded = !branchExpanded }
-                    ) {
-                        OutlinedTextField(
-                            value = traineeBranch,
-                            onValueChange = {},
-                            readOnly = true,
-                            singleLine = true,
-                            shape = RoundedCornerShape(14.dp),
-                            label = {
-                                Text(
-                                    text =
-                                        if (isEnglish) {
-                                            "Branch Name"
-                                        } else {
-                                            "שם הסניף"
-                                        },
-                                    style = KmiTypography.caption,
-                                    fontWeight = FontWeight.SemiBold,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis,
-                                    textAlign =
-                                        if (isEnglish) {
-                                            TextAlign.Left
-                                        } else {
-                                            TextAlign.Right
-                                        },
-                                    modifier = Modifier.fillMaxWidth()
-                                )
-                            },
-                            leadingIcon = if (isEnglish) {
-                                {
-                                    Icon(
-                                        imageVector = Icons.Default.Business,
-                                        contentDescription = null,
-                                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                        modifier = Modifier.size(19.dp)
-                                    )
-                                }
+                    KmiPremiumDropdown(
+                        title =
+                            if (isEnglish) {
+                                "Branch Name"
                             } else {
-                                null
+                                "שם הסניף"
                             },
-                            trailingIcon = if (isEnglish) {
-                                {
-                                    ExposedDropdownMenuDefaults.TrailingIcon(
-                                        expanded = branchExpanded
-                                    )
+                        options =
+                            branchOptions
+                                .map { option ->
+                                    option.trim()
                                 }
+                                .filter { option ->
+                                    option.isNotBlank()
+                                }
+                                .distinct(),
+                        selectedValue = traineeBranch.trim(),
+                        isEnglish = isEnglish,
+                        placeholder =
+                            if (isEnglish) {
+                                "Select branch"
                             } else {
-                                {
-                                    Row(
-                                        verticalAlignment = Alignment.CenterVertically
-                                    ) {
-                                        ExposedDropdownMenuDefaults.TrailingIcon(
-                                            expanded = branchExpanded
-                                        )
-                                        Icon(
-                                            imageVector = Icons.Default.Business,
-                                            contentDescription = null,
-                                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                            modifier = Modifier.size(19.dp)
-                                        )
-                                    }
-                                }
+                                "בחר סניף"
                             },
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(60.dp)
-                                .menuAnchor(),
-                            textStyle =
-                                KmiTypography.body.copy(
-                                    textAlign =
-                                        if (isEnglish) {
-                                            TextAlign.Left
-                                        } else {
-                                            TextAlign.Right
-                                        },
-                                    fontWeight = FontWeight.SemiBold
-                                ),
-                            colors =
-                                androidx.compose.material3.OutlinedTextFieldDefaults.colors(
-                                    focusedContainerColor =
-                                        MaterialTheme.colorScheme.surfaceVariant.copy(
-                                            alpha = 0.45f
-                                        ),
-                                    unfocusedContainerColor =
-                                        MaterialTheme.colorScheme.surfaceVariant.copy(
-                                            alpha = 0.32f
-                                        ),
-                                    disabledContainerColor =
-                                        MaterialTheme.colorScheme.surfaceVariant.copy(
-                                            alpha = 0.22f
-                                        ),
+                        enabled = branchOptions.isNotEmpty(),
+                        onSelected = { selectedBranch ->
+                            traineeBranch = selectedBranch
 
-                                    focusedBorderColor =
-                                        MaterialTheme.colorScheme.primary,
-                                    unfocusedBorderColor =
-                                        MaterialTheme.colorScheme.outlineVariant,
-                                    disabledBorderColor =
-                                        MaterialTheme.colorScheme.outlineVariant.copy(
-                                            alpha = 0.45f
-                                        ),
-
-                                    focusedTextColor =
-                                        MaterialTheme.colorScheme.onSurface,
-                                    unfocusedTextColor =
-                                        MaterialTheme.colorScheme.onSurface,
-                                    disabledTextColor =
-                                        MaterialTheme.colorScheme.onSurface.copy(
-                                            alpha = 0.55f
-                                        ),
-
-                                    focusedLabelColor =
-                                        MaterialTheme.colorScheme.primary,
-                                    unfocusedLabelColor =
-                                        MaterialTheme.colorScheme.onSurfaceVariant,
-                                    disabledLabelColor =
-                                        MaterialTheme.colorScheme.onSurfaceVariant.copy(
-                                            alpha = 0.55f
-                                        ),
-
-                                    focusedLeadingIconColor =
-                                        MaterialTheme.colorScheme.primary,
-                                    unfocusedLeadingIconColor =
-                                        MaterialTheme.colorScheme.onSurfaceVariant,
-
-                                    focusedTrailingIconColor =
-                                        MaterialTheme.colorScheme.primary,
-                                    unfocusedTrailingIconColor =
-                                        MaterialTheme.colorScheme.onSurfaceVariant,
-
-                                    cursorColor =
-                                        MaterialTheme.colorScheme.primary
-                                )
-                        )
-
-                        ExposedDropdownMenu(
-                            expanded = branchExpanded,
-                            onDismissRequest = { branchExpanded = false }
-                        ) {
-                            branchOptions.forEach { option ->
-                                DropdownMenuItem(
-                                    text = {
-                                        Text(
-                                            text = option,
-                                            style = KmiTypography.body,
-                                            color = MaterialTheme.colorScheme.onSurface,
-                                            textAlign =
-                                                if (isEnglish) {
-                                                    TextAlign.Left
-                                                } else {
-                                                    TextAlign.Right
-                                                },
-                                            modifier = Modifier.fillMaxWidth()
-                                        )
-                                    },
-                                    onClick = {
-                                        traineeBranch = option
-                                        if (option != missingBranchValue) {
-                                            traineeOtherBranch = ""
-                                        }
-                                        branchExpanded = false
-                                    }
-                                )
+                            if (selectedBranch != missingBranchValue) {
+                                traineeOtherBranch = ""
                             }
                         }
-                    }
+                    )
 
                     if (shouldShowOtherBranch) {
                         FormTextField(
@@ -1146,6 +1644,52 @@ fun MembershipPaymentScreen(
                     )
                 }
             }
+
+            if (isLoadingServerPrefill) {
+                Surface(
+                    modifier =
+                        Modifier
+                            .fillMaxSize()
+                            .padding(innerPadding),
+                    color =
+                        MaterialTheme.colorScheme.background.copy(
+                            alpha = 0.96f
+                        ),
+                    tonalElevation = 0.dp,
+                    shadowElevation = 0.dp
+                ) {
+                    Box(
+                        modifier = Modifier.fillMaxSize(),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Card(
+                            shape = RoundedCornerShape(22.dp),
+                            colors =
+                                CardDefaults.cardColors(
+                                    containerColor =
+                                        MaterialTheme.colorScheme.surface
+                                ),
+                            elevation =
+                                CardDefaults.cardElevation(
+                                    defaultElevation = 0.dp
+                                ),
+                            modifier =
+                                Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 24.dp)
+                        ) {
+                            MembershipPaymentPremiumLoading(
+                                text =
+                                    if (isEnglish) {
+                                        "Loading your details..."
+                                    } else {
+                                        "טוען את הפרטים שלך..."
+                                    }
+                            )
+                        }
+                    }
+                }
+            }
         }
     }
 
@@ -1256,74 +1800,9 @@ fun MembershipPaymentScreen(
 }
 
 @Composable
-private fun PremiumPaymentHeader(
-    title: String,
-    subtitle: String,
-    isEnglish: Boolean,
-    onClose: () -> Unit
-) {
-    val textAlign = if (isEnglish) TextAlign.Left else TextAlign.Right
-    val horizontalAlignment = if (isEnglish) Alignment.Start else Alignment.End
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        shape = MaterialTheme.shapes.extraLarge,
-        colors = CardDefaults.cardColors(
-            containerColor = Color(0xFF314875)
-        ),
-        elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 18.dp, vertical = 16.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Column(
-                modifier = Modifier.weight(1f),
-                verticalArrangement = Arrangement.spacedBy(4.dp),
-                horizontalAlignment = horizontalAlignment
-            ) {
-                Text(
-                    text = title,
-                    style = KmiTypography.sectionTitle,
-                    fontWeight = FontWeight.Bold,
-                    color = Color.White,
-                    textAlign = textAlign,
-                    modifier = Modifier.fillMaxWidth()
-                )
-
-                Text(
-                    text = subtitle,
-                    style = KmiTypography.body,
-                    color = Color.White.copy(alpha = 0.78f),
-                    textAlign = textAlign,
-                    modifier = Modifier.fillMaxWidth()
-                )
-            }
-
-            Surface(
-                shape = RoundedCornerShape(14.dp),
-                color = Color.White.copy(alpha = 0.10f)
-            ) {
-                IconButton(
-                    onClick = onClose
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Close,
-                        contentDescription = if (isEnglish) "Close" else "סגור",
-                        tint = Color.White
-                    )
-                }
-            }
-        }
-    }
-}
-
-@Composable
 private fun ProductHeroCard(
     isEnglish: Boolean,
-    amountText: String,
-    onClose: () -> Unit
+    amountText: String
 ) {
     val textAlign = if (isEnglish) TextAlign.Left else TextAlign.Right
     val horizontalAlignment = if (isEnglish) Alignment.Start else Alignment.End
@@ -1334,39 +1813,32 @@ private fun ProductHeroCard(
 
     Card(
         modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(24.dp),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surface
-        ),
-        elevation = CardDefaults.cardElevation(defaultElevation = 6.dp)
+        shape = RoundedCornerShape(22.dp),
+        colors =
+            CardDefaults.cardColors(
+                containerColor =
+                    MaterialTheme.colorScheme.surface
+            ),
+        elevation =
+            CardDefaults.cardElevation(
+                defaultElevation = 0.dp
+            )
     ) {
         Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 14.dp, vertical = 12.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
+            modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .padding(
+                        horizontal = 12.dp,
+                        vertical = 10.dp
+                    ),
+            verticalArrangement =
+                Arrangement.spacedBy(6.dp),
             horizontalAlignment = horizontalAlignment
         ) {
             Box(
                 modifier = Modifier.fillMaxWidth()
             ) {
-                Surface(
-                    modifier = Modifier.align(Alignment.CenterEnd),
-                    shape = RoundedCornerShape(18.dp),
-                    color = MaterialTheme.colorScheme.surfaceVariant
-                ) {
-                    IconButton(
-                        onClick = onClose,
-                        modifier = Modifier.size(46.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Close,
-                            contentDescription = if (isEnglish) "Close" else "סגור",
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                }
-
                 Surface(
                     modifier = Modifier.align(Alignment.Center),
                     shape = RoundedCornerShape(18.dp),
@@ -1448,21 +1920,26 @@ private fun SectionCard(
 
     Card(
         modifier = Modifier.fillMaxWidth(),
-        shape = MaterialTheme.shapes.extraLarge,
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surface
-        ),
-        elevation = CardDefaults.cardElevation(
-            defaultElevation = 8.dp,
-            pressedElevation = 10.dp
-        )
+        shape = RoundedCornerShape(22.dp),
+        colors =
+            CardDefaults.cardColors(
+                containerColor =
+                    MaterialTheme.colorScheme.surface
+            ),
+        elevation =
+            CardDefaults.cardElevation(
+                defaultElevation = 0.dp,
+                pressedElevation = 0.dp
+            )
     ) {
         Column(
-            modifier = Modifier.padding(
-                horizontal = 14.dp,
-                vertical = 12.dp
-            ),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
+            modifier =
+                Modifier.padding(
+                    horizontal = 12.dp,
+                    vertical = 10.dp
+                ),
+            verticalArrangement =
+                Arrangement.spacedBy(7.dp)
         ) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -1470,16 +1947,17 @@ private fun SectionCard(
                 horizontalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 Surface(
-                    shape = MaterialTheme.shapes.large,
+                    shape = RoundedCornerShape(14.dp),
                     color =
                         MaterialTheme.colorScheme.primary.copy(
                             alpha = 0.14f
                         )
                 ) {
                     Box(
-                        modifier = Modifier
-                            .size(44.dp)
-                            .padding(10.dp),
+                        modifier =
+                            Modifier
+                                .size(38.dp)
+                                .padding(8.dp),
                         contentAlignment = Alignment.Center
                     ) {
                         Icon(
@@ -1513,6 +1991,103 @@ private fun SectionCard(
 }
 
 @Composable
+private fun BirthDatePartField(
+    value: String,
+    onValueChange: (String) -> Unit,
+    label: String,
+    placeholder: String,
+    maxLength: Int,
+    focusRequester: FocusRequester,
+    imeAction: ImeAction,
+    onCompleted: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    OutlinedTextField(
+        value = value,
+        onValueChange = { rawValue ->
+            val cleanValue =
+                rawValue
+                    .filter { character ->
+                        character.isDigit()
+                    }
+                    .take(maxLength)
+
+            onValueChange(cleanValue)
+
+            if (
+                cleanValue.length == maxLength &&
+                rawValue.length >= value.length
+            ) {
+                onCompleted()
+            }
+        },
+        modifier =
+            modifier
+                .heightIn(min = 64.dp)
+                .focusRequester(focusRequester),
+        singleLine = true,
+        shape = RoundedCornerShape(14.dp),
+        label = {
+            Text(
+                text = label,
+                style =
+                    KmiTypography.caption.copy(
+                        fontWeight =
+                            FontWeight.SemiBold
+                    ),
+                maxLines = 1
+            )
+        },
+        placeholder = {
+            Text(
+                text = placeholder,
+                style = KmiTypography.secondary,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.fillMaxWidth()
+            )
+        },
+        textStyle =
+            KmiTypography.body.copy(
+                fontWeight = FontWeight.Bold,
+                textAlign = TextAlign.Center
+            ),
+        keyboardOptions =
+            KeyboardOptions(
+                keyboardType = KeyboardType.Number,
+                imeAction = imeAction
+            ),
+        keyboardActions =
+            KeyboardActions(
+                onNext = {
+                    onCompleted()
+                },
+                onDone = {
+                    onCompleted()
+                }
+            ),
+        colors =
+            androidx.compose.material3
+                .OutlinedTextFieldDefaults
+                .colors(
+                    focusedContainerColor =
+                        MaterialTheme.colorScheme.surface,
+                    unfocusedContainerColor =
+                        MaterialTheme.colorScheme.surface,
+                    focusedBorderColor =
+                        MaterialTheme.colorScheme.primary,
+                    unfocusedBorderColor =
+                        MaterialTheme.colorScheme.outlineVariant,
+                    focusedTextColor =
+                        MaterialTheme.colorScheme.onSurface,
+                    unfocusedTextColor =
+                        MaterialTheme.colorScheme.onSurface,
+                    cursorColor =
+                        MaterialTheme.colorScheme.primary
+                )
+    )
+}
+
+@Composable
 private fun FormTextField(
     value: String,
     onValueChange: (String) -> Unit,
@@ -1533,9 +2108,10 @@ private fun FormTextField(
     OutlinedTextField(
         value = value,
         onValueChange = onValueChange,
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(66.dp),
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .heightIn(min = 52.dp),
         enabled = enabled,
         singleLine = true,
         shape = RoundedCornerShape(14.dp),

@@ -2,27 +2,34 @@
 
 package il.kmi.app.screens.coach
 
+import android.app.Activity
 import android.app.Application
 import android.content.Context
 import android.content.Intent
-import androidx.core.content.FileProvider
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
-import androidx.compose.animation.core.animateFloat
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Assessment
+import androidx.compose.material.icons.filled.Cancel
+import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material3.Divider
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExposedDropdownMenuBox
 import androidx.compose.material3.ExposedDropdownMenuDefaults
 import androidx.compose.material3.Icon
@@ -33,16 +40,22 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.core.content.FileProvider
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.ktx.firestore
 import com.google.firebase.ktx.Firebase
@@ -54,7 +67,11 @@ import il.kmi.app.privacy.TraineeDisplayNameMapper
 import il.kmi.app.screens.registration.CoachBranchAssignment
 import il.kmi.app.screens.registration.CoachBranchAssignmentsCodec
 import il.kmi.app.training.TrainingCatalog
+import il.kmi.app.ui.KmiPremiumDropdown
 import il.kmi.app.ui.KmiTopBar
+import il.kmi.app.ui.KmiTypography
+import il.kmi.shared.localization.AppLanguage
+import il.kmi.shared.localization.AppLanguageManager
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.launch
@@ -63,322 +80,136 @@ import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
 import java.util.Locale
-import android.app.Activity
-import il.kmi.shared.localization.AppLanguage
-import il.kmi.shared.localization.AppLanguageManager
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.CheckCircle
-import androidx.compose.material.icons.filled.Cancel
-import androidx.compose.material.icons.filled.KeyboardArrowDown
-import androidx.compose.material.icons.filled.KeyboardArrowUp
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.material.icons.filled.Assessment
-import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.unit.sp
-import androidx.compose.runtime.saveable.rememberSaveable
+
 
 //=========================================================================
 
 @Composable
-private fun PremiumCoachPickerHeader(
-    title: String,
-    subtitle: String,
-    itemsCount: Int,
-    isDarkMode: Boolean,
-    textAlign: TextAlign,
-    horizontalAlignment: Alignment.Horizontal
+private fun CoachTraineesPremiumLoading(
+    text: String,
+    modifier: Modifier = Modifier
 ) {
+    val transition =
+        rememberInfiniteTransition(
+            label = "coachTraineesLoading"
+        )
+
+    val outerRotation by transition.animateFloat(
+        initialValue = 0f,
+        targetValue = 360f,
+        animationSpec =
+            infiniteRepeatable(
+                animation =
+                    tween(
+                        durationMillis = 1_250,
+                        easing = FastOutSlowInEasing
+                    )
+            ),
+        label = "coachTraineesOuterRing"
+    )
+
+    val innerRotation by transition.animateFloat(
+        initialValue = 360f,
+        targetValue = 0f,
+        animationSpec =
+            infiniteRepeatable(
+                animation =
+                    tween(
+                        durationMillis = 1_750,
+                        easing = FastOutSlowInEasing
+                    )
+            ),
+        label = "coachTraineesInnerRing"
+    )
+
     Column(
         modifier =
-            Modifier
+            modifier
                 .fillMaxWidth()
-                .padding(
-                    horizontal = 10.dp,
-                    vertical = 8.dp
-                ),
+                .padding(vertical = 12.dp),
+        horizontalAlignment =
+            Alignment.CenterHorizontally,
         verticalArrangement =
             Arrangement.spacedBy(8.dp)
     ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Surface(
-                color =
-                    if (isDarkMode) {
-                        MaterialTheme
-                            .colorScheme
-                            .primaryContainer
-                    } else {
-                        Color(0xFFEEE9FF)
-                    },
-                shape = CircleShape,
-                shadowElevation = 0.dp,
-                tonalElevation = 0.dp,
-                modifier = Modifier.size(32.dp)
-            ) {
-                Box(
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text(
-                        text = itemsCount.toString(),
-                        color =
-                            if (isDarkMode) {
-                                MaterialTheme
-                                    .colorScheme
-                                    .onPrimaryContainer
-                            } else {
-                                Color(0xFF6842D6)
-                            },
-                        style =
-                            MaterialTheme
-                                .typography
-                                .labelMedium,
-                        fontWeight = FontWeight.ExtraBold
-                    )
-                }
-            }
-
-            Spacer(Modifier.width(10.dp))
-
-            Column(
-                modifier = Modifier.weight(1f),
-                horizontalAlignment = horizontalAlignment
-            ) {
-                Text(
-                    text = title,
-                    color =
-                        if (isDarkMode) {
-                            MaterialTheme
-                                .colorScheme
-                                .onSurface
-                        } else {
-                            Color(0xFF172036)
-                        },
-                    style =
-                        MaterialTheme
-                            .typography
-                            .titleSmall,
-                    fontWeight = FontWeight.ExtraBold,
-                    textAlign = textAlign,
-                    modifier = Modifier.fillMaxWidth()
-                )
-
-                Text(
-                    text = subtitle,
-                    color =
-                        if (isDarkMode) {
-                            MaterialTheme
-                                .colorScheme
-                                .onSurfaceVariant
-                        } else {
-                            Color(0xFF68758A)
-                        },
-                    style =
-                        MaterialTheme
-                            .typography
-                            .labelSmall,
-                    textAlign = textAlign,
-                    modifier = Modifier.fillMaxWidth()
-                )
-            }
-        }
-
-        Divider(
-            color =
-                if (isDarkMode) {
-                    MaterialTheme
-                        .colorScheme
-                        .outline
-                        .copy(alpha = 0.35f)
-                } else {
-                    Color(0xFFD9E2F2)
-                },
-            thickness = 1.dp
-        )
-    }
-}
-
-@Composable
-private fun PremiumCoachPickerItem(
-    text: String,
-    badgeText: String,
-    isSelected: Boolean,
-    isDarkMode: Boolean,
-    textAlign: TextAlign,
-    maxLines: Int = 1,
-    onClick: () -> Unit
-) {
-    val itemShape = RoundedCornerShape(16.dp)
-
-    Row(
-        modifier =
-            Modifier
-                .fillMaxWidth()
-                .clip(itemShape)
-                .background(
-                    brush =
-                        if (isSelected) {
-                            Brush.horizontalGradient(
-                                colors =
-                                    if (isDarkMode) {
-                                        listOf(
-                                            MaterialTheme
-                                                .colorScheme
-                                                .primaryContainer,
-                                            MaterialTheme
-                                                .colorScheme
-                                                .secondaryContainer
-                                        )
-                                    } else {
-                                        listOf(
-                                            Color(0xFFF2ECFF),
-                                            Color(0xFFE8F4FF)
-                                        )
-                                    }
-                            )
-                        } else {
-                            Brush.horizontalGradient(
-                                colors = listOf(
-                                    MaterialTheme
-                                        .colorScheme
-                                        .surface,
-                                    MaterialTheme
-                                        .colorScheme
-                                        .surface
-                                )
-                            )
-                        }
-                )
-                .border(
-                    width =
-                        if (isSelected) {
-                            1.5.dp
-                        } else {
-                            1.dp
-                        },
-                    color =
-                        if (isSelected) {
-                            Color(0xFF8057E8)
-                        } else if (isDarkMode) {
-                            MaterialTheme
-                                .colorScheme
-                                .outline
-                                .copy(alpha = 0.40f)
-                        } else {
-                            Color(0xFFD7E1F0)
-                        },
-                    shape = itemShape
-                )
-                .clickable(onClick = onClick)
-                .padding(
-                    horizontal = 10.dp,
-                    vertical = 8.dp
-                ),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Surface(
-            color =
-                if (isSelected) {
-                    Color(0xFF7650DD)
-                } else if (isDarkMode) {
-                    MaterialTheme
-                        .colorScheme
-                        .surfaceVariant
-                } else {
-                    Color(0xFFE9EEFA)
-                },
-            shape = CircleShape,
-            shadowElevation = 0.dp,
-            tonalElevation = 0.dp,
-            modifier = Modifier.size(36.dp)
+        Box(
+            modifier = Modifier.size(58.dp),
+            contentAlignment = Alignment.Center
         ) {
             Box(
-                contentAlignment = Alignment.Center
-            ) {
-                Text(
-                    text = badgeText,
-                    color =
-                        if (isSelected) {
-                            Color.White
-                        } else {
-                            MaterialTheme
-                                .colorScheme
-                                .onSurfaceVariant
-                        },
-                    style =
-                        MaterialTheme
-                            .typography
-                            .bodyMedium,
-                    fontWeight = FontWeight.ExtraBold
-                )
-            }
-        }
+                modifier =
+                    Modifier
+                        .size(58.dp)
+                        .graphicsLayer {
+                            rotationZ = outerRotation
+                        }
+                        .border(
+                            width = 4.dp,
+                            brush =
+                                Brush.sweepGradient(
+                                    listOf(
+                                        Color.Transparent,
+                                        Color(0xFFA855F7),
+                                        Color(0xFF38BDF8),
+                                        Color.Transparent
+                                    )
+                                ),
+                            shape = CircleShape
+                        )
+            )
 
-        Spacer(Modifier.width(10.dp))
+            Box(
+                modifier =
+                    Modifier
+                        .size(40.dp)
+                        .graphicsLayer {
+                            rotationZ = innerRotation
+                        }
+                        .border(
+                            width = 3.dp,
+                            brush =
+                                Brush.sweepGradient(
+                                    listOf(
+                                        Color.Transparent,
+                                        Color(0xFFF59E0B),
+                                        Color(0xFF22C55E),
+                                        Color.Transparent
+                                    )
+                                ),
+                            shape = CircleShape
+                        )
+            )
+
+            Box(
+                modifier =
+                    Modifier
+                        .size(14.dp)
+                        .background(
+                            color =
+                                MaterialTheme.colorScheme.surface,
+                            shape = CircleShape
+                        )
+                        .border(
+                            width = 1.dp,
+                            color =
+                                Color(0xFFA78BFA)
+                                    .copy(alpha = 0.55f),
+                            shape = CircleShape
+                        )
+            )
+        }
 
         Text(
             text = text,
-            style =
-                MaterialTheme
-                    .typography
-                    .bodyMedium
-                    .copy(
-                        fontSize = 14.sp,
-                        lineHeight = 18.sp
-                    ),
-            fontWeight =
-                if (isSelected) {
-                    FontWeight.ExtraBold
-                } else {
-                    FontWeight.Bold
-                },
             color =
-                if (isSelected && !isDarkMode) {
-                    Color(0xFF5634B5)
-                } else {
-                    MaterialTheme
-                        .colorScheme
-                        .onSurface
-                },
-            textAlign = textAlign,
-            maxLines = maxLines,
-            overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.weight(1f)
+                MaterialTheme.colorScheme.onSurfaceVariant,
+            style =
+                KmiTypography.secondary.copy(
+                    fontWeight = FontWeight.Bold
+                ),
+            textAlign = TextAlign.Center,
+            modifier = Modifier.fillMaxWidth()
         )
-
-        if (isSelected) {
-            Spacer(Modifier.width(8.dp))
-
-            Surface(
-                color =
-                    if (isDarkMode) {
-                        MaterialTheme
-                            .colorScheme
-                            .tertiaryContainer
-                    } else {
-                        Color(0xFFE4F8EA)
-                    },
-                shape = CircleShape,
-                shadowElevation = 0.dp,
-                tonalElevation = 0.dp,
-                modifier = Modifier.size(28.dp)
-            ) {
-                Box(
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(
-                        imageVector =
-                            Icons.Default.CheckCircle,
-                        contentDescription = null,
-                        tint = Color(0xFF16A34A),
-                        modifier = Modifier.size(19.dp)
-                    )
-                }
-            }
-        }
     }
 }
 
@@ -458,14 +289,6 @@ fun CoachTraineesScreen(
 
     var availableGroups by remember {
         mutableStateOf<List<String>>(emptyList())
-    }
-
-    var branchPickerExpanded by remember {
-        mutableStateOf(false)
-    }
-
-    var groupPickerExpanded by remember {
-        mutableStateOf(false)
     }
 
     /*
@@ -2155,10 +1978,14 @@ fun CoachTraineesScreen(
     val demoPrivacyEnabled =
         DemoPrivacy.isEnabled()
 
-    fun demoSafeName(profile: TraineeProfile): String {
+    fun demoSafeName(
+        profile: TraineeProfile,
+        demoIndex: Int? = null
+    ): String {
         /*
-         * userDocId הוא המזהה המועדף מפני שהוא נשאר
-         * עקבי גם כאשר אותו מתאמן מופיע במסכים שונים.
+         * userDocId נשאר המזהה היציב לפעולות,
+         * שמירה ועדכון. demoIndex משפיע רק
+         * על השם שמוצג במצב הדגמה.
          */
         val stableKey =
             profile.userDocId.ifBlank {
@@ -2167,11 +1994,23 @@ fun CoachTraineesScreen(
                 }
             }
 
-        return TraineeDisplayNameMapper.displayName(
-            realName = profile.fullName,
-            stableKey = stableKey,
-            isEnglish = isEnglish
-        ).ifBlank {
+        val displayName =
+            if (demoIndex != null) {
+                TraineeDisplayNameMapper.displayName(
+                    realName = profile.fullName,
+                    stableKey = stableKey,
+                    demoIndex = demoIndex,
+                    isEnglish = isEnglish
+                )
+            } else {
+                TraineeDisplayNameMapper.displayName(
+                    realName = profile.fullName,
+                    stableKey = stableKey,
+                    isEnglish = isEnglish
+                )
+            }
+
+        return displayName.ifBlank {
             coachTr(
                 isEnglish,
                 "מתאמן ללא שם",
@@ -2732,13 +2571,16 @@ fun CoachTraineesScreen(
                                     Spacer(Modifier.width(6.dp))
 
                                     Text(
-                                        text = coachTr(isEnglish, "סטטיסטיקה", "statistics"),
-                                        fontWeight = FontWeight.ExtraBold,
+                                        text =
+                                            coachTr(
+                                                isEnglish,
+                                                "סטטיסטיקה",
+                                                "Statistics"
+                                            ),
+                                        fontWeight =
+                                            FontWeight.ExtraBold,
                                         color = Color.White,
-                                        style = MaterialTheme.typography.labelLarge.copy(
-                                            fontSize = 15.sp,
-                                            lineHeight = 17.sp
-                                        )
+                                        style = KmiTypography.action
                                     )
                                 }
                             }
@@ -2819,16 +2661,25 @@ fun CoachTraineesScreen(
                                 Spacer(Modifier.width(6.dp))
 
                                 Text(
-                                    text = if (isTopStatsExpanded) {
-                                        coachTr(isEnglish, "הסתר נתונים", "Hide data")
-                                    } else {
-                                        coachTr(isEnglish, "הצג נתונים", "Show data")
-                                    },
-                                    style = MaterialTheme.typography.labelMedium.copy(
-                                        fontSize = 12.sp,
-                                        lineHeight = 14.sp
-                                    ),
-                                    fontWeight = FontWeight.ExtraBold,
+                                    text =
+                                        if (isTopStatsExpanded) {
+                                            coachTr(
+                                                isEnglish,
+                                                "הסתר נתונים",
+                                                "Hide data"
+                                            )
+                                        } else {
+                                            coachTr(
+                                                isEnglish,
+                                                "הצג נתונים",
+                                                "Show data"
+                                            )
+                                        },
+                                    style =
+                                        KmiTypography.caption.copy(
+                                            fontWeight =
+                                                FontWeight.ExtraBold
+                                        ),
                                     color = Color(0xFF4B478F),
                                     textAlign = TextAlign.Center
                                 )
@@ -2954,377 +2805,103 @@ fun CoachTraineesScreen(
 
                             if (isTraineePickerExpanded) {
 
+                                if (
+                                    isProfilesLoading ||
+                                    isInitialServerSyncRunning ||
+                                    !didFinishInitialProfilesLoad
+                                ) {
+                                    CoachTraineesPremiumLoading(
+                                        text =
+                                            coachTr(
+                                                isEnglish,
+                                                "טוען את רשימת המתאמנים...",
+                                                "Loading trainees..."
+                                            )
+                                    )
+                                }
+
                                 // =====================================================
                                 // בחירת סניף
                                 // =====================================================
 
-                                ExposedDropdownMenuBox(
-                                    expanded = branchPickerExpanded,
-                                    onExpandedChange = {
-                                        if (availableBranches.isNotEmpty()) {
-                                            branchPickerExpanded = it
-                                        }
-                                    },
-                                    modifier = Modifier.fillMaxWidth()
-                                ) {
-                                    OutlinedTextField(
-                                        value = effectiveBranch,
-                                        onValueChange = {},
-                                        readOnly = true,
-                                        singleLine = true,
-                                        label = {
-                                            Text(
-                                                text = coachTr(
-                                                    isEnglish,
-                                                    "סניף",
-                                                    "Branch"
-                                                )
-                                            )
-                                        },
-                                        placeholder = {
-                                            Text(
-                                                text = coachTr(
-                                                    isEnglish,
-                                                    "בחר סניף",
-                                                    "Select branch"
-                                                )
-                                            )
-                                        },
-                                        trailingIcon = {
-                                            ExposedDropdownMenuDefaults
-                                                .TrailingIcon(
-                                                    expanded =
-                                                        branchPickerExpanded
-                                                )
-                                        },
-                                        colors =
-                                            OutlinedTextFieldDefaults.colors(
-                                                focusedTextColor =
-                                                    Color(0xFF172036),
-                                                unfocusedTextColor =
-                                                    Color(0xFF172036),
-                                                focusedBorderColor =
-                                                    Color(0xFF7C5CE7),
-                                                unfocusedBorderColor =
-                                                    Color(0xFFCBD8EA),
-                                                focusedContainerColor =
-                                                    Color.White,
-                                                unfocusedContainerColor =
-                                                    Color.White,
-                                                focusedLabelColor =
-                                                    Color(0xFF4F46E5),
-                                                unfocusedLabelColor =
-                                                    Color(0xFF64748B)
-                                            ),
-                                        shape = RoundedCornerShape(18.dp),
-                                        textStyle =
-                                            MaterialTheme.typography
-                                                .bodyMedium
-                                                .copy(
-                                                    fontWeight =
-                                                        FontWeight.Bold,
-                                                    textAlign =
-                                                        coachTextAlign(
-                                                            isEnglish
-                                                        )
-                                                ),
-                                        modifier = Modifier
-                                            .menuAnchor()
-                                            .fillMaxWidth()
-                                            .heightIn(min = 52.dp)
-                                    )
-
-                                    ExposedDropdownMenu(
-                                        expanded =
-                                            branchPickerExpanded,
-                                        onDismissRequest = {
-                                            branchPickerExpanded = false
-                                        },
-                                        modifier =
-                                            Modifier.heightIn(
-                                                max = 300.dp
-                                            )
-                                    ) {
-                                        Column(
-                                            modifier =
-                                                Modifier
-                                                    .fillMaxWidth()
-                                                    .background(
-                                                        color =
-                                                            if (
-                                                                isDarkMode
-                                                            ) {
-                                                                MaterialTheme
-                                                                    .colorScheme
-                                                                    .surface
-                                                            } else {
-                                                                Color(
-                                                                    0xFFF8FAFF
-                                                                )
-                                                            }
-                                                    )
-                                                    .padding(
-                                                        horizontal = 8.dp,
-                                                        vertical = 8.dp
-                                                    ),
-                                            verticalArrangement =
-                                                Arrangement.spacedBy(
-                                                    6.dp
-                                                )
+                                KmiPremiumDropdown(
+                                    title =
+                                        coachTr(
+                                            isEnglish,
+                                            "סניף",
+                                            "Branch"
+                                        ),
+                                    options = availableBranches,
+                                    selectedValue = effectiveBranch,
+                                    isEnglish = isEnglish,
+                                    placeholder =
+                                        coachTr(
+                                            isEnglish,
+                                            "בחר סניף",
+                                            "Select branch"
+                                        ),
+                                    enabled =
+                                        availableBranches.size > 1,
+                                    onSelected = { branchItem ->
+                                        if (
+                                            branchItem !=
+                                            effectiveBranch
                                         ) {
-                                            PremiumCoachPickerHeader(
-                                                title =
-                                                    coachTr(
-                                                        isEnglish,
-                                                        "הסניפים שלי",
-                                                        "My branches"
-                                                    ),
-                                                subtitle =
-                                                    coachTr(
-                                                        isEnglish,
-                                                        "בחר את הסניף להצגת הקבוצות",
-                                                        "Select a branch to view its groups"
-                                                    ),
-                                                itemsCount =
-                                                    availableBranches.size,
-                                                isDarkMode = isDarkMode,
-                                                textAlign =
-                                                    screenTextAlign,
-                                                horizontalAlignment =
-                                                    screenHorizontalAlignment
-                                            )
+                                            effectiveBranch =
+                                                branchItem
 
-                                            availableBranches.forEach {
-                                                    branchItem ->
-
-                                                PremiumCoachPickerItem(
-                                                    text = branchItem,
-                                                    badgeText =
-                                                        branchItem
-                                                            .trim()
-                                                            .firstOrNull()
-                                                            ?.toString()
-                                                            .orEmpty(),
-                                                    isSelected =
-                                                        branchItem ==
-                                                                effectiveBranch,
-                                                    isDarkMode =
-                                                        isDarkMode,
-                                                    textAlign =
-                                                        screenTextAlign,
-                                                    maxLines = 2,
-                                                    onClick = {
-                                                        if (
-                                                            branchItem !=
-                                                            effectiveBranch
-                                                        ) {
-                                                            effectiveBranch =
-                                                                branchItem
-
-                                                            /*
-                                                             * החלפת סניף מאפסת
-                                                             * גם את הקבוצה הקודמת
-                                                             * וגם את המתאמן שנבחר.
-                                                             */
-                                                            effectiveGroupKey =
-                                                                ""
-                                                            availableGroups =
-                                                                emptyList()
-                                                            selectedId = null
-                                                            traineeSearchQuery =
-                                                                ""
-                                                            expandedCoachSection =
-                                                                null
-                                                        }
-
-                                                        branchPickerExpanded =
-                                                            false
-                                                    }
-                                                )
-                                            }
+                                            /*
+                                             * החלפת סניף מאפסת
+                                             * את הקבוצה ואת המתאמן,
+                                             * משום שהם עלולים לא להיות
+                                             * תקפים בסניף החדש.
+                                             */
+                                            effectiveGroupKey = ""
+                                            availableGroups =
+                                                emptyList()
+                                            selectedId = null
+                                            traineeSearchQuery = ""
+                                            expandedCoachSection = null
                                         }
                                     }
-                                }
+                                )
 
                                 // =====================================================
                                 // בחירת קבוצה
                                 // =====================================================
 
-                                ExposedDropdownMenuBox(
-                                    expanded = groupPickerExpanded,
-                                    onExpandedChange = {
-                                        if (availableGroups.isNotEmpty()) {
-                                            groupPickerExpanded = it
-                                        }
-                                    },
-                                    modifier = Modifier.fillMaxWidth()
-                                ) {
-                                    OutlinedTextField(
-                                        value = effectiveGroupKey,
-                                        onValueChange = {},
-                                        readOnly = true,
-                                        singleLine = true,
-                                        label = {
-                                            Text(
-                                                text = coachTr(
-                                                    isEnglish,
-                                                    "קבוצה",
-                                                    "Group"
-                                                )
-                                            )
-                                        },
-                                        placeholder = {
-                                            Text(
-                                                text = coachTr(
-                                                    isEnglish,
-                                                    "בחר קבוצה",
-                                                    "Select group"
-                                                )
-                                            )
-                                        },
-                                        trailingIcon = {
-                                            ExposedDropdownMenuDefaults
-                                                .TrailingIcon(
-                                                    expanded =
-                                                        groupPickerExpanded
-                                                )
-                                        },
-                                        colors =
-                                            OutlinedTextFieldDefaults.colors(
-                                                focusedTextColor =
-                                                    Color(0xFF172036),
-                                                unfocusedTextColor =
-                                                    Color(0xFF172036),
-                                                focusedBorderColor =
-                                                    Color(0xFF7C5CE7),
-                                                unfocusedBorderColor =
-                                                    Color(0xFFCBD8EA),
-                                                focusedContainerColor =
-                                                    Color.White,
-                                                unfocusedContainerColor =
-                                                    Color.White,
-                                                focusedLabelColor =
-                                                    Color(0xFF4F46E5),
-                                                unfocusedLabelColor =
-                                                    Color(0xFF64748B)
-                                            ),
-                                        shape = RoundedCornerShape(18.dp),
-                                        textStyle =
-                                            MaterialTheme.typography
-                                                .bodyMedium
-                                                .copy(
-                                                    fontWeight =
-                                                        FontWeight.Bold,
-                                                    textAlign =
-                                                        coachTextAlign(
-                                                            isEnglish
-                                                        )
-                                                ),
-                                        modifier = Modifier
-                                            .menuAnchor()
-                                            .fillMaxWidth()
-                                    )
-
-                                    ExposedDropdownMenu(
-                                        expanded =
-                                            groupPickerExpanded,
-                                        onDismissRequest = {
-                                            groupPickerExpanded = false
-                                        },
-                                        modifier =
-                                            Modifier.heightIn(
-                                                max = 300.dp
-                                            )
-                                    ) {
-                                        Column(
-                                            modifier =
-                                                Modifier
-                                                    .fillMaxWidth()
-                                                    .background(
-                                                        color =
-                                                            if (
-                                                                isDarkMode
-                                                            ) {
-                                                                MaterialTheme
-                                                                    .colorScheme
-                                                                    .surface
-                                                            } else {
-                                                                Color(
-                                                                    0xFFF8FAFF
-                                                                )
-                                                            }
-                                                    )
-                                                    .padding(
-                                                        horizontal = 8.dp,
-                                                        vertical = 8.dp
-                                                    ),
-                                            verticalArrangement =
-                                                Arrangement.spacedBy(
-                                                    6.dp
-                                                )
+                                KmiPremiumDropdown(
+                                    title =
+                                        coachTr(
+                                            isEnglish,
+                                            "קבוצה",
+                                            "Group"
+                                        ),
+                                    options = availableGroups,
+                                    selectedValue =
+                                        effectiveGroupKey,
+                                    isEnglish = isEnglish,
+                                    placeholder =
+                                        coachTr(
+                                            isEnglish,
+                                            "בחר קבוצה",
+                                            "Select group"
+                                        ),
+                                    enabled =
+                                        availableGroups.size > 1,
+                                    onSelected = { groupItem ->
+                                        if (
+                                            groupItem !=
+                                            effectiveGroupKey
                                         ) {
-                                            PremiumCoachPickerHeader(
-                                                title =
-                                                    coachTr(
-                                                        isEnglish,
-                                                        "קבוצות בסניף",
-                                                        "Branch groups"
-                                                    ),
-                                                subtitle =
-                                                    coachTr(
-                                                        isEnglish,
-                                                        "בחר קבוצה להצגת המתאמנים",
-                                                        "Select a group to view its trainees"
-                                                    ),
-                                                itemsCount =
-                                                    availableGroups.size,
-                                                isDarkMode = isDarkMode,
-                                                textAlign =
-                                                    screenTextAlign,
-                                                horizontalAlignment =
-                                                    screenHorizontalAlignment
-                                            )
-
-                                            availableGroups.forEach {
-                                                    groupItem ->
-
-                                                PremiumCoachPickerItem(
-                                                    text = groupItem,
-                                                    badgeText =
-                                                        groupItem
-                                                            .trim()
-                                                            .firstOrNull()
-                                                            ?.toString()
-                                                            .orEmpty(),
-                                                    isSelected =
-                                                        groupItem ==
-                                                                effectiveGroupKey,
-                                                    isDarkMode =
-                                                        isDarkMode,
-                                                    textAlign =
-                                                        screenTextAlign,
-                                                    onClick = {
-                                                        if (
-                                                            groupItem !=
-                                                            effectiveGroupKey
-                                                        ) {
-                                                            effectiveGroupKey =
-                                                                groupItem
-                                                            selectedId = null
-                                                            traineeSearchQuery =
-                                                                ""
-                                                            expandedCoachSection =
-                                                                null
-                                                        }
-
-                                                        groupPickerExpanded =
-                                                            false
-                                                    }
-                                                )
-                                            }
+                                            effectiveGroupKey =
+                                                groupItem
+                                            selectedId = null
+                                            traineeSearchQuery = ""
+                                            expandedCoachSection = null
                                         }
                                     }
-                                }
+                                )
 
                                 // =====================================================
                                 // בחירת מתאמן – רשימה צפה שאינה מגדילה את הכרטיס
@@ -3365,23 +2942,22 @@ fun CoachTraineesScreen(
                                                     didFinishInitialProfilesLoad,
                                         singleLine = true,
                                         textStyle =
-                                            MaterialTheme.typography
-                                                .bodySmall
-                                                .copy(
-                                                    fontSize = 13.sp,
-                                                    textAlign =
-                                                        coachTextAlign(
-                                                            isEnglish
-                                                        ),
-                                                    color =
-                                                        if (isDarkMode) {
-                                                            MaterialTheme
-                                                                .colorScheme
-                                                                .onSurface
-                                                        } else {
-                                                            Color(0xFF172036)
-                                                        }
-                                                ),
+                                            KmiTypography.secondary.copy(
+                                                fontWeight =
+                                                    FontWeight.ExtraBold,
+                                                textAlign =
+                                                    coachTextAlign(
+                                                        isEnglish
+                                                    ),
+                                                color =
+                                                    if (isDarkMode) {
+                                                        MaterialTheme
+                                                            .colorScheme
+                                                            .onSurface
+                                                    } else {
+                                                        Color(0xFF172036)
+                                                    }
+                                            ),
                                         placeholder = {
                                             Text(
                                                 text =
@@ -3410,11 +2986,10 @@ fun CoachTraineesScreen(
                                                             )
                                                     },
                                                 style =
-                                                    MaterialTheme.typography
-                                                        .bodySmall
-                                                        .copy(
-                                                            fontSize = 12.sp
-                                                        ),
+                                                    KmiTypography.caption.copy(
+                                                        fontWeight =
+                                                            FontWeight.Bold
+                                                    ),
                                                 color =
                                                     if (isDarkMode) {
                                                         MaterialTheme
@@ -3426,13 +3001,17 @@ fun CoachTraineesScreen(
                                                 textAlign =
                                                     coachTextAlign(
                                                         isEnglish
-                                                    )
+                                                    ),
+                                                maxLines = 1,
+                                                overflow =
+                                                    TextOverflow.Ellipsis
                                             )
                                         },
                                         leadingIcon = {
                                             Text(
                                                 text = "🔎",
-                                                fontSize = 15.sp
+                                                style =
+                                                    KmiTypography.action
                                             )
                                         },
                                         trailingIcon = {
@@ -3535,357 +3114,97 @@ fun CoachTraineesScreen(
                                             isTraineeMenuExpanded = false
                                         },
                                         modifier =
-                                            Modifier.heightIn(
-                                                max = 300.dp
-                                            )
+                                            Modifier
+                                                .heightIn(max = 280.dp)
+                                                .clip(
+                                                    RoundedCornerShape(
+                                                        16.dp
+                                                    )
+                                                ),
+                                        containerColor =
+                                            Color(0xFF0A234A),
+                                        shadowElevation = 2.dp,
+                                        tonalElevation = 0.dp
                                     ) {
                                         Column(
                                             modifier =
                                                 Modifier
                                                     .fillMaxWidth()
-                                                    .background(
-                                                        brush =
-                                                            Brush.verticalGradient(
-                                                                colors =
-                                                                    if (
-                                                                        isDarkMode
-                                                                    ) {
-                                                                        listOf(
-                                                                            MaterialTheme
-                                                                                .colorScheme
-                                                                                .surface,
-                                                                            MaterialTheme
-                                                                                .colorScheme
-                                                                                .surfaceVariant
-                                                                        )
-                                                                    } else {
-                                                                        listOf(
-                                                                            Color(
-                                                                                0xFFFBFCFF
-                                                                            ),
-                                                                            Color(
-                                                                                0xFFF2F5FF
-                                                                            )
-                                                                        )
-                                                                    }
-                                                            )
+                                                    .heightIn(
+                                                        max = 272.dp
+                                                    )
+                                                    .verticalScroll(
+                                                        rememberScrollState()
                                                     )
                                                     .padding(
-                                                        horizontal = 8.dp,
-                                                        vertical = 8.dp
+                                                        vertical = 4.dp
                                                     ),
                                             verticalArrangement =
-                                                Arrangement.spacedBy(
-                                                    6.dp
-                                                )
+                                                Arrangement.spacedBy(0.dp)
                                         ) {
-                                            Row(
-                                                modifier =
-                                                    Modifier
-                                                        .fillMaxWidth()
-                                                        .padding(
-                                                            horizontal = 8.dp,
-                                                            vertical = 4.dp
-                                                        ),
-                                                verticalAlignment =
-                                                    Alignment.CenterVertically,
-                                                horizontalArrangement =
-                                                    Arrangement.SpaceBetween
-                                            ) {
-                                                Surface(
-                                                    color =
-                                                        Color(0xFFEEE9FF),
-                                                    shape = CircleShape,
-                                                    shadowElevation = 0.dp,
-                                                    tonalElevation = 0.dp,
-                                                    modifier =
-                                                        Modifier.size(
-                                                            30.dp
-                                                        )
-                                                ) {
-                                                    Box(
-                                                        contentAlignment =
-                                                            Alignment.Center
-                                                    ) {
-                                                        Text(
-                                                            text =
-                                                                uiProfiles
-                                                                    .size
-                                                                    .toString(),
-                                                            color =
-                                                                Color(
-                                                                    0xFF6842D6
-                                                                ),
-                                                            style =
-                                                                MaterialTheme
-                                                                    .typography
-                                                                    .labelMedium,
-                                                            fontWeight =
-                                                                FontWeight
-                                                                    .ExtraBold
-                                                        )
-                                                    }
-                                                }
-
-                                                Spacer(
-                                                    Modifier.width(
-                                                        8.dp
-                                                    )
-                                                )
-
-                                                Column(
-                                                    modifier =
-                                                        Modifier.weight(
-                                                            1f
-                                                        ),
-                                                    horizontalAlignment =
-                                                        screenHorizontalAlignment
-                                                ) {
-                                                    Text(
-                                                        text =
-                                                            coachTr(
-                                                                isEnglish,
-                                                                "מתאמני הקבוצה",
-                                                                "Group trainees"
-                                                            ),
-                                                        color =
-                                                            if (
-                                                                isDarkMode
-                                                            ) {
-                                                                MaterialTheme
-                                                                    .colorScheme
-                                                                    .onSurface
-                                                            } else {
-                                                                Color(
-                                                                    0xFF172036
-                                                                )
-                                                            },
-                                                        style =
-                                                            MaterialTheme
-                                                                .typography
-                                                                .titleSmall,
-                                                        fontWeight =
-                                                            FontWeight
-                                                                .ExtraBold,
-                                                        textAlign =
-                                                            screenTextAlign,
-                                                        modifier =
-                                                            Modifier
-                                                                .fillMaxWidth()
-                                                    )
-
-                                                    Text(
-                                                        text =
-                                                            coachTr(
-                                                                isEnglish,
-                                                                "בחר מתאמן לצפייה בנתונים",
-                                                                "Select a trainee to view details"
-                                                            ),
-                                                        color =
-                                                            if (
-                                                                isDarkMode
-                                                            ) {
-                                                                MaterialTheme
-                                                                    .colorScheme
-                                                                    .onSurfaceVariant
-                                                            } else {
-                                                                Color(
-                                                                    0xFF68758A
-                                                                )
-                                                            },
-                                                        style =
-                                                            MaterialTheme
-                                                                .typography
-                                                                .labelSmall,
-                                                        textAlign =
-                                                            screenTextAlign,
-                                                        modifier =
-                                                            Modifier
-                                                                .fillMaxWidth()
-                                                    )
-                                                }
-                                            }
-
-                                            Divider(
-                                                color =
-                                                    if (isDarkMode) {
-                                                        MaterialTheme
-                                                            .colorScheme
-                                                            .outline
-                                                            .copy(
-                                                                alpha = 0.35f
-                                                            )
-                                                    } else {
-                                                        Color(
-                                                            0xFFD9E2F2
-                                                        )
-                                                    },
-                                                thickness = 1.dp
-                                            )
-
                                             if (uiProfiles.isEmpty()) {
-                                                Surface(
+                                                Text(
+                                                    text =
+                                                        coachTr(
+                                                            isEnglish,
+                                                            "לא נמצאו מתאמנים בקבוצה שנבחרה",
+                                                            "No trainees were found in the selected group"
+                                                        ),
                                                     color =
-                                                        if (isDarkMode) {
-                                                            MaterialTheme
-                                                                .colorScheme
-                                                                .surfaceVariant
-                                                        } else {
-                                                            Color(
-                                                                0xFFF4F6FB
-                                                            )
-                                                        },
-                                                    shape =
-                                                        RoundedCornerShape(
-                                                            16.dp
+                                                        Color.White.copy(
+                                                            alpha = 0.82f
                                                         ),
-                                                    shadowElevation = 0.dp,
-                                                    tonalElevation = 0.dp,
-                                                    border =
-                                                        BorderStroke(
-                                                            width = 1.dp,
-                                                            color =
-                                                                if (
-                                                                    isDarkMode
-                                                                ) {
-                                                                    MaterialTheme
-                                                                        .colorScheme
-                                                                        .outline
-                                                                        .copy(
-                                                                            alpha =
-                                                                                0.35f
-                                                                        )
-                                                                } else {
-                                                                    Color(
-                                                                        0xFFD9E2F2
-                                                                    )
-                                                                }
+                                                    style =
+                                                        KmiTypography.secondary.copy(
+                                                            fontWeight =
+                                                                FontWeight.Bold
                                                         ),
+                                                    textAlign =
+                                                        screenTextAlign,
                                                     modifier =
                                                         Modifier
                                                             .fillMaxWidth()
-                                                ) {
-                                                    Text(
-                                                        text =
-                                                            coachTr(
-                                                                isEnglish,
-                                                                "לא נמצאו מתאמנים בקבוצה שנבחרה",
-                                                                "No trainees were found in the selected group"
-                                                            ),
-                                                        color =
-                                                            MaterialTheme
-                                                                .colorScheme
-                                                                .onSurfaceVariant,
-                                                        style =
-                                                            MaterialTheme
-                                                                .typography
-                                                                .bodySmall,
-                                                        textAlign =
-                                                            screenTextAlign,
-                                                        modifier =
-                                                            Modifier.padding(
+                                                            .padding(
                                                                 horizontal =
                                                                     14.dp,
                                                                 vertical =
                                                                     14.dp
                                                             )
-                                                    )
-                                                }
+                                                )
                                             } else {
-                                                uiProfiles.forEach {
+                                                uiProfiles.forEachIndexed {
+                                                        index,
                                                         trainee ->
 
                                                     val traineeName =
                                                         demoSafeName(
-                                                            trainee
+                                                            profile = trainee,
+                                                            demoIndex =
+                                                                index + 1
                                                         )
-
-                                                    val traineeInitial =
-                                                        traineeName
-                                                            .trim()
-                                                            .firstOrNull()
-                                                            ?.toString()
-                                                            .orEmpty()
 
                                                     val isSelected =
                                                         selectedId ==
                                                                 trainee.id
 
-                                                    val itemShape =
-                                                        RoundedCornerShape(
-                                                            16.dp
-                                                        )
-
                                                     Row(
                                                         modifier =
                                                             Modifier
                                                                 .fillMaxWidth()
-                                                                .clip(
-                                                                    itemShape
-                                                                )
                                                                 .background(
-                                                                    brush =
-                                                                        if (
-                                                                            isSelected
-                                                                        ) {
-                                                                            Brush
-                                                                                .horizontalGradient(
-                                                                                    listOf(
-                                                                                        Color(
-                                                                                            0xFFF2ECFF
-                                                                                        ),
-                                                                                        Color(
-                                                                                            0xFFE8F4FF
-                                                                                        )
-                                                                                    )
-                                                                                )
-                                                                        } else {
-                                                                            Brush
-                                                                                .horizontalGradient(
-                                                                                    listOf(
-                                                                                        MaterialTheme
-                                                                                            .colorScheme
-                                                                                            .surface,
-                                                                                        MaterialTheme
-                                                                                            .colorScheme
-                                                                                            .surface
-                                                                                    )
-                                                                                )
-                                                                        }
-                                                                )
-                                                                .border(
-                                                                    width =
-                                                                        if (
-                                                                            isSelected
-                                                                        ) {
-                                                                            1.5.dp
-                                                                        } else {
-                                                                            1.dp
-                                                                        },
                                                                     color =
                                                                         if (
                                                                             isSelected
                                                                         ) {
                                                                             Color(
-                                                                                0xFF8057E8
+                                                                                0xFF164E79
+                                                                            ).copy(
+                                                                                alpha =
+                                                                                    0.72f
                                                                             )
-                                                                        } else if (
-                                                                            isDarkMode
-                                                                        ) {
-                                                                            MaterialTheme
-                                                                                .colorScheme
-                                                                                .outline
-                                                                                .copy(
-                                                                                    alpha =
-                                                                                        0.40f
-                                                                                )
                                                                         } else {
-                                                                            Color(
-                                                                                0xFFD7E1F0
-                                                                            )
-                                                                        },
-                                                                    shape =
-                                                                        itemShape
+                                                                            Color.Transparent
+                                                                        }
                                                                 )
                                                                 .clickable {
                                                                     selectedId =
@@ -3909,98 +3228,33 @@ fun CoachTraineesScreen(
                                                             Alignment
                                                                 .CenterVertically
                                                     ) {
-                                                        Surface(
-                                                            color =
-                                                                if (
-                                                                    isSelected
-                                                                ) {
-                                                                    Color(
-                                                                        0xFF7650DD
-                                                                    )
-                                                                } else {
-                                                                    Color(
-                                                                        0xFFE9EEFA
-                                                                    )
-                                                                },
-                                                            shape =
-                                                                CircleShape,
-                                                            shadowElevation =
-                                                                0.dp,
-                                                            tonalElevation =
-                                                                0.dp,
-                                                            modifier =
-                                                                Modifier.size(
-                                                                    36.dp
-                                                                )
-                                                        ) {
-                                                            Box(
-                                                                contentAlignment =
-                                                                    Alignment
-                                                                        .Center
-                                                            ) {
-                                                                Text(
-                                                                    text =
-                                                                        traineeInitial,
-                                                                    color =
-                                                                        if (
-                                                                            isSelected
-                                                                        ) {
-                                                                            Color
-                                                                                .White
-                                                                        } else {
-                                                                            Color(
-                                                                                0xFF4A5870
-                                                                            )
-                                                                        },
-                                                                    style =
-                                                                        MaterialTheme
-                                                                            .typography
-                                                                            .bodyMedium,
-                                                                    fontWeight =
-                                                                        FontWeight
-                                                                            .ExtraBold
-                                                                )
-                                                            }
-                                                        }
-
-                                                        Spacer(
-                                                            Modifier.width(
-                                                                10.dp
-                                                            )
-                                                        )
-
                                                         Text(
                                                             text =
                                                                 traineeName,
                                                             style =
-                                                                MaterialTheme
-                                                                    .typography
-                                                                    .bodyMedium,
-                                                            fontWeight =
-                                                                if (
-                                                                    isSelected
-                                                                ) {
-                                                                    FontWeight
-                                                                        .ExtraBold
-                                                                } else {
-                                                                    FontWeight
-                                                                        .Bold
-                                                                },
+                                                                KmiTypography.secondary.copy(
+                                                                    fontWeight =
+                                                                        if (
+                                                                            isSelected
+                                                                        ) {
+                                                                            FontWeight.Black
+                                                                        } else {
+                                                                            FontWeight.Bold
+                                                                        }
+                                                                ),
                                                             color =
                                                                 if (
                                                                     isSelected
                                                                 ) {
                                                                     Color(
-                                                                        0xFF5634B5
+                                                                        0xFF67E8F9
                                                                     )
                                                                 } else {
-                                                                    MaterialTheme
-                                                                        .colorScheme
-                                                                        .onSurface
+                                                                    Color.White
                                                                 },
                                                             textAlign =
                                                                 screenTextAlign,
-                                                            maxLines = 1,
+                                                            maxLines = 2,
                                                             overflow =
                                                                 TextOverflow
                                                                     .Ellipsis,
@@ -4057,6 +3311,25 @@ fun CoachTraineesScreen(
                                                                 }
                                                             }
                                                         }
+                                                    }
+
+                                                    if (
+                                                        index <
+                                                        uiProfiles.lastIndex
+                                                    ) {
+                                                        Divider(
+                                                            modifier =
+                                                                Modifier.padding(
+                                                                    horizontal =
+                                                                        12.dp
+                                                                ),
+                                                            color =
+                                                                Color.White.copy(
+                                                                    alpha =
+                                                                        0.12f
+                                                                ),
+                                                            thickness = 1.dp
+                                                        )
                                                     }
                                                 }
                                             }
@@ -4128,30 +3401,42 @@ fun CoachTraineesScreen(
                                     ) {
                                         Text(
                                             text = demoSafeName(selected),
-                                            style = MaterialTheme.typography.titleLarge.copy(
-                                                fontSize = 23.sp,
-                                                lineHeight = 27.sp,
-                                                fontWeight = FontWeight.ExtraBold
-                                            ),
-                                            color = Color(0xFF172036),
+                                            style =
+                                                KmiTypography.sectionTitle.copy(
+                                                    fontWeight =
+                                                        FontWeight.ExtraBold
+                                                ),
+                                            color =
+                                                MaterialTheme
+                                                    .colorScheme
+                                                    .onSurface,
                                             textAlign = screenTextAlign,
-                                            modifier = Modifier.fillMaxWidth()
+                                            maxLines = 2,
+                                            overflow =
+                                                TextOverflow.Ellipsis,
+                                            modifier =
+                                                Modifier.fillMaxWidth()
                                         )
 
                                         Text(
-                                            text = coachTr(
-                                                isEnglish,
-                                                "פרופיל מתאמן",
-                                                "Trainee profile"
-                                            ),
-                                            style = MaterialTheme.typography.labelMedium.copy(
-                                                fontSize = 12.sp,
-                                                lineHeight = 14.sp,
-                                                fontWeight = FontWeight.SemiBold
-                                            ),
-                                            color = Color(0xFF64748B),
+                                            text =
+                                                coachTr(
+                                                    isEnglish,
+                                                    "פרופיל מתאמן",
+                                                    "Trainee profile"
+                                                ),
+                                            style =
+                                                KmiTypography.caption.copy(
+                                                    fontWeight =
+                                                        FontWeight.SemiBold
+                                                ),
+                                            color =
+                                                MaterialTheme
+                                                    .colorScheme
+                                                    .onSurfaceVariant,
                                             textAlign = screenTextAlign,
-                                            modifier = Modifier.fillMaxWidth()
+                                            modifier =
+                                                Modifier.fillMaxWidth()
                                         )
 
                                         Divider(
@@ -4299,13 +3584,17 @@ fun CoachTraineesScreen(
                                                         modifier = Modifier
                                                             .fillMaxWidth()
                                                             .clickable {
-                                                                expandedBelt = if (isExpanded) null else beltName
+                                                                expandedBelt =
+                                                                    if (isExpanded) null else beltName
                                                             }
                                                     ) {
                                                         Column(
                                                             modifier = Modifier
                                                                 .fillMaxWidth()
-                                                                .padding(horizontal = 10.dp, vertical = 8.dp),
+                                                                .padding(
+                                                                    horizontal = 10.dp,
+                                                                    vertical = 8.dp
+                                                                ),
                                                             verticalArrangement = Arrangement.spacedBy(6.dp)
                                                         ) {
                                                             Row(
@@ -4660,20 +3949,33 @@ fun CoachTraineesScreen(
                                                 Column(
                                                     modifier = Modifier
                                                         .fillMaxWidth()
-                                                        .padding(horizontal = 12.dp, vertical = 12.dp),
+                                                        .padding(
+                                                            horizontal = 12.dp,
+                                                            vertical = 12.dp
+                                                        ),
                                                     verticalArrangement = Arrangement.spacedBy(8.dp),
                                                     horizontalAlignment = screenHorizontalAlignment
                                                 ) {
                                                     Text(
-                                                        text = coachTr(isEnglish, "הערות מאמן", "Coach notes"),
-                                                        style = MaterialTheme.typography.labelMedium.copy(
-                                                            fontSize = 12.sp,
-                                                            lineHeight = 14.sp
-                                                        ),
-                                                        fontWeight = FontWeight.ExtraBold,
-                                                        color = Color(0xFF475569),
-                                                        textAlign = screenTextAlign,
-                                                        modifier = Modifier.fillMaxWidth()
+                                                        text =
+                                                            coachTr(
+                                                                isEnglish,
+                                                                "הערות מאמן",
+                                                                "Coach notes"
+                                                            ),
+                                                        style =
+                                                            KmiTypography.caption.copy(
+                                                                fontWeight =
+                                                                    FontWeight.ExtraBold
+                                                            ),
+                                                        color =
+                                                            MaterialTheme
+                                                                .colorScheme
+                                                                .onSurfaceVariant,
+                                                        textAlign =
+                                                            screenTextAlign,
+                                                        modifier =
+                                                            Modifier.fillMaxWidth()
                                                     )
 
                                                     OutlinedTextField(
@@ -4696,13 +3998,17 @@ fun CoachTraineesScreen(
                                                                 modifier = Modifier.fillMaxWidth()
                                                             )
                                                         },
-                                                        textStyle = MaterialTheme.typography.bodyMedium.copy(
-                                                            color = Color(0xFF0F172A),
-                                                            textAlign = screenTextAlign,
-                                                            fontSize = 14.sp,
-                                                            lineHeight = 18.sp
-                                                        ),
-                                                        modifier = Modifier.fillMaxWidth(),
+                                                        textStyle =
+                                                            KmiTypography.body.copy(
+                                                                color =
+                                                                    MaterialTheme
+                                                                        .colorScheme
+                                                                        .onSurface,
+                                                                textAlign =
+                                                                    screenTextAlign
+                                                            ),
+                                                        modifier =
+                                                            Modifier.fillMaxWidth(),
                                                         minLines = 4,
                                                         shape = RoundedCornerShape(16.dp),
                                                         colors = OutlinedTextFieldDefaults.colors(
@@ -4778,18 +4084,33 @@ fun CoachTraineesScreen(
                                                         contentAlignment = Alignment.Center
                                                     ) {
                                                         Text(
-                                                            text = if (isSavingCoachNotes) {
-                                                                coachTr(isEnglish, "שומר...", "Saving...")
-                                                            } else {
-                                                                coachTr(isEnglish, "שמור", "Save")
-                                                            },
-                                                            style = MaterialTheme.typography.labelSmall.copy(
-                                                                fontSize = 12.sp,
-                                                                lineHeight = 14.sp
-                                                            ),
-                                                            fontWeight = FontWeight.Bold,
-                                                            color = Color(0xFF334155),
-                                                            textAlign = TextAlign.Center,
+                                                            text =
+                                                                if (
+                                                                    isSavingCoachNotes
+                                                                ) {
+                                                                    coachTr(
+                                                                        isEnglish,
+                                                                        "שומר...",
+                                                                        "Saving..."
+                                                                    )
+                                                                } else {
+                                                                    coachTr(
+                                                                        isEnglish,
+                                                                        "שמור",
+                                                                        "Save"
+                                                                    )
+                                                                },
+                                                            style =
+                                                                KmiTypography.action.copy(
+                                                                    fontWeight =
+                                                                        FontWeight.Bold
+                                                                ),
+                                                            color =
+                                                                MaterialTheme
+                                                                    .colorScheme
+                                                                    .onSurface,
+                                                            textAlign =
+                                                                TextAlign.Center,
                                                             maxLines = 1
                                                         )
                                                     }
@@ -4825,7 +4146,10 @@ fun CoachTraineesScreen(
                                                     textAlign = screenTextAlign,
                                                     modifier = Modifier
                                                         .fillMaxWidth()
-                                                        .padding(horizontal = 12.dp, vertical = 10.dp)
+                                                        .padding(
+                                                            horizontal = 12.dp,
+                                                            vertical = 10.dp
+                                                        )
                                                 )
                                             }
                                         }
@@ -4914,8 +4238,11 @@ private fun PremiumCoachCompactSectionHeader(
                 ) {
                     Text(
                         text = iconText,
-                        fontSize = 14.sp,
-                        fontWeight = FontWeight.Bold,
+                        style =
+                            KmiTypography.action.copy(
+                                fontWeight =
+                                    FontWeight.Bold
+                            ),
                         color = accent,
                         textAlign = TextAlign.Center
                     )
@@ -4932,29 +4259,37 @@ private fun PremiumCoachCompactSectionHeader(
                 Text(
                     text = title,
                     modifier = Modifier.fillMaxWidth(),
-                    textAlign = coachTextAlign(isEnglish),
+                    textAlign =
+                        coachTextAlign(isEnglish),
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
-                    style = MaterialTheme.typography.titleSmall.copy(
-                        fontSize = 13.sp,
-                        lineHeight = 15.sp,
-                        fontWeight = FontWeight.Black,
-                        color = Color(0xFF0F172A)
-                    )
+                    style =
+                        KmiTypography.cardTitle.copy(
+                            fontWeight =
+                                FontWeight.Black,
+                            color =
+                                MaterialTheme
+                                    .colorScheme
+                                    .onSurface
+                        )
                 )
 
                 Text(
                     text = subtitle,
                     modifier = Modifier.fillMaxWidth(),
-                    textAlign = coachTextAlign(isEnglish),
-                    maxLines = 1,
+                    textAlign =
+                        coachTextAlign(isEnglish),
+                    maxLines = 2,
                     overflow = TextOverflow.Ellipsis,
-                    style = MaterialTheme.typography.labelSmall.copy(
-                        fontSize = 8.sp,
-                        lineHeight = 9.sp,
-                        fontWeight = FontWeight.Medium,
-                        color = Color(0xFF7A879A)
-                    )
+                    style =
+                        KmiTypography.caption.copy(
+                            fontWeight =
+                                FontWeight.Medium,
+                            color =
+                                MaterialTheme
+                                    .colorScheme
+                                    .onSurfaceVariant
+                        )
                 )
             }
 
@@ -5382,15 +4717,24 @@ private fun LabeledField(
         ) {
             if (!isEnglish) {
                 Box(
-                    modifier = Modifier
-                        .size(34.dp)
-                        .clip(CircleShape)
-                        .background(Color(0xFFF0EEFF)),
+                    modifier =
+                        Modifier
+                            .size(34.dp)
+                            .clip(CircleShape)
+                            .background(
+                                MaterialTheme
+                                    .colorScheme
+                                    .primaryContainer
+                            ),
                     contentAlignment = Alignment.Center
                 ) {
                     Text(
                         text = iconText,
-                        fontSize = 16.sp,
+                        style = KmiTypography.action,
+                        color =
+                            MaterialTheme
+                                .colorScheme
+                                .onPrimaryContainer,
                         textAlign = TextAlign.Center
                     )
                 }
@@ -5400,17 +4744,22 @@ private fun LabeledField(
 
             Column(
                 modifier = Modifier.weight(1f),
-                verticalArrangement = Arrangement.spacedBy(3.dp),
-                horizontalAlignment = horizontalAlignment
+                verticalArrangement =
+                    Arrangement.spacedBy(3.dp),
+                horizontalAlignment =
+                    horizontalAlignment
             ) {
                 Text(
                     text = label,
-                    style = MaterialTheme.typography.labelSmall.copy(
-                        fontSize = 11.sp,
-                        lineHeight = 13.sp,
-                        fontWeight = FontWeight.ExtraBold
-                    ),
-                    color = Color(0xFF64748B),
+                    style =
+                        KmiTypography.caption.copy(
+                            fontWeight =
+                                FontWeight.ExtraBold
+                        ),
+                    color =
+                        MaterialTheme
+                            .colorScheme
+                            .onSurfaceVariant,
                     textAlign = textAlign,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
@@ -5419,12 +4768,15 @@ private fun LabeledField(
 
                 Text(
                     text = cleanValue,
-                    style = MaterialTheme.typography.labelMedium.copy(
-                        fontSize = 12.sp,
-                        lineHeight = 14.sp,
-                        fontWeight = FontWeight.ExtraBold
-                    ),
-                    color = Color(0xFF0F172A),
+                    style =
+                        KmiTypography.secondary.copy(
+                            fontWeight =
+                                FontWeight.ExtraBold
+                        ),
+                    color =
+                        MaterialTheme
+                            .colorScheme
+                            .onSurface,
                     textAlign = textAlign,
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis,
@@ -5436,15 +4788,24 @@ private fun LabeledField(
                 Spacer(Modifier.width(8.dp))
 
                 Box(
-                    modifier = Modifier
-                        .size(34.dp)
-                        .clip(CircleShape)
-                        .background(Color(0xFFF0EEFF)),
+                    modifier =
+                        Modifier
+                            .size(34.dp)
+                            .clip(CircleShape)
+                            .background(
+                                MaterialTheme
+                                    .colorScheme
+                                    .primaryContainer
+                            ),
                     contentAlignment = Alignment.Center
                 ) {
                     Text(
                         text = iconText,
-                        fontSize = 16.sp,
+                        style = KmiTypography.action,
+                        color =
+                            MaterialTheme
+                                .colorScheme
+                                .onPrimaryContainer,
                         textAlign = TextAlign.Center
                     )
                 }

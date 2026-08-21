@@ -64,7 +64,6 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.compose.ui.zIndex
 import il.kmi.app.KmiViewModel
 import il.kmi.app.R
@@ -98,9 +97,7 @@ import il.kmi.app.ui.assistant.ui.AiAssistantDialog
 
 // ====== Colors & Theme ======
 private val White = Color(0xFFFFFFFF)
-private val Ink950 = Color(0xFF0B1020)
 private val Ink900 = Color(0xFF0F172A)
-private val Ink800 = Color(0xFF172036)
 private val Ink700 = Color(0xFF24304D)
 private val Ink600 = Color(0xFF475569)
 private val DividerCol = Color(0x33FFFFFF)
@@ -1274,7 +1271,7 @@ fun KmiTopBar(
                         modifier = Modifier.width(quickActionsWidth),
                         shape = RoundedCornerShape(24.dp),
                         color = Color.Transparent,
-                        shadowElevation = 18.dp,
+                        shadowElevation = 2.dp,
                         tonalElevation = 0.dp
                     ) {
                         Box(
@@ -1283,27 +1280,26 @@ fun KmiTopBar(
                                 .background(
                                     brush = Brush.verticalGradient(
                                         colors = listOf(
-                                            Color.White.copy(alpha = 0.98f),
-                                            Color(0xFFF8F7FF),
-                                            Color.White.copy(alpha = 0.98f)
+                                            MaterialTheme.colorScheme.surface,
+                                            MaterialTheme.colorScheme.surfaceVariant,
+                                            MaterialTheme.colorScheme.surface
                                         )
                                     ),
                                     shape = RoundedCornerShape(22.dp)
                                 )
                                 .border(
                                     width = 1.dp,
-                                    color = Color(0xFFE7DDFB),
+                                    color = MaterialTheme.colorScheme.outlineVariant,
                                     shape = RoundedCornerShape(22.dp)
                                 )
                                 .padding(horizontal = 2.dp, vertical = 6.dp)
                         ) {
-                            KmiLightTheme {
-                                Column(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    verticalArrangement = Arrangement.spacedBy(5.dp),
-                                    horizontalAlignment = Alignment.CenterHorizontally
-                                ) {
-                                    VerticalQuickActionItem(
+                            Column(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalArrangement = Arrangement.spacedBy(5.dp),
+                                horizontalAlignment = Alignment.CenterHorizontally
+                            ) {
+                                VerticalQuickActionItem(
                                         icon = Icons.Filled.Search,
                                         label = if (isEnglish) "Search" else "חיפוש",
                                         tint = Color(0xFF10B981),
@@ -1465,7 +1461,6 @@ fun KmiTopBar(
                                             }
                                         )
                                     }
-                                }
                             }
                         }
                     }
@@ -1473,7 +1468,6 @@ fun KmiTopBar(
             }
         }
 
-        // לוגו אופציונלי
         if (showLogoInBar && logoRes != null) {
             val logoSz = logoSize.coerceIn(40.dp, 72.dp)
             val baseOffset = topBarHeight
@@ -1484,13 +1478,21 @@ fun KmiTopBar(
                     .offset(y = baseOffset - 6.dp)
                     .size(logoSz)
                     .zIndex(50f)
+                    .shadow(
+                        elevation = 2.dp,
+                        shape = CircleShape,
+                        clip = false
+                    )
                     .clip(CircleShape)
-                    .background(Color.White)
-                    .shadow(4.dp, CircleShape)
+                    .background(MaterialTheme.colorScheme.surface)
             ) {
                 Image(
                     painter = painterResource(id = logoRes),
-                    contentDescription = "KMI Logo",
+                    contentDescription = if (isEnglish) {
+                        "KMI logo"
+                    } else {
+                        "סמל ק.מ.י"
+                    },
                     modifier = Modifier.fillMaxSize()
                 )
             }
@@ -1587,9 +1589,10 @@ fun KmiTopBar(
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
                     Text(
-                        if (isEnglish) "Coach Broadcast" else "שידור מאמן",
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.SemiBold
+                        text = if (isEnglish) "Coach Broadcast" else "שידור מאמן",
+                        style = KmiTypography.sectionTitle.copy(
+                            fontWeight = FontWeight.SemiBold
+                        )
                     )
 
                     // כפתור היסטוריה
@@ -1607,7 +1610,16 @@ fun KmiTopBar(
                         ) {
                             if (recentMessages.isEmpty()) {
                                 DropdownMenuItem(
-                                    text = { Text(if (isEnglish) "No saved messages" else "אין הודעות שמורות") },
+                                    text = {
+                                        Text(
+                                            text = if (isEnglish) {
+                                                "No saved messages"
+                                            } else {
+                                                "אין הודעות שמורות"
+                                            },
+                                            style = KmiTypography.body
+                                        )
+                                    },
                                     enabled = false,
                                     onClick = {}
                                 )
@@ -1616,12 +1628,19 @@ fun KmiTopBar(
                                     DropdownMenuItem(
                                         text = {
                                             Column {
-                                                Text(rb.message, maxLines = 2)
+                                                Text(
+                                                    text = rb.message,
+                                                    style = KmiTypography.body,
+                                                    maxLines = 2,
+                                                    overflow = TextOverflow.Ellipsis
+                                                )
+
                                                 val tsStr = formatRecentTs(rb.ts)
+
                                                 if (tsStr.isNotEmpty()) {
                                                     Text(
-                                                        tsStr,
-                                                        style = MaterialTheme.typography.labelSmall,
+                                                        text = tsStr,
+                                                        style = KmiTypography.caption,
                                                         color = MaterialTheme.colorScheme.onSurfaceVariant
                                                     )
                                                 }
@@ -1633,11 +1652,25 @@ fun KmiTopBar(
                                         }
                                     )
                                 }
-                                Divider()
+
+                                HorizontalDivider()
+
                                 DropdownMenuItem(
-                                    text = { Text(if (isEnglish) "Clear history" else "נקה היסטוריה") },
+                                    text = {
+                                        Text(
+                                            text = if (isEnglish) {
+                                                "Clear history"
+                                            } else {
+                                                "נקה היסטוריה"
+                                            },
+                                            style = KmiTypography.action
+                                        )
+                                    },
                                     onClick = {
-                                        spUser.edit().remove(PREF_RECENTS_KEY).apply()
+                                        spUser.edit()
+                                            .remove(PREF_RECENTS_KEY)
+                                            .apply()
+
                                         recentMessages.clear()
                                         historyExpanded = false
                                     }
@@ -1655,7 +1688,17 @@ fun KmiTopBar(
                 modifier = Modifier.fillMaxWidth(),
                 minLines = 3,
                 maxLines = 6,
-                label = { Text(if (isEnglish) "Message content" else "תוכן ההודעה") },
+                label = {
+                    Text(
+                        text = if (isEnglish) {
+                            "Message content"
+                        } else {
+                            "תוכן ההודעה"
+                        },
+                        style = KmiTypography.secondary
+                    )
+                },
+                textStyle = KmiTypography.body,
                 isError = broadcastText.length > MAX_BROADCAST_CHARS,
                 supportingText = {
                     val count = "${broadcastText.length}/$MAX_BROADCAST_CHARS"
@@ -1665,7 +1708,7 @@ fun KmiTopBar(
                             MaterialTheme.colorScheme.error
                         else
                             MaterialTheme.colorScheme.onSurfaceVariant,
-                        style = MaterialTheme.typography.bodySmall
+                        style = KmiTypography.caption
                     )
                 }
             )
@@ -1689,14 +1732,28 @@ fun KmiTopBar(
                         }
                     },
                     enabled = canSend
-                ) { Text(if (isEnglish) "Send" else "שלח") }
+                ) {
+                    Text(
+                        text = if (isEnglish) "Send" else "שלח",
+                        style = KmiTypography.action
+                    )
+                }
 
-                TextButton(onClick = {
-                    scope.launch {
-                        runCatching { broadcastSheetState.hide() }
-                        showBroadcastSheet = false
+                TextButton(
+                    onClick = {
+                        scope.launch {
+                            runCatching {
+                                broadcastSheetState.hide()
+                            }
+                            showBroadcastSheet = false
+                        }
                     }
-                }) { Text(if (isEnglish) "Cancel" else "ביטול") }
+                ) {
+                    Text(
+                        text = if (isEnglish) "Cancel" else "ביטול",
+                        style = KmiTypography.action
+                    )
+                }
             }
 
             Spacer(Modifier.height(8.dp))
@@ -1999,7 +2056,9 @@ private fun PremiumTextActionIcon(
                 scaleY = scale
             }
             .clip(RoundedCornerShape(6.dp))
-            .background(Color(0xFFE6E6EE))
+            .background(
+                MaterialTheme.colorScheme.secondaryContainer
+            )
             .clickable {
                 pressed = true
                 onClick()
@@ -2008,10 +2067,10 @@ private fun PremiumTextActionIcon(
     ) {
         Text(
             text = text,
-            color = Color(0xFF4B478F),
-            fontSize = 19.sp,
-            lineHeight = 19.sp,
-            fontWeight = FontWeight.ExtraBold,
+            color = MaterialTheme.colorScheme.onSecondaryContainer,
+            style = KmiTypography.action.copy(
+                fontWeight = FontWeight.ExtraBold
+            ),
             textAlign = TextAlign.Center
         )
     }
@@ -2329,10 +2388,10 @@ private fun VerticalQuickActionItem(
 
         Text(
             text = label,
-            color = Color(0xFF111827).copy(alpha = itemAlpha),
-            fontSize = 8.5.sp,
-            lineHeight = 10.sp,
-            fontWeight = FontWeight.ExtraBold,
+            color = MaterialTheme.colorScheme.onSurface.copy(alpha = itemAlpha),
+            style = KmiTypography.caption.copy(
+                fontWeight = FontWeight.ExtraBold
+            ),
             textAlign = TextAlign.Center,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
@@ -2371,7 +2430,7 @@ fun ModeBadgeSmall(isCoach: Boolean) {
 
     Text(
         text = label,
-        style = MaterialTheme.typography.labelSmall,
+        style = KmiTypography.caption,
         modifier = Modifier
             .clip(RoundedCornerShape(999.dp))
             .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f))
@@ -2514,7 +2573,7 @@ fun ExplanationWithStanceHighlight(
     Text(
         text = annotated,
         modifier = modifier,
-        style = MaterialTheme.typography.bodyLarge,
+        style = KmiTypography.body,
         color = MaterialTheme.colorScheme.onSurface
     )
 }
@@ -2560,32 +2619,6 @@ private fun buildExplanationWithStanceHighlight(
     return builder.toAnnotatedString()
 }
 
-/** תג מצב ריבועי (מאמן/מתאמן) */
-@Composable
-private fun RoleSquareBadge(isCoach: Boolean) {
-    val bg = if (isCoach) Color(0xFF2A1F52) else Color(0xFF1E2947)
-    val txt = Color.White
-    val line2 = if (isCoach) "מאמן" else "מתאמן"
-
-    Surface(
-        color = bg,
-        contentColor = txt,
-        shape = RoundedCornerShape(8.dp),
-        shadowElevation = 2.dp,
-        border = BorderStroke(1.dp, Color.White.copy(alpha = 0.12f))
-    ) {
-        Text(
-            text = "מצב\n$line2",
-            textAlign = TextAlign.Center,
-            style = MaterialTheme.typography.labelMedium,
-            fontSize = 11.sp,
-            lineHeight = 13.sp,
-            maxLines = 2,
-            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
-        )
-    }
-}
-
 /** תג מצב קטן ושקט בפינה השמאלית התחתונה של הכותרת */
 @Composable
 private fun RoleInlinePill(
@@ -2625,9 +2658,9 @@ private fun RoleInlinePill(
             text = label,
             textAlign = TextAlign.Center,
             color = Color.White,
-            fontSize = 8.5.sp,
-            lineHeight = 9.5.sp,
-            fontWeight = FontWeight.Bold,
+            style = KmiTypography.caption.copy(
+                fontWeight = FontWeight.Bold
+            ),
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
             modifier = Modifier.padding(horizontal = 7.dp, vertical = 1.5.dp)

@@ -16,7 +16,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import android.content.SharedPreferences
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.draw.clip
@@ -44,7 +43,6 @@ import il.kmi.app.ui.LoadingOverlay
 import android.content.ActivityNotFoundException
 import android.content.Intent
 import android.content.pm.PackageManager
-import android.net.Uri
 import android.os.Build
 import android.view.HapticFeedbackConstants
 import android.view.SoundEffectConstants
@@ -80,6 +78,7 @@ import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.window.Dialog
+import androidx.core.net.toUri
 import il.kmi.app.privacy.DemoPrivacy
 import il.kmi.app.screens.admin.AdminAccess
 
@@ -88,21 +87,30 @@ import il.kmi.app.screens.admin.AdminAccess
 typealias StatsVm = AppStatsVm
 
 /* ===== Helpers לשיתוף/דירוג/משוב ===== */
+private const val FEEDBACK_EMAIL =
+    "ypo1980@gmail.com"
+
 private fun openEmailFeedback(
-    ctx: android.content.Context,
-    to: String,
+    ctx: Context,
     subject: String,
     body: String = "",
     isEnglish: Boolean = false
 ) {
-    val intent = Intent(Intent.ACTION_SENDTO).apply {
-        data = Uri.parse("mailto:")
-        putExtra(Intent.EXTRA_EMAIL, arrayOf(to))
-        putExtra(Intent.EXTRA_SUBJECT, subject)
-        putExtra(Intent.EXTRA_TEXT, body)
-    }
+    val intent =
+        Intent(
+            Intent.ACTION_SENDTO,
+            "mailto:$FEEDBACK_EMAIL".toUri()
+        ).apply {
+            putExtra(Intent.EXTRA_SUBJECT, subject)
+            putExtra(Intent.EXTRA_TEXT, body)
+        }
 
-    val chooserTitle = if (isEnglish) "Send feedback" else "שלח משוב"
+    val chooserTitle =
+        if (isEnglish) {
+            "Send feedback"
+        } else {
+            "שלח משוב"
+        }
     val errorText = if (isEnglish) {
         "No email app was found"
     } else {
@@ -120,16 +128,27 @@ private fun openEmailFeedback(
     }
 }
 
-private fun openStorePage(ctx: android.content.Context) {
+private fun openStorePage(
+    ctx: Context
+) {
     val pkg = ctx.packageName
-    val market = Intent(
-        Intent.ACTION_VIEW,
-        Uri.parse("market://details?id=$pkg")
-    ).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-    val web = Intent(
-        Intent.ACTION_VIEW,
-        Uri.parse("https://play.google.com/store/apps/details?id=$pkg")
-    ).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+
+    val market =
+        Intent(
+            Intent.ACTION_VIEW,
+            "market://details?id=$pkg".toUri()
+        ).addFlags(
+            Intent.FLAG_ACTIVITY_NEW_TASK
+        )
+
+    val web =
+        Intent(
+            Intent.ACTION_VIEW,
+            "https://play.google.com/store/apps/details?id=$pkg".toUri()
+        ).addFlags(
+            Intent.FLAG_ACTIVITY_NEW_TASK
+        )
+
     try {
         ctx.startActivity(market)
     } catch (_: ActivityNotFoundException) {
@@ -138,7 +157,7 @@ private fun openStorePage(ctx: android.content.Context) {
 }
 
 private fun shareApp(
-    ctx: android.content.Context,
+    ctx: Context,
     isEnglish: Boolean = false
 ) {
     val text = if (isEnglish) {
@@ -160,14 +179,18 @@ private fun shareApp(
     )
 }
 
-private fun clearAppCache(ctx: android.content.Context): Boolean {
+private fun clearAppCache(
+    ctx: Context
+): Boolean {
     return runCatching {
-        ctx.cacheDir?.let { dir ->
-            dir.deleteRecursively()
-            dir.mkdirs() // להשאיר ספרייה קיימת
+        ctx.cacheDir.let { directory ->
+            directory.deleteRecursively()
+            directory.mkdirs()
         }
         true
-    }.getOrElse { false }
+    }.getOrElse {
+        false
+    }
 }
 
 private fun styleKmiNumberPicker(
@@ -476,7 +499,7 @@ fun SettingsScreenModern(
                 showTopHome = false,
                 showTopSearch = false,
                 showBottomActions = true,
-                lockSearch = true,
+                lockSearch = false,
                 centerTitle = true
             )
         }
@@ -826,13 +849,14 @@ fun SettingsScreenModern(
                                         .fillMaxWidth()
                                         .padding(horizontal = 12.dp),
                                     shape = RoundedCornerShape(30.dp),
-                                    color = if (isDarkMode) {
-                                        MaterialTheme.colorScheme.surface
-                                    } else {
-                                        Color(0xFFF6F1FB)
-                                    },
+                                    color =
+                                        if (isDarkMode) {
+                                            MaterialTheme.colorScheme.surface
+                                        } else {
+                                            Color(0xFFF6F1FB)
+                                        },
                                     tonalElevation = 0.dp,
-                                    shadowElevation = 16.dp
+                                    shadowElevation = 0.dp
                                 ) {
                                     Column(
                                         modifier = Modifier
@@ -919,9 +943,10 @@ fun SettingsScreenModern(
                                                 Surface(
                                                     modifier = Modifier.weight(1f),
                                                     shape = RoundedCornerShape(22.dp),
-                                                    color = MaterialTheme.colorScheme.surfaceVariant,
+                                                    color =
+                                                        MaterialTheme.colorScheme.surfaceVariant,
                                                     tonalElevation = 0.dp,
-                                                    shadowElevation = 4.dp
+                                                    shadowElevation = 0.dp
                                                 ) {
                                                     Column(
                                                         modifier = Modifier
@@ -977,9 +1002,10 @@ fun SettingsScreenModern(
                                                 Surface(
                                                     modifier = Modifier.weight(1f),
                                                     shape = RoundedCornerShape(22.dp),
-                                                    color = MaterialTheme.colorScheme.surfaceVariant,
+                                                    color =
+                                                        MaterialTheme.colorScheme.surfaceVariant,
                                                     tonalElevation = 0.dp,
-                                                    shadowElevation = 4.dp
+                                                    shadowElevation = 0.dp
                                                 ) {
                                                     Column(
                                                         modifier = Modifier
@@ -1038,9 +1064,10 @@ fun SettingsScreenModern(
                                                 Surface(
                                                     modifier = Modifier.weight(1f),
                                                     shape = RoundedCornerShape(22.dp),
-                                                    color = MaterialTheme.colorScheme.surfaceVariant,
+                                                    color =
+                                                        MaterialTheme.colorScheme.surfaceVariant,
                                                     tonalElevation = 0.dp,
-                                                    shadowElevation = 4.dp
+                                                    shadowElevation = 0.dp
                                                 ) {
                                                     Column(
                                                         modifier = Modifier
@@ -1099,9 +1126,10 @@ fun SettingsScreenModern(
                                                 Surface(
                                                     modifier = Modifier.weight(1f),
                                                     shape = RoundedCornerShape(22.dp),
-                                                    color = MaterialTheme.colorScheme.surfaceVariant,
+                                                    color =
+                                                        MaterialTheme.colorScheme.surfaceVariant,
                                                     tonalElevation = 0.dp,
-                                                    shadowElevation = 4.dp
+                                                    shadowElevation = 0.dp
                                                 ) {
                                                     Column(
                                                         modifier = Modifier
@@ -1736,11 +1764,19 @@ fun SettingsScreenModern(
                                     showCalendarPicker = true
                                 }
                             },
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(44.dp)
+                            modifier =
+                                Modifier
+                                    .fillMaxWidth()
+                                    .heightIn(min = 52.dp)
                         ) {
-                            Text(tr("בחר יומן יעד", "Choose target calendar"))
+                            Text(
+                                text =
+                                    tr(
+                                        "בחר יומן יעד",
+                                        "Choose target calendar"
+                                    ),
+                                style = KmiTypography.action
+                            )
                         }
 
                         if (showCalendarPicker) {
@@ -1856,9 +1892,13 @@ fun SettingsScreenModern(
 
                         LoadingOverlay(
                             show = isBusy,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(80.dp)
+                            modifier =
+                                Modifier
+                                    .fillMaxWidth()
+                                    .heightIn(
+                                        min = 64.dp,
+                                        max = 96.dp
+                                    )
                         )
                     }
                 }
@@ -2286,7 +2326,11 @@ fun SettingsScreenModern(
                                                 text = tr("קטן", "Small"),
                                                 maxLines = 1,
                                                 style =
-                                                    MaterialTheme.typography.labelMedium
+                                                    KmiTypography.caption.copy(
+                                                        fontWeight =
+                                                            FontWeight.SemiBold
+                                                    ),
+                                                textAlign = TextAlign.Center
                                             )
                                         }
                                     )
@@ -2302,7 +2346,11 @@ fun SettingsScreenModern(
                                                 text = tr("בינוני", "Medium"),
                                                 maxLines = 1,
                                                 style =
-                                                    MaterialTheme.typography.labelMedium
+                                                    KmiTypography.body.copy(
+                                                        fontWeight =
+                                                            FontWeight.SemiBold
+                                                    ),
+                                                textAlign = TextAlign.Center
                                             )
                                         }
                                     )
@@ -2318,21 +2366,29 @@ fun SettingsScreenModern(
                                                 text = tr("גדול", "Large"),
                                                 maxLines = 1,
                                                 style =
-                                                    MaterialTheme.typography.labelMedium
+                                                    KmiTypography.action.copy(
+                                                        fontWeight =
+                                                            FontWeight.ExtraBold
+                                                    ),
+                                                textAlign = TextAlign.Center
                                             )
                                         }
                                     )
                                 }
 
                                 Text(
-                                    text = tr(
-                                        "השינוי חל מיד ונשמר גם לאחר סגירת האפליקציה.",
-                                        "The change applies immediately and remains after closing the app."
-                                    ),
-                                    style = MaterialTheme.typography.bodySmall.copy(
-                                        fontWeight = FontWeight.SemiBold
-                                    ),
-                                    color = MaterialTheme.colorScheme.primary,
+                                    text =
+                                        tr(
+                                            "השינוי חל מיד ונשמר גם לאחר סגירת האפליקציה.",
+                                            "The change applies immediately and remains after closing the app."
+                                        ),
+                                    style =
+                                        KmiTypography.caption.copy(
+                                            fontWeight =
+                                                FontWeight.SemiBold
+                                        ),
+                                    color =
+                                        MaterialTheme.colorScheme.primary,
                                     textAlign = textAlignPrimary,
                                     modifier = Modifier.fillMaxWidth()
                                 )
@@ -2715,18 +2771,36 @@ fun SettingsScreenModern(
                                         val ok = clearAppCache(ctx)
                                         isBusy = false
                                         if (ok) {
-                                            toast(tr("נוקו קבצי המטמון", "Cache files cleared"))
+                                            toast(
+                                                tr(
+                                                    "נוקו קבצי המטמון",
+                                                    "Cache files cleared"
+                                                )
+                                            )
                                             haptic(true)
                                         } else {
-                                            toast(tr("ניקוי נכשל", "Clear failed"))
+                                            toast(
+                                                tr(
+                                                    "ניקוי נכשל",
+                                                    "Clear failed"
+                                                )
+                                            )
                                             haptic(false)
                                         }
                                     },
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .height(44.dp)
+                                    modifier =
+                                        Modifier
+                                            .fillMaxWidth()
+                                            .heightIn(min = 52.dp)
                                 ) {
-                                    Text(tr("נקה מטמון אפליקציה", "Clear app cache"))
+                                    Text(
+                                        text =
+                                            tr(
+                                                "נקה מטמון אפליקציה",
+                                                "Clear app cache"
+                                            ),
+                                        style = KmiTypography.action
+                                    )
                                 }
                             }
                         }
@@ -2848,18 +2922,30 @@ fun SettingsScreenModern(
                                         }
                                         openEmailFeedback(
                                             ctx = ctx,
-                                            to = "ypo1980@gmail.com",
-                                            subject = tr("משוב על האפליקציה", "App feedback"),
+                                            subject =
+                                                tr(
+                                                    "משוב על האפליקציה",
+                                                    "App feedback"
+                                                ),
                                             body = body,
                                             isEnglish = isEnglish
                                         )
                                         h(true)
                                     },
-                                    modifier = Modifier
-                                        .weight(1f)
-                                        .height(44.dp)
+                                    modifier =
+                                        Modifier
+                                            .weight(1f)
+                                            .heightIn(min = 52.dp)
                                 ) {
-                                    Text(tr("שלח משוב", "Send feedback"))
+                                    Text(
+                                        text =
+                                            tr(
+                                                "שלח משוב",
+                                                "Send feedback"
+                                            ),
+                                        style = KmiTypography.action,
+                                        textAlign = TextAlign.Center
+                                    )
                                 }
 
                                 OutlinedButton(
@@ -2867,24 +2953,44 @@ fun SettingsScreenModern(
                                         openStorePage(ctx)
                                         h(true)
                                     },
-                                    modifier = Modifier
-                                        .weight(1f)
-                                        .height(44.dp)
+                                    modifier =
+                                        Modifier
+                                            .weight(1f)
+                                            .heightIn(min = 52.dp)
                                 ) {
-                                    Text(tr("דרג בחנות", "Rate in store"))
+                                    Text(
+                                        text =
+                                            tr(
+                                                "דרג בחנות",
+                                                "Rate in store"
+                                            ),
+                                        style = KmiTypography.action,
+                                        textAlign = TextAlign.Center
+                                    )
                                 }
                             }
 
                             OutlinedButton(
                                 onClick = {
-                                    shareApp(ctx, isEnglish = isEnglish)
+                                    shareApp(
+                                        ctx,
+                                        isEnglish = isEnglish
+                                    )
                                     h(true)
                                 },
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .height(44.dp)
+                                modifier =
+                                    Modifier
+                                        .fillMaxWidth()
+                                        .heightIn(min = 52.dp)
                             ) {
-                                Text(tr("שתף את האפליקציה", "Share the app"))
+                                Text(
+                                    text =
+                                        tr(
+                                            "שתף את האפליקציה",
+                                            "Share the app"
+                                        ),
+                                    style = KmiTypography.action
+                                )
                             }
                         }
                     }
@@ -2900,13 +3006,18 @@ fun SettingsScreenModern(
                         topStart = 28.dp,
                         topEnd = 28.dp
                     ),
-                    color = if (isDarkMode) {
-                        MaterialTheme.colorScheme.surface.copy(alpha = 0.98f)
-                    } else {
-                        Color(0xFFF4EFFB).copy(alpha = 0.97f)
-                    },
-                    tonalElevation = 10.dp,
-                    shadowElevation = 18.dp
+                    color =
+                        if (isDarkMode) {
+                            MaterialTheme.colorScheme.surface.copy(
+                                alpha = 0.98f
+                            )
+                        } else {
+                            Color(0xFFF4EFFB).copy(
+                                alpha = 0.97f
+                            )
+                        },
+                    tonalElevation = 0.dp,
+                    shadowElevation = 0.dp
                 ) {
                     Row(
                         modifier = Modifier
@@ -3036,7 +3147,7 @@ fun SettingsListSection(
     Surface(
         color = Color.Transparent,
         tonalElevation = 0.dp,
-        shadowElevation = 8.dp,
+        shadowElevation = 0.dp,
         shape = RoundedCornerShape(24.dp),
         border = BorderStroke(
             width = 1.dp,
@@ -3567,14 +3678,15 @@ fun SettingsCard(
                     ) {
                         Text(
                             text = title,
-                            style = MaterialTheme.typography.titleMedium.copy(
-                                fontSize = 12.0.sp,
-                                lineHeight = 14.6.sp,
-                                fontWeight = FontWeight.ExtraBold
-                            ),
+                            style =
+                                KmiTypography.cardTitle.copy(
+                                    fontWeight =
+                                        FontWeight.ExtraBold
+                                ),
                             textAlign = textAlignPrimary,
-                            color = MaterialTheme.colorScheme.onSurface,
-                            maxLines = 1,
+                            color =
+                                MaterialTheme.colorScheme.onSurface,
+                            maxLines = 2,
                             overflow = TextOverflow.Ellipsis,
                             modifier = Modifier.fillMaxWidth()
                         )
@@ -3678,10 +3790,14 @@ private fun traineeRankDisplayName(
 }
 
 private fun registeredRankId(
-    ctx: android.content.Context,
+    ctx: Context,
     spSettings: SharedPreferences
 ): String {
-    val spUser = ctx.getSharedPreferences("kmi_user", Context.MODE_PRIVATE)
+    val spUser =
+        ctx.getSharedPreferences(
+            "kmi_user",
+            Context.MODE_PRIVATE
+        )
 
     return listOf(
         spSettings.getString("current_belt", null),
@@ -3707,8 +3823,15 @@ private fun registeredRankId(
         .orEmpty()
 }
 
-private fun readRegisteredBelt(ctx: android.content.Context, spSettings: SharedPreferences): Belt {
-    val spUser = ctx.getSharedPreferences("kmi_user", Context.MODE_PRIVATE)
+private fun readRegisteredBelt(
+    ctx: Context,
+    spSettings: SharedPreferences
+): Belt {
+    val spUser =
+        ctx.getSharedPreferences(
+            "kmi_user",
+            Context.MODE_PRIVATE
+        )
 
     // 1) מזהה חגורה שנשמר בטופס הרישום (למתאמן): "current_belt" ב-sp או "belt_current" ב-kmi_user
     val idFromSettings = listOf(

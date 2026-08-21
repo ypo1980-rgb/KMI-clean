@@ -98,7 +98,6 @@ import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.unit.sp
 import com.google.firebase.firestore.DocumentSnapshot
 import il.kmi.shared.localization.AppLanguage
 import il.kmi.shared.localization.AppLanguageManager
@@ -126,83 +125,6 @@ import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.zIndex
 
 //=================================================================================
-
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-private fun CoachInfoCard(
-    coachName: String?,
-    branchName: String?,
-    city: String?,
-    groupName: String?,
-    onOpenProfile: () -> Unit = {},
-    modifier: Modifier = Modifier
-) {
-    val haptic = rememberHapticsGlobal()
-    val clickSound = rememberClickSound()
-
-    Surface(
-        shape = MaterialTheme.shapes.large,
-        color = Color.White.copy(alpha = 0.92f),
-        tonalElevation = 1.dp,
-        shadowElevation = 1.dp,
-        modifier = modifier
-            .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 8.dp)
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 14.dp, vertical = 10.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Column(
-                modifier = Modifier.weight(1f),
-                verticalArrangement = Arrangement.spacedBy(2.dp)
-            ) {
-                Text(
-                    text = "מאמן: ${coachName.orEmpty()}",
-                    style = KmiTypography.cardTitle,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-
-                val branchLine = buildString {
-                    if (!city.isNullOrBlank()) append(city).append(" · ")
-                    append(branchName.orEmpty())
-                }
-
-                Text(
-                    text = branchLine,
-                    style = KmiTypography.secondary,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-
-                Text(
-                    text = "קבוצה: ${groupName.orEmpty()}",
-                    style = KmiTypography.secondary,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-            }
-
-            IconButton(
-                onClick = {
-                    clickSound()
-                    haptic(true)
-                    onOpenProfile()
-                }
-            ) {
-                Icon(
-                    imageVector = Icons.Filled.Person,
-                    contentDescription = "פרופיל",
-                    tint = MaterialTheme.colorScheme.primary
-                )
-            }
-        }
-    }
-}
 
 private enum class HomeNoticeType {
     COACH_MESSAGE,
@@ -3217,8 +3139,8 @@ fun HomeScreen(
                             color = MaterialTheme.colorScheme.surface.copy(
                                 alpha = 0.96f
                             ),
-                            tonalElevation = 2.dp,
-                            shadowElevation = 6.dp,
+                            tonalElevation = 0.dp,
+                            shadowElevation = 0.dp,
                             border = BorderStroke(
                                 width = 1.dp,
                                 color = MaterialTheme.colorScheme.primary.copy(
@@ -3477,16 +3399,16 @@ fun HomeScreen(
                             onContinue()
                         },
                         shape = RoundedCornerShape(18.dp),
-                        shadowElevation = 5.dp,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(60.dp)
-                            .shadow(12.dp, RoundedCornerShape(18.dp))
-                            .graphicsLayer {
-                                scaleX = 1.02f
-                                scaleY = 1.02f
-                            }
-                            .border(
+                        tonalElevation = 0.dp,
+                        shadowElevation = 0.dp,
+                        modifier =
+                            Modifier
+                                .fillMaxWidth()
+                                .heightIn(
+                                    min = 46.dp,
+                                    max = 58.dp
+                                )
+                                .border(
                                 width = 1.dp,
                                 brush = Brush.linearGradient(
                                     colors = listOf(
@@ -3537,19 +3459,31 @@ fun HomeScreen(
                                     horizontalArrangement = Arrangement.Center
                                 ) {
                                     Icon(
-                                        imageVector = Icons.Filled.Star,
+                                        imageVector =
+                                            Icons.Filled.Star,
                                         contentDescription = null,
                                         tint = Color.White,
-                                        modifier = Modifier.size(18.dp)
+                                        modifier =
+                                            Modifier.size(16.dp)
                                     )
 
-                                    Spacer(Modifier.width(8.dp))
+                                    Spacer(Modifier.width(6.dp))
 
                                     Text(
-                                        text = if (isEnglish) "Go to Belt Selection" else "מעבר לבחירת חגורה",
-                                        fontWeight = FontWeight.Bold,
+                                        text =
+                                            if (isEnglish) {
+                                                "Go to Belt Selection"
+                                            } else {
+                                                "מעבר לבחירת חגורה"
+                                            },
+                                        fontWeight =
+                                            FontWeight.ExtraBold,
                                         color = Color.White,
-                                        style = MaterialTheme.typography.titleMedium
+                                        style =
+                                            KmiTypography.action,
+                                        maxLines = 1,
+                                        overflow =
+                                            TextOverflow.Ellipsis
                                     )
                                 }
                             }
@@ -4467,7 +4401,7 @@ private fun HomePremiumQuickMenuPanel(
         shape = panelShape,
         color = panelColor,
         tonalElevation = 0.dp,
-        shadowElevation = 14.dp,
+        shadowElevation = 0.dp,
         border = BorderStroke(
             width = 1.dp,
             color = borderColor
@@ -4543,14 +4477,14 @@ private fun HomePremiumQuickMenuPanel(
                         Text(
                             text = title,
                             color = menuAccent,
-                            fontWeight = FontWeight.ExtraBold,
+                            fontWeight =
+                                FontWeight.ExtraBold,
                             textAlign = TextAlign.Right,
                             maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                            style = MaterialTheme.typography.titleSmall.copy(
-                                fontSize = 13.sp,
-                                lineHeight = 15.sp
-                            ),
+                            overflow =
+                                TextOverflow.Ellipsis,
+                            style =
+                                KmiTypography.cardTitle,
                             modifier = Modifier.weight(1f)
                         )
 
@@ -4636,14 +4570,17 @@ private fun HomePremiumQuickMenuRow(
             Text(
                 text = cleanText,
                 color = menuAccent,
-                fontWeight = FontWeight.SemiBold,
+                fontWeight =
+                    FontWeight.SemiBold,
                 textAlign = TextAlign.Start,
-                style = KmiTypography.caption.copy(
-                    fontWeight = FontWeight.SemiBold,
-                    letterSpacing = (-0.14).sp
-                ),
+                style =
+                    KmiTypography.caption.copy(
+                        fontWeight =
+                            FontWeight.SemiBold
+                    ),
                 maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
+                overflow =
+                    TextOverflow.Ellipsis,
                 modifier = Modifier.weight(1f)
             )
 
@@ -4674,15 +4611,17 @@ private fun HomePremiumQuickMenuRow(
             Text(
                 text = cleanText,
                 color = menuAccent,
-                fontWeight = FontWeight.SemiBold,
+                fontWeight =
+                    FontWeight.SemiBold,
                 textAlign = TextAlign.Right,
-                style = MaterialTheme.typography.bodySmall.copy(
-                    fontSize = 11.sp,
-                    lineHeight = 13.sp,
-                    letterSpacing = (-0.14).sp
-                ),
+                style =
+                    KmiTypography.caption.copy(
+                        fontWeight =
+                            FontWeight.SemiBold
+                    ),
                 maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
+                overflow =
+                    TextOverflow.Ellipsis,
                 modifier = Modifier.weight(1f)
             )
 
@@ -5106,10 +5045,17 @@ private fun TrainingCardCompact(
         Surface(
             onClick = { onClick() },
             shape = RoundedCornerShape(20.dp),
-            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f),
+            color =
+                MaterialTheme
+                    .colorScheme
+                    .surfaceVariant
+                    .copy(alpha = 0.55f),
             tonalElevation = 0.dp,
             shadowElevation = 0.dp,
-            modifier = modifier.height(40.dp)
+            modifier =
+                modifier.heightIn(
+                    min = 40.dp
+                )
         ) {
             Row(
                 verticalAlignment = Alignment.CenterVertically,
@@ -5160,9 +5106,12 @@ private fun TrainingCardCompact(
             modifier = Modifier
                 .fillMaxWidth()
                 .heightIn(min = 78.dp),
-            color = MaterialTheme.colorScheme.surface,
-            tonalElevation = 1.dp,
-            shadowElevation = 3.dp,
+            color =
+                MaterialTheme
+                    .colorScheme
+                    .surface,
+            tonalElevation = 0.dp,
+            shadowElevation = 0.dp,
             shape = RoundedCornerShape(16.dp),
             border = BorderStroke(
                 width = 1.dp,
@@ -5462,8 +5411,8 @@ private fun TrainingCardCompact(
                         MaterialTheme.colorScheme.primary
                             .copy(alpha = 0.55f)
                 ),
-                tonalElevation = 2.dp,
-                shadowElevation = 5.dp
+                tonalElevation = 0.dp,
+                shadowElevation = 0.dp
             ) {
                 IconButton(
                     onClick = {
@@ -5934,7 +5883,10 @@ private fun NavigationAppChoiceCard(
 ) {
     Surface(
         onClick = onClick,
-        modifier = modifier.height(56.dp),
+        modifier =
+            modifier.heightIn(
+                min = 56.dp
+            ),
         shape = RoundedCornerShape(16.dp),
         color = containerColor,
 
