@@ -14,10 +14,13 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.sizeIn
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.Divider
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -39,8 +42,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
+import il.kmi.app.ui.KmiTypography
 import java.time.LocalDate
 import java.time.YearMonth
 import java.time.format.DateTimeFormatter
@@ -59,8 +62,8 @@ fun KmiCalendarMonth(
     isEnglish: Boolean,
     onVisibleMonthChange: (YearMonth) -> Unit,
     onDateSelected: (LocalDate) -> Unit,
-    markers: KmiCalendarMarkers = KmiCalendarMarkers(),
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    markers: KmiCalendarMarkers = KmiCalendarMarkers()
 ) {
     val colorScheme = MaterialTheme.colorScheme
     val isDarkTheme =
@@ -180,7 +183,7 @@ fun KmiCalendarMonth(
         leadingEmptyDays,
         daysInMonth
     ) {
-        buildList<Int?> {
+        buildList {
             repeat(leadingEmptyDays) {
                 add(null)
             }
@@ -237,8 +240,15 @@ fun KmiCalendarMonth(
                     color = navigationButtonColor,
                     tonalElevation = 0.dp,
                     shadowElevation =
-                        if (isDarkTheme) 0.dp else 2.dp,
-                    modifier = Modifier.size(30.dp)
+                        if (isDarkTheme) {
+                            0.dp
+                        } else {
+                            1.dp
+                        },
+                    modifier = Modifier.sizeIn(
+                        minWidth = 34.dp,
+                        minHeight = 34.dp
+                    )
                 ) {
                     Box(
                         contentAlignment =
@@ -246,14 +256,13 @@ fun KmiCalendarMonth(
                     ) {
                         Text(
                             text = "‹",
-                            color =
-                                navigationButtonContentColor,
+                            color = navigationButtonContentColor,
                             style =
-                                MaterialTheme.typography.titleMedium,
-                            fontWeight =
-                                FontWeight.Black,
-                            textAlign =
-                                TextAlign.Center
+                                KmiTypography.action.copy(
+                                    fontWeight = FontWeight.Black
+                                ),
+                            textAlign = TextAlign.Center,
+                            maxLines = 1
                         )
                     }
                 }
@@ -261,10 +270,13 @@ fun KmiCalendarMonth(
                 Text(
                     text = monthTitle,
                     color = primaryTextColor,
-                    fontWeight = FontWeight.Black,
                     style =
-                        MaterialTheme.typography.titleLarge,
-                    textAlign = TextAlign.Center
+                        KmiTypography.sectionTitle.copy(
+                            fontWeight = FontWeight.Black
+                        ),
+                    textAlign = TextAlign.Center,
+                    maxLines = 2,
+                    modifier = Modifier.weight(1f)
                 )
 
                 Surface(
@@ -281,8 +293,15 @@ fun KmiCalendarMonth(
                     color = navigationButtonColor,
                     tonalElevation = 0.dp,
                     shadowElevation =
-                        if (isDarkTheme) 0.dp else 2.dp,
-                    modifier = Modifier.size(30.dp)
+                        if (isDarkTheme) {
+                            0.dp
+                        } else {
+                            1.dp
+                        },
+                    modifier = Modifier.sizeIn(
+                        minWidth = 34.dp,
+                        minHeight = 34.dp
+                    )
                 ) {
                     Box(
                         contentAlignment =
@@ -290,14 +309,13 @@ fun KmiCalendarMonth(
                     ) {
                         Text(
                             text = "›",
-                            color =
-                                navigationButtonContentColor,
+                            color = navigationButtonContentColor,
                             style =
-                                MaterialTheme.typography.titleMedium,
-                            fontWeight =
-                                FontWeight.Black,
-                            textAlign =
-                                TextAlign.Center
+                                KmiTypography.action.copy(
+                                    fontWeight = FontWeight.Black
+                                ),
+                            textAlign = TextAlign.Center,
+                            maxLines = 1
                         )
                     }
                 }
@@ -310,7 +328,11 @@ fun KmiCalendarMonth(
             color = calendarSectionColor,
             tonalElevation = 0.dp,
             shadowElevation =
-                if (isDarkTheme) 0.dp else 2.dp,
+                if (isDarkTheme) {
+                    0.dp
+                } else {
+                    1.dp
+                },
             border = BorderStroke(
                 width = 1.dp,
                 color = calendarSectionBorderColor
@@ -325,11 +347,13 @@ fun KmiCalendarMonth(
                     Text(
                         text = dayName,
                         color = weekDayTextColor,
-                        fontWeight = FontWeight.Black,
                         style =
-                            MaterialTheme.typography.labelLarge,
+                            KmiTypography.caption.copy(
+                                fontWeight = FontWeight.Black
+                            ),
                         textAlign = TextAlign.Center,
-                        modifier = Modifier.weight(1f)
+                        modifier = Modifier.weight(1f),
+                        maxLines = 1
                     )
                 }
             }
@@ -341,7 +365,11 @@ fun KmiCalendarMonth(
             color = calendarSectionColor,
             tonalElevation = 0.dp,
             shadowElevation =
-                if (isDarkTheme) 0.dp else 3.dp,
+                if (isDarkTheme) {
+                    0.dp
+                } else {
+                    1.dp
+                },
             border = BorderStroke(
                 width = 1.dp,
                 color = calendarSectionBorderColor
@@ -388,7 +416,7 @@ fun KmiCalendarMonth(
                             Box(
                                 modifier = Modifier
                                     .weight(1f)
-                                    .height(38.dp),
+                                    .heightIn(min = 42.dp),
                                 contentAlignment = Alignment.Center
                             ) {
                                 if (
@@ -397,7 +425,10 @@ fun KmiCalendarMonth(
                                 ) {
                                     Surface(
                                         modifier = Modifier
-                                            .size(32.dp)
+                                            .sizeIn(
+                                                minWidth = 34.dp,
+                                                minHeight = 34.dp
+                                            )
                                             .clickable {
                                                 onDateSelected(cellDate)
                                             },
@@ -435,10 +466,12 @@ fun KmiCalendarMonth(
                                                     } else {
                                                         primaryTextColor
                                                     },
-                                                fontWeight = FontWeight.Black,
                                                 style =
-                                                    MaterialTheme.typography.bodyMedium,
-                                                textAlign = TextAlign.Center
+                                                    KmiTypography.body.copy(
+                                                        fontWeight = FontWeight.Black
+                                                    ),
+                                                textAlign = TextAlign.Center,
+                                                maxLines = 1
                                             )
 
                                             if (
@@ -528,6 +561,17 @@ fun KmiCalendarPickerDialog(
         )
     }
 
+    val colorScheme = MaterialTheme.colorScheme
+    val isDarkTheme =
+        colorScheme.background.luminance() < 0.5f
+
+    val dialogContainerColor =
+        if (isDarkTheme) {
+            Color(0xFF061832).copy(alpha = 0.96f)
+        } else {
+            colorScheme.surface.copy(alpha = 0.98f)
+        }
+
     Dialog(
         onDismissRequest = onDismiss
     ) {
@@ -538,7 +582,8 @@ fun KmiCalendarPickerDialog(
                 .heightIn(max = 690.dp),
             shape = RoundedCornerShape(30.dp),
             color = Color.Transparent,
-            shadowElevation = 20.dp
+            tonalElevation = 0.dp,
+            shadowElevation = 1.dp
         ) {
             Box(
                 modifier = Modifier
@@ -546,12 +591,22 @@ fun KmiCalendarPickerDialog(
                     .clip(RoundedCornerShape(30.dp))
                     .background(
                         Brush.verticalGradient(
-                            colors = listOf(
-                                Color(0xFF07152E),
-                                Color(0xFF0B1E48),
-                                Color(0xFF103C89),
-                                Color(0xFF18BDEB)
-                            )
+                            colors =
+                                if (isDarkTheme) {
+                                    listOf(
+                                        Color(0xFF07152E),
+                                        Color(0xFF0B1E48),
+                                        Color(0xFF103C89),
+                                        Color(0xFF18BDEB)
+                                    )
+                                } else {
+                                    listOf(
+                                        Color(0xFFEFFBFF),
+                                        Color(0xFFDBF4FF),
+                                        Color(0xFFBAE6FD),
+                                        Color(0xFF38BDF8)
+                                    )
+                                }
                         )
                     )
                     .padding(1.dp)
@@ -559,8 +614,9 @@ fun KmiCalendarPickerDialog(
                 Surface(
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(29.dp),
-                    color = Color(0xFF061832)
-                        .copy(alpha = 0.96f)
+                    color = dialogContainerColor,
+                    tonalElevation = 0.dp,
+                    shadowElevation = 0.dp
                 ) {
                     CompositionLocalProvider(
                         LocalLayoutDirection provides
@@ -573,6 +629,9 @@ fun KmiCalendarPickerDialog(
                         Column(
                             modifier = Modifier
                                 .fillMaxWidth()
+                                .verticalScroll(
+                                    rememberScrollState()
+                                )
                                 .padding(
                                     horizontal = 16.dp,
                                     vertical = 10.dp
@@ -586,10 +645,11 @@ fun KmiCalendarPickerDialog(
                                 isEnglish = isEnglish
                             )
 
-                            Divider(
-                                color = Color.White.copy(
-                                    alpha = 0.14f
-                                )
+                            HorizontalDivider(
+                                color =
+                                    colorScheme
+                                        .outlineVariant
+                                        .copy(alpha = 0.65f)
                             )
 
                             KmiCalendarMonth(
@@ -630,22 +690,42 @@ private fun CalendarDialogHeader(
     selectedTitle: String,
     isEnglish: Boolean
 ) {
+    val colorScheme = MaterialTheme.colorScheme
+    val isDarkTheme =
+        colorScheme.background.luminance() < 0.5f
+
+    val headerAccentColor =
+        if (isDarkTheme) {
+            Color(0xFFBFDBFE)
+        } else {
+            colorScheme.primary
+        }
+
     Row(
         modifier = Modifier.fillMaxWidth(),
         verticalAlignment = Alignment.Top
     ) {
         Surface(
             shape = CircleShape,
-            color = Color.White.copy(alpha = 0.09f),
+            color =
+                if (isDarkTheme) {
+                    Color.White.copy(alpha = 0.09f)
+                } else {
+                    colorScheme.primaryContainer.copy(alpha = 0.55f)
+                },
+            tonalElevation = 0.dp,
+            shadowElevation = 0.dp,
             border = BorderStroke(
                 1.dp,
-                Color.White.copy(alpha = 0.18f)
+                colorScheme.outline.copy(alpha = 0.35f)
             )
         ) {
             Text(
                 text = "📅",
-                fontSize = 20.sp,
-                modifier = Modifier.padding(9.dp)
+                style = KmiTypography.metric,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.padding(9.dp),
+                maxLines = 1
             )
         }
 
@@ -661,33 +741,38 @@ private fun CalendarDialogHeader(
         ) {
             Text(
                 text = title,
-                color = Color(0xFFBFDBFE),
-                fontWeight = FontWeight.ExtraBold,
-                style = MaterialTheme.typography.titleMedium,
-                textAlign = if (isEnglish) {
-                    TextAlign.Start
-                } else {
-                    TextAlign.End
-                },
-                modifier = Modifier.fillMaxWidth()
+                color = headerAccentColor,
+                style =
+                    KmiTypography.cardTitle.copy(
+                        fontWeight = FontWeight.ExtraBold
+                    ),
+                textAlign =
+                    if (isEnglish) {
+                        TextAlign.Start
+                    } else {
+                        TextAlign.End
+                    },
+                modifier = Modifier.fillMaxWidth(),
+                maxLines = 2
             )
 
             Spacer(Modifier.height(6.dp))
 
             Text(
                 text = selectedTitle,
-                color = Color.White,
-                fontWeight = FontWeight.Black,
-                style = MaterialTheme.typography.titleLarge.copy(
-                    fontSize = 22.sp,
-                    lineHeight = 25.sp
-                ),
-                textAlign = if (isEnglish) {
-                    TextAlign.Start
-                } else {
-                    TextAlign.End
-                },
-                modifier = Modifier.fillMaxWidth()
+                color = colorScheme.onSurface,
+                style =
+                    KmiTypography.screenTitle.copy(
+                        fontWeight = FontWeight.Black
+                    ),
+                textAlign =
+                    if (isEnglish) {
+                        TextAlign.Start
+                    } else {
+                        TextAlign.End
+                    },
+                modifier = Modifier.fillMaxWidth(),
+                maxLines = 2
             )
         }
     }
@@ -699,13 +784,24 @@ private fun CalendarDialogActions(
     onDismiss: () -> Unit,
     onToday: () -> Unit
 ) {
+    val colorScheme = MaterialTheme.colorScheme
+    val isDarkTheme =
+        colorScheme.background.luminance() < 0.5f
+
     Surface(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(18.dp),
-        color = Color.White.copy(alpha = 0.07f),
+        color =
+            if (isDarkTheme) {
+                Color.White.copy(alpha = 0.07f)
+            } else {
+                colorScheme.surfaceVariant.copy(alpha = 0.55f)
+            },
+        tonalElevation = 0.dp,
+        shadowElevation = 0.dp,
         border = BorderStroke(
             1.dp,
-            Color.White.copy(alpha = 0.12f)
+            colorScheme.outline.copy(alpha = 0.30f)
         )
     ) {
         Row(
@@ -724,17 +820,26 @@ private fun CalendarDialogActions(
         ) {
             TextButton(
                 onClick = onDismiss,
-                modifier = Modifier.height(38.dp)
+                modifier = Modifier.heightIn(min = 40.dp)
             ) {
                 Text(
-                    text = if (isEnglish) {
-                        "Cancel"
-                    } else {
-                        "ביטול"
-                    },
-                    color = Color(0xFFBFDBFE),
-                    fontWeight = FontWeight.ExtraBold,
-                    fontSize = 15.sp
+                    text =
+                        if (isEnglish) {
+                            "Cancel"
+                        } else {
+                            "ביטול"
+                        },
+                    color =
+                        if (isDarkTheme) {
+                            Color(0xFFBFDBFE)
+                        } else {
+                            colorScheme.primary
+                        },
+                    style =
+                        KmiTypography.action.copy(
+                            fontWeight = FontWeight.ExtraBold
+                        ),
+                    maxLines = 1
                 )
             }
 
@@ -743,8 +848,14 @@ private fun CalendarDialogActions(
             Surface(
                 onClick = onToday,
                 shape = RoundedCornerShape(999.dp),
-                color = Color(0xFF22D3EE),
-                shadowElevation = 5.dp
+                color =
+                    if (isDarkTheme) {
+                        Color(0xFF22D3EE)
+                    } else {
+                        colorScheme.primary
+                    },
+                tonalElevation = 0.dp,
+                shadowElevation = 0.dp
             ) {
                 Box(
                     modifier = Modifier.padding(
@@ -754,14 +865,23 @@ private fun CalendarDialogActions(
                     contentAlignment = Alignment.Center
                 ) {
                     Text(
-                        text = if (isEnglish) {
-                            "Today"
-                        } else {
-                            "היום"
-                        },
-                        color = Color(0xFF04101F),
-                        fontWeight = FontWeight.Black,
-                        fontSize = 15.sp
+                        text =
+                            if (isEnglish) {
+                                "Today"
+                            } else {
+                                "היום"
+                            },
+                        color =
+                            if (isDarkTheme) {
+                                Color(0xFF04101F)
+                            } else {
+                                colorScheme.onPrimary
+                            },
+                        style =
+                            KmiTypography.action.copy(
+                                fontWeight = FontWeight.Black
+                            ),
+                        maxLines = 1
                     )
                 }
             }

@@ -117,6 +117,31 @@ internal fun CoachGroupStatsPremiumScreen(
     val statsHorizontalAlignment =
         coachHorizontalAlignment(isEnglish)
 
+    val isDarkMode =
+        MaterialTheme.colorScheme.background
+            .luminance() < 0.5f
+
+    val statsCardColor =
+        if (isDarkMode) {
+            Color(0xFF111827)
+        } else {
+            MaterialTheme.colorScheme.surface
+        }
+
+    val statsCardVariantColor =
+        if (isDarkMode) {
+            Color(0xFF172036)
+        } else {
+            MaterialTheme.colorScheme.surfaceVariant
+        }
+
+    val statsCardBorderColor =
+        if (isDarkMode) {
+            Color(0xFF475569).copy(alpha = 0.58f)
+        } else {
+            MaterialTheme.colorScheme.outlineVariant
+        }
+
     val statsBgBrush = Brush.verticalGradient(
         colors = listOf(
             MaterialTheme.colorScheme.background,
@@ -206,15 +231,15 @@ internal fun CoachGroupStatsPremiumScreen(
                 ) {
 
                     Surface(
-                        color = MaterialTheme.colorScheme.surface.copy(
-                            alpha = 0.96f
+                        color = statsCardColor.copy(
+                            alpha = 0.98f
                         ),
                         shape = RoundedCornerShape(24.dp),
                         shadowElevation = 2.dp,
                         tonalElevation = 0.dp,
                         border = BorderStroke(
                             width = 1.dp,
-                            color = MaterialTheme.colorScheme.outlineVariant
+                            color = statsCardBorderColor
                         ),
                         modifier = Modifier.fillMaxWidth()
                     ) {
@@ -224,11 +249,11 @@ internal fun CoachGroupStatsPremiumScreen(
                                 .background(
                                     brush = Brush.verticalGradient(
                                         colors = listOf(
-                                            MaterialTheme.colorScheme.surface,
-                                            MaterialTheme.colorScheme.surfaceVariant.copy(
-                                                alpha = 0.52f
+                                            statsCardColor,
+                                            statsCardVariantColor.copy(
+                                                alpha = if (isDarkMode) 0.96f else 0.52f
                                             ),
-                                            MaterialTheme.colorScheme.surface
+                                            statsCardColor
                                         )
                                     )
                                 )
@@ -246,7 +271,7 @@ internal fun CoachGroupStatsPremiumScreen(
                                     Alignment.CenterVertically
                             ) {
                                 Surface(
-                                    color = MaterialTheme.colorScheme.surface,
+                                    color = statsCardColor,
                                     shape = RoundedCornerShape(20.dp),
                                     shadowElevation = 0.dp,
                                     tonalElevation = 0.dp,
@@ -266,12 +291,22 @@ internal fun CoachGroupStatsPremiumScreen(
                                             .background(
                                                 Brush.horizontalGradient(
                                                     listOf(
-                                                        MaterialTheme.colorScheme.surface,
-                                                        MaterialTheme.colorScheme.surfaceVariant.copy(
-                                                            alpha = 0.50f
+                                                        statsCardColor,
+                                                        statsCardVariantColor.copy(
+                                                            alpha =
+                                                                if (isDarkMode) {
+                                                                    0.94f
+                                                                } else {
+                                                                    0.50f
+                                                                }
                                                         ),
                                                         Color(0xFF4F46E5).copy(
-                                                            alpha = 0.10f
+                                                            alpha =
+                                                                if (isDarkMode) {
+                                                                    0.22f
+                                                                } else {
+                                                                    0.10f
+                                                                }
                                                         )
                                                     )
                                                 )
@@ -339,7 +374,7 @@ internal fun CoachGroupStatsPremiumScreen(
                             }
 
                                 Surface(
-                                    color = MaterialTheme.colorScheme.surface,
+                                    color = statsCardColor,
                                     shape = RoundedCornerShape(20.dp),
                                     shadowElevation = 0.dp,
                                     tonalElevation = 0.dp,
@@ -359,12 +394,22 @@ internal fun CoachGroupStatsPremiumScreen(
                                             .background(
                                                 Brush.horizontalGradient(
                                                     listOf(
-                                                        MaterialTheme.colorScheme.surface,
-                                                        MaterialTheme.colorScheme.surfaceVariant.copy(
-                                                            alpha = 0.50f
+                                                        statsCardColor,
+                                                        statsCardVariantColor.copy(
+                                                            alpha =
+                                                                if (isDarkMode) {
+                                                                    0.94f
+                                                                } else {
+                                                                    0.50f
+                                                                }
                                                         ),
                                                         Color(0xFF22C55E).copy(
-                                                            alpha = 0.10f
+                                                            alpha =
+                                                                if (isDarkMode) {
+                                                                    0.18f
+                                                                } else {
+                                                                    0.10f
+                                                                }
                                                         )
                                                     )
                                                 )
@@ -504,15 +549,15 @@ internal fun CoachGroupStatsPremiumScreen(
                  * מאותו תוכן גלול.
                  */
                 Surface(
-                    color = MaterialTheme.colorScheme.surface.copy(
-                        alpha = 0.96f
+                    color = statsCardColor.copy(
+                        alpha = 0.98f
                     ),
                     shape = RoundedCornerShape(24.dp),
                     shadowElevation = 2.dp,
                     tonalElevation = 0.dp,
                     border = BorderStroke(
                         width = 1.dp,
-                        color = MaterialTheme.colorScheme.outlineVariant
+                        color = statsCardBorderColor
                     ),
                     modifier = Modifier.fillMaxWidth()
                 ) {
@@ -522,11 +567,11 @@ internal fun CoachGroupStatsPremiumScreen(
                             .background(
                                 brush = Brush.verticalGradient(
                                     colors = listOf(
-                                        MaterialTheme.colorScheme.surface,
-                                        MaterialTheme.colorScheme.surfaceVariant.copy(
-                                            alpha = 0.52f
+                                        statsCardColor,
+                                        statsCardVariantColor.copy(
+                                            alpha = if (isDarkMode) 0.96f else 0.52f
                                         ),
-                                        MaterialTheme.colorScheme.surface
+                                        statsCardColor
                                     )
                                 )
                             )

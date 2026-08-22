@@ -3347,15 +3347,33 @@ fun CoachTraineesScreen(
                  */
                 if (selected != null) {
                     item {
+                        val isDarkMode =
+                            MaterialTheme.colorScheme.background
+                                .luminance() < 0.5f
+
+                        val traineeCardColor =
+                            if (isDarkMode) {
+                                Color(0xFF0F172A)
+                            } else {
+                                Color(0xFFF4F8FF)
+                            }
+
+                        val traineeCardBorder =
+                            if (isDarkMode) {
+                                Color(0xFF475569).copy(alpha = 0.62f)
+                            } else {
+                                Color(0xFFD8E4F4)
+                            }
+
                         // כרטיס פרטי מתאמן
                         Surface(
-                            color = Color(0xFFF4F8FF),
-                            shape = RoundedCornerShape(26.dp),
-                            shadowElevation = 7.dp,
+                            color = traineeCardColor,
+                            shape = RoundedCornerShape(24.dp),
+                            shadowElevation = 1.dp,
                             tonalElevation = 0.dp,
                             border = BorderStroke(
                                 width = 1.dp,
-                                color = Color(0xFFD8E4F4)
+                                color = traineeCardBorder
                             ),
                             modifier = Modifier.fillMaxWidth()
                         ) {
@@ -3364,13 +3382,22 @@ fun CoachTraineesScreen(
                                     .fillMaxWidth()
                                     .background(
                                         brush = Brush.verticalGradient(
-                                            colors = listOf(
-                                                Color(0xFFF9FBFF),
-                                                Color(0xFFF1F6FD),
-                                                Color(0xFFEAF2FC)
-                                            )
+                                            colors =
+                                                if (isDarkMode) {
+                                                    listOf(
+                                                        Color(0xFF0F172A),
+                                                        Color(0xFF172036),
+                                                        Color(0xFF1E293B)
+                                                    )
+                                                } else {
+                                                    listOf(
+                                                        Color(0xFFF9FBFF),
+                                                        Color(0xFFF1F6FD),
+                                                        Color(0xFFEAF2FC)
+                                                    )
+                                                }
                                         ),
-                                        shape = RoundedCornerShape(26.dp)
+                                        shape = RoundedCornerShape(24.dp)
                                     )
                             ) {
                                 if (selected == null) {
@@ -3440,7 +3467,14 @@ fun CoachTraineesScreen(
                                         )
 
                                         Divider(
-                                            color = Color(0xFFD8E4F4)
+                                            color =
+                                                if (isDarkMode) {
+                                                    Color(0xFF475569).copy(
+                                                        alpha = 0.58f
+                                                    )
+                                                } else {
+                                                    Color(0xFFD8E4F4)
+                                                }
                                         )
 
                                         Column(
@@ -3931,18 +3965,36 @@ fun CoachTraineesScreen(
                                             mutableStateOf<String?>(null)
                                         }
 
+                                        val isCoachNotesDarkMode =
+                                            MaterialTheme.colorScheme.background
+                                                .luminance() < 0.5f
+
+                                        val coachNotesContainerColor =
+                                            if (isCoachNotesDarkMode) {
+                                                Color(0xFF172036)
+                                            } else {
+                                                Color(0xFFF8FAFC)
+                                            }
+
+                                        val coachNotesBorderColor =
+                                            if (isCoachNotesDarkMode) {
+                                                Color(0xFF475569).copy(alpha = 0.62f)
+                                            } else {
+                                                Color(0xFFD6E2F1)
+                                            }
+
                                         Column(
                                             modifier = Modifier.fillMaxWidth(),
                                             verticalArrangement = Arrangement.spacedBy(4.dp),
                                             horizontalAlignment = screenHorizontalAlignment
                                         ) {
                                             Surface(
-                                                color = Color(0xFFF8FAFC),
+                                                color = coachNotesContainerColor,
                                                 shape = RoundedCornerShape(20.dp),
-                                                shadowElevation = 3.dp,
+                                                shadowElevation = 0.dp,
                                                 border = BorderStroke(
                                                     1.dp,
-                                                    Color(0xFFD6E2F1)
+                                                    coachNotesBorderColor
                                                 ),
                                                 modifier = Modifier.fillMaxWidth()
                                             ) {
@@ -3991,10 +4043,15 @@ fun CoachTraineesScreen(
                                                                     "כתוב כאן הערות על המתאמן...",
                                                                     "Write coach notes here..."
                                                                 ),
-                                                                color = Color(0xFF94A3B8),
-                                                                style = MaterialTheme.typography.bodyMedium.copy(
-                                                                    textAlign = screenTextAlign
-                                                                ),
+                                                                color =
+                                                                    MaterialTheme
+                                                                        .colorScheme
+                                                                        .onSurfaceVariant,
+                                                                style =
+                                                                    KmiTypography.body.copy(
+                                                                        textAlign =
+                                                                            screenTextAlign
+                                                                    ),
                                                                 modifier = Modifier.fillMaxWidth()
                                                             )
                                                         },
@@ -4012,17 +4069,36 @@ fun CoachTraineesScreen(
                                                         minLines = 4,
                                                         shape = RoundedCornerShape(16.dp),
                                                         colors = OutlinedTextFieldDefaults.colors(
-                                                            focusedTextColor = Color(0xFF0F172A),
-                                                            unfocusedTextColor = Color(0xFF0F172A),
-                                                            disabledTextColor = Color(0xFF64748B),
-                                                            cursorColor = Color(0xFF2563EB),
-                                                            focusedBorderColor = Color(0xFF60A5FA),
-                                                            unfocusedBorderColor = Color(0xFFCBD5E1),
-                                                            focusedContainerColor = Color.White,
-                                                            unfocusedContainerColor = Color.White,
-                                                            disabledContainerColor = Color(0xFFF8FAFC),
-                                                            focusedPlaceholderColor = Color(0xFF94A3B8),
-                                                            unfocusedPlaceholderColor = Color(0xFF94A3B8)
+                                                            focusedTextColor =
+                                                                MaterialTheme.colorScheme.onSurface,
+                                                            unfocusedTextColor =
+                                                                MaterialTheme.colorScheme.onSurface,
+                                                            disabledTextColor =
+                                                                MaterialTheme.colorScheme.onSurfaceVariant,
+                                                            cursorColor =
+                                                                MaterialTheme.colorScheme.primary,
+                                                            focusedBorderColor =
+                                                                MaterialTheme.colorScheme.primary,
+                                                            unfocusedBorderColor =
+                                                                coachNotesBorderColor,
+                                                            focusedContainerColor =
+                                                                if (isCoachNotesDarkMode) {
+                                                                    Color(0xFF0F172A)
+                                                                } else {
+                                                                    Color.White
+                                                                },
+                                                            unfocusedContainerColor =
+                                                                if (isCoachNotesDarkMode) {
+                                                                    Color(0xFF0F172A)
+                                                                } else {
+                                                                    Color.White
+                                                                },
+                                                            disabledContainerColor =
+                                                                coachNotesContainerColor,
+                                                            focusedPlaceholderColor =
+                                                                MaterialTheme.colorScheme.onSurfaceVariant,
+                                                            unfocusedPlaceholderColor =
+                                                                MaterialTheme.colorScheme.onSurfaceVariant
                                                         )
                                                     )
                                                 }
@@ -4070,17 +4146,27 @@ fun CoachTraineesScreen(
                                                         }
                                                     },
                                                     shape = RoundedCornerShape(999.dp),
-                                                    color = Color(0xFFF1F5F9),
+                                                    color =
+                                                        MaterialTheme
+                                                            .colorScheme
+                                                            .primary,
                                                     shadowElevation = 0.dp,
+                                                    tonalElevation = 0.dp,
                                                     border = BorderStroke(
                                                         1.dp,
-                                                        Color(0xFFCBD5E1)
+                                                        MaterialTheme
+                                                            .colorScheme
+                                                            .primary
+                                                            .copy(alpha = 0.75f)
                                                     ),
                                                     modifier = Modifier.widthIn(min = 118.dp)
                                                 ) {
                                                     Box(
                                                         modifier = Modifier
-                                                            .padding(horizontal = 12.dp, vertical = 5.dp),
+                                                            .padding(
+                                                                horizontal = 16.dp,
+                                                                vertical = 7.dp
+                                                            ),
                                                         contentAlignment = Alignment.Center
                                                     ) {
                                                         Text(
@@ -4108,7 +4194,7 @@ fun CoachTraineesScreen(
                                                             color =
                                                                 MaterialTheme
                                                                     .colorScheme
-                                                                    .onSurface,
+                                                                    .onPrimary,
                                                             textAlign =
                                                                 TextAlign.Center,
                                                             maxLines = 1
@@ -4197,15 +4283,33 @@ private fun PremiumCoachCompactSectionHeader(
     isEnglish: Boolean,
     onClick: () -> Unit
 ) {
+    val isDarkMode =
+        MaterialTheme.colorScheme.background
+            .luminance() < 0.5f
+
+    val headerColor =
+        if (isDarkMode) {
+            Color(0xFF172036)
+        } else {
+            Color(0xFFFCFDFF)
+        }
+
+    val headerBorderColor =
+        if (isDarkMode) {
+            Color(0xFF475569).copy(alpha = 0.62f)
+        } else {
+            Color(0xFFE7ECF7)
+        }
+
     Surface(
         onClick = onClick,
-        color = Color(0xFFFCFDFF),
+        color = headerColor,
         shape = RoundedCornerShape(16.dp),
-        shadowElevation = 1.dp,
+        shadowElevation = 0.dp,
         tonalElevation = 0.dp,
         border = BorderStroke(
             1.dp,
-            Color(0xFFE7ECF7)
+            headerBorderColor
         ),
         modifier = Modifier
             .fillMaxWidth()
@@ -4216,11 +4320,20 @@ private fun PremiumCoachCompactSectionHeader(
                 .fillMaxWidth()
                 .background(
                     brush = Brush.horizontalGradient(
-                        colors = listOf(
-                            Color.White,
-                            Color(0xFFFAFBFF),
-                            accent.copy(alpha = 0.025f)
-                        )
+                        colors =
+                            if (isDarkMode) {
+                                listOf(
+                                    Color(0xFF172036),
+                                    Color(0xFF1E293B),
+                                    accent.copy(alpha = 0.14f)
+                                )
+                            } else {
+                                listOf(
+                                    Color.White,
+                                    Color(0xFFFAFBFF),
+                                    accent.copy(alpha = 0.025f)
+                                )
+                            }
                     )
                 )
                 .padding(horizontal = 9.dp, vertical = 6.dp),
@@ -4676,8 +4789,46 @@ private fun LabeledField(
     modifier: Modifier = Modifier
 ) {
     val textAlign = coachTextAlign(isEnglish)
-    val horizontalAlignment = coachHorizontalAlignment(isEnglish)
-    val cleanValue = value.ifBlank { "—" }
+
+    val horizontalAlignment =
+        coachHorizontalAlignment(isEnglish)
+
+    val cleanValue =
+        value.ifBlank { "—" }
+
+    val isDarkMode =
+        MaterialTheme.colorScheme.background
+            .luminance() < 0.5f
+
+    val fieldContainerColor =
+        if (isDarkMode) {
+            Color(0xFF172036)
+        } else {
+            Color.White
+        }
+
+    val fieldBorderColor =
+        if (isDarkMode) {
+            Color(0xFF475569).copy(alpha = 0.62f)
+        } else {
+            Color(0xFFD6E0EE)
+        }
+
+    val iconContainerColor =
+        if (isDarkMode) {
+            MaterialTheme.colorScheme.primary.copy(
+                alpha = 0.22f
+            )
+        } else {
+            MaterialTheme.colorScheme.primaryContainer
+        }
+
+    val iconContentColor =
+        if (isDarkMode) {
+            Color(0xFFC7D2FE)
+        } else {
+            MaterialTheme.colorScheme.onPrimaryContainer
+        }
 
     val iconText = when {
         label.contains("גיל") || label.contains("Age") -> "🎂"
@@ -4690,13 +4841,13 @@ private fun LabeledField(
     }
 
     Surface(
-        color = Color.White,
-        shape = RoundedCornerShape(20.dp),
-        shadowElevation = 2.dp,
+        color = fieldContainerColor,
+        shape = RoundedCornerShape(18.dp),
+        shadowElevation = 0.dp,
         tonalElevation = 0.dp,
         border = BorderStroke(
             width = 1.dp,
-            color = Color(0xFFD6E0EE)
+            color = fieldBorderColor
         ),
         modifier = modifier.heightIn(min = 78.dp)
     ) {
@@ -4705,11 +4856,20 @@ private fun LabeledField(
                 .fillMaxWidth()
                 .background(
                     brush = Brush.horizontalGradient(
-                        colors = listOf(
-                            Color.White,
-                            Color(0xFFFAFCFF),
-                            Color(0xFFF3F7FD)
-                        )
+                        colors =
+                            if (isDarkMode) {
+                                listOf(
+                                    Color(0xFF172036),
+                                    Color(0xFF1E293B),
+                                    Color(0xFF172036)
+                                )
+                            } else {
+                                listOf(
+                                    Color.White,
+                                    Color(0xFFFAFCFF),
+                                    Color(0xFFF3F7FD)
+                                )
+                            }
                     )
                 )
                 .padding(horizontal = 10.dp, vertical = 10.dp),
@@ -4722,19 +4882,14 @@ private fun LabeledField(
                             .size(34.dp)
                             .clip(CircleShape)
                             .background(
-                                MaterialTheme
-                                    .colorScheme
-                                    .primaryContainer
+                                iconContainerColor
                             ),
                     contentAlignment = Alignment.Center
                 ) {
                     Text(
                         text = iconText,
                         style = KmiTypography.action,
-                        color =
-                            MaterialTheme
-                                .colorScheme
-                                .onPrimaryContainer,
+                        color = iconContentColor,
                         textAlign = TextAlign.Center
                     )
                 }
@@ -4793,19 +4948,14 @@ private fun LabeledField(
                             .size(34.dp)
                             .clip(CircleShape)
                             .background(
-                                MaterialTheme
-                                    .colorScheme
-                                    .primaryContainer
+                                iconContainerColor
                             ),
                     contentAlignment = Alignment.Center
                 ) {
                     Text(
                         text = iconText,
                         style = KmiTypography.action,
-                        color =
-                            MaterialTheme
-                                .colorScheme
-                                .onPrimaryContainer,
+                        color = iconContentColor,
                         textAlign = TextAlign.Center
                     )
                 }

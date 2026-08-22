@@ -94,6 +94,7 @@ import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.rounded.NearMe
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.scale
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.lerp
@@ -123,6 +124,7 @@ import java.util.TimeZone
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.zIndex
+import il.kmi.app.ui.LocalAppIconScale
 
 //=================================================================================
 
@@ -5644,6 +5646,8 @@ private fun NavPickerDialog(
         MaterialTheme.colorScheme.background
             .luminance() < 0.5f
 
+    val uiScale = LocalAppIconScale.current
+
     /*
      * אותו גוון גרניט של כרטיס הניווט.
      */
@@ -5667,8 +5671,12 @@ private fun NavPickerDialog(
         Surface(
             modifier = Modifier
                 .fillMaxWidth()
-                .widthIn(max = 430.dp),
-            shape = RoundedCornerShape(28.dp),
+                .widthIn(
+                    max = 430.dp * uiScale
+                ),
+            shape = RoundedCornerShape(
+                28.dp * uiScale
+            ),
             color = graniteCardColor,
 
             /*
@@ -5695,11 +5703,13 @@ private fun NavPickerDialog(
         ) {
             Column(
                 modifier = Modifier.padding(
-                    horizontal = 20.dp,
-                    vertical = 20.dp
+                    horizontal = 20.dp * uiScale,
+                    vertical = 20.dp * uiScale
                 ),
                 verticalArrangement =
-                    Arrangement.spacedBy(16.dp)
+                    Arrangement.spacedBy(
+                        16.dp * uiScale
+                    )
             ) {
                 /*
                  * כותרת וכתובת.
@@ -5707,15 +5717,19 @@ private fun NavPickerDialog(
                 Column(
                     modifier = Modifier.fillMaxWidth(),
                     verticalArrangement =
-                        Arrangement.spacedBy(6.dp)
+                        Arrangement.spacedBy(
+                            6.dp * uiScale
+                        )
                 ) {
                     Text(
                         text = tr(
                             "ניווט באמצעות",
                             "Navigate with"
                         ),
-                        style = KmiTypography.sectionTitle,
-                        fontWeight = FontWeight.ExtraBold,
+                        style =
+                            KmiTypography.cardTitle.copy(
+                                fontWeight = FontWeight.ExtraBold
+                            ),
                         color =
                             MaterialTheme.colorScheme.onSurface,
                         textAlign =
@@ -5749,7 +5763,9 @@ private fun NavPickerDialog(
                  */
                 Surface(
                     modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(16.dp),
+                    shape = RoundedCornerShape(
+                        16.dp * uiScale
+                    ),
                     color = innerCardColor,
                     tonalElevation = 0.dp,
                     shadowElevation = 0.dp,
@@ -5764,8 +5780,8 @@ private fun NavPickerDialog(
                         modifier = Modifier
                             .fillMaxWidth()
                             .padding(
-                                horizontal = 14.dp,
-                                vertical = 8.dp
+                                horizontal = 14.dp * uiScale,
+                                vertical = 8.dp * uiScale
                             ),
                         verticalAlignment =
                             Alignment.CenterVertically
@@ -5775,10 +5791,12 @@ private fun NavPickerDialog(
                                 "זכור בחירה",
                                 "Remember selection"
                             ),
-                            style = KmiTypography.body,
+                            style =
+                                KmiTypography.secondary.copy(
+                                    fontWeight = FontWeight.SemiBold
+                                ),
                             color =
                                 MaterialTheme.colorScheme.onSurface,
-                            fontWeight = FontWeight.SemiBold,
                             modifier = Modifier.weight(1f),
                             textAlign =
                                 if (isEnglish) {
@@ -5791,7 +5809,10 @@ private fun NavPickerDialog(
                         Switch(
                             checked = rememberChoice,
                             onCheckedChange =
-                                onRememberChoiceChange
+                                onRememberChoiceChange,
+                            modifier = Modifier.scale(
+                                uiScale
+                            )
                         )
                     }
                 }
@@ -5800,9 +5821,15 @@ private fun NavPickerDialog(
                  * אפליקציות הניווט.
                  */
                 Row(
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(IntrinsicSize.Max),
                     horizontalArrangement =
-                        Arrangement.spacedBy(10.dp)
+                        Arrangement.spacedBy(
+                            10.dp * uiScale
+                        ),
+                    verticalAlignment =
+                        Alignment.CenterVertically
                 ) {
                     NavigationAppChoiceCard(
                         label = "Waze",
@@ -5864,8 +5891,10 @@ private fun NavPickerDialog(
                             "סגור",
                             "Close"
                         ),
-                        style = KmiTypography.action,
-                        fontWeight = FontWeight.Bold
+                        style =
+                            KmiTypography.secondary.copy(
+                                fontWeight = FontWeight.Bold
+                            )
                     )
                 }
             }
@@ -5881,13 +5910,19 @@ private fun NavigationAppChoiceCard(
     onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val uiScale = LocalAppIconScale.current
+
     Surface(
         onClick = onClick,
         modifier =
-            modifier.heightIn(
-                min = 56.dp
-            ),
-        shape = RoundedCornerShape(16.dp),
+            modifier
+                .fillMaxHeight()
+                .heightIn(
+                    min = 56.dp * uiScale
+                ),
+        shape = RoundedCornerShape(
+            16.dp * uiScale
+        ),
         color = containerColor,
 
         /*
@@ -5906,8 +5941,11 @@ private fun NavigationAppChoiceCard(
     ) {
         Row(
             modifier = Modifier
-                .fillMaxSize()
-                .padding(horizontal = 10.dp),
+                .fillMaxWidth()
+                .padding(
+                    horizontal = 8.dp * uiScale,
+                    vertical = 12.dp * uiScale
+                ),
             verticalAlignment =
                 Alignment.CenterVertically,
             horizontalArrangement =
@@ -5917,22 +5955,29 @@ private fun NavigationAppChoiceCard(
                 painter = painterResource(
                     id = iconRes
                 ),
-                contentDescription = null,
+                contentDescription = label,
                 tint = Color.Unspecified,
-                modifier = Modifier.size(23.dp)
+                modifier = Modifier.size(
+                    23.dp * uiScale
+                )
             )
 
             Spacer(
-                Modifier.width(8.dp)
+                Modifier.width(
+                    8.dp * uiScale
+                )
             )
 
             Text(
                 text = label,
-                style = KmiTypography.action,
+                style =
+                    KmiTypography.secondary.copy(
+                        fontWeight = FontWeight.Bold
+                    ),
                 color =
                     MaterialTheme.colorScheme.onSurface,
-                fontWeight = FontWeight.Bold,
-                maxLines = 1,
+                textAlign = TextAlign.Center,
+                maxLines = 2,
                 overflow = TextOverflow.Ellipsis
             )
         }

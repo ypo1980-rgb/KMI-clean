@@ -18,16 +18,17 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.width
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -40,10 +41,10 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.AbsoluteAlignment
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.res.painterResource
@@ -51,9 +52,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import il.kmi.app.R
 import il.kmi.app.ui.KmiTopBar
+import il.kmi.app.ui.KmiTypography
 
 @Composable
 fun OnboardingScreen(
@@ -76,6 +77,26 @@ fun OnboardingScreen(
     val currentStep = steps[currentStepIndex]
     val isFirstStep = currentStepIndex == 0
     val isLastStep = currentStepIndex == steps.lastIndex
+
+    val colorScheme = MaterialTheme.colorScheme
+    val isDarkMode =
+        colorScheme.background.luminance() < 0.5f
+
+    val screenGradient =
+        if (isDarkMode) {
+            listOf(
+                Color(0xFF030B14),
+                Color(0xFF071827),
+                currentStep.accentColor.copy(alpha = 0.20f),
+                Color(0xFF061522)
+            )
+        } else {
+            listOf(
+                Color(0xFFF8FAFF),
+                currentStep.accentColor.copy(alpha = 0.12f),
+                Color(0xFFF4F0FF)
+            )
+        }
 
     val layoutDirection = if (isEnglish) {
         LayoutDirection.Ltr
@@ -139,11 +160,7 @@ fun OnboardingScreen(
                     .fillMaxSize()
                     .background(
                         brush = Brush.verticalGradient(
-                            colors = listOf(
-                                Color(0xFFF8FAFF),
-                                currentStep.accentColor.copy(alpha = 0.12f),
-                                Color(0xFFF4F0FF)
-                            )
+                            colors = screenGradient
                         )
                     )
                     .padding(padding)
@@ -214,14 +231,21 @@ private fun OnboardingNavigationHeader(
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .height(56.dp)
+            .heightIn(min = 72.dp)
     ) {
         if (allowSkip) {
             TextButton(
                 onClick = onSkip,
                 modifier = Modifier
-                    .align(AbsoluteAlignment.TopLeft)
-                    .height(34.dp),
+                    .align(
+                        if (isEnglish) {
+                            AbsoluteAlignment.BottomLeft
+                        } else {
+                            AbsoluteAlignment.BottomRight
+                        }
+                    )
+                    .heightIn(min = 40.dp)
+                    .padding(horizontal = 4.dp),
                 contentPadding = androidx.compose.foundation.layout.PaddingValues(
                     horizontal = 6.dp,
                     vertical = 0.dp
@@ -234,9 +258,11 @@ private fun OnboardingNavigationHeader(
                         "דלג"
                     },
                     color = Color(0xFF6D4ED8),
-                    fontSize = 13.sp,
-                    lineHeight = 15.sp,
-                    fontWeight = FontWeight.Bold
+                    style =
+                        KmiTypography.action.copy(
+                            fontWeight = FontWeight.Bold
+                        ),
+                    maxLines = 1
                 )
             }
         }
@@ -260,6 +286,10 @@ private fun OnboardingProgressIndicator(
     isEnglish: Boolean,
     modifier: Modifier = Modifier
 ) {
+    val colorScheme = MaterialTheme.colorScheme
+    val isDarkMode =
+        colorScheme.background.luminance() < 0.5f
+
     Column(
         modifier = modifier,
         horizontalAlignment = Alignment.CenterHorizontally,
@@ -289,8 +319,15 @@ private fun OnboardingProgressIndicator(
                         .background(
                             when {
                                 isSelected -> accentColor
-                                isCompleted -> accentColor.copy(alpha = 0.55f)
-                                else -> Color(0xFFD8DEE9)
+                                isCompleted ->
+                                    accentColor.copy(alpha = 0.55f)
+
+                                else ->
+                                    if (isDarkMode) {
+                                        colorScheme.outlineVariant
+                                    } else {
+                                        Color(0xFFD8DEE9)
+                                    }
                             }
                         )
                 )
@@ -303,10 +340,17 @@ private fun OnboardingProgressIndicator(
             } else {
                 "שלב ${currentStepIndex + 1} מתוך $stepsCount"
             },
-            color = Color(0xFF64748B),
-            fontSize = 11.sp,
-            lineHeight = 13.sp,
-            fontWeight = FontWeight.Bold
+            color =
+                if (isDarkMode) {
+                    colorScheme.onSurfaceVariant
+                } else {
+                    Color(0xFF64748B)
+                },
+            style =
+                KmiTypography.caption.copy(
+                    fontWeight = FontWeight.Bold
+                ),
+            maxLines = 1
         )
     }
 }
@@ -360,13 +404,28 @@ private fun OnboardingStepCard(
 ) {
     val imageRes = onboardingImageForStep(step)
     val scrollState = rememberScrollState()
+    val colorScheme = MaterialTheme.colorScheme
+    val isDarkMode =
+        colorScheme.background.luminance() < 0.5f
 
     Surface(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(30.dp),
-        color = Color.White.copy(alpha = 0.97f),
-        shadowElevation = 12.dp,
-        tonalElevation = 0.dp
+        color =
+            if (isDarkMode) {
+                colorScheme.surface.copy(alpha = 0.96f)
+            } else {
+                Color.White.copy(alpha = 0.97f)
+            },
+        shadowElevation = 0.dp,
+        tonalElevation = 0.dp,
+        border = androidx.compose.foundation.BorderStroke(
+            width = 0.75.dp,
+            color =
+                colorScheme.outlineVariant.copy(
+                    alpha = if (isDarkMode) 0.52f else 0.38f
+                )
+        )
     ) {
         Column(
             modifier = Modifier
@@ -384,10 +443,11 @@ private fun OnboardingStepCard(
             Text(
                 text = step.title(isEnglish),
                 modifier = Modifier.fillMaxWidth(),
-                color = Color(0xFF111827),
-                fontSize = 14.5.sp,
-                lineHeight = 18.sp,
-                fontWeight = FontWeight.ExtraBold,
+                color = colorScheme.onSurface,
+                style =
+                    KmiTypography.cardTitle.copy(
+                        fontWeight = FontWeight.ExtraBold
+                    ),
                 textAlign = TextAlign.Center,
                 maxLines = 2
             )
@@ -429,10 +489,11 @@ private fun OnboardingStepCard(
             Text(
                 text = step.description(isEnglish),
                 modifier = Modifier.fillMaxWidth(),
-                color = Color(0xFF475569),
-                fontSize = 14.5.sp,
-                lineHeight = 21.sp,
-                fontWeight = FontWeight.Medium,
+                color = colorScheme.onSurfaceVariant,
+                style =
+                    KmiTypography.body.copy(
+                        fontWeight = FontWeight.Medium
+                    ),
                 textAlign = if (isEnglish) {
                     TextAlign.Start
                 } else {
@@ -451,12 +512,7 @@ private fun PremiumScrollHint(
     Surface(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 8.dp)
-            .shadow(
-                elevation = 14.dp,
-                shape = RoundedCornerShape(22.dp),
-                clip = false
-            ),
+            .padding(horizontal = 8.dp),
         shape = RoundedCornerShape(22.dp),
         color = Color.Transparent,
         tonalElevation = 0.dp,
@@ -525,14 +581,16 @@ private fun PremiumScrollHint(
                             "המשך להסבר המלא"
                         },
                         color = Color.White,
-                        fontSize = 12.5.sp,
-                        lineHeight = 15.sp,
-                        fontWeight = FontWeight.Black,
+                        style =
+                            KmiTypography.secondary.copy(
+                                fontWeight = FontWeight.Black
+                            ),
                         textAlign = if (isEnglish) {
                             TextAlign.Right
                         } else {
                             TextAlign.Left
-                        }
+                        },
+                        maxLines = 2
                     )
 
                     Text(
@@ -542,14 +600,16 @@ private fun PremiumScrollHint(
                             "מידע נוסף מחכה לך למטה"
                         },
                         color = Color.White.copy(alpha = 0.78f),
-                        fontSize = 9.5.sp,
-                        lineHeight = 12.sp,
-                        fontWeight = FontWeight.SemiBold,
+                        style =
+                            KmiTypography.caption.copy(
+                                fontWeight = FontWeight.SemiBold
+                            ),
                         textAlign = if (isEnglish) {
                             TextAlign.Right
                         } else {
                             TextAlign.Left
-                        }
+                        },
+                        maxLines = 2
                     )
                 }
 
@@ -573,9 +633,10 @@ private fun PremiumScrollHint(
                         Text(
                             text = "↓",
                             color = Color.White,
-                            fontSize = 16.sp,
-                            lineHeight = 16.sp,
-                            fontWeight = FontWeight.Black
+                            style =
+                                KmiTypography.action.copy(
+                                    fontWeight = FontWeight.Black
+                                )
                         )
                     }
                 }
@@ -592,10 +653,20 @@ private fun OnboardingBottomBar(
     onPrevious: () -> Unit,
     onNext: () -> Unit
 ) {
+    val colorScheme = MaterialTheme.colorScheme
+    val isDarkMode =
+        colorScheme.background.luminance() < 0.5f
+
     Surface(
         modifier = Modifier.fillMaxWidth(),
-        color = Color.White,
-        shadowElevation = 10.dp
+        color =
+            if (isDarkMode) {
+                colorScheme.surface
+            } else {
+                Color.White
+            },
+        shadowElevation = 0.dp,
+        tonalElevation = 0.dp
     ) {
         Row(
             modifier = Modifier
@@ -613,20 +684,25 @@ private fun OnboardingBottomBar(
                     onClick = onPrevious,
                     modifier = Modifier
                         .weight(1f)
-                        .height(36.dp)
-                        .shadow(
-                            elevation = 4.dp,
-                            shape = RoundedCornerShape(14.dp),
-                            clip = false
-                        ),
+                        .heightIn(min = 44.dp),
                     shape = RoundedCornerShape(14.dp),
                     border = androidx.compose.foundation.BorderStroke(
                         width = 1.dp,
                         color = Color(0xFFD7DDEA)
                     ),
                     colors = ButtonDefaults.buttonColors(
-                        containerColor = Color.White,
-                        contentColor = Color(0xFF475569)
+                        containerColor =
+                            if (isDarkMode) {
+                                colorScheme.surfaceVariant
+                            } else {
+                                Color.White
+                            },
+                        contentColor =
+                            if (isDarkMode) {
+                                colorScheme.onSurfaceVariant
+                            } else {
+                                Color(0xFF475569)
+                            }
                     ),
                     contentPadding = androidx.compose.foundation.layout.PaddingValues(
                         horizontal = 12.dp,
@@ -639,9 +715,11 @@ private fun OnboardingBottomBar(
                         } else {
                             "הקודם"
                         },
-                        fontSize = 12.sp,
-                        lineHeight = 15.sp,
-                        fontWeight = FontWeight.ExtraBold
+                        style =
+                            KmiTypography.action.copy(
+                                fontWeight = FontWeight.ExtraBold
+                            ),
+                        maxLines = 1
                     )
                 }
             } else {
@@ -654,12 +732,7 @@ private fun OnboardingBottomBar(
                 onClick = onNext,
                 modifier = Modifier
                     .weight(1.2f)
-                    .height(36.dp)
-                    .shadow(
-                        elevation = 7.dp,
-                        shape = RoundedCornerShape(14.dp),
-                        clip = false
-                    ),
+                    .heightIn(min = 44.dp),
                 shape = RoundedCornerShape(14.dp),
                 border = androidx.compose.foundation.BorderStroke(
                     width = 1.dp,
@@ -681,9 +754,11 @@ private fun OnboardingBottomBar(
                         isEnglish -> "Next"
                         else -> "הבא"
                     },
-                    fontSize = 12.sp,
-                    lineHeight = 15.sp,
-                    fontWeight = FontWeight.Black
+                    style =
+                        KmiTypography.action.copy(
+                            fontWeight = FontWeight.Black
+                        ),
+                    maxLines = 1
                 )
             }
         }

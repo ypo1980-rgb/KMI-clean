@@ -20,7 +20,6 @@ import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDirection
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.compose.foundation.Image
 import androidx.compose.ui.graphics.drawscope.withTransform
 import androidx.compose.ui.layout.ContentScale
@@ -45,6 +44,7 @@ import android.widget.Toast
 import androidx.compose.foundation.BorderStroke
 import il.kmi.app.auth.GoogleAuthManager
 import il.kmi.app.auth.UserProfileCompletion
+import il.kmi.app.ui.KmiTypography
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
 import il.kmi.app.FcmTokenManager
@@ -54,8 +54,11 @@ import kotlinx.coroutines.tasks.await
 
 //=======================================================================
 
-private fun overshootEasing(tension: Float = 2f): Easing =
-    Easing { t -> OvershootInterpolator(tension).getInterpolation(t) }
+private fun overshootEasing(): Easing =
+    Easing { progress ->
+        OvershootInterpolator(2f)
+            .getInterpolation(progress)
+    }
 
 private data class IntroRankDisplay(
     val id: String,
@@ -403,8 +406,11 @@ private fun BeltBadge(
         Text(
             text = if (lang == AppLanguage.ENGLISH) rank.en else rank.he,
             color = beltTextColor,
-            fontSize = 22.sp,
-            fontWeight = FontWeight.Bold
+            style =
+                KmiTypography.sectionTitle.copy(
+                    fontWeight = FontWeight.Bold
+                ),
+            textAlign = TextAlign.Center
         )
 
         Spacer(Modifier.height(6.dp))
@@ -451,7 +457,9 @@ private fun BeltBadge(
 }
 
 @Composable
-private fun PremiumIntroButtonLoading() {
+private fun PremiumIntroButtonLoading(
+    loadingText: String
+) {
     val infiniteTransition = rememberInfiniteTransition(
         label = "premiumIntroButtonLoading"
     )
@@ -468,70 +476,118 @@ private fun PremiumIntroButtonLoading() {
         label = "premiumIntroButtonOuterRotation"
     )
 
-    val innerRotation by infiniteTransition.animateFloat(
+    val middleRotation by infiniteTransition.animateFloat(
         initialValue = 360f,
         targetValue = 0f,
         animationSpec = infiniteRepeatable(
             animation = tween(
-                durationMillis = 1650,
+                durationMillis = 1500,
+                easing = LinearEasing
+            )
+        ),
+        label = "premiumIntroButtonMiddleRotation"
+    )
+
+    val innerRotation by infiniteTransition.animateFloat(
+        initialValue = 0f,
+        targetValue = 360f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(
+                durationMillis = 900,
                 easing = LinearEasing
             )
         ),
         label = "premiumIntroButtonInnerRotation"
     )
 
-    Box(
-        modifier = Modifier.size(30.dp),
-        contentAlignment = Alignment.Center
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
     ) {
-        Surface(
-            modifier = Modifier
-                .size(28.dp)
-                .graphicsLayer {
-                    rotationZ = outerRotation
-                },
-            shape = CircleShape,
-            color = Color.Transparent,
-            border = BorderStroke(
-                width = 3.dp,
-                brush = Brush.sweepGradient(
-                    colors = listOf(
-                        Color.Transparent,
-                        Color.White,
-                        Color(0xFFBFE7FF),
-                        Color.Transparent
+        Box(
+            modifier = Modifier.size(30.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            Surface(
+                modifier = Modifier
+                    .size(28.dp)
+                    .graphicsLayer {
+                        rotationZ = outerRotation
+                    },
+                shape = CircleShape,
+                color = Color.Transparent,
+                shadowElevation = 0.dp,
+                tonalElevation = 0.dp,
+                border = BorderStroke(
+                    width = 3.dp,
+                    brush = Brush.sweepGradient(
+                        colors = listOf(
+                            Color.Transparent,
+                            Color.White,
+                            Color(0xFFBFE7FF),
+                            Color.Transparent
+                        )
                     )
                 )
-            )
-        ) {}
+            ) {}
 
-        Surface(
-            modifier = Modifier
-                .size(19.dp)
-                .graphicsLayer {
-                    rotationZ = innerRotation
-                },
-            shape = CircleShape,
-            color = Color.Transparent,
-            border = BorderStroke(
-                width = 2.dp,
-                brush = Brush.sweepGradient(
-                    colors = listOf(
-                        Color.Transparent,
-                        Color(0xFFFFD166),
-                        Color.White,
-                        Color.Transparent
+            Surface(
+                modifier = Modifier
+                    .size(20.dp)
+                    .graphicsLayer {
+                        rotationZ = middleRotation
+                    },
+                shape = CircleShape,
+                color = Color.Transparent,
+                shadowElevation = 0.dp,
+                tonalElevation = 0.dp,
+                border = BorderStroke(
+                    width = 2.dp,
+                    brush = Brush.sweepGradient(
+                        colors = listOf(
+                            Color.Transparent,
+                            Color(0xFFFFD166),
+                            Color.White,
+                            Color.Transparent
+                        )
                     )
                 )
-            )
-        ) {}
+            ) {}
 
-        Surface(
-            modifier = Modifier.size(8.dp),
-            shape = CircleShape,
-            color = Color.White.copy(alpha = 0.96f),
-            shadowElevation = 4.dp
-        ) {}
+            Surface(
+                modifier = Modifier
+                    .size(12.dp)
+                    .graphicsLayer {
+                        rotationZ = innerRotation
+                    },
+                shape = CircleShape,
+                color = Color.Transparent,
+                shadowElevation = 0.dp,
+                tonalElevation = 0.dp,
+                border = BorderStroke(
+                    width = 2.dp,
+                    brush = Brush.sweepGradient(
+                        colors = listOf(
+                            Color.Transparent,
+                            Color.White,
+                            Color(0xFFBFE7FF),
+                            Color.Transparent
+                        )
+                    )
+                )
+            ) {}
+        }
+
+        Text(
+            text = loadingText,
+            style =
+                KmiTypography.caption.copy(
+                    fontWeight = FontWeight.Bold
+                ),
+            color = Color.White,
+            textAlign = TextAlign.Center,
+            maxLines = 1
+        )
     }
 }
 
@@ -570,16 +626,12 @@ private fun IntroWelcomeImageScreen(
             Color(0xFF172033)
         }
 
-    val secondaryTextColor =
-        colorScheme.onSurfaceVariant
-
     BoxWithConstraints(
         modifier = Modifier
             .fillMaxSize()
             .background(colorScheme.background)
     ) {
         val isCompactHeight = maxHeight < 760.dp
-        val isVeryCompactHeight = maxHeight < 690.dp
 
         val horizontalPadding =
             if (isCompactHeight) 24.dp else 30.dp
@@ -646,35 +698,35 @@ private fun IntroWelcomeImageScreen(
             Box(
                 modifier = Modifier
                     .fillMaxWidth(0.80f)
-                    .height(greetingHeight)
+                    .heightIn(min = greetingHeight)
                     .shadow(
-                        elevation = 4.dp,
+                        elevation = 1.dp,
                         shape = RoundedCornerShape(10.dp),
                         clip = false
                     )
                     .clip(RoundedCornerShape(10.dp))
                     .background(cardBackground)
-                    .padding(horizontal = 10.dp),
+                    .padding(
+                        horizontal = 10.dp,
+                        vertical = 5.dp
+                    ),
                 contentAlignment = Alignment.Center
             ) {
                 Text(
                     text = greeting,
-                    style = MaterialTheme.typography.headlineMedium.copy(
-                        fontSize =
-                            if (isCompactHeight) 22.sp else 26.sp,
-                        lineHeight =
-                            if (isCompactHeight) 25.sp else 29.sp,
-                        textDirection =
-                            if (isEnglish) {
-                                TextDirection.Ltr
-                            } else {
-                                TextDirection.Rtl
-                            }
-                    ),
-                    fontWeight = FontWeight.ExtraBold,
+                    style =
+                        KmiTypography.screenTitle.copy(
+                            fontWeight = FontWeight.ExtraBold,
+                            textDirection =
+                                if (isEnglish) {
+                                    TextDirection.Ltr
+                                } else {
+                                    TextDirection.Rtl
+                                }
+                        ),
                     color = primaryTextColor,
                     textAlign = TextAlign.Center,
-                    maxLines = 1,
+                    maxLines = 2,
                     modifier = Modifier.fillMaxWidth()
                 )
             }
@@ -685,7 +737,7 @@ private fun IntroWelcomeImageScreen(
                 Column(
                     modifier = Modifier
                         .fillMaxWidth(0.78f)
-                        .height(beltRowHeight)
+                        .heightIn(min = beltRowHeight)
                         .offset(
                             y = beltVerticalOffset
                         ),
@@ -694,23 +746,33 @@ private fun IntroWelcomeImageScreen(
                 ) {
                     Text(
                         text = if (isEnglish) rank.en else rank.he,
-                        style = MaterialTheme.typography.titleMedium.copy(
-                            fontSize = if (isCompactHeight) 23.sp else 27.sp,
-                            lineHeight = if (isCompactHeight) 26.sp else 30.sp,
-                            textDirection =
-                                if (isEnglish) {
-                                    TextDirection.Ltr
-                                } else {
-                                    TextDirection.Rtl
-                                }
-                        ),
-                        fontWeight = FontWeight.ExtraBold,
-                        color = when (rank.baseBelt) {
-                            Belt.WHITE -> Color(0xFF98A2B3)
-                            else -> rank.color
-                        },
+                        style =
+                            KmiTypography.sectionTitle.copy(
+                                fontWeight = FontWeight.ExtraBold,
+                                textDirection =
+                                    if (isEnglish) {
+                                        TextDirection.Ltr
+                                    } else {
+                                        TextDirection.Rtl
+                                    }
+                            ),
+                        color =
+                            when (rank.baseBelt) {
+                                Belt.WHITE ->
+                                    Color(0xFF98A2B3)
+
+                                Belt.BLACK ->
+                                    if (isDarkTheme) {
+                                        Color.White
+                                    } else {
+                                        Color(0xFF111827)
+                                    }
+
+                                else ->
+                                    rank.color
+                            },
                         textAlign = TextAlign.Center,
-                        maxLines = 1,
+                        maxLines = 2,
                         modifier = Modifier.fillMaxWidth()
                     )
 
@@ -742,15 +804,18 @@ private fun IntroWelcomeImageScreen(
                 Box(
                     modifier = Modifier
                         .fillMaxWidth(0.78f)
-                        .height(beltRowHeight)
+                        .heightIn(min = beltRowHeight)
                         .shadow(
-                            elevation = 4.dp,
+                            elevation = 1.dp,
                             shape = RoundedCornerShape(16.dp),
                             clip = false
                         )
                         .clip(RoundedCornerShape(16.dp))
                         .background(cardBackground)
-                        .padding(horizontal = 12.dp),
+                        .padding(
+                            horizontal = 12.dp,
+                            vertical = 8.dp
+                        ),
                     contentAlignment = Alignment.Center
                 ) {
                     Text(
@@ -759,22 +824,19 @@ private fun IntroWelcomeImageScreen(
                         } else {
                             "עדיין לא עודכנה חגורה"
                         },
-                        style = MaterialTheme.typography.titleSmall.copy(
-                            fontSize =
-                                if (isCompactHeight) 13.sp else 15.sp,
-                            lineHeight =
-                                if (isCompactHeight) 15.sp else 17.sp,
-                            textDirection =
-                                if (isEnglish) {
-                                    TextDirection.Ltr
-                                } else {
-                                    TextDirection.Rtl
-                                }
-                        ),
-                        fontWeight = FontWeight.ExtraBold,
+                        style =
+                            KmiTypography.secondary.copy(
+                                fontWeight = FontWeight.ExtraBold,
+                                textDirection =
+                                    if (isEnglish) {
+                                        TextDirection.Ltr
+                                    } else {
+                                        TextDirection.Rtl
+                                    }
+                            ),
                         color = primaryTextColor,
                         textAlign = TextAlign.Center,
-                        maxLines = 1,
+                        maxLines = 2,
                         modifier = Modifier.fillMaxWidth()
                     )
                 }
@@ -785,9 +847,16 @@ private fun IntroWelcomeImageScreen(
             Box(
                 modifier = Modifier
                     .fillMaxWidth(0.90f)
-                    .height(if (isCompactHeight) 36.dp else 40.dp)
+                    .heightIn(
+                        min =
+                            if (isCompactHeight) {
+                                40.dp
+                            } else {
+                                44.dp
+                            }
+                    )
                     .shadow(
-                        elevation = 6.dp,
+                        elevation = 1.dp,
                         shape = RoundedCornerShape(24.dp),
                         clip = false
                     )
@@ -810,11 +879,30 @@ private fun IntroWelcomeImageScreen(
                         } else {
                             onGoogleClick()
                         }
-                    },
+                    }
+                    .padding(
+                        horizontal = 16.dp,
+                        vertical = 7.dp
+                    ),
                 contentAlignment = Alignment.Center
             ) {
                 if (isGoogleLoading || isProfileStatusLoading) {
-                    PremiumIntroButtonLoading()
+                    PremiumIntroButtonLoading(
+                        loadingText =
+                            when {
+                                isGoogleLoading && isEnglish ->
+                                    "Signing in..."
+
+                                isGoogleLoading ->
+                                    "מתחבר..."
+
+                                isEnglish ->
+                                    "Loading..."
+
+                                else ->
+                                    "טוען..."
+                            }
+                    )
                 } else {
                     Text(
                         text = when {
@@ -831,8 +919,10 @@ private fun IntroWelcomeImageScreen(
                                 "התחברות עם Google ★"
                         },
                         color = Color.White,
-                        fontWeight = FontWeight.SemiBold,
-                        fontSize = if (isCompactHeight) 13.sp else 15.sp,
+                        style =
+                            KmiTypography.action.copy(
+                                fontWeight = FontWeight.SemiBold
+                            ),
                         textAlign = TextAlign.Center,
                         maxLines = 1
                     )
@@ -852,8 +942,13 @@ private fun IntroWelcomeImageScreen(
                 Box(
                     modifier = Modifier
                         .fillMaxWidth(0.90f)
-                        .height(
-                            if (isCompactHeight) 32.dp else 36.dp
+                        .heightIn(
+                            min =
+                                if (isCompactHeight) {
+                                    36.dp
+                                } else {
+                                    40.dp
+                                }
                         )
                         .clip(RoundedCornerShape(20.dp))
                         .background(cardBackground)
@@ -863,7 +958,11 @@ private fun IntroWelcomeImageScreen(
                                         !isProfileStatusLoading
                         ) {
                             onRegularClick()
-                        },
+                        }
+                        .padding(
+                            horizontal = 14.dp,
+                            vertical = 6.dp
+                        ),
                     contentAlignment = Alignment.Center
                 ) {
                     Text(
@@ -873,10 +972,12 @@ private fun IntroWelcomeImageScreen(
                             "כניסה / רישום בדרך הרגילה"
                         },
                         color = primaryTextColor,
-                        fontWeight = FontWeight.Bold,
-                        fontSize = if (isCompactHeight) 12.sp else 14.sp,
+                        style =
+                            KmiTypography.action.copy(
+                                fontWeight = FontWeight.Bold
+                            ),
                         textAlign = TextAlign.Center,
-                        maxLines = 1
+                        maxLines = 2
                     )
                 }
             }
@@ -886,13 +987,10 @@ private fun IntroWelcomeImageScreen(
 
                 Text(
                     text = googleError,
-                    color = Color(0xFFD32F2F),
-                    style = MaterialTheme.typography.bodySmall.copy(
-                        fontSize = 12.sp,
-                        lineHeight = 15.sp
-                    ),
+                    color = MaterialTheme.colorScheme.error,
+                    style = KmiTypography.caption,
                     textAlign = TextAlign.Center,
-                    maxLines = 2,
+                    maxLines = 3,
                     modifier = Modifier.fillMaxWidth()
                 )
             }
@@ -1158,7 +1256,11 @@ fun IntroScreen(
 
     val scale by animateFloatAsState(
         targetValue = if (startAnim) 1f else 0.7f,
-        animationSpec = tween(durationMillis = 2000, easing = overshootEasing(2f)),
+        animationSpec =
+            tween(
+                durationMillis = 2000,
+                easing = overshootEasing()
+            ),
         label = "scaleIn"
     )
 

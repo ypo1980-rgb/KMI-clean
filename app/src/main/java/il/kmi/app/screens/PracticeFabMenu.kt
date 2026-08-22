@@ -2,7 +2,6 @@ package il.kmi.app.screens
 
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
-import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.LocalIndication
 import androidx.compose.foundation.background
@@ -16,7 +15,6 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -31,17 +29,16 @@ import androidx.compose.material.icons.filled.Casino
 import androidx.compose.material.icons.filled.ChevronLeft
 import androidx.compose.material.icons.filled.Topic
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Divider
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExposedDropdownMenuBox
 import androidx.compose.material3.ExposedDropdownMenuDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.MenuAnchorType
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.TextField
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.Immutable
@@ -56,6 +53,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.text.font.FontWeight
@@ -63,14 +61,14 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
+import il.kmi.app.domain.ContentRepo
+import il.kmi.app.ui.KmiTypography
 import il.kmi.app.ui.ext.color
 import il.kmi.shared.domain.Belt
-import il.kmi.app.domain.ContentRepo
 import il.kmi.shared.domain.catalog.CatalogRepo
 import il.kmi.shared.localization.AppLanguage
 import il.kmi.shared.localization.AppLanguageManager
-import java.util.LinkedHashSet
+
 
 //============================================================================
 
@@ -89,6 +87,7 @@ fun PracticeMenuDialog(
     onDismiss: () -> Unit,
     onRandomPractice: (Belt) -> Unit,
     onFinalExam: (Belt) -> Unit,
+    @Suppress("UNUSED_PARAMETER")
     onPracticeByTopics: (PracticeByTopicsSelection) -> Unit,
     onPracticeByTopicSelected: (belt: Belt, topic: String) -> Unit
 ) {
@@ -98,14 +97,9 @@ fun PracticeMenuDialog(
     fun tr(he: String, en: String): String = if (isEnglish) en else he
     val textAlignPrimary = if (isEnglish) TextAlign.Start else TextAlign.Right
 
-    val graniteBrush = Brush.linearGradient(
-        colors = listOf(
-            Color(0xFFF7F2FA),
-            Color(0xFFF1EAF6),
-            Color(0xFFECE5F3),
-            Color(0xFFF8F4FA)
-        )
-    )
+    val colorScheme = MaterialTheme.colorScheme
+    val isDarkMode =
+        colorScheme.background.luminance() < 0.5f
 
     val premiumHeaderBrush = Brush.linearGradient(
         colors = listOf(
@@ -125,7 +119,8 @@ fun PracticeMenuDialog(
             onDismiss = { showTopicsPicker = false },
             onConfirm = { selection ->
                 val belt = selection.belts.firstOrNull() ?: return@PracticeByTopicsPickerDialog
-                val topic = selection.topicsByBelt[belt]?.firstOrNull() ?: return@PracticeByTopicsPickerDialog
+                val topic = selection.topicsByBelt[belt]?.firstOrNull()
+                    ?: return@PracticeByTopicsPickerDialog
 
                 showTopicsPicker = false
                 onPracticeByTopicSelected(belt, topic)
@@ -144,27 +139,6 @@ fun PracticeMenuDialog(
     ) {
 
         @Composable
-        fun GradientDivider(modifier: Modifier = Modifier) {
-            Box(
-                modifier
-                    .fillMaxWidth()
-                    .height(2.dp)
-                    .background(
-                        brush = Brush.horizontalGradient(
-                            listOf(
-                                Color.Transparent,
-                                beltAccent.copy(alpha = 0.22f),
-                                beltAccent.copy(alpha = 0.40f),
-                                beltAccent.copy(alpha = 0.22f),
-                                Color.Transparent
-                            )
-                        ),
-                        shape = RoundedCornerShape(999.dp)
-                    )
-            )
-        }
-
-        @Composable
         fun ModernActionRow(
             title: String,
             icon: ImageVector,
@@ -172,29 +146,41 @@ fun PracticeMenuDialog(
             onClick: () -> Unit
         ) {
             val shape = RoundedCornerShape(22.dp)
-            val border = MaterialTheme.colorScheme.outline.copy(alpha = 0.12f)
 
-            val interaction = remember { MutableInteractionSource() }
+            val interaction = remember {
+                MutableInteractionSource()
+            }
             val pressed by interaction.collectIsPressedAsState()
 
             val bg by animateColorAsState(
-                targetValue = when {
-                    !enabled ->
-                        Color(0xFFF3F4F6)
+                targetValue =
+                    when {
+                        !enabled ->
+                            if (isDarkMode) {
+                                colorScheme.surfaceVariant.copy(
+                                    alpha = 0.55f
+                                )
+                            } else {
+                                Color(0xFFF3F4F6)
+                            }
 
-                    pressed ->
-                        beltAccent.copy(alpha = 0.14f)
+                        pressed ->
+                            beltAccent.copy(alpha = 0.14f)
 
-                    else ->
-                        Color(0xFFF8FAFC)
-                },
+                        else ->
+                            if (isDarkMode) {
+                                colorScheme.surfaceVariant
+                            } else {
+                                Color(0xFFF8FAFC)
+                            }
+                    },
                 label = "row_bg"
             )
 
             Surface(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(68.dp)
+                    .heightIn(min = 68.dp)
                     .clip(shape)
                     .clickable(
                         enabled = enabled,
@@ -257,9 +243,10 @@ fun PracticeMenuDialog(
                     Text(
                         text = title,
                         modifier = Modifier.weight(1f),
-                        fontSize = 15.sp,
-                        lineHeight = 18.sp,
-                        fontWeight = FontWeight.SemiBold,
+                        style =
+                            KmiTypography.cardTitle.copy(
+                                fontWeight = FontWeight.SemiBold
+                            ),
                         color = if (enabled) {
                             MaterialTheme.colorScheme.onSurface
                         } else {
@@ -314,7 +301,7 @@ fun PracticeMenuDialog(
                         shape = RoundedCornerShape(22.dp),
                         color = Color.Transparent,
                         tonalElevation = 0.dp,
-                        shadowElevation = 6.dp
+                        shadowElevation = 0.dp
                     ) {
                         Row(
                             modifier = Modifier
@@ -349,13 +336,14 @@ fun PracticeMenuDialog(
                                         "Practice"
                                     ),
                                     color = Color.White,
-                                    fontSize = 20.sp,
-                                    lineHeight = 22.sp,
-                                    fontWeight =
-                                        FontWeight.ExtraBold,
+                                    style =
+                                        KmiTypography.sectionTitle.copy(
+                                            fontWeight =
+                                                FontWeight.ExtraBold
+                                        ),
                                     textAlign =
                                         textAlignPrimary,
-                                    maxLines = 1,
+                                    maxLines = 2,
                                     modifier =
                                         Modifier.fillMaxWidth()
                                 )
@@ -369,13 +357,14 @@ fun PracticeMenuDialog(
                                         Color.White.copy(
                                             alpha = 0.94f
                                         ),
-                                    fontSize = 13.sp,
-                                    lineHeight = 15.sp,
-                                    fontWeight =
-                                        FontWeight.SemiBold,
+                                    style =
+                                        KmiTypography.secondary.copy(
+                                            fontWeight =
+                                                FontWeight.SemiBold
+                                        ),
                                     textAlign =
                                         textAlignPrimary,
-                                    maxLines = 1,
+                                    maxLines = 2,
                                     modifier =
                                         Modifier.fillMaxWidth()
                                 )
@@ -397,7 +386,7 @@ fun PracticeMenuDialog(
                                         )
                                 ),
                                 tonalElevation = 0.dp,
-                                shadowElevation = 4.dp
+                                shadowElevation = 0.dp
                             ) {
                                 Box(
                                     contentAlignment =
@@ -515,16 +504,9 @@ fun PracticeMenuDialog(
                                                 horizontal = 12.dp,
                                                 vertical = 8.dp
                                             ),
-                                        color =
-                                            MaterialTheme
-                                                .colorScheme
-                                                .error,
-                                        style =
-                                            MaterialTheme
-                                                .typography
-                                                .bodySmall,
-                                        textAlign =
-                                            textAlignPrimary
+                                        color = colorScheme.error,
+                                        style = KmiTypography.caption,
+                                        textAlign = textAlignPrimary
                                     )
                                 }
                             }
@@ -542,8 +524,11 @@ fun PracticeMenuDialog(
                             "סגור",
                             "Close"
                         ),
-                        fontWeight =
-                            FontWeight.SemiBold,
+                        style =
+                            KmiTypography.action.copy(
+                                fontWeight =
+                                    FontWeight.SemiBold
+                            ),
                         color = beltAccent
                     )
                 }
@@ -564,14 +549,29 @@ private fun PracticeByTopicsPickerDialog(
     fun tr(he: String, en: String): String = if (isEnglish) en else he
     val textAlignPrimary = if (isEnglish) TextAlign.Start else TextAlign.Right
 
-    val graniteBrush = Brush.linearGradient(
-        colors = listOf(
-            Color(0xFFF7F2FA),
-            Color(0xFFF1EAF6),
-            Color(0xFFECE5F3),
-            Color(0xFFF8F4FA)
+    val colorScheme = MaterialTheme.colorScheme
+    val isDarkMode =
+        colorScheme.background.luminance() < 0.5f
+
+    val graniteBrush =
+        Brush.linearGradient(
+            colors =
+                if (isDarkMode) {
+                    listOf(
+                        Color(0xFF171B24),
+                        Color(0xFF1D2230),
+                        Color(0xFF222737),
+                        Color(0xFF181D28)
+                    )
+                } else {
+                    listOf(
+                        Color(0xFFF7F2FA),
+                        Color(0xFFF1EAF6),
+                        Color(0xFFECE5F3),
+                        Color(0xFFF8F4FA)
+                    )
+                }
         )
-    )
 
     // ✅ RTL לכל הדיאלוג
     CompositionLocalProvider(
@@ -581,25 +581,14 @@ private fun PracticeByTopicsPickerDialog(
         // ✅ בלי חגורה לבנה ברשימה בכלל
         val allBelts = remember { Belt.order.filterNot { it == Belt.WHITE } }
 
-        var selectedBelts by rememberSaveable {
-            mutableStateOf(
-                (initialBelts.ifEmpty { setOf(Belt.GREEN) })
-                    .filterNot { it == Belt.WHITE }
-                    .toSet()
-                    .ifEmpty { setOf(Belt.GREEN) }
-            )
-        }
-
-        var topicsByBelt by rememberSaveable {
-            mutableStateOf<Map<Belt, Set<String>>>(emptyMap())
-        }
-
         @Composable
         fun topicTitlesForBelt(belt: Belt): List<String> {
             return remember(belt) {
-                val sharedBelt = runCatching {
-                    il.kmi.shared.domain.Belt.fromId(belt.id)
-                }.getOrNull() ?: il.kmi.shared.domain.Belt.WHITE
+                val sharedBelt =
+                    runCatching {
+                        Belt.fromId(belt.id)
+                    }.getOrNull()
+                        ?: Belt.WHITE
 
                 val ordered = LinkedHashSet<String>()
 
@@ -634,8 +623,18 @@ private fun PracticeByTopicsPickerDialog(
         }
 
         // מצב הבחירה החדש – חגורה אחת ונושא אחד
-        var selectedBelt by rememberSaveable { mutableStateOf<Belt?>(null) }
-        var selectedTopic by rememberSaveable { mutableStateOf<String?>(null) }
+        var selectedBelt by rememberSaveable(initialBelts) {
+            mutableStateOf(
+                initialBelts
+                    .firstOrNull { belt ->
+                        belt != Belt.WHITE
+                    }
+            )
+        }
+
+        var selectedTopic by rememberSaveable {
+            mutableStateOf<String?>(null)
+        }
 
         var beltMenuExpanded by rememberSaveable {
             mutableStateOf(false)
@@ -648,11 +647,11 @@ private fun PracticeByTopicsPickerDialog(
                 }
                 .orEmpty()
 
-        val selectedBeltAccent = selectedBelt?.color ?: MaterialTheme.colorScheme.primary
-        val selectedBeltFieldBg = selectedBeltAccent.copy(alpha = 0.08f)
-        val selectedBeltFieldBorder = selectedBeltAccent.copy(alpha = 0.22f)
+        val selectedBeltAccent =
+            selectedBelt?.color
+                ?: MaterialTheme.colorScheme.primary
 
-        // ✅ NEW: כרטיס נושא "אפליקציה מובילה" כמו במסך נושאים
+        // כרטיסי הנושאים משתמשים בצבע החגורה שנבחרה.
         fun topicDisplayName(topic: String): String {
             if (!isEnglish) return topic
             return when (topic.trim()) {
@@ -702,12 +701,14 @@ private fun PracticeByTopicsPickerDialog(
                                 "תרגול לפי נושא",
                                 "Practice by Topic"
                             ),
-                            fontSize = 21.sp,
-                            lineHeight = 24.sp,
-                            fontWeight = FontWeight.Black,
+                            style =
+                                KmiTypography.screenTitle.copy(
+                                    fontWeight = FontWeight.Black
+                                ),
                             textAlign = TextAlign.Center,
                             color = Color.White,
-                            modifier = Modifier.fillMaxWidth()
+                            modifier = Modifier.fillMaxWidth(),
+                            maxLines = 2
                         )
                     }
                 }
@@ -748,12 +749,22 @@ private fun PracticeByTopicsPickerDialog(
                         ) {
                             Surface(
                                 modifier = Modifier
-                                    .menuAnchor()
+                                    .menuAnchor(
+                                        type =
+                                            MenuAnchorType
+                                                .PrimaryNotEditable,
+                                        enabled = true
+                                    )
                                     .fillMaxWidth(),
                                 shape = RoundedCornerShape(20.dp),
-                                color = Color.White,
+                                color =
+                                    if (isDarkMode) {
+                                        colorScheme.surfaceVariant
+                                    } else {
+                                        Color.White
+                                    },
                                 tonalElevation = 0.dp,
-                                shadowElevation = 3.dp,
+                                shadowElevation = 0.dp,
                                 border = BorderStroke(
                                     width = 1.dp,
                                     color =
@@ -824,18 +835,19 @@ private fun PracticeByTopicsPickerDialog(
                                             Modifier.weight(1f),
                                         color =
                                             if (selectedBelt != null) {
-                                                Color(0xFF172033)
+                                                colorScheme.onSurface
                                             } else {
-                                                Color(0xFF64748B)
+                                                colorScheme.onSurfaceVariant
                                             },
-                                        fontSize = 15.sp,
-                                        lineHeight = 18.sp,
-                                        fontWeight =
-                                            if (selectedBelt != null) {
-                                                FontWeight.Bold
-                                            } else {
-                                                FontWeight.Medium
-                                            },
+                                        style =
+                                            KmiTypography.cardTitle.copy(
+                                                fontWeight =
+                                                    if (selectedBelt != null) {
+                                                        FontWeight.Bold
+                                                    } else {
+                                                        FontWeight.Medium
+                                                    }
+                                            ),
                                         textAlign =
                                             textAlignPrimary,
                                         maxLines = 1
@@ -900,15 +912,23 @@ private fun PracticeByTopicsPickerDialog(
                                                         } else {
                                                             belt.heb
                                                         },
-                                                    fontWeight =
-                                                        if (
-                                                            selectedBelt ==
-                                                            belt
-                                                        ) {
-                                                            FontWeight.Bold
-                                                        } else {
-                                                            FontWeight.Medium
-                                                        }
+                                                    style =
+                                                        KmiTypography.body.copy(
+                                                            fontWeight =
+                                                                if (
+                                                                    selectedBelt ==
+                                                                    belt
+                                                                ) {
+                                                                    FontWeight.Bold
+                                                                } else {
+                                                                    FontWeight.Medium
+                                                                }
+                                                        ),
+                                                    color =
+                                                        colorScheme.onSurface,
+                                                    maxLines = 1,
+                                                    overflow =
+                                                        TextOverflow.Ellipsis
                                                 )
                                             }
                                         },
@@ -929,15 +949,21 @@ private fun PracticeByTopicsPickerDialog(
                                 modifier = Modifier.fillMaxWidth(),
                                 shape = RoundedCornerShape(18.dp),
                                 color =
-                                    Color.White.copy(
-                                        alpha = 0.72f
-                                    ),
+                                    if (isDarkMode) {
+                                        colorScheme.surfaceVariant.copy(
+                                            alpha = 0.86f
+                                        )
+                                    } else {
+                                        Color.White.copy(
+                                            alpha = 0.72f
+                                        )
+                                    },
                                 tonalElevation = 0.dp,
                                 shadowElevation = 0.dp,
                                 border = BorderStroke(
                                     width = 1.dp,
                                     color =
-                                        Color(0xFFCBD5E1).copy(
+                                        colorScheme.outlineVariant.copy(
                                             alpha = 0.65f
                                         )
                                 )
@@ -953,11 +979,15 @@ private fun PracticeByTopicsPickerDialog(
                                             horizontal = 14.dp,
                                             vertical = 12.dp
                                         ),
-                                    color = Color(0xFF64748B),
-                                    fontSize = 13.sp,
-                                    lineHeight = 16.sp,
-                                    fontWeight = FontWeight.Medium,
-                                    textAlign = TextAlign.Center
+                                    color =
+                                        colorScheme.onSurfaceVariant,
+                                    style =
+                                        KmiTypography.secondary.copy(
+                                            fontWeight = FontWeight.Medium
+                                        ),
+                                    textAlign = TextAlign.Center,
+                                    maxLines = 2,
+                                    overflow = TextOverflow.Ellipsis
                                 )
                             }
                         }
@@ -985,11 +1015,13 @@ private fun PracticeByTopicsPickerDialog(
                                             horizontal = 5.dp,
                                             vertical = 2.dp
                                         ),
-                                    color = Color(0xFF334155),
-                                    fontSize = 14.sp,
-                                    lineHeight = 17.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    textAlign = textAlignPrimary
+                                    color = colorScheme.onSurface,
+                                    style =
+                                        KmiTypography.body.copy(
+                                            fontWeight = FontWeight.Bold
+                                        ),
+                                    textAlign = textAlignPrimary,
+                                    maxLines = 2
                                 )
 
                                 topics.forEach { topic ->
@@ -1027,7 +1059,11 @@ private fun PracticeByTopicsPickerDialog(
                                                         )
 
                                                 else ->
-                                                    Color.White
+                                                    if (isDarkMode) {
+                                                        colorScheme.surfaceVariant
+                                                    } else {
+                                                        Color.White
+                                                    }
                                             },
                                         label =
                                             "topic_card_background"
@@ -1036,7 +1072,7 @@ private fun PracticeByTopicsPickerDialog(
                                     Surface(
                                         modifier = Modifier
                                             .fillMaxWidth()
-                                            .height(62.dp)
+                                            .heightIn(min = 62.dp)
                                             .clip(topicShape)
                                             .clickable(
                                                 interactionSource =
@@ -1067,12 +1103,7 @@ private fun PracticeByTopicsPickerDialog(
                                         shape = topicShape,
                                         color = topicBackground,
                                         tonalElevation = 0.dp,
-                                        shadowElevation =
-                                            if (isSelected) {
-                                                5.dp
-                                            } else {
-                                                2.dp
-                                            },
+                                        shadowElevation = 0.dp,
                                         border = BorderStroke(
                                             width = 1.dp,
                                             color =
@@ -1161,18 +1192,20 @@ private fun PracticeByTopicsPickerDialog(
                                                 modifier =
                                                     Modifier.weight(1f),
                                                 color =
-                                                    Color(0xFF172033),
-                                                fontSize = 15.sp,
-                                                lineHeight = 18.sp,
-                                                fontWeight =
-                                                    if (isSelected) {
-                                                        FontWeight.Black
-                                                    } else {
-                                                        FontWeight.SemiBold
-                                                    },
+                                                    colorScheme.onSurface,
+                                                style =
+                                                    KmiTypography.cardTitle.copy(
+                                                        fontWeight =
+                                                            if (isSelected) {
+                                                                FontWeight.Black
+                                                            } else {
+                                                                FontWeight.SemiBold
+                                                            }
+                                                    ),
+
                                                 textAlign =
                                                     textAlignPrimary,
-                                                maxLines = 1,
+                                                maxLines = 2,
                                                 overflow =
                                                     TextOverflow.Ellipsis
                                             )
@@ -1232,10 +1265,14 @@ private fun PracticeByTopicsPickerDialog(
                                 "סגור",
                                 "Close"
                             ),
+                            style =
+                                KmiTypography.action.copy(
+                                    fontWeight =
+                                        FontWeight.SemiBold
+                                ),
                             color =
                                 MaterialTheme.colorScheme.onSurface
-                                    .copy(alpha = 0.80f),
-                            fontWeight = FontWeight.SemiBold
+                                    .copy(alpha = 0.80f)
                         )
                     }
                 }

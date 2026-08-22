@@ -9,7 +9,6 @@ import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import android.media.MediaPlayer
-import android.net.Uri
 import android.widget.VideoView
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -48,13 +47,13 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
-import androidx.compose.ui.AbsoluteAlignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
@@ -69,11 +68,13 @@ import androidx.compose.ui.text.font.FontWeight
 import il.kmi.app.ui.scaledIconSize
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
+import androidx.core.net.toUri
+import il.kmi.app.ui.KmiTypography
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
+import kotlin.time.Duration.Companion.milliseconds
 
 //-----------------------------------------------------------------------
 private data class LoadingStage(
@@ -140,12 +141,14 @@ fun KmiStartupLoadingScreen(
             }
         }
 
-        val totalDuration = 7_000L
-        val tick = 100L
-        val totalSteps = (totalDuration / tick).toInt()
+        val totalDurationMillis = 7_000L
+        val tickMillis = 100L
+        val totalSteps =
+            (totalDurationMillis / tickMillis)
+                .toInt()
 
         repeat(totalSteps) { step ->
-            delay(tick)
+            delay(tickMillis.milliseconds)
 
             progress = (step + 1) / totalSteps.toFloat()
 
@@ -162,7 +165,7 @@ fun KmiStartupLoadingScreen(
 
         // נותן לטעינות אמת עוד רגע קצר להסתיים,
         // אבל לא תוקע את מסך הכניסה לזמן ארוך אם Firestore איטי.
-        withTimeoutOrNull(2_500L) {
+        withTimeoutOrNull(2_500.milliseconds) {
             preloadJob.join()
         }
 
@@ -276,11 +279,6 @@ fun KmiStartupLoadingScreen(
             else if (isCompactHeight) maxHeight * 0.155f
             else maxHeight * 0.165f
 
-        val titleTopSpace =
-            if (isVeryCompactHeight) maxHeight * 0.255f
-            else if (isCompactHeight) maxHeight * 0.265f
-            else maxHeight * 0.275f
-
         val cardTopSpace = maxHeight * 0.580f
 
         val videoWidth = if (isVeryCompactHeight) 184.dp else if (isCompactHeight) 198.dp else 214.dp
@@ -333,8 +331,8 @@ fun KmiStartupLoadingScreen(
                         .height(videoHeight),
                     shape = RoundedCornerShape(24.dp),
                     color = videoBackgroundColor,
-                    tonalElevation = 8.dp,
-                    shadowElevation = 8.dp
+                    tonalElevation = 0.dp,
+                    shadowElevation = 1.dp
                 ) {
                     BoxWithConstraints(
                         modifier = Modifier.fillMaxSize()
@@ -376,8 +374,8 @@ fun KmiStartupLoadingScreen(
                     .fillMaxWidth(0.96f),
                 shape = RoundedCornerShape(22.dp),
                 color = cardBg,
-                tonalElevation = 6.dp,
-                shadowElevation = 8.dp
+                tonalElevation = 0.dp,
+                shadowElevation = 1.dp
             ) {
                 Column(
                     modifier = Modifier
@@ -406,26 +404,40 @@ fun KmiStartupLoadingScreen(
 
                         Column(modifier = Modifier.weight(1f)) {
                             Text(
-                                text = if (isEnglish) "Current stage" else "שלב נוכחי",
-                                style = MaterialTheme.typography.labelMedium,
-                                color = textSecondary
+                                text = if (isEnglish) {
+                                    "Current stage"
+                                } else {
+                                    "שלב נוכחי"
+                                },
+                                style = KmiTypography.caption,
+                                color = textSecondary,
+                                maxLines = 1
                             )
 
                             Spacer(modifier = Modifier.height(2.dp))
 
                             Text(
-                                text = if (isEnglish) currentStage.titleEn else currentStage.titleHe,
-                                style = MaterialTheme.typography.bodyMedium,
-                                fontWeight = FontWeight.ExtraBold,
+                                text =
+                                    if (isEnglish) {
+                                        currentStage.titleEn
+                                    } else {
+                                        currentStage.titleHe
+                                    },
+                                style =
+                                    KmiTypography.body.copy(
+                                        fontWeight = FontWeight.ExtraBold
+                                    ),
                                 color = textPrimary,
-                                maxLines = 1
+                                maxLines = 2
                             )
                         }
 
                         Text(
                             text = "${(progressAnimated * 100).toInt()}%",
-                            style = MaterialTheme.typography.titleSmall,
-                            fontWeight = FontWeight.ExtraBold,
+                            style =
+                                KmiTypography.metric.copy(
+                                    fontWeight = FontWeight.ExtraBold
+                                ),
                             color = progressTextColor,
                             modifier = Modifier.offset(y = (-10).dp)
                         )
@@ -466,61 +478,58 @@ fun KmiStartupLoadingScreen(
 
                     Spacer(modifier = Modifier.height(2.dp))
 
-                    Box(
+                    Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(32.dp)
+                            .heightIn(min = 48.dp),
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
                         TextButton(
                             onClick = {
                                 finishOnce()
                             },
-                            modifier = Modifier
-                                .align(
-                                    if (isEnglish) Alignment.CenterStart else Alignment.CenterEnd
-                                ),
                             colors = ButtonDefaults.textButtonColors(
                                 contentColor = progressTextColor
                             ),
                             contentPadding = PaddingValues(
-                                horizontal = 0.dp,
-                                vertical = 0.dp
+                                horizontal = 8.dp,
+                                vertical = 4.dp
                             )
                         ) {
                             Text(
-                                text = if (isEnglish) "Skip" else "דלג",
-                                style = MaterialTheme.typography.titleSmall,
-                                fontWeight = FontWeight.Bold
+                                text =
+                                    if (isEnglish) {
+                                        "Skip"
+                                    } else {
+                                        "דלג"
+                                    },
+                                style =
+                                    KmiTypography.action.copy(
+                                        fontWeight = FontWeight.Bold
+                                    ),
+                                maxLines = 1
                             )
                         }
 
+                        Spacer(
+                            modifier = Modifier.width(12.dp)
+                        )
+
                         Text(
-                            text = if (isEnglish) {
-                                "Please wait..."
-                            } else {
-                                "אנא המתן..."
-                            },
-                            style = MaterialTheme.typography.bodySmall.copy(
-                                fontSize = 12.sp,
-                                lineHeight = 14.sp
-                            ),
-                            fontWeight = FontWeight.SemiBold,
+                            text =
+                                if (isEnglish) {
+                                    "Please wait..."
+                                } else {
+                                    "אנא המתן..."
+                                },
+                            style =
+                                KmiTypography.caption.copy(
+                                    fontWeight = FontWeight.SemiBold
+                                ),
                             color = progressTextColor,
-                            textAlign = if (isEnglish) {
-                                TextAlign.Left
-                            } else {
-                                TextAlign.Right
-                            },
-                            maxLines = 1,
-                            modifier = Modifier
-                                .align(
-                                    if (isEnglish) {
-                                        AbsoluteAlignment.CenterLeft
-                                    } else {
-                                        AbsoluteAlignment.CenterRight
-                                    }
-                                )
-                                .width(120.dp)
+                            textAlign = TextAlign.End,
+                            maxLines = 2,
+                            modifier = Modifier.weight(1f)
                         )
                     }
                 }
@@ -536,9 +545,11 @@ private fun KmiLoopingStartupVideo(
     val context = LocalContext.current
     var videoViewRef: VideoView? = null
 
-    val videoUri = remember(context) {
-        Uri.parse("android.resource://${context.packageName}/${il.kmi.app.R.raw.kmi_startup_animation}")
-    }
+    val videoUri =
+        remember(context) {
+            "android.resource://${context.packageName}/${R.raw.kmi_startup_animation}"
+                .toUri()
+        }
 
     DisposableEffect(Unit) {
         onDispose {
@@ -639,14 +650,29 @@ private fun LoadingChecklist(
                 Spacer(modifier = Modifier.width(8.dp))
 
                 Text(
-                    text = if (isEnglish) stage.titleEn else stage.titleHe,
-                    style = MaterialTheme.typography.bodySmall.copy(
-                        fontSize = 11.5.sp,
-                        lineHeight = 14.sp
-                    ),
-                    fontWeight = if (active) FontWeight.SemiBold else FontWeight.Normal,
-                    color = if (active || done) textPrimary else textSecondary,
-                    maxLines = 1
+                    text =
+                        if (isEnglish) {
+                            stage.titleEn
+                        } else {
+                            stage.titleHe
+                        },
+                    style =
+                        KmiTypography.caption.copy(
+                            fontWeight =
+                                if (active) {
+                                    FontWeight.SemiBold
+                                } else {
+                                    FontWeight.Normal
+                                }
+                        ),
+                    color =
+                        if (active || done) {
+                            textPrimary
+                        } else {
+                            textSecondary
+                        },
+                    maxLines = 2,
+                    modifier = Modifier.weight(1f)
                 )
             }
         }

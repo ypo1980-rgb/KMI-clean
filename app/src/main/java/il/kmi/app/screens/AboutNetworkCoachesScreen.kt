@@ -1,5 +1,6 @@
 package il.kmi.app.screens
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.slideInVertically
@@ -36,11 +37,12 @@ import androidx.compose.material.icons.filled.Verified
 import androidx.compose.material.icons.filled.WorkspacePremium
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.Divider
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExposedDropdownMenuBox
 import androidx.compose.material3.ExposedDropdownMenuDefaults
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
+import androidx.compose.material3.MenuAnchorType
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
@@ -61,13 +63,13 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import com.google.firebase.firestore.DocumentSnapshot
 import com.google.firebase.firestore.ktx.firestore
 import com.google.firebase.ktx.Firebase
 import il.kmi.app.database.KmiDatabaseProvider
 import il.kmi.app.database.KmiDatabaseRepository
 import il.kmi.app.ui.KmiTopBar
+import il.kmi.app.ui.KmiTypography
 import kotlinx.coroutines.tasks.await
 
 private data class NetworkCoachInfo(
@@ -512,8 +514,9 @@ private fun PremiumNetworkCoachesLoading() {
             ) {
                 Text(
                     text = "🥋",
-                    fontSize = 12.sp,
-                    textAlign = TextAlign.Center
+                    style = KmiTypography.caption,
+                    textAlign = TextAlign.Center,
+                    maxLines = 1
                 )
             }
         }
@@ -528,7 +531,14 @@ fun AboutNetworkCoachesScreen(
     onHome: () -> Unit = {},
     onOpenExercise: ((String) -> Unit)? = null
 ) {
-    var coaches by remember { mutableStateOf<List<NetworkCoachInfo>>(fallbackNetworkCoaches) }
+    BackHandler(
+        onBack = onClose
+    )
+
+    var coaches by remember {
+        mutableStateOf(fallbackNetworkCoaches)
+    }
+
     var isLoading by remember { mutableStateOf(true) }
     var loadError by remember { mutableStateOf<String?>(null) }
 
@@ -671,7 +681,10 @@ fun AboutNetworkCoachesScreen(
                                     "בחרו אות, ואז בחרו מאמן כדי לראות דרגה, הכשרה, ותק, הסמכות ומידע מקצועי.",
                                     "Choose a letter, then select a coach to view rank, training, experience, certifications and professional details."
                                 ),
-                                style = MaterialTheme.typography.titleMedium,
+                                style =
+                                    KmiTypography.body.copy(
+                                        fontWeight = FontWeight.SemiBold
+                                    ),
                                 color = Color.White.copy(alpha = 0.92f),
                                 textAlign = textAlign,
                                 modifier = Modifier.fillMaxWidth()
@@ -694,8 +707,10 @@ fun AboutNetworkCoachesScreen(
                                         ),
                                         color = Color.White.copy(alpha = 0.90f),
                                         textAlign = TextAlign.Center,
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        fontWeight = FontWeight.ExtraBold,
+                                        style =
+                                            KmiTypography.body.copy(
+                                                fontWeight = FontWeight.ExtraBold
+                                            ),
                                         modifier = Modifier.fillMaxWidth()
                                     )
 
@@ -706,8 +721,10 @@ fun AboutNetworkCoachesScreen(
                                         ),
                                         color = Color.White.copy(alpha = 0.62f),
                                         textAlign = TextAlign.Center,
-                                        style = MaterialTheme.typography.labelSmall,
-                                        fontWeight = FontWeight.SemiBold,
+                                        style =
+                                            KmiTypography.caption.copy(
+                                                fontWeight = FontWeight.SemiBold
+                                            ),
                                         modifier = Modifier.fillMaxWidth()
                                     )
                                 }
@@ -719,7 +736,7 @@ fun AboutNetworkCoachesScreen(
                                         "לא הצלחנו לטעון מהשרת כרגע, מוצגים נתוני ברירת מחדל.",
                                         "Could not load from the server right now. Showing default data."
                                     ),
-                                    style = MaterialTheme.typography.bodySmall,
+                                    style = KmiTypography.secondary,
                                     color = Color(0xFFFFD6A5),
                                     textAlign = textAlign,
                                     modifier = Modifier.fillMaxWidth()
@@ -727,10 +744,15 @@ fun AboutNetworkCoachesScreen(
                             }
 
                             Text(
-                                text = tr("סינון לפי אות", "Filter by Hebrew letter"),
-                                style = MaterialTheme.typography.titleSmall,
+                                text = tr(
+                                    "סינון לפי אות",
+                                    "Filter by Hebrew letter"
+                                ),
+                                style =
+                                    KmiTypography.cardTitle.copy(
+                                        fontWeight = FontWeight.ExtraBold
+                                    ),
                                 color = Color.White,
-                                fontWeight = FontWeight.ExtraBold,
                                 textAlign = textAlign,
                                 modifier = Modifier.fillMaxWidth()
                             )
@@ -764,12 +786,18 @@ fun AboutNetworkCoachesScreen(
                                         )
                                     },
                                     modifier = Modifier
-                                        .menuAnchor()
+                                        .menuAnchor(
+                                            type =
+                                                MenuAnchorType
+                                                    .PrimaryNotEditable,
+                                            enabled = true
+                                        )
                                         .fillMaxWidth(),
-                                    textStyle = MaterialTheme.typography.titleMedium.copy(
-                                        color = fieldTextColor,
-                                        fontWeight = FontWeight.ExtraBold,
-                                        textAlign = textAlign
+                                    textStyle =
+                                        KmiTypography.body.copy(
+                                            color = fieldTextColor,
+                                            fontWeight = FontWeight.ExtraBold,
+                                            textAlign = textAlign
                                     ),
                                     colors = ExposedDropdownMenuDefaults.outlinedTextFieldColors(
                                         focusedTextColor = fieldTextColor,
@@ -798,9 +826,17 @@ fun AboutNetworkCoachesScreen(
                                         DropdownMenuItem(
                                             text = {
                                                 Text(
-                                                    text = if (letter == "הכל") tr("הכל", "All") else letter,
+                                                    text =
+                                                        if (letter == "הכל") {
+                                                            tr("הכל", "All")
+                                                        } else {
+                                                            letter
+                                                        },
                                                     color = Color.White,
-                                                    fontWeight = FontWeight.Bold,
+                                                    style =
+                                                        KmiTypography.body.copy(
+                                                            fontWeight = FontWeight.Bold
+                                                        ),
                                                     textAlign = textAlign,
                                                     modifier = Modifier.fillMaxWidth()
                                                 )
@@ -815,13 +851,20 @@ fun AboutNetworkCoachesScreen(
                                 }
                             }
 
-                            Divider(color = Color.White.copy(alpha = 0.16f))
+                            HorizontalDivider(
+                                color = Color.White.copy(alpha = 0.16f)
+                            )
 
                             Text(
-                                text = tr("בחירת מאמן", "Choose coach"),
-                                style = MaterialTheme.typography.titleSmall,
+                                text = tr(
+                                    "בחירת מאמן",
+                                    "Choose coach"
+                                ),
+                                style =
+                                    KmiTypography.cardTitle.copy(
+                                        fontWeight = FontWeight.ExtraBold
+                                    ),
                                 color = Color.White,
-                                fontWeight = FontWeight.ExtraBold,
                                 textAlign = textAlign,
                                 modifier = Modifier.fillMaxWidth()
                             )
@@ -832,7 +875,7 @@ fun AboutNetworkCoachesScreen(
                                         "אין מאמנים שמתחילים באות $selectedLetter",
                                         "No coaches found for this letter"
                                     ),
-                                    style = MaterialTheme.typography.bodyMedium,
+                                    style = KmiTypography.body,
                                     color = Color.White.copy(alpha = 0.78f),
                                     textAlign = textAlign,
                                     modifier = Modifier.fillMaxWidth()
@@ -893,12 +936,25 @@ fun AboutNetworkCoachesScreen(
                                                 Spacer(Modifier.size(10.dp))
 
                                                 Text(
-                                                    text = if (isEnglish) coach.nameEn else coach.nameHe,
+                                                    text =
+                                                        if (isEnglish) {
+                                                            coach.nameEn
+                                                        } else {
+                                                            coach.nameHe
+                                                        },
                                                     modifier = Modifier.fillMaxWidth(),
-                                                    fontWeight = FontWeight.ExtraBold,
-                                                    color = if (selected) Color.White else fieldTextColor,
+                                                    color =
+                                                        if (selected) {
+                                                            Color.White
+                                                        } else {
+                                                            fieldTextColor
+                                                        },
                                                     textAlign = textAlign,
-                                                    style = MaterialTheme.typography.titleMedium
+                                                    style =
+                                                        KmiTypography.cardTitle.copy(
+                                                            fontWeight = FontWeight.ExtraBold
+                                                        ),
+                                                    maxLines = 2
                                                 )
                                             }
                                         }
@@ -992,7 +1048,9 @@ private fun CoachDetailsCard(
                 }
             }
 
-            Divider(color = Color.White.copy(alpha = 0.14f))
+            HorizontalDivider(
+                color = Color.White.copy(alpha = 0.14f)
+            )
 
             CoachInfoRow(
                 icon = Icons.Default.WorkspacePremium,

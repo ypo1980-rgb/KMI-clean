@@ -3,6 +3,7 @@
 package il.kmi.app.screens.admin
 
 import android.content.Context
+import androidx.activity.compose.BackHandler
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
@@ -40,10 +41,12 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.Scaffold
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.material3.MaterialTheme
 import il.kmi.app.ui.KmiTopBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -54,17 +57,18 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
+import androidx.core.content.edit
 import com.google.firebase.Timestamp
 import com.google.firebase.firestore.Query
 import com.google.firebase.firestore.ktx.firestore
 import com.google.firebase.ktx.Firebase
+import il.kmi.app.ui.KmiTypography
 import java.text.SimpleDateFormat
-import java.util.Date
 import java.util.Locale
 import java.util.concurrent.TimeUnit
 
@@ -118,7 +122,7 @@ private enum class AdminDiagnosticsType(
 }
 
 private fun createAdminDiagnosticsPdf(
-    context: android.content.Context,
+    context: Context,
     isEnglish: Boolean,
     rangeTitle: String,
     typeTitle: String,
@@ -467,10 +471,13 @@ private fun createAdminDiagnosticsPdf(
             subtitlePaint
         )
 
-        val generatedDate = java.text.SimpleDateFormat(
-            "dd/MM/yyyy HH:mm",
-            java.util.Locale.getDefault()
-        ).format(java.util.Date())
+        val generatedDate =
+            SimpleDateFormat(
+                "dd/MM/yyyy HH:mm",
+                Locale.getDefault()
+            ).format(
+                System.currentTimeMillis()
+            )
 
         smallPaint.textAlign = android.graphics.Paint.Align.RIGHT
 
@@ -1040,7 +1047,12 @@ fun AdminDiagnosticsScreen(
     onBack: () -> Unit,
     onHome: () -> Unit
 ) {
-    fun tr(he: String, en: String): String = if (isEnglish) en else he
+    BackHandler(
+        onBack = onBack
+    )
+
+    fun tr(he: String, en: String): String =
+        if (isEnglish) en else he
 
     val ctx = LocalContext.current
     val resetSp = remember(ctx) {
@@ -1048,16 +1060,19 @@ fun AdminDiagnosticsScreen(
     }
 
     var resetVersion by rememberSaveable {
-        mutableStateOf(0)
+        mutableIntStateOf(0)
     }
 
     fun resetKeyForGroup(groupKey: String): String =
         "reset_after_$groupKey"
 
     fun resetGroup(groupKey: String) {
-        resetSp.edit()
-            .putLong(resetKeyForGroup(groupKey), System.currentTimeMillis())
-            .apply()
+        resetSp.edit {
+            putLong(
+                resetKeyForGroup(groupKey),
+                System.currentTimeMillis()
+            )
+        }
 
         resetVersion++
     }
@@ -1080,9 +1095,12 @@ fun AdminDiagnosticsScreen(
             obj.put(screen.screenName, screen.count)
         }
 
-        resetSp.edit()
-            .putString("top_screens_baseline", obj.toString())
-            .apply()
+        resetSp.edit {
+            putString(
+                "top_screens_baseline",
+                obj.toString()
+            )
+        }
 
         resetVersion++
     }
@@ -1728,6 +1746,24 @@ fun AdminDiagnosticsScreen(
         }
     }
 
+    val colorScheme = MaterialTheme.colorScheme
+    val isDarkMode =
+        colorScheme.background.luminance() < 0.5f
+
+    val introCardColor =
+        if (isDarkMode) {
+            colorScheme.surface.copy(alpha = 0.94f)
+        } else {
+            Color.White.copy(alpha = 0.72f)
+        }
+
+    val introCardBorderColor =
+        if (isDarkMode) {
+            colorScheme.outline.copy(alpha = 0.62f)
+        } else {
+            Color(0xFF37B7E8).copy(alpha = 0.45f)
+        }
+
     Scaffold(
         topBar = {
             KmiTopBar(
@@ -1754,12 +1790,22 @@ fun AdminDiagnosticsScreen(
                 .padding(padding)
                 .background(
                     Brush.verticalGradient(
-                        colorStops = arrayOf(
-                            0.00f to Color(0xFFEFFBFF),
-                            0.34f to Color(0xFFBDEEFF),
-                            0.68f to Color(0xFF21A5DC),
-                            1.00f to Color(0xFF006FAE)
-                        )
+                        colorStops =
+                            if (isDarkMode) {
+                                arrayOf(
+                                    0.00f to colorScheme.background,
+                                    0.34f to Color(0xFF0F172A),
+                                    0.68f to Color(0xFF0B3954),
+                                    1.00f to Color(0xFF075985)
+                                )
+                            } else {
+                                arrayOf(
+                                    0.00f to Color(0xFFEFFBFF),
+                                    0.34f to Color(0xFFBDEEFF),
+                                    0.68f to Color(0xFF21A5DC),
+                                    1.00f to Color(0xFF006FAE)
+                                )
+                            }
                     )
                 )
         ) {
@@ -1777,10 +1823,12 @@ fun AdminDiagnosticsScreen(
                     Surface(
                         modifier = Modifier.fillMaxWidth(),
                         shape = RoundedCornerShape(14.dp),
-                        color = Color.White.copy(alpha = 0.72f),
+                        color = introCardColor,
+                        tonalElevation = 0.dp,
+                        shadowElevation = 0.dp,
                         border = BorderStroke(
                             width = 1.dp,
-                            color = Color(0xFF37B7E8).copy(alpha = 0.45f)
+                            color = introCardBorderColor
                         )
                     ) {
                         Text(
@@ -1788,14 +1836,23 @@ fun AdminDiagnosticsScreen(
                                 "ניתוח פעילות, תקלות ושימוש באפליקציה",
                                 "Activity, errors and app diagnostics"
                             ),
-                            color = Color(0xFF102033),
-                            fontSize = 13.sp,
-                            lineHeight = 16.sp,
-                            fontWeight = FontWeight.ExtraBold,
-                            textAlign = if (isEnglish) TextAlign.Start else TextAlign.Right,
+                            color = colorScheme.onSurface,
+                            style =
+                                KmiTypography.secondary.copy(
+                                    fontWeight = FontWeight.ExtraBold
+                                ),
+                            textAlign =
+                                if (isEnglish) {
+                                    TextAlign.Start
+                                } else {
+                                    TextAlign.Right
+                                },
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(horizontal = 12.dp, vertical = 9.dp)
+                                .padding(
+                                    horizontal = 12.dp,
+                                    vertical = 9.dp
+                                )
                         )
                     }
                 }
@@ -1951,6 +2008,17 @@ private fun PremiumAdminDiagnosticsLoading(
     isEnglish: Boolean,
     modifier: Modifier = Modifier
 ) {
+    val colorScheme = MaterialTheme.colorScheme
+    val isDarkMode =
+        colorScheme.background.luminance() < 0.5f
+
+    val loadingCardColor =
+        if (isDarkMode) {
+            colorScheme.surface.copy(alpha = 0.94f)
+        } else {
+            Color.White.copy(alpha = 0.88f)
+        }
+
     val infiniteTransition = rememberInfiniteTransition(
         label = "premiumAdminDiagnosticsLoading"
     )
@@ -1979,15 +2047,32 @@ private fun PremiumAdminDiagnosticsLoading(
         label = "premiumAdminDiagnosticsInnerRotation"
     )
 
+    val centerRotation by infiniteTransition.animateFloat(
+        initialValue = 0f,
+        targetValue = 360f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(
+                durationMillis = 950,
+                easing = LinearEasing
+            )
+        ),
+        label = "premiumAdminDiagnosticsCenterRotation"
+    )
+
     Surface(
         modifier = modifier,
         shape = RoundedCornerShape(26.dp),
-        color = Color.White.copy(alpha = 0.16f),
+        color = loadingCardColor,
         border = BorderStroke(
             width = 1.dp,
-            color = Color.White.copy(alpha = 0.24f)
+            color =
+                if (isDarkMode) {
+                    colorScheme.outline.copy(alpha = 0.58f)
+                } else {
+                    Color(0xFF38BDF8).copy(alpha = 0.42f)
+                }
         ),
-        shadowElevation = 8.dp,
+        shadowElevation = 0.dp,
         tonalElevation = 0.dp
     ) {
         Column(
@@ -2023,8 +2108,14 @@ private fun PremiumAdminDiagnosticsLoading(
                 Surface(
                     modifier = Modifier.size(66.dp),
                     shape = CircleShape,
-                    color = Color(0xFFEFFBFF),
-                    shadowElevation = 0.dp
+                    color =
+                        if (isDarkMode) {
+                            Color(0xFF172036)
+                        } else {
+                            Color(0xFFEFFBFF)
+                        },
+                    shadowElevation = 0.dp,
+                    tonalElevation = 0.dp
                 ) {}
 
                 Box(
@@ -2046,14 +2137,44 @@ private fun PremiumAdminDiagnosticsLoading(
                         )
                 )
 
+                Box(
+                    modifier = Modifier
+                        .size(44.dp)
+                        .graphicsLayer {
+                            rotationZ = centerRotation
+                        }
+                        .background(
+                            brush = Brush.sweepGradient(
+                                colors = listOf(
+                                    Color.Transparent,
+                                    Color(0xFFA78BFA),
+                                    Color(0xFF38BDF8),
+                                    Color.Transparent
+                                )
+                            ),
+                            shape = CircleShape
+                        )
+                )
+
                 Surface(
-                    modifier = Modifier.size(43.dp),
+                    modifier = Modifier.size(34.dp),
                     shape = CircleShape,
-                    color = Color.White.copy(alpha = 0.96f),
-                    shadowElevation = 7.dp,
+                    color =
+                        if (isDarkMode) {
+                            Color(0xFF0F172A)
+                        } else {
+                            Color.White.copy(alpha = 0.96f)
+                        },
+                    shadowElevation = 0.dp,
+                    tonalElevation = 0.dp,
                     border = BorderStroke(
                         width = 1.dp,
-                        color = Color(0xFFBAE6FD)
+                        color =
+                            if (isDarkMode) {
+                                colorScheme.outline.copy(alpha = 0.60f)
+                            } else {
+                                Color(0xFFBAE6FD)
+                            }
                     )
                 ) {
                     Box(
@@ -2061,11 +2182,20 @@ private fun PremiumAdminDiagnosticsLoading(
                             .fillMaxSize()
                             .background(
                                 brush = Brush.radialGradient(
-                                    colors = listOf(
-                                        Color.White,
-                                        Color(0xFFE0F2FE),
-                                        Color(0xFFEDE9FE)
-                                    )
+                                    colors =
+                                        if (isDarkMode) {
+                                            listOf(
+                                                Color(0xFF0F172A),
+                                                Color(0xFF172036),
+                                                Color(0xFF1E1B4B)
+                                            )
+                                        } else {
+                                            listOf(
+                                                Color.White,
+                                                Color(0xFFE0F2FE),
+                                                Color(0xFFEDE9FE)
+                                            )
+                                        }
                                 ),
                                 shape = CircleShape
                             ),
@@ -2087,11 +2217,13 @@ private fun PremiumAdminDiagnosticsLoading(
                 } else {
                     "טוען נתוני בקרה ולוגים..."
                 },
-                color = Color.White,
-                fontWeight = FontWeight.Black,
-                fontSize = 18.sp,
-                lineHeight = 22.sp,
-                textAlign = TextAlign.Center
+                color = colorScheme.onSurface,
+                style =
+                    KmiTypography.sectionTitle.copy(
+                        fontWeight = FontWeight.Black
+                    ),
+                textAlign = TextAlign.Center,
+                maxLines = 2
             )
 
             Text(
@@ -2100,11 +2232,13 @@ private fun PremiumAdminDiagnosticsLoading(
                 } else {
                     "מסדר לוגים, אירועי Google וצפיות במסכים"
                 },
-                color = Color.White.copy(alpha = 0.78f),
-                fontWeight = FontWeight.SemiBold,
-                fontSize = 12.5.sp,
-                lineHeight = 15.sp,
-                textAlign = TextAlign.Center
+                color = colorScheme.onSurfaceVariant,
+                style =
+                    KmiTypography.secondary.copy(
+                        fontWeight = FontWeight.SemiBold
+                    ),
+                textAlign = TextAlign.Center,
+                maxLines = 3
             )
         }
     }
@@ -2117,31 +2251,57 @@ private fun AdminSummaryCard(
     color: Color,
     modifier: Modifier = Modifier
 ) {
+    val colorScheme = MaterialTheme.colorScheme
+    val isDarkMode =
+        colorScheme.background.luminance() < 0.5f
+
     Surface(
         modifier = modifier,
         shape = RoundedCornerShape(18.dp),
-        color = Color.White.copy(alpha = 0.94f),
-        border = BorderStroke(1.dp, color.copy(alpha = 0.55f)),
-        shadowElevation = 2.dp
+        color =
+            if (isDarkMode) {
+                colorScheme.surface.copy(alpha = 0.94f)
+            } else {
+                Color.White.copy(alpha = 0.94f)
+            },
+        border = BorderStroke(
+            1.dp,
+            if (isDarkMode) {
+                colorScheme.outline.copy(alpha = 0.58f)
+            } else {
+                color.copy(alpha = 0.55f)
+            }
+        ),
+        tonalElevation = 0.dp,
+        shadowElevation = 0.dp
     ) {
         Column(
-            modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+            modifier = Modifier.padding(
+                horizontal = 12.dp,
+                vertical = 10.dp
+            ),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             Text(
                 text = value,
                 color = color,
-                fontSize = 20.sp,
-                fontWeight = FontWeight.Black,
+                style =
+                    KmiTypography.metric.copy(
+                        fontWeight = FontWeight.Black
+                    ),
                 maxLines = 1
             )
+
             Text(
                 text = title,
-                color = Color(0xFF102033),
-                fontSize = 10.5.sp,
-                fontWeight = FontWeight.Bold,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
+                color = colorScheme.onSurface,
+                style =
+                    KmiTypography.caption.copy(
+                        fontWeight = FontWeight.Bold
+                    ),
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+                textAlign = TextAlign.Center
             )
         }
     }
@@ -2190,11 +2350,18 @@ private fun AdminInsightsCard(
                     modifier = Modifier.size(20.dp)
                 )
                 Spacer(Modifier.size(8.dp))
+
                 Text(
-                    text = tr("תובנות מהירות", "Quick insights"),
+                    text = tr(
+                        "תובנות מהירות",
+                        "Quick insights"
+                    ),
                     color = Color.White,
-                    fontWeight = FontWeight.Black,
-                    fontSize = 13.sp
+                    style =
+                        KmiTypography.cardTitle.copy(
+                            fontWeight = FontWeight.Black
+                        ),
+                    maxLines = 2
                 )
             }
 
@@ -2204,10 +2371,16 @@ private fun AdminInsightsCard(
                 Text(
                     text = "• $insight",
                     color = Color.White.copy(alpha = 0.84f),
-                    fontSize = 11.5.sp,
-                    lineHeight = 15.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    textAlign = if (isEnglish) TextAlign.Start else TextAlign.Right,
+                    style =
+                        KmiTypography.body.copy(
+                            fontWeight = FontWeight.SemiBold
+                        ),
+                    textAlign =
+                        if (isEnglish) {
+                            TextAlign.Start
+                        } else {
+                            TextAlign.Right
+                        },
                     modifier = Modifier.fillMaxWidth()
                 )
             }
@@ -2223,6 +2396,31 @@ private fun FilterRow(
     selectedType: AdminDiagnosticsType,
     onTypeSelected: (AdminDiagnosticsType) -> Unit
 ) {
+    val colorScheme = MaterialTheme.colorScheme
+    val isDarkMode =
+        colorScheme.background.luminance() < 0.5f
+
+    val filterContainerColor =
+        if (isDarkMode) {
+            colorScheme.surface.copy(alpha = 0.94f)
+        } else {
+            Color.White.copy(alpha = 0.94f)
+        }
+
+    val selectedFilterColor =
+        if (isDarkMode) {
+            Color(0xFF312E81)
+        } else {
+            Color(0xFFEDE4FF)
+        }
+
+    val filterBorderColor =
+        if (isDarkMode) {
+            colorScheme.outline.copy(alpha = 0.58f)
+        } else {
+            Color(0xFF37B7E8).copy(alpha = 0.70f)
+        }
+
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
 
         Row(
@@ -2231,29 +2429,48 @@ private fun FilterRow(
                 .fillMaxWidth()
                 .horizontalScroll(rememberScrollState())
         ) {
-            AdminDiagnosticsRange.values().forEach { range ->
+            AdminDiagnosticsRange.entries.forEach { range ->
                 FilterChip(
                     selected = selectedRange == range,
-                    onClick = { onRangeSelected(range) },
+                    onClick = {
+                        onRangeSelected(range)
+                    },
                     colors = FilterChipDefaults.filterChipColors(
-                        containerColor = Color.White.copy(alpha = 0.94f),
-                        labelColor = Color(0xFF102033),
-                        selectedContainerColor = Color(0xFFEDE4FF),
-                        selectedLabelColor = Color(0xFF111827)
+                        containerColor = filterContainerColor,
+                        labelColor = colorScheme.onSurface,
+                        selectedContainerColor = selectedFilterColor,
+                        selectedLabelColor =
+                            if (isDarkMode) {
+                                Color(0xFFE0E7FF)
+                            } else {
+                                Color(0xFF111827)
+                            }
                     ),
                     border = BorderStroke(
                         width = 1.dp,
-                        color = if (selectedRange == range) {
-                            Color(0xFF7C4DFF)
-                        } else {
-                            Color(0xFF37B7E8).copy(alpha = 0.70f)
-                        }
+                        color =
+                            if (selectedRange == range) {
+                                if (isDarkMode) {
+                                    Color(0xFFA78BFA)
+                                } else {
+                                    Color(0xFF7C4DFF)
+                                }
+                            } else {
+                                filterBorderColor
+                            }
                     ),
                     label = {
                         Text(
-                            text = if (isEnglish) range.titleEn else range.titleHe,
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.Bold,
+                            text =
+                                if (isEnglish) {
+                                    range.titleEn
+                                } else {
+                                    range.titleHe
+                                },
+                            style =
+                                KmiTypography.caption.copy(
+                                    fontWeight = FontWeight.Bold
+                                ),
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis
                         )
@@ -2268,29 +2485,48 @@ private fun FilterRow(
                 .fillMaxWidth()
                 .horizontalScroll(rememberScrollState())
         ) {
-            AdminDiagnosticsType.values().forEach { type ->
+            AdminDiagnosticsType.entries.forEach { type ->
                 FilterChip(
                     selected = selectedType == type,
-                    onClick = { onTypeSelected(type) },
+                    onClick = {
+                        onTypeSelected(type)
+                    },
                     colors = FilterChipDefaults.filterChipColors(
-                        containerColor = Color.White.copy(alpha = 0.94f),
-                        labelColor = Color(0xFF102033),
-                        selectedContainerColor = Color(0xFFEDE4FF),
-                        selectedLabelColor = Color(0xFF111827)
+                        containerColor = filterContainerColor,
+                        labelColor = colorScheme.onSurface,
+                        selectedContainerColor = selectedFilterColor,
+                        selectedLabelColor =
+                            if (isDarkMode) {
+                                Color(0xFFE0E7FF)
+                            } else {
+                                Color(0xFF111827)
+                            }
                     ),
                     border = BorderStroke(
                         width = 1.dp,
-                        color = if (selectedType == type) {
-                            Color(0xFF7C4DFF)
-                        } else {
-                            Color(0xFF37B7E8).copy(alpha = 0.70f)
-                        }
+                        color =
+                            if (selectedType == type) {
+                                if (isDarkMode) {
+                                    Color(0xFFA78BFA)
+                                } else {
+                                    Color(0xFF7C4DFF)
+                                }
+                            } else {
+                                filterBorderColor
+                            }
                     ),
                     label = {
                         Text(
-                            text = if (isEnglish) type.titleEn else type.titleHe,
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.Bold,
+                            text =
+                                if (isEnglish) {
+                                    type.titleEn
+                                } else {
+                                    type.titleHe
+                                },
+                            style =
+                                KmiTypography.caption.copy(
+                                    fontWeight = FontWeight.Bold
+                                ),
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis
                         )
@@ -2311,14 +2547,33 @@ private fun AdminLogGroupHeader(
     onReset: () -> Unit,
     onClick: () -> Unit
 ) {
+    val colorScheme = MaterialTheme.colorScheme
+    val isDarkMode =
+        colorScheme.background.luminance() < 0.5f
+
     Surface(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable { onClick() },
+            .clickable {
+                onClick()
+            },
         shape = RoundedCornerShape(18.dp),
-        color = Color.White.copy(alpha = 0.94f),
-        border = BorderStroke(1.dp, color.copy(alpha = 0.45f)),
-        shadowElevation = 2.dp
+        color =
+            if (isDarkMode) {
+                colorScheme.surface.copy(alpha = 0.94f)
+            } else {
+                Color.White.copy(alpha = 0.94f)
+            },
+        border = BorderStroke(
+            1.dp,
+            if (isDarkMode) {
+                colorScheme.outline.copy(alpha = 0.58f)
+            } else {
+                color.copy(alpha = 0.45f)
+            }
+        ),
+        tonalElevation = 0.dp,
+        shadowElevation = 0.dp
     ) {
         Row(
             modifier = Modifier
@@ -2329,10 +2584,13 @@ private fun AdminLogGroupHeader(
             Text(
                 text = if (expanded) "⌃" else "⌄",
                 color = color,
-                fontSize = 16.sp,
-                fontWeight = FontWeight.Black,
+                style =
+                    KmiTypography.action.copy(
+                        fontWeight = FontWeight.Black
+                    ),
                 modifier = Modifier.width(28.dp),
-                textAlign = TextAlign.Center
+                textAlign = TextAlign.Center,
+                maxLines = 1
             )
 
             Column(
@@ -2341,24 +2599,42 @@ private fun AdminLogGroupHeader(
             ) {
                 Text(
                     text = title,
-                    color = Color(0xFF102033),
-                    fontWeight = FontWeight.Black,
-                    fontSize = 14.sp,
-                    lineHeight = 17.sp,
-                    textAlign = if (isEnglish) TextAlign.Start else TextAlign.Right,
+                    color = colorScheme.onSurface,
+                    style =
+                        KmiTypography.cardTitle.copy(
+                            fontWeight = FontWeight.Black
+                        ),
+                    textAlign =
+                        if (isEnglish) {
+                            TextAlign.Start
+                        } else {
+                            TextAlign.Right
+                        },
                     modifier = Modifier.fillMaxWidth(),
-                    maxLines = 1,
+                    maxLines = 2,
                     overflow = TextOverflow.Ellipsis
                 )
 
                 Text(
-                    text = if (isEnglish) "$count events" else "$count אירועים",
+                    text =
+                        if (isEnglish) {
+                            "$count events"
+                        } else {
+                            "$count אירועים"
+                        },
                     color = color,
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 11.sp,
-                    lineHeight = 13.sp,
-                    textAlign = if (isEnglish) TextAlign.Start else TextAlign.Right,
-                    modifier = Modifier.fillMaxWidth()
+                    style =
+                        KmiTypography.caption.copy(
+                            fontWeight = FontWeight.Bold
+                        ),
+                    textAlign =
+                        if (isEnglish) {
+                            TextAlign.Start
+                        } else {
+                            TextAlign.Right
+                        },
+                    modifier = Modifier.fillMaxWidth(),
+                    maxLines = 1
                 )
             }
 
@@ -2370,19 +2646,44 @@ private fun AdminLogGroupHeader(
                         onReset()
                     },
                 shape = RoundedCornerShape(999.dp),
-                color = Color(0xFFFFF7ED),
+                color =
+                    if (isDarkMode) {
+                        Color(0xFF431407)
+                    } else {
+                        Color(0xFFFFF7ED)
+                    },
+                tonalElevation = 0.dp,
+                shadowElevation = 0.dp,
                 border = BorderStroke(
                     width = 1.dp,
-                    color = Color(0xFFF97316).copy(alpha = 0.45f)
+                    color =
+                        if (isDarkMode) {
+                            Color(0xFFFB923C).copy(alpha = 0.70f)
+                        } else {
+                            Color(0xFFF97316).copy(alpha = 0.45f)
+                        }
                 )
             ) {
                 Text(
-                    text = if (isEnglish) "Reset" else "איפוס",
-                    color = Color(0xFF9A3412),
-                    fontSize = 10.5.sp,
-                    lineHeight = 12.sp,
-                    fontWeight = FontWeight.Black,
-                    modifier = Modifier.padding(horizontal = 9.dp, vertical = 5.dp),
+                    text = if (isEnglish) {
+                        "Reset"
+                    } else {
+                        "איפוס"
+                    },
+                    color =
+                        if (isDarkMode) {
+                            Color(0xFFFED7AA)
+                        } else {
+                            Color(0xFF9A3412)
+                        },
+                    style =
+                        KmiTypography.caption.copy(
+                            fontWeight = FontWeight.Black
+                        ),
+                    modifier = Modifier.padding(
+                        horizontal = 9.dp,
+                        vertical = 5.dp
+                    ),
                     maxLines = 1
                 )
             }
@@ -2412,6 +2713,10 @@ private fun AdminLogCard(
     log: AdminDiagnosticLog,
     isEnglish: Boolean
 ) {
+    val colorScheme = MaterialTheme.colorScheme
+    val isDarkMode =
+        colorScheme.background.luminance() < 0.5f
+
     val severityColor = when {
         log.severity.equals("error", ignoreCase = true) ||
                 log.type.contains("failed", ignoreCase = true) -> Color(0xFFFF8A8A)
@@ -2425,9 +2730,22 @@ private fun AdminLogCard(
 
     Surface(
         shape = RoundedCornerShape(20.dp),
-        color = Color.White.copy(alpha = 0.90f),
-        border = BorderStroke(1.dp, severityColor.copy(alpha = 0.42f)),
-        shadowElevation = 2.dp
+        color =
+            if (isDarkMode) {
+                colorScheme.surface.copy(alpha = 0.94f)
+            } else {
+                Color.White.copy(alpha = 0.90f)
+            },
+        border = BorderStroke(
+            1.dp,
+            if (isDarkMode) {
+                colorScheme.outline.copy(alpha = 0.58f)
+            } else {
+                severityColor.copy(alpha = 0.42f)
+            }
+        ),
+        tonalElevation = 0.dp,
+        shadowElevation = 0.dp
     ) {
         Column(
             modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp)
@@ -2459,36 +2777,70 @@ private fun AdminLogCard(
                     horizontalAlignment = if (isEnglish) Alignment.Start else Alignment.End
                 ) {
                     Text(
-                        text = log.title.ifBlank { log.type.ifBlank { "Log event" } },
-                        color = Color(0xFF102033),
-                        fontSize = 13.sp,
-                        lineHeight = 15.sp,
-                        fontWeight = FontWeight.Black,
-                        textAlign = if (isEnglish) TextAlign.Start else TextAlign.Right,
+                        text =
+                            log.title.ifBlank {
+                                log.type.ifBlank {
+                                    if (isEnglish) {
+                                        "Log event"
+                                    } else {
+                                        "אירוע מערכת"
+                                    }
+                                }
+                            },
+                        color = colorScheme.onSurface,
+                        style =
+                            KmiTypography.cardTitle.copy(
+                                fontWeight = FontWeight.Black
+                            ),
+                        textAlign =
+                            if (isEnglish) {
+                                TextAlign.Start
+                            } else {
+                                TextAlign.Right
+                            },
                         modifier = Modifier.fillMaxWidth(),
                         maxLines = 2,
                         overflow = TextOverflow.Ellipsis
                     )
+
                     Text(
-                        text = formatLogTime(log.createdAt, isEnglish),
-                        color = Color(0xFF475569),
-                        fontSize = 10.5.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        textAlign = if (isEnglish) TextAlign.Start else TextAlign.Right,
-                        modifier = Modifier.fillMaxWidth()
+                        text = formatLogTime(
+                            log.createdAt,
+                            isEnglish
+                        ),
+                        color = colorScheme.onSurfaceVariant,
+                        style =
+                            KmiTypography.caption.copy(
+                                fontWeight = FontWeight.SemiBold
+                            ),
+                        textAlign =
+                            if (isEnglish) {
+                                TextAlign.Start
+                            } else {
+                                TextAlign.Right
+                            },
+                        modifier = Modifier.fillMaxWidth(),
+                        maxLines = 1
                     )
                 }
             }
 
             if (log.message.isNotBlank()) {
                 Spacer(Modifier.height(8.dp))
+
                 Text(
                     text = log.message,
-                    color = Color(0xFF1E293B),
-                    fontSize = 11.5.sp,
-                    lineHeight = 15.sp,
-                    fontWeight = FontWeight.Medium,
-                    textAlign = if (isEnglish) TextAlign.Start else TextAlign.Right,
+                    color = colorScheme.onSurface,
+                    style =
+                        KmiTypography.body.copy(
+                            fontWeight = FontWeight.Medium
+                        ),
+                    textAlign =
+                        if (isEnglish) {
+                            TextAlign.Start
+                        } else {
+                            TextAlign.Right
+                        },
                     modifier = Modifier.fillMaxWidth(),
                     maxLines = 12,
                     overflow = TextOverflow.Ellipsis
@@ -2496,7 +2848,13 @@ private fun AdminLogCard(
             }
 
             Spacer(Modifier.height(8.dp))
-            HorizontalDivider(color = Color(0xFFCBD5E1).copy(alpha = 0.70f))
+
+            HorizontalDivider(
+                color = colorScheme.outlineVariant.copy(
+                    alpha = 0.70f
+                )
+            )
+
             Spacer(Modifier.height(8.dp))
 
             Text(
@@ -2519,11 +2877,17 @@ private fun AdminLogCard(
                         append(log.appVersion)
                     }
                 },
-                color = Color(0xFF475569),
-                fontSize = 10.5.sp,
-                lineHeight = 13.sp,
-                fontWeight = FontWeight.SemiBold,
-                textAlign = if (isEnglish) TextAlign.Start else TextAlign.Right,
+                color = colorScheme.onSurfaceVariant,
+                style =
+                    KmiTypography.caption.copy(
+                        fontWeight = FontWeight.SemiBold
+                    ),
+                textAlign =
+                    if (isEnglish) {
+                        TextAlign.Start
+                    } else {
+                        TextAlign.Right
+                    },
                 modifier = Modifier.fillMaxWidth()
             )
         }
@@ -2554,19 +2918,26 @@ private fun AdminStateCard(
                 modifier = Modifier.size(32.dp)
             )
             Spacer(Modifier.height(8.dp))
+
             Text(
                 text = title,
                 color = Color.White,
-                fontWeight = FontWeight.Black,
-                fontSize = 15.sp,
-                textAlign = TextAlign.Center
+                style =
+                    KmiTypography.sectionTitle.copy(
+                        fontWeight = FontWeight.Black
+                    ),
+                textAlign = TextAlign.Center,
+                maxLines = 2
             )
+
             Spacer(Modifier.height(4.dp))
             Text(
                 text = message,
                 color = Color.White.copy(alpha = 0.72f),
-                fontWeight = FontWeight.SemiBold,
-                fontSize = 11.5.sp,
+                style =
+                    KmiTypography.secondary.copy(
+                        fontWeight = FontWeight.SemiBold
+                    ),
                 textAlign = TextAlign.Center
             )
         }
@@ -2579,13 +2950,31 @@ private fun TopScreensCard(
     screens: List<AdminTopScreen>,
     onReset: () -> Unit
 ) {
-    fun tr(he: String, en: String): String = if (isEnglish) en else he
+    fun tr(he: String, en: String): String =
+        if (isEnglish) en else he
+
+    val colorScheme = MaterialTheme.colorScheme
+    val isDarkMode =
+        colorScheme.background.luminance() < 0.5f
 
     Surface(
         shape = RoundedCornerShape(22.dp),
-        color = Color.White.copy(alpha = 0.88f),
-        border = BorderStroke(1.dp, Color(0xFF37B7E8).copy(alpha = 0.55f)),
-        shadowElevation = 3.dp
+        color =
+            if (isDarkMode) {
+                colorScheme.surface.copy(alpha = 0.94f)
+            } else {
+                Color.White.copy(alpha = 0.88f)
+            },
+        border = BorderStroke(
+            1.dp,
+            if (isDarkMode) {
+                colorScheme.outline.copy(alpha = 0.58f)
+            } else {
+                Color(0xFF37B7E8).copy(alpha = 0.55f)
+            }
+        ),
+        tonalElevation = 0.dp,
+        shadowElevation = 0.dp
     ) {
         Column(
             modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp)
@@ -2603,13 +2992,23 @@ private fun TopScreensCard(
                 Spacer(Modifier.size(8.dp))
 
                 Text(
-                    text = tr("10 המסכים הכי נצפים", "Top 10 screens"),
-                    color = Color(0xFF102033),
-                    fontWeight = FontWeight.Black,
-                    fontSize = 14.sp,
-                    textAlign = if (isEnglish) TextAlign.Start else TextAlign.Right,
+                    text = tr(
+                        "10 המסכים הכי נצפים",
+                        "Top 10 screens"
+                    ),
+                    color = colorScheme.onSurface,
+                    style =
+                        KmiTypography.cardTitle.copy(
+                            fontWeight = FontWeight.Black
+                        ),
+                    textAlign =
+                        if (isEnglish) {
+                            TextAlign.Start
+                        } else {
+                            TextAlign.Right
+                        },
                     modifier = Modifier.weight(1f),
-                    maxLines = 1,
+                    maxLines = 2,
                     overflow = TextOverflow.Ellipsis
                 )
 
@@ -2620,19 +3019,43 @@ private fun TopScreensCard(
                         onReset()
                     },
                     shape = RoundedCornerShape(999.dp),
-                    color = Color(0xFFFFF7ED),
+                    color =
+                        if (isDarkMode) {
+                            Color(0xFF431407)
+                        } else {
+                            Color(0xFFFFF7ED)
+                        },
+                    tonalElevation = 0.dp,
+                    shadowElevation = 0.dp,
                     border = BorderStroke(
                         width = 1.dp,
-                        color = Color(0xFFF97316).copy(alpha = 0.45f)
+                        color =
+                            if (isDarkMode) {
+                                Color(0xFFFB923C).copy(alpha = 0.70f)
+                            } else {
+                                Color(0xFFF97316).copy(alpha = 0.45f)
+                            }
                     )
                 ) {
                     Text(
-                        text = tr("איפוס", "Reset"),
-                        color = Color(0xFF9A3412),
-                        fontSize = 10.5.sp,
-                        lineHeight = 12.sp,
-                        fontWeight = FontWeight.Black,
-                        modifier = Modifier.padding(horizontal = 9.dp, vertical = 5.dp),
+                        text = tr(
+                            "איפוס",
+                            "Reset"
+                        ),
+                        color =
+                            if (isDarkMode) {
+                                Color(0xFFFED7AA)
+                            } else {
+                                Color(0xFF9A3412)
+                            },
+                        style =
+                            KmiTypography.caption.copy(
+                                fontWeight = FontWeight.Black
+                            ),
+                        modifier = Modifier.padding(
+                            horizontal = 9.dp,
+                            vertical = 5.dp
+                        ),
                         maxLines = 1
                     )
                 }
@@ -2646,10 +3069,17 @@ private fun TopScreensCard(
                         "אין עדיין נתוני צפייה במסכים.",
                         "No screen view data yet."
                     ),
-                    color = Color(0xFF475569),
-                    fontWeight = FontWeight.SemiBold,
-                    fontSize = 11.5.sp,
-                    textAlign = if (isEnglish) TextAlign.Start else TextAlign.Right,
+                    color = colorScheme.onSurfaceVariant,
+                    style =
+                        KmiTypography.secondary.copy(
+                            fontWeight = FontWeight.SemiBold
+                        ),
+                    textAlign =
+                        if (isEnglish) {
+                            TextAlign.Start
+                        } else {
+                            TextAlign.Right
+                        },
                     modifier = Modifier.fillMaxWidth()
                 )
             } else {
@@ -2663,36 +3093,52 @@ private fun TopScreensCard(
                         Text(
                             text = "${index + 1}",
                             color = Color(0xFF0284C7),
-                            fontWeight = FontWeight.Black,
-                            fontSize = 13.sp,
-                            modifier = Modifier.width(26.dp),
-                            textAlign = TextAlign.Center
+                            style =
+                                KmiTypography.metric.copy(
+                                    fontWeight = FontWeight.Black
+                                ),
+                            modifier = Modifier.width(30.dp),
+                            textAlign = TextAlign.Center,
+                            maxLines = 1
                         )
 
                         Text(
                             text = item.screenName,
-                            color = Color(0xFF102033),
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 12.sp,
-                            maxLines = 1,
+                            color = colorScheme.onSurface,
+                            style =
+                                KmiTypography.body.copy(
+                                    fontWeight = FontWeight.Bold
+                                ),
+                            maxLines = 2,
                             overflow = TextOverflow.Ellipsis,
-                            textAlign = if (isEnglish) TextAlign.Start else TextAlign.Right,
+                            textAlign =
+                                if (isEnglish) {
+                                    TextAlign.Start
+                                } else {
+                                    TextAlign.Right
+                                },
                             modifier = Modifier.weight(1f)
                         )
 
                         Text(
                             text = item.count.toString(),
                             color = Color(0xFF16A34A),
-                            fontWeight = FontWeight.Black,
-                            fontSize = 13.sp,
-                            modifier = Modifier.width(52.dp),
-                            textAlign = TextAlign.Center
+                            style =
+                                KmiTypography.metric.copy(
+                                    fontWeight = FontWeight.Black
+                                ),
+                            modifier = Modifier.width(56.dp),
+                            textAlign = TextAlign.Center,
+                            maxLines = 1
                         )
                     }
 
                     if (index != screens.lastIndex) {
                         HorizontalDivider(
-                            color = Color(0xFFCBD5E1).copy(alpha = 0.55f)
+                            color =
+                                colorScheme
+                                    .outlineVariant
+                                    .copy(alpha = 0.60f)
                         )
                     }
                 }

@@ -1,16 +1,17 @@
-package il.kmi.app.screens.payments
+package il.kmi.app.screens.forms.payment
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -32,20 +33,16 @@ import androidx.compose.material.icons.outlined.Person
 import androidx.compose.material.icons.outlined.Phone
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.material3.ExposedDropdownMenuBox
-import androidx.compose.material3.ExposedDropdownMenuDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.MenuAnchorType
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -56,16 +53,19 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.LayoutDirection
+import il.kmi.app.ui.KmiPremiumDropdown
+import il.kmi.app.ui.KmiTypography
 
 //==================================================================================
 
@@ -74,10 +74,6 @@ private enum class CheckoutPaymentMethod {
     BIT
 }
 
-@OptIn(
-    ExperimentalMaterial3Api::class,
-    androidx.compose.foundation.layout.ExperimentalLayoutApi::class
-)
 @Composable
 fun PaymentScreen(
     isEnglish: Boolean,
@@ -108,7 +104,11 @@ fun PaymentScreen(
     var expiry by remember { mutableStateOf("") }
     var cvv by remember { mutableStateOf("") }
 
-    val installmentOptions = listOf(1, 2, 3, 4, 6, 12)
+    val installmentOptions =
+        remember {
+            listOf(1, 2, 3, 4, 6, 12)
+        }
+
     var selectedPaymentMethod by remember {
         mutableStateOf(CheckoutPaymentMethod.CREDIT_CARD)
     }
@@ -120,9 +120,15 @@ fun PaymentScreen(
         selectedPaymentMethod == CheckoutPaymentMethod.BIT
 
     val paymentMethodTitle =
-        if (isEnglish) "Choose payment method" else "בחר אמצעי תשלום"
-    var installmentsExpanded by remember { mutableStateOf(false) }
-    var installments by remember { mutableStateOf(1) }
+        if (isEnglish) {
+            "Choose payment method"
+        } else {
+            "בחר אמצעי תשלום"
+        }
+
+    var installments by remember {
+        mutableIntStateOf(1)
+    }
 
     val title = if (isEnglish) "Payment Details" else "פרטי תשלום"
     val subtitle = if (isEnglish) "Complete your membership payment securely" else "השלם את תשלום דמי החבר בצורה מאובטחת"
@@ -147,11 +153,17 @@ fun PaymentScreen(
         if (isEnglish) Alignment.Start else Alignment.End
 
     val headerLayoutDirection = LayoutDirection.Ltr
+
+    val cleanCardHolderName = cardHolderName.trim()
+    val cleanIdNumber = idNumber.trim()
+    val cleanPhone = phone.trim()
+    val cleanEmail = email.trim()
+
     val personalDetailsValid =
-        cardHolderName.isNotBlank() &&
-                idNumber.length >= 8 &&
-                phone.length >= 9 &&
-                email.contains("@")
+        cleanCardHolderName.isNotBlank() &&
+                cleanIdNumber.length >= 8 &&
+                cleanPhone.length >= 9 &&
+                cleanEmail.contains("@")
 
     val cardDetailsValid =
         cardNumber.filter { it.isDigit() }.length >= 12 &&
@@ -165,16 +177,65 @@ fun PaymentScreen(
             personalDetailsValid && cardDetailsValid
         }
 
+    val colorScheme = MaterialTheme.colorScheme
+    val isDarkMode = colorScheme.background.luminance() < 0.5f
+
+    val screenGradient =
+        if (isDarkMode) {
+            listOf(
+                Color(0xFF06131F),
+                Color(0xFF0B2233),
+                Color(0xFF10344A)
+            )
+        } else {
+            listOf(
+                Color(0xFFF7FBFF),
+                Color(0xFFEAF6FF),
+                Color(0xFFDDF1FF)
+            )
+        }
+
+    val primaryTextColor =
+        if (isDarkMode) {
+            Color.White
+        } else {
+            colorScheme.onBackground
+        }
+
+    val secondaryTextColor =
+        if (isDarkMode) {
+            Color.White.copy(alpha = 0.74f)
+        } else {
+            colorScheme.onSurfaceVariant
+        }
+
+    val cardContainerColor =
+        if (isDarkMode) {
+            Color.White.copy(alpha = 0.10f)
+        } else {
+            colorScheme.surface.copy(alpha = 0.94f)
+        }
+
+    val cardBorderColor =
+        if (isDarkMode) {
+            Color.White.copy(alpha = 0.14f)
+        } else {
+            Color(0xFF8AC9E8).copy(alpha = 0.58f)
+        }
+
+    val dividerColor =
+        if (isDarkMode) {
+            Color.White.copy(alpha = 0.10f)
+        } else {
+            colorScheme.outlineVariant.copy(alpha = 0.72f)
+        }
+
     Box(
         modifier = Modifier
             .fillMaxSize()
             .background(
                 Brush.verticalGradient(
-                    listOf(
-                        Color(0xFF06131F),
-                        Color(0xFF0B2233),
-                        Color(0xFF10344A)
-                    )
+                    colors = screenGradient
                 )
             )
     ) {
@@ -183,6 +244,7 @@ fun PaymentScreen(
                 .fillMaxSize()
                 .statusBarsPadding()
                 .navigationBarsPadding()
+                .imePadding()
                 .verticalScroll(rememberScrollState())
                 .padding(horizontal = 16.dp, vertical = 12.dp)
         ) {
@@ -195,15 +257,21 @@ fun PaymentScreen(
                 ) {
                     Surface(
                         shape = CircleShape,
-                        color = Color.White.copy(alpha = 0.10f),
+                        color =
+                            if (isDarkMode) {
+                                Color.White.copy(alpha = 0.10f)
+                            } else {
+                                colorScheme.primaryContainer.copy(alpha = 0.72f)
+                            },
                         tonalElevation = 0.dp,
+                        shadowElevation = 0.dp,
                         modifier = Modifier.size(42.dp)
                     ) {
                         IconButton(onClick = onClose) {
                             Icon(
                                 imageVector = Icons.Default.Close,
                                 contentDescription = closeDesc,
-                                tint = Color.White
+                                tint = primaryTextColor
                             )
                         }
                     }
@@ -216,20 +284,22 @@ fun PaymentScreen(
                     ) {
                         Text(
                             text = title,
-                            color = Color.White,
-                            fontSize = 24.sp,
-                            fontWeight = FontWeight.Bold,
+                            color = primaryTextColor,
+                            style =
+                                KmiTypography.screenTitle.copy(
+                                    fontWeight = FontWeight.Bold
+                                ),
                             textAlign = screenTextAlign,
-                            modifier = Modifier.fillMaxWidth()
+                            modifier = Modifier.fillMaxWidth(),
+                            maxLines = 2
                         )
 
                         Spacer(modifier = Modifier.height(4.dp))
 
                         Text(
                             text = subtitle,
-                            color = Color.White.copy(alpha = 0.78f),
-                            fontSize = 13.sp,
-                            lineHeight = 20.sp,
+                            color = secondaryTextColor,
+                            style = KmiTypography.secondary,
                             textAlign = screenTextAlign,
                             modifier = Modifier.fillMaxWidth()
                         )
@@ -242,14 +312,14 @@ fun PaymentScreen(
             Card(
                 shape = RoundedCornerShape(24.dp),
                 colors = CardDefaults.cardColors(
-                    containerColor = Color.White.copy(alpha = 0.10f)
+                    containerColor = cardContainerColor
                 ),
                 elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
                 modifier = Modifier
                     .fillMaxWidth()
                     .border(
                         width = 1.dp,
-                        color = Color.White.copy(alpha = 0.14f),
+                        color = cardBorderColor,
                         shape = RoundedCornerShape(24.dp)
                     )
             ) {
@@ -270,7 +340,12 @@ fun PaymentScreen(
                                 Icon(
                                     imageVector = Icons.Outlined.Lock,
                                     contentDescription = null,
-                                    tint = Color(0xFF7CFFB2)
+                                    tint =
+                                        if (isDarkMode) {
+                                            Color(0xFF7CFFB2)
+                                        } else {
+                                            Color(0xFF078B59)
+                                        }
                                 )
                             }
                         }
@@ -283,37 +358,57 @@ fun PaymentScreen(
                         ) {
                             Text(
                                 text = secureText,
-                                color = Color.White,
-                                fontWeight = FontWeight.SemiBold,
-                                fontSize = 16.sp
+                                color = primaryTextColor,
+                                style =
+                                    KmiTypography.cardTitle.copy(
+                                        fontWeight = FontWeight.SemiBold
+                                    ),
+                                maxLines = 2
                             )
+
                             Text(
                                 text = amountTitle,
-                                color = Color.White.copy(alpha = 0.70f),
-                                fontSize = 12.sp
+                                color = secondaryTextColor,
+                                style = KmiTypography.caption,
+                                maxLines = 2
                             )
                         }
 
                         Text(
                             text = amountToPay,
-                            color = Color(0xFFFFD66B),
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 22.sp
+                            color =
+                                if (isDarkMode) {
+                                    Color(0xFFFFD66B)
+                                } else {
+                                    Color(0xFF8A5A00)
+                                },
+                            style =
+                                KmiTypography.metric.copy(
+                                    fontWeight = FontWeight.Bold
+                                ),
+                            maxLines = 1
                         )
                     }
 
                     Spacer(modifier = Modifier.height(8.dp))
-                    HorizontalDivider(color = Color.White.copy(alpha = 0.10f))
+                    HorizontalDivider(color = dividerColor)
                     Spacer(modifier = Modifier.height(8.dp))
 
                     Text(
                         text = paymentMethodTitle,
-                        color = Color.White,
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 15.sp,
-                        lineHeight = 18.sp,
+                        color = primaryTextColor,
+                        style =
+                            KmiTypography.cardTitle.copy(
+                                fontWeight = FontWeight.Bold
+                            ),
                         modifier = Modifier.fillMaxWidth(),
-                        textAlign = if (isEnglish) TextAlign.Left else TextAlign.Right
+                        textAlign =
+                            if (isEnglish) {
+                                TextAlign.Left
+                            } else {
+                                TextAlign.Right
+                            },
+                        maxLines = 2
                     )
 
                     Spacer(modifier = Modifier.height(6.dp))
@@ -439,68 +534,32 @@ fun PaymentScreen(
 
                         Spacer(modifier = Modifier.height(8.dp))
 
-                        ExposedDropdownMenuBox(
-                            expanded = installmentsExpanded,
-                            onExpandedChange = { installmentsExpanded = !installmentsExpanded }
-                        ) {
-                            CompositionLocalProvider(
-                                LocalLayoutDirection provides if (isEnglish) {
-                                    LayoutDirection.Ltr
+                        KmiPremiumDropdown(
+                            title = fieldInstallments,
+                            options =
+                                installmentOptions.map { option ->
+                                    option.toString()
+                                },
+                            selectedValue = installments.toString(),
+                            isEnglish = isEnglish,
+                            placeholder =
+                                if (isEnglish) {
+                                    "Choose installments"
                                 } else {
-                                    LayoutDirection.Rtl
-                                }
-                            ) {
-                                OutlinedTextField(
-                                    value = installments.toString(),
-                                    onValueChange = {},
-                                    readOnly = true,
-                                    singleLine = true,
-                                    label = {
-                                        Text(
-                                            text = fieldInstallments,
-                                            fontSize = 10.sp,
-                                            lineHeight = 12.sp,
-                                            maxLines = 1,
-                                            overflow = TextOverflow.Ellipsis,
-                                            textAlign = if (isEnglish) TextAlign.Start else TextAlign.End,
-                                            modifier = Modifier.fillMaxWidth()
-                                        )
-                                    },
-                                    trailingIcon = {
-                                        ExposedDropdownMenuDefaults.TrailingIcon(
-                                            expanded = installmentsExpanded
-                                        )
-                                    },
-                                    colors = premiumFieldColors(),
-                                    shape = RoundedCornerShape(16.dp),
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .height(60.dp)
-                                        .menuAnchor(MenuAnchorType.PrimaryNotEditable, true),
-                                    textStyle = MaterialTheme.typography.bodyMedium.copy(
-                                        color = Color.White,
-                                        fontSize = 12.sp,
-                                        lineHeight = 15.sp,
-                                        textAlign = if (isEnglish) TextAlign.Start else TextAlign.End
-                                    )
-                                )
+                                    "בחר מספר תשלומים"
+                                },
+                            enabled = installmentOptions.isNotEmpty(),
+                            onSelected = { selectedInstallments ->
+                                selectedInstallments
+                                    .toIntOrNull()
+                                    ?.takeIf { selectedValue ->
+                                        selectedValue in installmentOptions
+                                    }
+                                    ?.let { selectedValue ->
+                                        installments = selectedValue
+                                    }
                             }
-
-                            ExposedDropdownMenu(
-                                expanded = installmentsExpanded,
-                                onDismissRequest = { installmentsExpanded = false }
-                            ) {
-                                installmentOptions.forEach { option ->
-                                    DropdownMenuItem(
-                                        text = { Text(option.toString()) },
-                                        onClick = {
-                                            installments = option
-                                            installmentsExpanded = false
-                                        }
-                                    )
-                                }
-                            }
-                        }
+                        )
 
                         Spacer(modifier = Modifier.height(8.dp))
                     }
@@ -509,20 +568,20 @@ fun PaymentScreen(
                         onClick = {
                             if (isBitSelected) {
                                 onBitPayClicked(
-                                    cardHolderName,
-                                    idNumber,
-                                    phone,
-                                    email
+                                    cleanCardHolderName,
+                                    cleanIdNumber,
+                                    cleanPhone,
+                                    cleanEmail
                                 )
                             } else {
                                 onPayClicked(
-                                    cardHolderName,
-                                    idNumber,
-                                    phone,
-                                    email,
-                                    cardNumber,
-                                    expiry,
-                                    cvv,
+                                    cleanCardHolderName,
+                                    cleanIdNumber,
+                                    cleanPhone,
+                                    cleanEmail,
+                                    cardNumber.trim(),
+                                    expiry.trim(),
+                                    cvv.trim(),
                                     installments
                                 )
                             }
@@ -535,29 +594,40 @@ fun PaymentScreen(
                         ),
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(56.dp)
+                            .heightIn(min = 52.dp)
                     ) {
                         Text(
-                            text = if (isBitSelected) {
-                                if (isEnglish) "Continue to bit" else "המשך לתשלום בביט"
-                            } else {
-                                payNowText
-                            },
+                            text =
+                                if (isBitSelected) {
+                                    if (isEnglish) {
+                                        "Continue to bit"
+                                    } else {
+                                        "המשך לתשלום בביט"
+                                    }
+                                } else {
+                                    payNowText
+                                },
                             color = Color(0xFF06251A),
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 17.sp
+                            style =
+                                KmiTypography.action.copy(
+                                    fontWeight = FontWeight.Bold
+                                ),
+                            maxLines = 2,
+                            textAlign = TextAlign.Center
                         )
                     }
 
                     Spacer(modifier = Modifier.height(10.dp))
 
                     Text(
-                        text = if (isEnglish)
-                            "Your details are transmitted securely."
-                        else
-                            "הפרטים שלך מועברים בצורה מאובטחת.",
-                        color = Color.White.copy(alpha = 0.62f),
-                        fontSize = 12.sp,
+                        text =
+                            if (isEnglish) {
+                                "Your details are transmitted securely."
+                            } else {
+                                "הפרטים שלך מועברים בצורה מאובטחת."
+                            },
+                        color = secondaryTextColor,
+                        style = KmiTypography.caption,
                         modifier = Modifier.fillMaxWidth(),
                         textAlign = TextAlign.Center
                     )
@@ -577,27 +647,48 @@ private fun PaymentMethodChoiceCard(
     selected: Boolean,
     onClick: () -> Unit
 ) {
+    val colorScheme = MaterialTheme.colorScheme
+    val isDarkMode = colorScheme.background.luminance() < 0.5f
+
+    val containerColor =
+        if (selected) {
+            Color(0xFF19C37D).copy(
+                alpha = if (isDarkMode) 0.22f else 0.16f
+            )
+        } else if (isDarkMode) {
+            Color.White.copy(alpha = 0.07f)
+        } else {
+            colorScheme.surfaceVariant.copy(alpha = 0.72f)
+        }
+
+    val borderColor =
+        if (selected) {
+            if (isDarkMode) {
+                Color(0xFF7CFFB2).copy(alpha = 0.75f)
+            } else {
+                Color(0xFF078B59).copy(alpha = 0.72f)
+            }
+        } else if (isDarkMode) {
+            Color.White.copy(alpha = 0.14f)
+        } else {
+            colorScheme.outlineVariant
+        }
+
     Surface(
         onClick = onClick,
-        modifier = modifier.height(84.dp),
+        modifier = modifier.heightIn(min = 72.dp),
         shape = RoundedCornerShape(18.dp),
-        color = if (selected) {
-            Color(0xFF19C37D).copy(alpha = 0.22f)
-        } else {
-            Color.White.copy(alpha = 0.07f)
-        },
-        tonalElevation = if (selected) 6.dp else 0.dp
+        color = containerColor,
+        contentColor = colorScheme.onSurface,
+        tonalElevation = 0.dp,
+        shadowElevation = 0.dp
     ) {
         Column(
             modifier = Modifier
-                .fillMaxSize()
+                .fillMaxWidth()
                 .border(
                     width = 1.dp,
-                    color = if (selected) {
-                        Color(0xFF7CFFB2).copy(alpha = 0.75f)
-                    } else {
-                        Color.White.copy(alpha = 0.14f)
-                    },
+                    color = borderColor,
                     shape = RoundedCornerShape(18.dp)
                 )
                 .padding(horizontal = 8.dp, vertical = 10.dp),
@@ -615,10 +706,11 @@ private fun PaymentMethodChoiceCard(
 
             Text(
                 text = title,
-                color = Color.White,
-                fontWeight = FontWeight.Bold,
-                fontSize = 11.sp,
-                lineHeight = 13.sp,
+                color = colorScheme.onSurface,
+                style =
+                    KmiTypography.caption.copy(
+                        fontWeight = FontWeight.Bold
+                    ),
                 textAlign = TextAlign.Center,
                 maxLines = 2
             )
@@ -651,8 +743,7 @@ private fun PremiumTextField(
             label = {
                 Text(
                     text = label,
-                    fontSize = 10.sp,
-                    lineHeight = 12.sp,
+                    style = KmiTypography.caption,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                     textAlign = fieldTextAlign,
@@ -667,44 +758,55 @@ private fun PremiumTextField(
             colors = premiumFieldColors(),
             modifier = Modifier
                 .fillMaxWidth()
-                .height(60.dp),
-            textStyle = MaterialTheme.typography.bodyMedium.copy(
-                color = Color.White,
-                fontSize = 12.sp,
-                lineHeight = 15.sp,
-                textAlign = fieldTextAlign
-            )
+                .heightIn(min = 56.dp),
+            textStyle =
+                KmiTypography.body.copy(
+                    color = MaterialTheme.colorScheme.onSurface,
+                    textAlign = fieldTextAlign
+                )
         )
     }
 }
 
 @Composable
-private fun premiumFieldColors() = OutlinedTextFieldDefaults.colors(
-    focusedTextColor = Color.White,
-    unfocusedTextColor = Color.White,
+private fun premiumFieldColors() =
+    OutlinedTextFieldDefaults.colors(
+        focusedTextColor = MaterialTheme.colorScheme.onSurface,
+        unfocusedTextColor = MaterialTheme.colorScheme.onSurface,
+        disabledTextColor =
+            MaterialTheme.colorScheme.onSurface.copy(alpha = 0.45f),
 
-    focusedContainerColor = Color(0xFF24365E),
-    unfocusedContainerColor = Color(0xFF24365E),
-    disabledContainerColor = Color(0xFF1E2E4F),
+        focusedContainerColor =
+            MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.82f),
+        unfocusedContainerColor =
+            MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.68f),
+        disabledContainerColor =
+            MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.42f),
 
-    focusedBorderColor = Color(0xFF7CFFB2),
-    unfocusedBorderColor = Color(0xFF5B6F95),
-    disabledBorderColor = Color(0xFF3A4A68),
+        focusedBorderColor = Color(0xFF19C37D),
+        unfocusedBorderColor = MaterialTheme.colorScheme.outline,
+        disabledBorderColor =
+            MaterialTheme.colorScheme.outline.copy(alpha = 0.38f),
 
-    focusedLabelColor = Color(0xFFB9FFD7),
-    unfocusedLabelColor = Color.White.copy(alpha = 0.82f),
-    disabledLabelColor = Color.White.copy(alpha = 0.45f),
+        focusedLabelColor = Color(0xFF078B59),
+        unfocusedLabelColor = MaterialTheme.colorScheme.onSurfaceVariant,
+        disabledLabelColor =
+            MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.45f),
 
-    cursorColor = Color(0xFF7CFFB2),
+        cursorColor = Color(0xFF19C37D),
 
-    focusedLeadingIconColor = Color(0xFFB9FFD7),
-    unfocusedLeadingIconColor = Color.White.copy(alpha = 0.82f),
-    disabledLeadingIconColor = Color.White.copy(alpha = 0.45f),
+        focusedLeadingIconColor = Color(0xFF078B59),
+        unfocusedLeadingIconColor =
+            MaterialTheme.colorScheme.onSurfaceVariant,
+        disabledLeadingIconColor =
+            MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.45f),
 
-    focusedTrailingIconColor = Color(0xFFB9FFD7),
-    unfocusedTrailingIconColor = Color.White.copy(alpha = 0.82f),
-    disabledTrailingIconColor = Color.White.copy(alpha = 0.45f)
-)
+        focusedTrailingIconColor = Color(0xFF078B59),
+        unfocusedTrailingIconColor =
+            MaterialTheme.colorScheme.onSurfaceVariant,
+        disabledTrailingIconColor =
+            MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.45f)
+    )
 
 private fun formatCardNumber(input: String): String {
     val digits = input.filter { it.isDigit() }.take(16)

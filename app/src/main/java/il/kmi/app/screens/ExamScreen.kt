@@ -1,33 +1,38 @@
 package il.kmi.app.screens
 
 import android.content.SharedPreferences
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.VolumeOff
-import androidx.compose.material.icons.filled.VolumeUp
+import androidx.compose.material.icons.automirrored.filled.VolumeOff
+import androidx.compose.material.icons.automirrored.filled.VolumeUp
 import androidx.compose.material3.*
-import androidx.compose.material3.LocalTextStyle
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
+import androidx.core.content.edit
 import il.kmi.shared.domain.Belt
 import il.kmi.app.favorites.FavoritesStore
 import il.kmi.app.ui.KmiTtsManager
 import il.kmi.app.ui.dialogs.ExerciseExplanationDialog
 import il.kmi.app.ui.dialogs.ExerciseNoteEditorDialog
 import il.kmi.app.domain.ExerciseExplanationResolver
+import il.kmi.app.ui.KmiTypography
 import il.kmi.app.ui.ext.color
 import il.kmi.app.ui.ext.lightColor
 import kotlinx.coroutines.delay
+import java.util.Locale
+import kotlin.time.Duration.Companion.milliseconds
+import kotlin.time.Duration.Companion.seconds
 
 // ✅ קבוע אחד למבחן (לא דיאלוג, לא שינוי, לא כפילויות)
 private const val EXAM_SECONDS_PER_EXERCISE = 20
@@ -68,7 +73,7 @@ private fun saveExerciseNote(
 ) {
     val clean = text.trim()
 
-    prefs.edit().apply {
+    prefs.edit {
         val keys = buildList {
             add(primaryKey)
             addAll(legacyKeys)
@@ -81,7 +86,7 @@ private fun saveExerciseNote(
                 putString(key, clean)
             }
         }
-    }.apply()
+    }
 }
 
 private fun findExplanationForExam(
@@ -167,6 +172,7 @@ fun ExamScreen(
     onBack: () -> Unit,
     excludedItems: Set<String> = emptySet(),
     onHome: () -> Unit = {},
+    @Suppress("UNUSED_PARAMETER")
     onSearch: () -> Unit = {}
 ) {
     val context = LocalContext.current
@@ -186,15 +192,26 @@ fun ExamScreen(
     val baseItems: List<String> = remember(belt) {
         il.kmi.shared.exam.ExamFacade.buildExamItems(
             beltId = belt.id,
-            topicTitlesProvider = il.kmi.shared.exam.ExamFacade.TopicTitlesProvider { beltId ->
-                val appBelt = Belt.fromId(beltId) ?: belt
-                runCatching { il.kmi.app.search.KmiSearchBridge.topicTitlesFor(appBelt) }
-                    .getOrDefault(emptyList())
+            topicTitlesProvider = { beltId ->
+                val appBelt =
+                    Belt.fromId(beltId) ?: belt
+
+                runCatching {
+                    il.kmi.app.search.KmiSearchBridge
+                        .topicTitlesFor(appBelt)
+                }.getOrDefault(emptyList())
             },
-            itemsProvider = il.kmi.shared.exam.ExamFacade.ItemsProvider { beltId, topicTitle ->
-                val appBelt = Belt.fromId(beltId) ?: belt
-                runCatching { il.kmi.app.search.KmiSearchBridge.itemsFor(appBelt, topicTitle) }
-                    .getOrDefault(emptyList())
+            itemsProvider = { beltId, topicTitle ->
+                val appBelt =
+                    Belt.fromId(beltId) ?: belt
+
+                runCatching {
+                    il.kmi.app.search.KmiSearchBridge
+                        .itemsFor(
+                            appBelt,
+                            topicTitle
+                        )
+                }.getOrDefault(emptyList())
             }
         )
     }
@@ -209,9 +226,19 @@ fun ExamScreen(
         items.map(::toDisplayItem)
     }
 
-    var currentIndex by remember { mutableStateOf(0) }
-    var timeLeft by remember { mutableStateOf(EXAM_SECONDS_PER_EXERCISE) }
-    var isRunning by remember { mutableStateOf(false) } // מתחיל false, נדליק אחרי "letsgo"
+    var currentIndex by remember {
+        mutableIntStateOf(0)
+    }
+
+    var timeLeft by remember {
+        mutableIntStateOf(
+            EXAM_SECONDS_PER_EXERCISE
+        )
+    }
+
+    var isRunning by remember {
+        mutableStateOf(false)
+    }
     var isMuted by rememberSaveable { mutableStateOf(false) }
 
     // ✅ Guard: אם items השתנתה והאינדקס יצא מהטווח – מתקנים
@@ -239,7 +266,7 @@ fun ExamScreen(
     // מקריא אחרי תחילת המבחן ובכל מעבר לתרגיל חדש
     LaunchedEffect(currentIndex, items, isMuted, examStarted) {
         if (examStarted && !isMuted && items.isNotEmpty() && currentIndex in items.indices) {
-            delay(300)
+            delay(300.milliseconds)
             KmiTtsManager.speak(displayItems[currentIndex])
         }
     }
@@ -250,7 +277,7 @@ fun ExamScreen(
             timeLeft = EXAM_SECONDS_PER_EXERCISE
 
             while (timeLeft > 0 && isRunning) {
-                delay(1000)
+                delay(1.seconds)
                 timeLeft--
             }
 
@@ -275,7 +302,49 @@ fun ExamScreen(
     }
 
     val total = items.size.coerceAtLeast(1)
-    val progress = (currentIndex + 1).toFloat() / total.toFloat()
+    val progress =
+        (currentIndex + 1).toFloat() /
+                total.toFloat()
+
+    val colorScheme = MaterialTheme.colorScheme
+    val isDarkMode =
+        colorScheme.background.luminance() < 0.5f
+
+    val backgroundBrush =
+        Brush.verticalGradient(
+            colors =
+                if (isDarkMode) {
+                    listOf(
+                        colorScheme.background,
+                        colorScheme.surface,
+                        colorScheme.primaryContainer.copy(
+                            alpha = 0.30f
+                        )
+                    )
+                } else {
+                    listOf(
+                        Color(0xFFF7F2FF),
+                        Color(0xFFECE4FF),
+                        Color(0xFFE3F2FF)
+                    )
+                }
+        )
+
+    val headerCardColor =
+        if (isDarkMode) {
+            colorScheme.surfaceVariant.copy(
+                alpha = 0.92f
+            )
+        } else {
+            belt.lightColor.copy(alpha = 0.20f)
+        }
+
+    val exerciseCardColor =
+        if (isDarkMode) {
+            colorScheme.surface
+        } else {
+            colorScheme.surface.copy(alpha = 0.96f)
+        }
 
     Scaffold(
         topBar = {
@@ -292,14 +361,6 @@ fun ExamScreen(
             )
         }
     ) { padding ->
-
-        val backgroundBrush = Brush.verticalGradient(
-            colors = listOf(
-                Color(0xFFF7F2FF),
-                Color(0xFFECE4FF),
-                Color(0xFFE3F2FF)
-            )
-        )
 
         if (items.isEmpty()) {
             Box(
@@ -325,8 +386,17 @@ fun ExamScreen(
 
             Surface(
                 shape = MaterialTheme.shapes.large,
-                color = belt.lightColor.copy(alpha = 0.20f),
+                color = headerCardColor,
                 tonalElevation = 0.dp,
+                shadowElevation = 0.dp,
+                border =
+                    BorderStroke(
+                        width = 0.75.dp,
+                        color =
+                            belt.color.copy(
+                                alpha = 0.24f
+                            )
+                    ),
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Column(
@@ -343,13 +413,21 @@ fun ExamScreen(
                         Column {
                             Text(
                                 text = belt.heb,
-                                style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.SemiBold
+                                style =
+                                    KmiTypography.cardTitle.copy(
+                                        fontWeight =
+                                            FontWeight.SemiBold
+                                    ),
+                                color =
+                                    MaterialTheme.colorScheme.onSurface
                             )
+
                             Text(
-                                text = "תרגיל ${currentIndex + 1} מתוך $total",
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = Color.Gray
+                                text =
+                                    "תרגיל ${currentIndex + 1} מתוך $total",
+                                style = KmiTypography.secondary,
+                                color =
+                                    MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
 
@@ -358,11 +436,23 @@ fun ExamScreen(
                             color = belt.color.copy(alpha = 0.12f)
                         ) {
                             Text(
-                                text = String.format("%02d", timeLeft),
-                                modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp),
+                                text =
+                                    String.format(
+                                        Locale.getDefault(),
+                                        "%02d",
+                                        timeLeft
+                                    ),
+                                modifier =
+                                    Modifier.padding(
+                                        horizontal = 14.dp,
+                                        vertical = 6.dp
+                                    ),
                                 color = belt.color,
-                                style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.Bold
+                                style =
+                                    KmiTypography.cardTitle.copy(
+                                        fontWeight =
+                                            FontWeight.Bold
+                                    )
                             )
                         }
                     }
@@ -400,13 +490,23 @@ fun ExamScreen(
 
             Surface(
                 shape = MaterialTheme.shapes.extraLarge,
-                color = Color.White,
-                tonalElevation = 3.dp,
-                shadowElevation = 3.dp,
+                color = exerciseCardColor,
+                tonalElevation = 0.dp,
+                shadowElevation = 0.dp,
+                border =
+                    BorderStroke(
+                        width = 0.75.dp,
+                        color =
+                            belt.color.copy(
+                                alpha = 0.22f
+                            )
+                    ),
                 modifier = Modifier
                     .fillMaxWidth()
                     .weight(1f),
-                onClick = { showHelp = true }
+                onClick = {
+                    showHelp = true
+                }
             ) {
                 Column(
                     modifier = Modifier
@@ -419,12 +519,16 @@ fun ExamScreen(
 
                     Text(
                         text = displayItems[currentIndex],
-                        style = MaterialTheme.typography.titleLarge.copy(
-                            fontSize = 22.sp,
-                            fontWeight = FontWeight.Bold
-                        ),
+                        style =
+                            KmiTypography.sectionTitle.copy(
+                                fontWeight =
+                                    FontWeight.Bold
+                            ),
+                        color =
+                            MaterialTheme.colorScheme.onSurface,
                         textAlign = TextAlign.Center,
-                        modifier = Modifier.fillMaxWidth()
+                        modifier = Modifier.fillMaxWidth(),
+                        maxLines = 3
                     )
 
                     Spacer(Modifier.height(8.dp))
@@ -446,7 +550,12 @@ fun ExamScreen(
                             modifier = Modifier.size(50.dp)
                         ) {
                             Icon(
-                                imageVector = if (isMuted) Icons.Filled.VolumeOff else Icons.Filled.VolumeUp,
+                                imageVector =
+                                    if (isMuted) {
+                                        Icons.AutoMirrored.Filled.VolumeOff
+                                    } else {
+                                        Icons.AutoMirrored.Filled.VolumeUp
+                                    },
                                 contentDescription = if (isMuted) "בטל השתק" else "השתק",
                                 tint = belt.color
                             )
@@ -498,22 +607,34 @@ fun ExamScreen(
                     KmiTtsManager.stop()
                     onBack()
                 },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(54.dp),
+                modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .heightIn(min = 52.dp),
                 shape = MaterialTheme.shapes.large,
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = Color(0xFFEEEEEE),
-                    contentColor = Color.Black
-                )
+                colors =
+                    ButtonDefaults.buttonColors(
+                        containerColor =
+                            colorScheme.primaryContainer,
+                        contentColor =
+                            colorScheme.onPrimaryContainer
+                    )
             ) {
-                Text("סיום מבחן", fontWeight = FontWeight.Bold)
+                Text(
+                    text = "סיום מבחן",
+                    style =
+                        KmiTypography.action.copy(
+                            fontWeight =
+                                FontWeight.Bold
+                        )
+                )
             }
         }
 
         pickedSearchKey?.let { key ->
 
-            val (b, topic, item) = il.kmi.app.screens.parseSearchKey(key)
+            val (b, topic, item) =
+                parseSearchKey(key)
 
             val explanation = remember(b, item, topic) {
                 findExplanationForExam(

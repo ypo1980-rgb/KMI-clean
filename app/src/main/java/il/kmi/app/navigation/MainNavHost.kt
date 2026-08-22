@@ -57,7 +57,7 @@ import il.kmi.app.screens.BeltQuestions.ByTopic.subTopicsByTopicNavGraph
 import il.kmi.app.screens.admin.PaymentsReportScreen
 import il.kmi.app.screens.admin.AdminDiagnosticsScreen
 import il.kmi.app.screens.admin.AdminAccess
-import il.kmi.app.screens.payments.PaymentScreen
+import il.kmi.app.screens.forms.payment.PaymentScreen
 import il.kmi.app.ui.loading.KmiStartupLoadingScreen
 import il.kmi.app.screens.InitialLanguageScreen
 import il.kmi.app.screens.drawer.DrawerVoiceActionsBridge
