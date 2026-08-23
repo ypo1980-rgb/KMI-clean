@@ -4,6 +4,8 @@ import android.content.SharedPreferences
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.VolumeOff
 import androidx.compose.material.icons.automirrored.filled.VolumeUp
@@ -29,6 +31,8 @@ import il.kmi.app.domain.ExerciseExplanationResolver
 import il.kmi.app.ui.KmiTypography
 import il.kmi.app.ui.ext.color
 import il.kmi.app.ui.ext.lightColor
+import il.kmi.shared.localization.AppLanguage
+import il.kmi.shared.localization.AppLanguageManager
 import kotlinx.coroutines.delay
 import java.util.Locale
 import kotlin.time.Duration.Companion.milliseconds
@@ -92,6 +96,7 @@ private fun saveExerciseNote(
 private fun findExplanationForExam(
     belt: Belt,
     rawItem: String,
+    isEnglish: Boolean,
     topic: String = ""
 ): String {
     val display = il.kmi.shared.questions.model.util.ExerciseTitleFormatter
@@ -99,12 +104,13 @@ private fun findExplanationForExam(
         .ifBlank { rawItem }
         .trim()
 
-    val resolved = ExerciseExplanationResolver.get(
-        belt = belt,
-        topic = topic,
-        item = display,
-        isEnglish = false
-    ).trim()
+    val resolved =
+        ExerciseExplanationResolver.get(
+            belt = belt,
+            topic = topic,
+            item = display,
+            isEnglish = isEnglish
+        ).trim()
 
     val cleaned = if ("::" in resolved) {
         resolved
@@ -127,7 +133,11 @@ private fun findExplanationForExam(
         return cleaned
     }
 
-    return "אין כרגע הסבר לתרגיל הזה."
+    return if (isEnglish) {
+        "There is currently no explanation for this exercise."
+    } else {
+        "אין כרגע הסבר לתרגיל הזה."
+    }
 }
 
 /** מזהה אם טקסט נראה כמו tag (לטיני/מספרים/_,:) ולא כמו עברית */
@@ -176,6 +186,23 @@ fun ExamScreen(
     onSearch: () -> Unit = {}
 ) {
     val context = LocalContext.current
+
+    val languageManager =
+        remember(context) {
+            AppLanguageManager(context)
+        }
+
+    val isEnglish =
+        languageManager.getCurrentLanguage() ==
+                AppLanguage.ENGLISH
+
+    fun tr(
+        he: String,
+        en: String
+    ): String {
+        return if (isEnglish) en else he
+    }
+
     val notePrefs = remember(context) {
         context.getSharedPreferences("kmi_exercise_notes", android.content.Context.MODE_PRIVATE)
     }
@@ -349,7 +376,11 @@ fun ExamScreen(
     Scaffold(
         topBar = {
             il.kmi.app.ui.KmiTopBar(
-                title = "מבחן מסכם – ${belt.heb}",
+                title =
+                    tr(
+                        "מבחן מסכם – ${belt.heb}",
+                        "Final Exam – ${belt.en}"
+                    ),
                 showTopHome = false,
                 showTopSearch = false,
                 showBottomActions = true,
@@ -370,18 +401,37 @@ fun ExamScreen(
                     .padding(padding),
                 contentAlignment = Alignment.Center
             ) {
-                Text("אין תרגילים זמינים")
+                Text(
+                    text =
+                        tr(
+                            "אין תרגילים זמינים",
+                            "No exercises available"
+                        ),
+                    style = KmiTypography.body,
+                    color =
+                        colorScheme.onBackground,
+                    textAlign = TextAlign.Center
+                )
             }
             return@Scaffold
         }
 
         Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(backgroundBrush)
-                .padding(padding)
-                .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
+            modifier =
+                Modifier
+                    .fillMaxSize()
+                    .background(backgroundBrush)
+                    .padding(padding)
+                    .verticalScroll(
+                        rememberScrollState()
+                    )
+                    .navigationBarsPadding()
+                    .padding(
+                        horizontal = 16.dp,
+                        vertical = 12.dp
+                    ),
+            verticalArrangement =
+                Arrangement.spacedBy(12.dp)
         ) {
 
             Surface(
@@ -412,7 +462,12 @@ fun ExamScreen(
                     ) {
                         Column {
                             Text(
-                                text = belt.heb,
+                                text =
+                                    if (isEnglish) {
+                                        belt.en
+                                    } else {
+                                        belt.heb
+                                    },
                                 style =
                                     KmiTypography.cardTitle.copy(
                                         fontWeight =
@@ -424,7 +479,10 @@ fun ExamScreen(
 
                             Text(
                                 text =
-                                    "תרגיל ${currentIndex + 1} מתוך $total",
+                                    tr(
+                                        "תרגיל ${currentIndex + 1} מתוך $total",
+                                        "Exercise ${currentIndex + 1} of $total"
+                                    ),
                                 style = KmiTypography.secondary,
                                 color =
                                     MaterialTheme.colorScheme.onSurfaceVariant
@@ -462,7 +520,10 @@ fun ExamScreen(
                         modifier = Modifier
                             .fillMaxWidth()
                             .height(10.dp),
-                        trackColor = Color.White.copy(alpha = 0.4f),
+                        trackColor =
+                            colorScheme.onSurface.copy(
+                                alpha = 0.12f
+                            ),
                         color = belt.color
                     )
 
@@ -501,21 +562,27 @@ fun ExamScreen(
                                 alpha = 0.22f
                             )
                     ),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .weight(1f),
+                modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .heightIn(min = 180.dp),
                 onClick = {
                     showHelp = true
                 }
             ) {
                 Column(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(20.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.SpaceBetween
+                    modifier =
+                        Modifier
+                            .fillMaxWidth()
+                            .padding(
+                                horizontal = 16.dp,
+                                vertical = 14.dp
+                            ),
+                    horizontalAlignment =
+                        Alignment.CenterHorizontally,
+                    verticalArrangement =
+                        Arrangement.spacedBy(18.dp)
                 ) {
-                    Spacer(Modifier.height(6.dp))
 
                     Text(
                         text = displayItems[currentIndex],
@@ -530,8 +597,6 @@ fun ExamScreen(
                         modifier = Modifier.fillMaxWidth(),
                         maxLines = 3
                     )
-
-                    Spacer(Modifier.height(8.dp))
 
                     Row(
                         modifier = Modifier.fillMaxWidth(),
@@ -556,7 +621,18 @@ fun ExamScreen(
                                     } else {
                                         Icons.AutoMirrored.Filled.VolumeUp
                                     },
-                                contentDescription = if (isMuted) "בטל השתק" else "השתק",
+                                contentDescription =
+                                    if (isMuted) {
+                                        tr(
+                                            "בטל השתק",
+                                            "Unmute"
+                                        )
+                                    } else {
+                                        tr(
+                                            "השתק",
+                                            "Mute"
+                                        )
+                                    },
                                 tint = belt.color
                             )
                         }
@@ -568,7 +644,14 @@ fun ExamScreen(
                             modifier = Modifier.weight(1f),
                             shape = MaterialTheme.shapes.large
                         ) {
-                            Text("עזרה")
+                            Text(
+                                text =
+                                    tr(
+                                        "עזרה",
+                                        "Help"
+                                    ),
+                                style = KmiTypography.action
+                            )
                         }
 
                         /*
@@ -595,7 +678,15 @@ fun ExamScreen(
                                 shape =
                                     MaterialTheme.shapes.large
                             ) {
-                                Text("דלג")
+                                Text(
+                                    text =
+                                        tr(
+                                            "דלג",
+                                            "Skip"
+                                        ),
+                                    style =
+                                        KmiTypography.action
+                                )
                             }
                         }
                     }
@@ -621,7 +712,11 @@ fun ExamScreen(
                     )
             ) {
                 Text(
-                    text = "סיום מבחן",
+                    text =
+                        tr(
+                            "סיום מבחן",
+                            "End Exam"
+                        ),
                     style =
                         KmiTypography.action.copy(
                             fontWeight =
@@ -636,13 +731,20 @@ fun ExamScreen(
             val (b, topic, item) =
                 parseSearchKey(key)
 
-            val explanation = remember(b, item, topic) {
-                findExplanationForExam(
-                    belt = b,
-                    rawItem = item,
-                    topic = topic
-                )
-            }
+            val explanation =
+                remember(
+                    b,
+                    item,
+                    topic,
+                    isEnglish
+                ) {
+                    findExplanationForExam(
+                        belt = b,
+                        rawItem = item,
+                        isEnglish = isEnglish,
+                        topic = topic
+                    )
+                }
 
             val favId = remember(item) { normalizeFavoriteId(item) }
             val isFav = favorites.contains(favId)
@@ -676,12 +778,17 @@ fun ExamScreen(
 
             ExerciseExplanationDialog(
                 title = toDisplayItem(item),
-                beltLabel = "$topic • ${b.heb}",
+                beltLabel =
+                    if (isEnglish) {
+                        "$topic • ${b.en}"
+                    } else {
+                        "$topic • ${b.heb}"
+                    },
                 explanation = explanation,
                 noteText = noteText,
                 isFavorite = isFav,
                 accentColor = b.color,
-                isEnglish = false,
+                isEnglish = isEnglish,
                 onDismiss = { pickedSearchKey = null },
                 onEditNote = { showNoteEditor = true },
                 onDeleteNote = {
@@ -701,7 +808,7 @@ fun ExamScreen(
                 ExerciseNoteEditorDialog(
                     exerciseTitle = toDisplayItem(item),
                     noteText = noteText,
-                    isEnglish = false,
+                    isEnglish = isEnglish,
                     accentColor = b.color,
                     onNoteChange = { noteText = it },
                     onDismiss = { showNoteEditor = false },
@@ -726,13 +833,19 @@ fun ExamScreen(
             val rawItem = items[currentIndex]
             val displayItem = displayItems[currentIndex]
 
-            val explanation = remember(belt, rawItem) {
-                findExplanationForExam(
-                    belt = belt,
-                    rawItem = rawItem,
-                    topic = ""
-                )
-            }
+            val explanation =
+                remember(
+                    belt,
+                    rawItem,
+                    isEnglish
+                ) {
+                    findExplanationForExam(
+                        belt = belt,
+                        rawItem = rawItem,
+                        isEnglish = isEnglish,
+                        topic = ""
+                    )
+                }
 
             val favId = remember(rawItem) { normalizeFavoriteId(rawItem) }
             val isFav = favorites.contains(favId)
@@ -766,12 +879,16 @@ fun ExamScreen(
 
             ExerciseExplanationDialog(
                 title = displayItem,
-                beltLabel = "מבחן מסכם • ${belt.heb}",
+                beltLabel =
+                    tr(
+                        "מבחן מסכם • ${belt.heb}",
+                        "Final Exam • ${belt.en}"
+                    ),
                 explanation = explanation,
                 noteText = noteText,
                 isFavorite = isFav,
                 accentColor = belt.color,
-                isEnglish = false,
+                isEnglish = isEnglish,
                 onDismiss = { showHelp = false },
                 onEditNote = { showNoteEditor = true },
                 onDeleteNote = {
@@ -791,7 +908,7 @@ fun ExamScreen(
                 ExerciseNoteEditorDialog(
                     exerciseTitle = displayItem,
                     noteText = noteText,
-                    isEnglish = false,
+                    isEnglish = isEnglish,
                     accentColor = belt.color,
                     onNoteChange = { noteText = it },
                     onDismiss = { showNoteEditor = false },

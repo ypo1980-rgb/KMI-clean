@@ -18,23 +18,134 @@ enum class Belt(
     BLACK ("black",  "חגורה שחורה", "Black Belt",  0xFF212121, 0xFFBDBDBD);
 
     companion object {
-        val order: List<Belt> = listOf(WHITE, YELLOW, ORANGE, GREEN, BLUE, BROWN, BLACK)
+
+        val order: List<Belt> =
+            listOf(
+                WHITE,
+                YELLOW,
+                ORANGE,
+                GREEN,
+                BLUE,
+                BROWN,
+                BLACK
+            )
 
         fun nextOf(belt: Belt): Belt? =
-            order.getOrNull(order.indexOf(belt) + 1)
+            order.getOrNull(
+                order.indexOf(belt) + 1
+            )
 
-        fun fromId(id: Any?): Belt? =
-            order.firstOrNull { it.id.equals(id?.toString(), ignoreCase = true) }
+        private fun normalize(raw: Any?): String {
+            return raw
+                ?.toString()
+                ?.trim()
+                ?.lowercase()
+                ?.replace('־', '-')
+                ?.replace('–', '-')
+                ?.replace('—', '-')
+                ?.replace('_', ' ')
+                ?.replace('-', ' ')
+                ?.replace(Regex("\\s+"), " ")
+                .orEmpty()
+        }
 
-        fun fromHeb(heb: String?): Belt? =
-            order.firstOrNull { it.heb == heb?.trim() }
+        fun fromId(id: Any?): Belt? {
+            val raw = normalize(id)
 
-        fun fromAny(v: String?): Belt? = fromId(v) ?: fromHeb(v)
+            if (raw.isBlank()) {
+                return null
+            }
 
-        fun nextOfAny(v: String?): Belt? = fromAny(v)?.let { nextOf(it) }
+            // התאמה רגילה לפי ID
+            order.firstOrNull { belt ->
+                normalize(belt.id) == raw
+            }?.let {
+                return it
+            }
 
-        fun isLast(b: Belt): Boolean = order.lastOrNull() == b
+            /*
+             * חגורה שחורה עם דרגת דאן.
+             *
+             * דוגמאות נתמכות:
+             * black dan 1
+             * black_dan_5
+             * black-dan-10
+             * dan 5
+             * dan_5
+             */
+            val isBlackDan =
+                raw.matches(
+                    Regex(
+                        """(?:black\s*)?(?:dan)\s*(10|[1-9])"""
+                    )
+                )
 
-        fun indexOf(b: Belt?): Int = if (b == null) -1 else order.indexOf(b)
+            if (isBlackDan) {
+                return BLACK
+            }
+
+            return null
+        }
+
+        fun fromHeb(heb: String?): Belt? {
+            val raw = normalize(heb)
+
+            if (raw.isBlank()) {
+                return null
+            }
+
+            // התאמה רגילה לשם החגורה בעברית
+            order.firstOrNull { belt ->
+                normalize(belt.heb) == raw
+            }?.let {
+                return it
+            }
+
+            /*
+             * חגורה שחורה דאן 1–10 בעברית.
+             *
+             * דוגמאות:
+             * שחורה דאן 5
+             * חגורה שחורה דאן 5
+             * שחורה דן 5
+             * חגורה שחורה דן 10
+             */
+            val isBlackDan =
+                (
+                        raw.contains("שחור") &&
+                                (
+                                        raw.contains("דאן") ||
+                                                raw.contains("דן")
+                                        )
+                        ) &&
+                        Regex("""(?:^|\s)(10|[1-9])(?:\s|$)""")
+                            .containsMatchIn(raw)
+
+            if (isBlackDan) {
+                return BLACK
+            }
+
+            return null
+        }
+
+        fun fromAny(v: String?): Belt? {
+            return fromId(v)
+                ?: fromHeb(v)
+        }
+
+        fun nextOfAny(v: String?): Belt? =
+            fromAny(v)?.let { belt ->
+                nextOf(belt)
+            }
+
+        fun isLast(b: Belt): Boolean =
+            order.lastOrNull() == b
+
+        fun indexOf(b: Belt?): Int =
+            if (b == null) {
+                -1
+            } else {
+                order.indexOf(b)
+            }
     }
 }

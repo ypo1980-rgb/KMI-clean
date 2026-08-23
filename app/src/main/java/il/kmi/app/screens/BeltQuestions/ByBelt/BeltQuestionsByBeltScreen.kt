@@ -1215,49 +1215,71 @@ internal fun BeltPangoLayout(
 
     val requestedBelt by vm.selectedBelt.collectAsState()
 
+    /*
+     * חגורת הפתיחה של הקרוסלה נקבעת לפי חגורת המשתמש:
+     *
+     * חגורה קיימת -> מציגים במרכז את החגורה הבאה (+1).
+     * ללא חגורה -> מציגים כתומה.
+     *
+     * vm.selectedBelt לא משמש לקביעת נקודת הפתיחה,
+     * כדי שבחירה ישנה או ערך ברירת מחדל ב-ViewModel
+     * לא יחזירו את הקרוסלה בטעות לחגורה כתומה.
+     */
     val initialBelt: Belt = remember(
         belts,
         kmiPrefs,
-        userSp,
-        requestedBelt
+        userSp
     ) {
-        requestedBelt
-            ?.takeIf { it in belts }
-            ?: run {
-                val regId =
-                    kmiPrefs.getStringCompat("current_belt")
-                        ?: kmiPrefs.getStringCompat("belt_current")
-                        ?: userSp.getString("current_belt", null)
-                        ?: userSp.getString("belt_current", null)
-                        ?: userSp.getString("currentBelt", null)
-                        ?: userSp.getString("belt", null)
+        val regId =
+            kmiPrefs.getStringCompat("current_belt")
+                ?: kmiPrefs.getStringCompat("belt_current")
+                ?: userSp.getString("current_belt", null)
+                ?: userSp.getString("belt_current", null)
+                ?: userSp.getString("currentBelt", null)
+                ?: userSp.getString("belt", null)
 
-                val cleanRegId = regId?.trim().orEmpty()
-                val regBelt = cleanRegId
-                    .takeIf { it.isNotBlank() }
-                    ?.let { Belt.fromId(it) }
+        val cleanRegId = regId?.trim().orEmpty()
 
-                val nextBelt = when {
-                    cleanRegId.isBlank() || regBelt == null ->
-                        Belt.ORANGE
+        val registeredBelt =
+            cleanRegId
+                .takeIf { it.isNotBlank() }
+                ?.let { Belt.fromAny(it) }
 
-                    regBelt == Belt.WHITE ->
-                        Belt.YELLOW
+        val nextBelt =
+            when {
+                // אין למשתמש חגורה בכלל -> כתומה
+                registeredBelt == null ->
+                    Belt.ORANGE
 
-                    else -> {
-                        val index = belts.indexOf(regBelt)
+                // חגורה שחורה, כולל דרגות הדאן שממופות לשחורה,
+                // תמיד מתחילה בחגורה שחורה
+                registeredBelt == Belt.BLACK ->
+                    Belt.BLACK
 
-                        if (index >= 0 && index < belts.lastIndex) {
-                            belts[index + 1]
-                        } else {
-                            regBelt
-                        }
+                // לבנה אינה מוצגת בקרוסלה,
+                // ולכן החגורה הבאה שלה היא צהובה
+                registeredBelt == Belt.WHITE ->
+                    Belt.YELLOW
+
+                else -> {
+                    val registeredIndex =
+                        belts.indexOf(registeredBelt)
+
+                    if (
+                        registeredIndex >= 0 &&
+                        registeredIndex < belts.lastIndex
+                    ) {
+                        belts[registeredIndex + 1]
+                    } else {
+                        // המשתמש כבר בחגורה האחרונה
+                        registeredBelt
                     }
                 }
-
-                nextBelt.takeIf { it in belts }
-                    ?: Belt.ORANGE
             }
+
+        nextBelt
+            .takeIf { it in belts }
+            ?: Belt.ORANGE
     }
 
     /*

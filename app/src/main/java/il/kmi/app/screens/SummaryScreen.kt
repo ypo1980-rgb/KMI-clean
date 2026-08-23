@@ -2,6 +2,7 @@ package il.kmi.app.screens
 
 import android.graphics.pdf.PdfDocument
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -503,27 +504,73 @@ fun ProgressMeter(
             ?: total
 
     /*
-     * אחוז ההתקדמות מציין כמה תרגילים סומנו.
+     * במצב מתאמן אין חפיפה בין הקטגוריות.
      *
-     * „יודע חלקית” נחשב מסומן, אך אינו מתווסף
-     * למספר התרגילים שהמשתמש יודע במלואם.
+     * במצב מאמן אותו תרגיל יכול להיות גם „נלמד”
+     * וגם „תורגל”. לכן doneOverride מחזיק את מספר
+     * התרגילים הייחודיים שסומנו, ואינו סכום
+     * של שלוש קטגוריות המאמן.
      */
-    val effectiveCompleted =
+    val categorySelectionsTotal =
         (
                 effectiveKnown +
                         effectivePartiallyKnown +
                         effectiveNotKnown
                 )
-            .coerceAtMost(effectiveTotal)
             .coerceAtLeast(0)
 
-    val pct: Int =
-        if (effectiveTotal == 0) 0
-        else (effectiveCompleted * 100 / effectiveTotal)
+    val effectiveCompleted =
+        (
+                doneOverride
+                    ?: categorySelectionsTotal
+                )
+            .coerceIn(
+                minimumValue = 0,
+                maximumValue = effectiveTotal
+            )
 
-    val animatedKnownSweep by animateFloatAsState(
-        targetValue = if (effectiveTotal == 0) 0f else 360f * (effectiveKnown.toFloat() / effectiveTotal.toFloat()),
-        animationSpec = tween(durationMillis = 950),
+    /*
+     * אם קיימים שני סימוני מאמן לאותו תרגיל,
+     * מקטינים את שלושת המקטעים באותו יחס.
+     *
+     * כך כל הצבעים מוצגים, אבל אורך הקשת הכולל
+     * נשאר שווה למספר התרגילים הייחודיים שסומנו.
+     */
+    val categorySweepScale =
+        if (
+            categorySelectionsTotal >
+            effectiveCompleted &&
+            categorySelectionsTotal > 0
+        ) {
+            effectiveCompleted.toFloat() /
+                    categorySelectionsTotal.toFloat()
+        } else {
+            1f
+        }
+
+    val pct: Int =
+        if (effectiveTotal == 0) {
+            0
+        } else {
+            effectiveCompleted * 100 /
+                    effectiveTotal
+        }
+
+    val animatedKnownSweep by
+    animateFloatAsState(
+        targetValue =
+            if (effectiveTotal == 0) {
+                0f
+            } else {
+                360f *
+                        (
+                                effectiveKnown.toFloat() *
+                                        categorySweepScale /
+                                        effectiveTotal.toFloat()
+                                )
+            },
+        animationSpec =
+            tween(durationMillis = 950),
         label = "premiumKnownSweep"
     )
 
@@ -536,7 +583,8 @@ fun ProgressMeter(
                 360f *
                         (
                                 effectivePartiallyKnown
-                                    .toFloat() /
+                                    .toFloat() *
+                                        categorySweepScale /
                                         effectiveTotal.toFloat()
                                 )
             },
@@ -555,7 +603,8 @@ fun ProgressMeter(
                 360f *
                         (
                                 effectiveNotKnown
-                                    .toFloat() /
+                                    .toFloat() *
+                                        categorySweepScale /
                                         effectiveTotal.toFloat()
                                 )
             },
@@ -569,14 +618,40 @@ fun ProgressMeter(
     val languageManager = remember { AppLanguageManager(context) }
     val isEnglish = languageManager.getCurrentLanguage() == AppLanguage.ENGLISH
 
+    val colorScheme =
+        MaterialTheme.colorScheme
+
     val knownColor = Color(0xFF4CAF50)
     val partiallyKnownColor = Color(0xFFF28C28)
     val notKnownColor = Color(0xFFE53935)
-    val unmarkedColor = Color(0xFFD9D9E3)
 
-    val centerTextColor = Color(0xFF1E293B)
-    val subTextColor = Color(0xFF667085)
-    val remaining = (effectiveTotal - effectiveCompleted).coerceAtLeast(0)
+    val unmarkedColor =
+        colorScheme.outlineVariant.copy(
+            alpha = 0.78f
+        )
+
+    val meterSurfaceColor =
+        colorScheme.surface
+
+    val innerMeterColor =
+        belt.color
+            .copy(alpha = 0.07f)
+            .compositeOver(
+                colorScheme.surfaceVariant
+            )
+
+    val centerTextColor =
+        colorScheme.onSurface
+
+    val subTextColor =
+        colorScheme.onSurfaceVariant
+
+    val remaining =
+        (
+                effectiveTotal -
+                        effectiveCompleted
+                )
+            .coerceAtLeast(0)
 
     Box(
         modifier = modifier.size(meterSize),
@@ -587,7 +662,7 @@ fun ProgressMeter(
             var startAngle = -90f
 
             drawCircle(
-                color = Color.White.copy(alpha = 0.96f)
+                color = meterSurfaceColor
             )
 
             drawArc(
@@ -645,12 +720,12 @@ fun ProgressMeter(
             val innerSoftRadius = size.minDimension * 0.28f
 
             drawCircle(
-                color = Color.White.copy(alpha = 0.98f),
+                color = meterSurfaceColor,
                 radius = innerWhiteRadius
             )
 
             drawCircle(
-                color = belt.color.copy(alpha = 0.07f),
+                color = innerMeterColor,
                 radius = innerSoftRadius
             )
         }
@@ -715,7 +790,8 @@ fun ProgressMeter(
                     style = KmiTypography.secondary.copy(
                         fontWeight = FontWeight.ExtraBold
                     ),
-                    color = Color(0xFF344054),
+                    color =
+                        colorScheme.onSurfaceVariant,
                     textAlign = TextAlign.Center,
                     maxLines = 2,
                     modifier = Modifier.padding(
@@ -778,7 +854,10 @@ private fun UserProgressComparisonCard(
             width = 1.dp,
             color = belt.color.copy(alpha = 0.28f)
         ),
-        elevation = CardDefaults.cardElevation(defaultElevation = 5.dp)
+        elevation =
+            CardDefaults.cardElevation(
+                defaultElevation = 0.dp
+            )
     ) {
         Column(
             modifier = Modifier
@@ -803,7 +882,7 @@ private fun UserProgressComparisonCard(
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(38.dp)
+                    .heightIn(min = 38.dp)
             ) {
                 IconButton(
                     onClick = onClose,
@@ -943,7 +1022,10 @@ private fun SummaryMiniProgressChip(
     modifier: Modifier = Modifier
 ) {
     Surface(
-        modifier = modifier.height(76.dp),
+        modifier =
+            modifier.heightIn(
+                min = 76.dp
+            ),
         shape = RoundedCornerShape(18.dp),
         color = color.copy(alpha = 0.12f),
         border = BorderStroke(
@@ -998,41 +1080,67 @@ private fun SummaryToggleButton(
     val buttonBrush =
         if (selected) {
             Brush.horizontalGradient(
-                colors = listOf(
-                    colorScheme.primary,
-                    colorScheme.secondary
-                )
+                colors =
+                    listOf(
+                        Color(0xFF00B8D9),
+                        Color(0xFF1677FF),
+                        Color(0xFF6D28D9)
+                    )
             )
         } else {
             Brush.horizontalGradient(
-                colors = listOf(
-                    iconColor.copy(alpha = 0.92f),
-                    colorScheme.primary.copy(alpha = 0.88f)
-                )
+                colors =
+                    listOf(
+                        Color(0xFF0E7490),
+                        Color(0xFF2563A8),
+                        Color(0xFF5B4BDB)
+                    )
             )
         }
 
     Surface(
         onClick = onClick,
-        modifier = modifier.height(48.dp),
+        modifier =
+            modifier.heightIn(
+                min = 48.dp
+            ),
         shape = RoundedCornerShape(19.dp),
         color = colorScheme.primary,
         tonalElevation = 0.dp,
-        shadowElevation = if (selected) 7.dp else 3.dp
+        shadowElevation = 0.dp,
+        border =
+            BorderStroke(
+                width = 0.75.dp,
+                color =
+                    Color.White.copy(
+                        alpha =
+                            if (selected) {
+                                0.52f
+                            } else {
+                                0.28f
+                            }
+                    )
+            )
     ) {
         Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(
-                    brush = buttonBrush
-                )
-                .padding(horizontal = 12.dp),
+            modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .background(
+                        brush = buttonBrush
+                    )
+                    .padding(
+                        horizontal = 12.dp,
+                        vertical = 12.dp
+                    ),
             contentAlignment = Alignment.Center
         ) {
             Row(
-                modifier = Modifier.fillMaxSize(),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.Center
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment =
+                    Alignment.CenterVertically,
+                horizontalArrangement =
+                    Arrangement.Center
             ) {
                 Text(
                     text = text,
@@ -1209,7 +1317,7 @@ private fun CoachGroupsProgressCard(
         shape = RoundedCornerShape(24.dp),
         color = surfaceColor,
         shadowElevation = 0.dp,
-        tonalElevation = 1.dp,
+        tonalElevation = 0.dp,
         border = BorderStroke(
             width = 1.dp,
             color = belt.color.copy(alpha = 0.38f)
@@ -1262,8 +1370,11 @@ private fun CoachGroupsProgressCard(
                             "נתוני הקבוצות · ${belt.heb}"
                         },
                     modifier = Modifier.weight(1f),
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Black,
+                    style =
+                        KmiTypography.sectionTitle.copy(
+                            fontWeight =
+                                FontWeight.Black
+                        ),
                     color = primaryTextColor,
                     textAlign =
                         if (isEnglish) {
@@ -1275,15 +1386,32 @@ private fun CoachGroupsProgressCard(
             }
 
             if (!isLoaded) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(150.dp),
-                    contentAlignment = Alignment.Center
+                Column(
+                    modifier =
+                        Modifier
+                            .fillMaxWidth()
+                            .heightIn(min = 138.dp),
+                    horizontalAlignment =
+                        Alignment.CenterHorizontally,
+                    verticalArrangement =
+                        Arrangement.Center
                 ) {
-                    CircularProgressIndicator(
-                        color = belt.color,
-                        strokeWidth = 4.dp
+                    PremiumSummaryLoading()
+
+                    Spacer(
+                        Modifier.height(8.dp)
+                    )
+
+                    Text(
+                        text =
+                            if (isEnglish) {
+                                "Loading group data..."
+                            } else {
+                                "טוען את נתוני הקבוצות..."
+                            },
+                        style = KmiTypography.secondary,
+                        color = secondaryTextColor,
+                        textAlign = TextAlign.Center
                     )
                 }
             } else if (
@@ -1297,11 +1425,15 @@ private fun CoachGroupsProgressCard(
                         } else {
                             "לא נמצאו מתאמנים בקבוצות שאליהן אתה משויך."
                         },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(vertical = 24.dp),
-                    style = MaterialTheme.typography.bodyMedium,
-                    fontWeight = FontWeight.SemiBold,
+                    modifier =
+                        Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 24.dp),
+                    style =
+                        KmiTypography.body.copy(
+                            fontWeight =
+                                FontWeight.SemiBold
+                        ),
                     color = secondaryTextColor,
                     textAlign = TextAlign.Center
                 )
@@ -1356,8 +1488,11 @@ private fun CoachGroupsProgressCard(
                             "ממוצע ידיעת חומר ${belt.heb}"
                         },
                     modifier = Modifier.fillMaxWidth(),
-                    style = MaterialTheme.typography.bodyMedium,
-                    fontWeight = FontWeight.Bold,
+                    style =
+                        KmiTypography.body.copy(
+                            fontWeight =
+                                FontWeight.Bold
+                        ),
                     color = primaryTextColor,
                     textAlign = TextAlign.Center
                 )
@@ -2986,14 +3121,81 @@ fun SummaryScreen(
                                     key !in partiallyKnownIds
                         }
 
+                    /*
+                     * לצורך מד ההתקדמות בלבד, כל תרגיל
+                     * משויך לקטגוריה אחת לפי עדיפות:
+                     *
+                     * חיזוק ← תורגל ← נלמד.
+                     *
+                     * השיוכים המקוריים נשארים ללא שינוי,
+                     * גם כאשר לתרגיל נשמרו שני סימונים.
+                     */
+                    val coachReinforcementCount =
+                        coachStatusMap.values.count { statuses ->
+                            CoachSummaryStatus
+                                .NEEDS_REINFORCEMENT in
+                                    statuses
+                        }
+
+                    val coachPracticedCount =
+                        coachStatusMap.values.count { statuses ->
+                            CoachSummaryStatus
+                                .NEEDS_REINFORCEMENT !in
+                                    statuses &&
+                                    CoachSummaryStatus
+                                        .PRACTICED in
+                                    statuses
+                        }
+
+                    val coachTaughtCount =
+                        coachStatusMap.values.count { statuses ->
+                            CoachSummaryStatus
+                                .NEEDS_REINFORCEMENT !in
+                                    statuses &&
+                                    CoachSummaryStatus
+                                        .PRACTICED !in
+                                    statuses &&
+                                    CoachSummaryStatus
+                                        .TAUGHT in
+                                    statuses
+                        }
+
+                    /*
+                     * במצב מאמן אחוז ההתקדמות מבוסס על מספר
+                     * התרגילים שקיבלו לפחות סימון מאמן אחד.
+                     *
+                     * מוני המתאמן אינם נכנסים למד במצב מאמן.
+                     */
+                    val effectivePartiallyKnownCount =
+                        if (isCoach) {
+                            coachPracticedCount
+                        } else {
+                            partiallyKnownCount
+                        }
+
+                    val effectiveNotKnownCount =
+                        if (isCoach) {
+                            coachReinforcementCount
+                        } else {
+                            notKnownCount
+                        }
+
                     val unmarkedCount =
-                        (
-                                overallTotal -
-                                        overallDone -
-                                        partiallyKnownCount -
-                                        notKnownCount
-                                )
-                            .coerceAtLeast(0)
+                        if (isCoach) {
+                            (
+                                    overallTotal -
+                                            overallDone
+                                    )
+                                .coerceAtLeast(0)
+                        } else {
+                            (
+                                    overallTotal -
+                                            overallDone -
+                                            partiallyKnownCount -
+                                            notKnownCount
+                                    )
+                                .coerceAtLeast(0)
+                        }
 
                     Card(
                         modifier = Modifier
@@ -3007,7 +3209,10 @@ fun SummaryScreen(
                             width = 1.dp,
                             color = belt.color.copy(alpha = 0.28f)
                         ),
-                        elevation = CardDefaults.cardElevation(defaultElevation = 5.dp)
+                        elevation =
+                            CardDefaults.cardElevation(
+                                defaultElevation = 0.dp
+                            )
                     ) {
                         Column(
                             modifier = Modifier
@@ -3024,7 +3229,7 @@ fun SummaryScreen(
                             Box(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .height(62.dp)
+                                    .heightIn(min = 62.dp)
                             ) {
                                 IconButton(
                                     onClick = { showProgress = false },
@@ -3082,26 +3287,45 @@ fun SummaryScreen(
                                 modifier = Modifier.size(194.dp),
                                 meterSize = 194.dp,
                                 stroke = 16.dp,
-                                doneOverride = overallDone,
+                                doneOverride =
+                                    if (isCoach) {
+                                        overallDone
+                                    } else {
+                                        null
+                                    },
                                 totalOverride = overallTotal,
-                                knownOverride = overallDone,
+                                knownOverride =
+                                    if (isCoach) {
+                                        coachTaughtCount
+                                    } else {
+                                        overallDone
+                                    },
                                 partiallyKnownOverride =
-                                    partiallyKnownCount,
+                                    effectivePartiallyKnownCount,
                                 notKnownOverride =
-                                    notKnownCount,
+                                    effectiveNotKnownCount,
                                 unmarkedOverride =
                                     unmarkedCount
                             )
 
                             Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                verticalAlignment = Alignment.CenterVertically
+                                modifier =
+                                    Modifier
+                                        .fillMaxWidth()
+                                        .height(
+                                            IntrinsicSize.Min
+                                        ),
+                                horizontalArrangement =
+                                    Arrangement.spacedBy(8.dp),
+                                verticalAlignment =
+                                    Alignment.CenterVertically
                             ) {
                                 Surface(
                                     modifier = Modifier
                                         .weight(1f)
-                                        .height(44.dp),
+                                        .heightIn(
+                                            min = 44.dp
+                                        ),
                                     shape = RoundedCornerShape(16.dp),
                                     color = Color(0xFF4CAF50).copy(alpha = 0.12f),
                                     border = BorderStroke(
@@ -3114,10 +3338,18 @@ fun SummaryScreen(
                                         contentAlignment = Alignment.Center
                                     ) {
                                         Text(
-                                            text = tr(
-                                                "יודע: $overallDone",
-                                                "Known: $overallDone"
-                                            ),
+                                            text =
+                                                if (isCoach) {
+                                                    tr(
+                                                        "נלמד: $coachTaughtCount",
+                                                        "Taught: $coachTaughtCount"
+                                                    )
+                                                } else {
+                                                    tr(
+                                                        "יודע: $overallDone",
+                                                        "Known: $overallDone"
+                                                    )
+                                                },
                                             style = KmiTypography.caption.copy(
                                                 fontWeight = FontWeight.ExtraBold
                                             ),
@@ -3134,7 +3366,9 @@ fun SummaryScreen(
                                 Surface(
                                     modifier = Modifier
                                         .weight(1f)
-                                        .height(44.dp),
+                                        .heightIn(
+                                            min = 44.dp
+                                        ),
                                     shape =
                                         RoundedCornerShape(
                                             16.dp
@@ -3160,10 +3394,18 @@ fun SummaryScreen(
                                             Alignment.Center
                                     ) {
                                         Text(
-                                            text = tr(
-                                                "חלקית: $partiallyKnownCount",
-                                                "Partial: $partiallyKnownCount"
-                                            ),
+                                            text =
+                                                if (isCoach) {
+                                                    tr(
+                                                        "תורגל: $coachPracticedCount",
+                                                        "Practiced: $coachPracticedCount"
+                                                    )
+                                                } else {
+                                                    tr(
+                                                        "חלקית: $partiallyKnownCount",
+                                                        "Partial: $partiallyKnownCount"
+                                                    )
+                                                },
                                             style =
                                                 KmiTypography
                                                     .caption
@@ -3194,7 +3436,9 @@ fun SummaryScreen(
                                 Surface(
                                     modifier = Modifier
                                         .weight(1f)
-                                        .height(44.dp),
+                                        .heightIn(
+                                            min = 44.dp
+                                        ),
                                     shape = RoundedCornerShape(16.dp),
                                     color = Color(0xFFE53935).copy(alpha = 0.12f),
                                     border = BorderStroke(
@@ -3207,10 +3451,18 @@ fun SummaryScreen(
                                         contentAlignment = Alignment.Center
                                     ) {
                                         Text(
-                                            text = tr(
-                                                "לא יודע: $notKnownCount",
-                                                "No: $notKnownCount"
-                                            ),
+                                            text =
+                                                if (isCoach) {
+                                                    tr(
+                                                        "חיזוק: $coachReinforcementCount",
+                                                        "Reinforce: $coachReinforcementCount"
+                                                    )
+                                                } else {
+                                                    tr(
+                                                        "לא יודע: $notKnownCount",
+                                                        "No: $notKnownCount"
+                                                    )
+                                                },
                                             style = KmiTypography.caption.copy(
                                                 fontWeight = FontWeight.ExtraBold
                                             ),
@@ -3224,7 +3476,9 @@ fun SummaryScreen(
                                 Surface(
                                     modifier = Modifier
                                         .weight(1f)
-                                        .height(44.dp),
+                                        .heightIn(
+                                            min = 44.dp
+                                        ),
                                     shape = RoundedCornerShape(16.dp),
                                     color = Color(0xFF98A2B3).copy(alpha = 0.12f),
                                     border = BorderStroke(
@@ -3272,7 +3526,10 @@ fun SummaryScreen(
                             modifier = Modifier.fillMaxWidth(),
                             colors = CardDefaults.cardColors(containerColor = Color.Transparent),
                             shape = RoundedCornerShape(18.dp),
-                            elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
+                            elevation =
+                                CardDefaults.cardElevation(
+                                    defaultElevation = 0.dp
+                                )
                         ) {
                             Text(
                                 text = tr(
@@ -3377,8 +3634,20 @@ fun SummaryScreen(
                                     verticalArrangement = Arrangement.spacedBy(8.dp)
                                 ) {
                                     Row(
-                                        modifier = Modifier.fillMaxWidth(),
-                                        verticalAlignment = Alignment.CenterVertically
+                                        modifier =
+                                            Modifier
+                                                .fillMaxWidth()
+                                                .clickable {
+                                                    topicExpandedState[
+                                                        topicTitle
+                                                    ] =
+                                                        !isTopicExpanded
+                                                }
+                                                .padding(
+                                                    vertical = 2.dp
+                                                ),
+                                        verticalAlignment =
+                                            Alignment.CenterVertically
                                     ) {
                                         Text(
                                             text =
@@ -3809,7 +4078,7 @@ fun SummaryScreen(
                                                                             modifier = Modifier.size(36.dp),
                                                                             shape = CircleShape,
                                                                             color = Color(0xFF8A939D),
-                                                                            shadowElevation = 2.dp,
+                                                                            shadowElevation = 0.dp,
                                                                             tonalElevation = 0.dp
                                                                         ) {
                                                                             Box(
@@ -3927,7 +4196,7 @@ fun SummaryScreen(
                                                                                     modifier = Modifier.size(36.dp),
                                                                                     shape = CircleShape,
                                                                                     color = coachColor,
-                                                                                    shadowElevation = 2.dp,
+                                                                                    shadowElevation = 0.dp,
                                                                                     tonalElevation = 0.dp
                                                                                 ) {
                                                                                     Box(
@@ -3991,7 +4260,7 @@ fun SummaryScreen(
                                                                         modifier = Modifier.size(28.dp),
                                                                         shape = CircleShape,
                                                                         color = statusBackgroundColor,
-                                                                        shadowElevation = 2.dp,
+                                                                        shadowElevation = 0.dp,
                                                                         tonalElevation = 0.dp
                                                                     ) {
                                                                         Box(

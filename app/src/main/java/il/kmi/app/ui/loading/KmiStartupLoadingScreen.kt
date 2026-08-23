@@ -279,7 +279,7 @@ fun KmiStartupLoadingScreen(
             else if (isCompactHeight) maxHeight * 0.155f
             else maxHeight * 0.165f
 
-        val cardTopSpace = maxHeight * 0.580f
+        val cardTopSpace = maxHeight * 0.550f
 
         val videoWidth = if (isVeryCompactHeight) 184.dp else if (isCompactHeight) 198.dp else 214.dp
         val videoHeight = if (isVeryCompactHeight) 74.dp else if (isCompactHeight) 80.dp else 88.dp
@@ -425,9 +425,11 @@ fun KmiStartupLoadingScreen(
                                     },
                                 style =
                                     KmiTypography.body.copy(
-                                        fontWeight = FontWeight.ExtraBold
+                                        fontWeight =
+                                            FontWeight.ExtraBold
                                     ),
                                 color = textPrimary,
+                                minLines = 2,
                                 maxLines = 2
                             )
                         }

@@ -29,13 +29,13 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.BookmarkBorder
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.Icon
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.Divider
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExposedDropdownMenuBox
@@ -51,9 +51,9 @@ import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -70,10 +70,13 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.core.content.FileProvider
+import androidx.core.graphics.toColorInt
 import il.kmi.shared.domain.Belt
 import il.kmi.app.domain.ContentRepo
 import il.kmi.app.search.KmiSearchBridge
 import il.kmi.app.localization.rememberIsEnglish
+import il.kmi.app.privacy.DemoPrivacy
+import il.kmi.app.privacy.TraineeDisplayNameMapper
 import il.kmi.shared.domain.content.ExerciseTitlesEn
 import il.kmi.shared.domain.SubTopicRegistry
 import java.io.File
@@ -88,13 +91,12 @@ import il.kmi.app.R
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Shadow
 import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.unit.sp
 import androidx.compose.ui.graphics.drawscope.Stroke
-import androidx.compose.ui.text.TextStyle
 import android.graphics.RectF
 import androidx.compose.foundation.layout.heightIn
-import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.MenuAnchorType
 import androidx.compose.ui.focus.focusRequester
 import android.graphics.Color as AColor
 import androidx.compose.ui.focus.FocusRequester
@@ -106,12 +108,14 @@ import com.google.firebase.firestore.Query
 import com.google.firebase.firestore.SetOptions
 import kotlinx.coroutines.launch
 import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
 import il.kmi.app.ui.KmiTopBar
 import il.kmi.app.ui.KmiTypography
 import androidx.compose.ui.graphics.luminance
+
+
+//============================================================================
 
 // ======================
 // מודלים ולוגיקה
@@ -260,13 +264,8 @@ private fun examBeltDrawableRes(belt: Belt): Int =
         else -> R.drawable.intro_belt_black
     }
 
-private fun examBeltImageScale(belt: Belt): Float =
-    when (belt) {
-        Belt.YELLOW -> 1.50f
-        else -> 1.0f
-    }
-
-private fun internalExamEntryScreenBrush(belt: Belt): androidx.compose.ui.graphics.Brush =
+private fun internalExamEntryScreenBrush():
+        androidx.compose.ui.graphics.Brush =
     androidx.compose.ui.graphics.Brush.verticalGradient(
         colors = listOf(
             Color(0xFFF8FBFF),
@@ -277,7 +276,8 @@ private fun internalExamEntryScreenBrush(belt: Belt): androidx.compose.ui.graphi
         )
     )
 
-private fun examBeltScreenBrush(belt: Belt): androidx.compose.ui.graphics.Brush =
+private fun examBeltScreenBrush():
+        androidx.compose.ui.graphics.Brush =
     androidx.compose.ui.graphics.Brush.verticalGradient(
         colors = listOf(
             Color(0xFFF8FBFF),
@@ -294,15 +294,6 @@ private fun examBeltButtonBrush(belt: Belt): androidx.compose.ui.graphics.Brush 
             examBeltDarkColor(belt).copy(alpha = 0.82f),
             examBeltMainColor(belt).copy(alpha = if (belt == Belt.YELLOW) 0.62f else 0.74f),
             Color(0xFF7C3AED).copy(alpha = 0.74f)
-        )
-    )
-
-private fun examBeltCardBrush(belt: Belt): androidx.compose.ui.graphics.Brush =
-    androidx.compose.ui.graphics.Brush.horizontalGradient(
-        listOf(
-            Color.White.copy(alpha = 0.98f),
-            examBeltSoftColor(belt).copy(alpha = 0.92f),
-            Color.White.copy(alpha = 0.96f)
         )
     )
 
@@ -433,7 +424,6 @@ private fun buildInternalExamSessionForUi(
             val leftMargin = 40f
             val rightMargin = (pageW - 40).toFloat()
 
-            val headerH = 122f
             val footerH = 44f
 
             val contentTop = 164f
@@ -472,16 +462,11 @@ private fun buildInternalExamSessionForUi(
             fun percentColor(p: Int): Int {
                 // אדום -> צהוב -> ירוק
                 return when {
-                    p >= 85 -> AColor.parseColor("#16A34A") // green
-                    p >= 70 -> AColor.parseColor("#84CC16") // lime
-                    p >= 50 -> AColor.parseColor("#F59E0B") // amber
-                    else    -> AColor.parseColor("#EF4444") // red
+                    p >= 85 -> "#16A34A".toColorInt() // green
+                    p >= 70 -> "#84CC16".toColorInt() // lime
+                    p >= 50 -> "#F59E0B".toColorInt() // amber
+                    else    -> "#EF4444".toColorInt() // red
                 }
-            }
-
-            val headerBg = Paint().apply {
-                isAntiAlias = true
-                color = AColor.parseColor("#0B1220")
             }
 
             val headerTitle = Paint().apply {
@@ -500,75 +485,75 @@ private fun buildInternalExamSessionForUi(
 
             val cardBg = Paint().apply {
                 isAntiAlias = true
-                color = AColor.parseColor("#F8FAFC")
+                color = "#F8FAFC".toColorInt()
             }
             val cardStroke = Paint().apply {
                 isAntiAlias = true
                 style = Paint.Style.STROKE
                 strokeWidth = 1.5f
-                color = AColor.parseColor("#E2E8F0")
+                color = "#E2E8F0".toColorInt()
             }
 
             val kpiLabel = Paint().apply {
                 isAntiAlias = true
-                color = AColor.parseColor("#64748B")
+                color = "#64748B".toColorInt()
                 textSize = 11f
                 typeface = Typeface.create("sans-serif", Typeface.NORMAL)
             }
             val kpiValue = Paint().apply {
                 isAntiAlias = true
-                color = AColor.parseColor("#0F172A")
+                color = "#0F172A".toColorInt()
                 textSize = 14f
                 typeface = Typeface.create("sans-serif-medium", Typeface.BOLD)
             }
 
             val sectionTitle = Paint().apply {
                 isAntiAlias = true
-                color = AColor.parseColor("#0F172A")
+                color = "#0F172A".toColorInt()
                 textSize = 15f
                 typeface = Typeface.create("sans-serif-medium", Typeface.BOLD)
             }
 
             val topicTitle = Paint().apply {
                 isAntiAlias = true
-                color = AColor.parseColor("#1E293B")
+                color = "#1E293B".toColorInt()
                 textSize = 13.5f
                 typeface = Typeface.create("sans-serif-medium", Typeface.BOLD)
             }
 
             val lineText = Paint().apply {
                 isAntiAlias = true
-                color = AColor.parseColor("#0F172A")
+                color = "#0F172A".toColorInt()
                 textSize = 12.5f
                 typeface = Typeface.create("sans-serif", Typeface.NORMAL)
             }
 
             val scoreBoxBg = Paint().apply {
                 isAntiAlias = true
-                color = AColor.parseColor("#EEF2FF")
+                color = "#EEF2FF".toColorInt()
             }
             val scoreBoxStroke = Paint().apply {
                 isAntiAlias = true
                 style = Paint.Style.STROKE
                 strokeWidth = 1.2f
-                color = AColor.parseColor("#C7D2FE")
+                color = "#C7D2FE".toColorInt()
             }
             val scoreBoxText = Paint().apply {
                 isAntiAlias = true
-                color = AColor.parseColor("#0F172A")
+                color = "#0F172A".toColorInt()
                 textSize = 12f
                 typeface = Typeface.create("sans-serif-medium", Typeface.BOLD)
             }
 
             val divider = Paint().apply {
                 isAntiAlias = true
-                color = AColor.parseColor("#E2E8F0")
+                color = "#E2E8F0".toColorInt()
                 strokeWidth = 1.2f
             }
 
             val footerPaint = Paint().apply {
                 isAntiAlias = true
-                color = AColor.parseColor("#64748B")
+                color = "#64748B".toColorInt()
                 textSize = 10.5f
                 typeface = Typeface.create("sans-serif", Typeface.NORMAL)
             }
@@ -586,17 +571,8 @@ private fun buildInternalExamSessionForUi(
                 }
             }
 
-            fun drawOpposite(canvas: android.graphics.Canvas, text: String, y: Float, paint: Paint) {
-                if (isEnglish) {
-                    drawRight(canvas, text, y, paint)
-                } else {
-                    canvas.drawText(text, leftMargin, y, paint)
-                }
-            }
-
             fun drawHeader(
-                canvas: android.graphics.Canvas,
-                pageNumber: Int
+                canvas: android.graphics.Canvas
             ) {
                 canvas.drawColor(AColor.WHITE)
 
@@ -606,7 +582,6 @@ private fun buildInternalExamSessionForUi(
                 val mutedText = AColor.rgb(80, 100, 120)
 
                 val headerBottom = 122f
-                val headerTextRight = pageW - 34f
 
                 val navyHeaderPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
                     color = navy
@@ -802,12 +777,11 @@ private fun buildInternalExamSessionForUi(
                     canvas.drawText(value, x + cardW - 14f - vw, y + 46f, kpiValue)
                 }
 
-                val x1 = leftMargin
                 val x2 = leftMargin + cardW + gap
                 val x3 = leftMargin + (cardW + gap) * 2
 
                 card(
-                    x1,
+                    leftMargin,
                     pdfTr("שם מתאמן", "Trainee name"),
                     session.traineeName.ifBlank { "—" }
                 )
@@ -835,8 +809,8 @@ private fun buildInternalExamSessionForUi(
                 val c = percentColor(p)
 
                 val badgeR = RectF(leftMargin, y, rightMargin, y + 78f)
-                val badgeBg = Paint().apply { isAntiAlias = true; color = AColor.parseColor("#FFFFFF") }
-                val badgeStroke = Paint().apply { isAntiAlias = true; style = Paint.Style.STROKE; strokeWidth = 1.6f; color = AColor.parseColor("#E2E8F0") }
+                val badgeBg = Paint().apply { isAntiAlias = true; color = "#FFFFFF".toColorInt() }
+                val badgeStroke = Paint().apply { isAntiAlias = true; style = Paint.Style.STROKE; strokeWidth = 1.6f; color = "#E2E8F0".toColorInt() }
                 canvas.drawRoundRect(badgeR, 18f, 18f, badgeBg)
                 canvas.drawRoundRect(badgeR, 18f, 18f, badgeStroke)
 
@@ -868,13 +842,13 @@ private fun buildInternalExamSessionForUi(
 
                 val scorePaint = Paint().apply {
                     isAntiAlias = true
-                    color = AColor.parseColor("#0F172A")
+                    color = "#0F172A".toColorInt()
                     textSize = 16f
                     typeface = Typeface.create("sans-serif-medium", Typeface.BOLD)
                 }
                 val statusPaint = Paint().apply {
                     isAntiAlias = true
-                    color = AColor.parseColor("#334155")
+                    color = "#334155".toColorInt()
                     textSize = 12.5f
                     typeface = Typeface.create("sans-serif", Typeface.NORMAL)
                 }
@@ -896,10 +870,19 @@ private fun buildInternalExamSessionForUi(
                 return y
             }
 
-            fun drawScoreBox(canvas: android.graphics.Canvas, xRight: Float, yTop: Float, score: Int) {
+            fun drawScoreBox(
+                canvas: android.graphics.Canvas,
+                xRight: Float,
+                yTop: Float,
+                score: Int
+            ) {
                 val w = 40f
-                val h = 22f
-                val r = RectF(xRight - w, yTop - 16f, xRight, yTop + 6f)
+                val r = RectF(
+                    xRight - w,
+                    yTop - 16f,
+                    xRight,
+                    yTop + 6f
+                )
                 canvas.drawRoundRect(r, 7f, 7f, scoreBoxBg)
                 canvas.drawRoundRect(r, 7f, 7f, scoreBoxStroke)
 
@@ -940,7 +923,7 @@ private fun buildInternalExamSessionForUi(
             var page = document.startPage(pageInfo)
             var canvas = page.canvas
 
-            drawHeader(canvas, pageNumber)
+            drawHeader(canvas)
 
             var y = contentTop
             y = drawKpiCards(canvas, y)
@@ -989,7 +972,7 @@ private fun buildInternalExamSessionForUi(
                 page = document.startPage(pageInfo)
                 canvas = page.canvas
 
-                drawHeader(canvas, pageNumber)
+                drawHeader(canvas)
                 y = contentTop
 
                 drawStart(
@@ -1009,20 +992,15 @@ private fun buildInternalExamSessionForUi(
                 currentSubTopic = null
             }
 
-            // ✅ רצועה קבועה לימין עבור תיבת ציון
-            val scoreBoxW = 40f
-            val scoreBoxGap = 10f
-            val nameRight = rightMargin - scoreBoxW - scoreBoxGap
-
             fun beltPdfColor(belt: Belt): Int {
                 return when (belt) {
-                    Belt.YELLOW -> AColor.parseColor("#CA8A04")
-                    Belt.ORANGE -> AColor.parseColor("#EA580C")
-                    Belt.GREEN -> AColor.parseColor("#16A34A")
-                    Belt.BLUE -> AColor.parseColor("#2563EB")
-                    Belt.BROWN -> AColor.parseColor("#7C3F1D")
-                    Belt.BLACK -> AColor.parseColor("#111827")
-                    else -> AColor.parseColor("#7C3AED")
+                    Belt.YELLOW -> "#CA8A04".toColorInt()
+                    Belt.ORANGE -> "#EA580C".toColorInt()
+                    Belt.GREEN -> "#16A34A".toColorInt()
+                    Belt.BLUE -> "#2563EB".toColorInt()
+                    Belt.BROWN -> "#7C3F1D".toColorInt()
+                    Belt.BLACK -> "#111827".toColorInt()
+                    else -> "#7C3AED".toColorInt()
                 }
             }
 
@@ -1054,7 +1032,7 @@ private fun buildInternalExamSessionForUi(
                         topicTitle
                     )
 
-                    topicTitle.color = AColor.parseColor("#1E293B")
+                    topicTitle.color = "#1E293B".toColorInt()
                     y += 20f
                 }
 
@@ -1104,14 +1082,14 @@ private fun buildInternalExamSessionForUi(
 
                 val rowBg = Paint().apply {
                     isAntiAlias = true
-                    color = AColor.parseColor("#F8FAFC")
+                    color = "#F8FAFC".toColorInt()
                 }
 
                 val rowStroke = Paint().apply {
                     isAntiAlias = true
                     style = Paint.Style.STROKE
                     strokeWidth = 0.8f
-                    color = AColor.parseColor("#E2E8F0")
+                    color = "#E2E8F0".toColorInt()
                 }
 
                 canvas.drawRoundRect(
@@ -1227,11 +1205,18 @@ fun InternalExamScreen(
     onTraineeNameChange: (String) -> Unit,
     belt: Belt,
     exercises: List<ExamExerciseItem>,
+    @Suppress("UNUSED_PARAMETER")
     examResults: Map<String, Boolean> = emptyMap(),
+    @Suppress("UNUSED_PARAMETER")
     currentScore: Float = 0f,
+    @Suppress("UNUSED_PARAMETER")
     onResultUpdate: (String, Boolean) -> Unit = { _, _ -> },
     onBeltChange: (Belt) -> Unit,
     onBack: () -> Unit,
+    @Suppress("UNUSED_PARAMETER")
+    onExportPdf: (
+        InternalExamSession
+    ) -> Unit = {},
     sharedMarksMap: MutableMap<String, Int>? = null,
     showSetupHeader: Boolean = true
 ) {
@@ -1295,40 +1280,6 @@ fun InternalExamScreen(
         }
     }
 
-    // session מצטבר לכל החגורות עד החגורה הנוכחית
-    val session by remember {
-        derivedStateOf {
-            buildInternalExamSessionForUi(
-                traineeName = traineeName,
-                belt = belt,
-                marksMap = marksMap
-            )
-        }
-    }
-
-    // 🔽 פעולה אחת לשיתוף ה-PDF (משותפת לטופ-בר ולבאר התחתון)
-    val onExportPdf: () -> Unit = {
-        val uri = InternalExamPdf.createPdf(
-            context = ctx,
-            session = session,
-            isEnglish = isEnglish
-        )
-
-        if (uri != null) {
-            InternalExamPdf.sharePdf(
-                context = ctx,
-                uri = uri,
-                isEnglish = isEnglish
-            )
-        } else {
-            Toast.makeText(
-                ctx,
-                examTr(isEnglish, "שגיאה ביצירת PDF", "Error creating PDF"),
-                Toast.LENGTH_SHORT
-            ).show()
-        }
-    }
-
     // ✅ טעינת Draft מהשרת אם קיים
     LaunchedEffect(traineeName, belt) {
         val name = traineeName.trim()
@@ -1372,7 +1323,9 @@ fun InternalExamScreen(
             modifier = Modifier
                 .padding(padding)
                 .fillMaxSize()
-                .background(examBeltScreenBrush(belt))
+                .background(
+                    examBeltScreenBrush()
+                )
         ) {
             Column(
                 modifier = Modifier.fillMaxSize()
@@ -1436,7 +1389,28 @@ fun InternalExamScreen(
                                 horizontalArrangement = Arrangement.spacedBy(8.dp)
                             ) {
                                 Text(
-                                    text = traineeName.trim(),
+                                    text =
+                                        TraineeDisplayNameMapper.displayName(
+                                            realName =
+                                                traineeName.trim(),
+                                            stableKey =
+                                                internalExamTraineeKey(
+                                                    traineeName.trim()
+                                                ),
+                                            demoIndex =
+                                                recentTrainees
+                                                    .indexOfFirst {
+                                                        it.trim().equals(
+                                                            traineeName.trim(),
+                                                            ignoreCase = true
+                                                        )
+                                                    }
+                                                    .takeIf {
+                                                        it >= 0
+                                                    }
+                                                    ?.plus(1),
+                                            isEnglish = isEnglish
+                                        ),
                                     modifier = Modifier.weight(1f),
                                     fontWeight = FontWeight.Bold,
                                     maxLines = 1,
@@ -1474,7 +1448,9 @@ fun InternalExamScreen(
                                     if (recentTrainees.isEmpty()) {
                                         Text(examTr(isEnglish, "אין נבחנים שמורים עדיין.", "No saved trainees yet."))
                                     } else {
-                                        recentTrainees.forEach { name ->
+                                        recentTrainees.forEachIndexed {
+                                                index,
+                                                name ->
                                             Button(
                                                 onClick = {
                                                     marksMap.clear()
@@ -1485,7 +1461,27 @@ fun InternalExamScreen(
                                                 },
                                                 modifier = Modifier.fillMaxWidth()
                                             ) {
-                                                Text(name, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                                Text(
+                                                    text =
+                                                        TraineeDisplayNameMapper
+                                                            .displayName(
+                                                                realName =
+                                                                    name,
+                                                                stableKey =
+                                                                    internalExamTraineeKey(
+                                                                        name
+                                                                    ),
+                                                                demoIndex =
+                                                                    index + 1,
+                                                                isEnglish =
+                                                                    isEnglish
+                                                            ),
+                                                    style =
+                                                        KmiTypography.body,
+                                                    maxLines = 1,
+                                                    overflow =
+                                                        TextOverflow.Ellipsis
+                                                )
                                             }
                                         }
                                     }
@@ -1524,7 +1520,7 @@ fun InternalExamScreen(
                     isEnglish = isEnglish
                 )
 
-                Divider(modifier = Modifier.padding(vertical = 4.dp))
+                HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
 
                 val exercisesByTopic = remember(exercises) {
                     exercises.groupBy { it.topic }
@@ -1573,7 +1569,6 @@ fun InternalExamScreen(
                                 exerciseCount = topicExercises.size,
                                 subTopicCount = subTopicGroups.size,
                                 isEnglish = isEnglish,
-                                belt = belt,
                                 onClick = {
                                     if (topicIsExpanded) {
                                         expandedTopic = null
@@ -1593,17 +1588,36 @@ fun InternalExamScreen(
                                         modifier = Modifier
                                             .fillMaxWidth()
                                             .padding(
-                                                start = if (isEnglish) 14.dp else 0.dp,
-                                                end = if (isEnglish) 0.dp else 14.dp,
+                                                start =
+                                                    if (isEnglish) {
+                                                        14.dp
+                                                    } else {
+                                                        0.dp
+                                                    },
+                                                end =
+                                                    if (isEnglish) {
+                                                        0.dp
+                                                    } else {
+                                                        14.dp
+                                                    },
                                                 top = 2.dp,
                                                 bottom = 4.dp
                                             ),
                                         shape = RoundedCornerShape(22.dp),
-                                        color = Color(0xFFEAF6FF).copy(alpha = 0.86f),
-                                        shadowElevation = 5.dp,
+                                        color =
+                                            MaterialTheme.colorScheme
+                                                .surfaceVariant.copy(
+                                                    alpha = 0.88f
+                                                ),
+                                        tonalElevation = 0.dp,
+                                        shadowElevation = 0.dp,
                                         border = BorderStroke(
-                                            width = 1.dp,
-                                            color = Color.White.copy(alpha = 0.72f)
+                                            width = 0.75.dp,
+                                            color =
+                                                MaterialTheme.colorScheme
+                                                    .outlineVariant.copy(
+                                                        alpha = 0.55f
+                                                    )
                                         )
                                     ) {
                                         Column(
@@ -1623,7 +1637,6 @@ fun InternalExamScreen(
                                                     expanded = subTopicExpanded,
                                                     exerciseCount = subTopicExercises.size,
                                                     isEnglish = isEnglish,
-                                                    belt = belt,
                                                     onClick = {
                                                         expandedSubTopicKey =
                                                             if (subTopicExpanded) null else subTopicKey
@@ -1631,7 +1644,7 @@ fun InternalExamScreen(
                                                 )
 
                                                 if (index < subTopicGroups.size - 1 || directExercises.isNotEmpty()) {
-                                                    Divider(
+                                                    HorizontalDivider(
                                                         color = Color(0xFF7FAED6).copy(alpha = 0.46f),
                                                         thickness = 1.dp,
                                                         modifier = Modifier.padding(horizontal = 10.dp)
@@ -1674,11 +1687,15 @@ fun InternalExamScreen(
                                                 val generalExpanded = expandedSubTopicKey == generalKey
 
                                                 SubTopicHeader(
-                                                    title = examTr(isEnglish, "כללי", "General"),
+                                                    title = examTr(
+                                                        isEnglish,
+                                                        "כללי",
+                                                        "General"
+                                                    ),
                                                     expanded = generalExpanded,
-                                                    exerciseCount = directExercises.size,
+                                                    exerciseCount =
+                                                        directExercises.size,
                                                     isEnglish = isEnglish,
-                                                    belt = belt,
                                                     onClick = {
                                                         expandedSubTopicKey =
                                                             if (generalExpanded) null else generalKey
@@ -1752,7 +1769,6 @@ fun InternalExamScreen(
                 }
 
                 BottomActionBar(
-                    session = session,
                     isEnglish = isEnglish,
                     isSaving = isSavingFinalResult,
                     finishMode = true,
@@ -1790,8 +1806,7 @@ fun InternalExamScreen(
                         }
 
                         showFinishExamConfirmDialog = true
-                    },
-                    onExportPdf = onExportPdf
+                    }
                 )
 
                 // --- תחתית במסך התרגילים: מעבר חזרה למסך הראשי לבחירת חגורה אחרת ---
@@ -1936,31 +1951,61 @@ fun InternalExamScreen(
             ) {
                 Surface(
                     shape = RoundedCornerShape(32.dp),
-                    color = Color(0xFFF6F1FF),
-                    border = BorderStroke(1.dp, Color.White.copy(alpha = 0.72f)),
-                    shadowElevation = 24.dp,
+                    color = MaterialTheme.colorScheme.surface,
+                    border = BorderStroke(
+                        width = 0.75.dp,
+                        color =
+                            MaterialTheme.colorScheme.primary.copy(
+                                alpha = 0.34f
+                            )
+                    ),
+                    tonalElevation = 0.dp,
+                    shadowElevation = 0.dp,
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Column(
                         modifier = Modifier
                             .fillMaxWidth()
                             .background(
-                                brush = androidx.compose.ui.graphics.Brush.verticalGradient(
-                                    listOf(
-                                        Color(0xFFF8F5FF),
-                                        Color(0xFFF2EBFF),
-                                        Color(0xFFE9E2FF)
-                                    )
-                                )
+                                brush =
+                                    androidx.compose.ui.graphics.Brush
+                                        .verticalGradient(
+                                            listOf(
+                                                MaterialTheme.colorScheme
+                                                    .surface,
+                                                MaterialTheme.colorScheme
+                                                    .surfaceVariant.copy(
+                                                        alpha = 0.76f
+                                                    ),
+                                                MaterialTheme.colorScheme
+                                                    .primary.copy(
+                                                        alpha = 0.10f
+                                                    ),
+                                                MaterialTheme.colorScheme
+                                                    .surface
+                                            )
+                                        )
                             )
-                            .padding(horizontal = 20.dp, vertical = 22.dp),
+                            .padding(
+                                horizontal = 18.dp,
+                                vertical = 18.dp
+                            ),
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {
                         Surface(
                             shape = CircleShape,
-                            color = Color(0xFFEDE9FE),
-                            shadowElevation = 10.dp,
-                            modifier = Modifier.size(64.dp)
+                            color =
+                                MaterialTheme.colorScheme
+                                    .primaryContainer,
+                            tonalElevation = 0.dp,
+                            shadowElevation = 0.dp,
+                            border = BorderStroke(
+                                width = 0.75.dp,
+                                color =
+                                    MaterialTheme.colorScheme.primary
+                                        .copy(alpha = 0.34f)
+                            ),
+                            modifier = Modifier.size(52.dp)
                         ) {
                             Box(
                                 modifier = Modifier.fillMaxSize(),
@@ -1968,18 +2013,23 @@ fun InternalExamScreen(
                             ) {
                                 Text(
                                     text = "💾",
-                                    fontSize = 28.sp
+                                    style = KmiTypography.cardTitle
                                 )
                             }
                         }
 
-                        Spacer(modifier = Modifier.height(14.dp))
+                        Spacer(modifier = Modifier.height(10.dp))
 
                         Text(
-                            text = examTr(isEnglish, "מבחן שמור נמצא", "Saved exam found"),
-                            color = Color(0xFF1F2937),
-                            fontWeight = FontWeight.ExtraBold,
-                            fontSize = 28.sp,
+                            text = examTr(
+                                isEnglish,
+                                "מבחן שמור נמצא",
+                                "Saved exam found"
+                            ),
+                            color = MaterialTheme.colorScheme.onSurface,
+                            style = KmiTypography.screenTitle.copy(
+                                fontWeight = FontWeight.ExtraBold
+                            ),
                             textAlign = TextAlign.Center
                         )
 
@@ -1991,18 +2041,19 @@ fun InternalExamScreen(
                                 "נמצא מבחן שמור מהפעם האחרונה.\nלהמשיך ממנו או להתחיל מבחן חדש?",
                                 "A saved exam was found from the last session.\nContinue from it or start a new exam?"
                             ),
-                            color = Color(0xFF4B5563),
-                            fontWeight = FontWeight.SemiBold,
-                            fontSize = 18.sp,
-                            textAlign = TextAlign.Center,
-                            lineHeight = 24.sp
+                            color =
+                                MaterialTheme.colorScheme.onSurfaceVariant,
+                            style = KmiTypography.body.copy(
+                                fontWeight = FontWeight.SemiBold
+                            ),
+                            textAlign = TextAlign.Center
                         )
 
-                        Spacer(modifier = Modifier.height(22.dp))
+                        Spacer(modifier = Modifier.height(16.dp))
 
                         Row(
                             modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(12.dp)
+                            horizontalArrangement = Arrangement.spacedBy(10.dp)
                         ) {
                             PremiumDialogActionButton(
                                 modifier = Modifier.weight(1f),
@@ -2090,7 +2141,6 @@ private fun TopicHeader(
     exerciseCount: Int,
     subTopicCount: Int,
     isEnglish: Boolean,
-    belt: Belt,
     onClick: () -> Unit
 ) {
     val textAlign = if (isEnglish) TextAlign.Left else TextAlign.Right
@@ -2099,19 +2149,28 @@ private fun TopicHeader(
 
     Surface(
         shape = cardShape,
-        color = Color(0xFFEAF2FF),
-        shadowElevation = 2.dp,
+        color =
+            MaterialTheme.colorScheme.surfaceVariant.copy(
+                alpha = if (expanded) 0.96f else 0.82f
+            ),
+        tonalElevation = 0.dp,
+        shadowElevation = 0.dp,
         border = BorderStroke(
-            width = 1.dp,
-            color = if (expanded) {
-                Color(0xFFBFD0E8)
-            } else {
-                Color(0xFFD8E3F5)
-            }
+            width = 0.75.dp,
+            color =
+                if (expanded) {
+                    MaterialTheme.colorScheme.primary.copy(
+                        alpha = 0.42f
+                    )
+                } else {
+                    MaterialTheme.colorScheme.outlineVariant.copy(
+                        alpha = 0.52f
+                    )
+                }
         ),
         modifier = Modifier
             .fillMaxWidth()
-            .height(42.dp)
+            .heightIn(min = 52.dp)
             .clip(cardShape)
             .clickable(
                 interactionSource = remember { MutableInteractionSource() },
@@ -2128,12 +2187,14 @@ private fun TopicHeader(
         ) {
             Surface(
                 shape = CircleShape,
-                color = if (expanded) {
-                    Color(0xFF0F5E9C)
-                } else {
-                    Color(0xFF6B778B)
-                },
-                shadowElevation = 2.dp,
+                color =
+                    if (expanded) {
+                        MaterialTheme.colorScheme.primary
+                    } else {
+                        MaterialTheme.colorScheme.secondary
+                    },
+                tonalElevation = 0.dp,
+                shadowElevation = 0.dp,
                 modifier = Modifier.size(23.dp)
             ) {
                 Box(
@@ -2143,9 +2204,9 @@ private fun TopicHeader(
                     Text(
                         text = if (expanded) "▲" else "▼",
                         color = Color.White,
-                        fontWeight = FontWeight.Black,
-                        fontSize = 9.sp,
-                        lineHeight = 9.sp
+                        style = KmiTypography.caption.copy(
+                            fontWeight = FontWeight.Black
+                        )
                     )
                 }
             }
@@ -2159,10 +2220,11 @@ private fun TopicHeader(
             ) {
                 Text(
                     text = title,
-                    color = Color(0xFF111827),
-                    fontWeight = FontWeight.Black,
-                    fontSize = 11.4.sp,
-                    lineHeight = 12.sp,
+                    color =
+                        MaterialTheme.colorScheme.onSurface,
+                    style = KmiTypography.caption.copy(
+                        fontWeight = FontWeight.Black
+                    ),
                     textAlign = textAlign,
                     maxLines = 1,
                     softWrap = false,
@@ -2186,10 +2248,11 @@ private fun TopicHeader(
                             "$exerciseCount exercises"
                         )
                     },
-                    color = Color(0xFF5E6C80),
-                    fontWeight = FontWeight.SemiBold,
-                    fontSize = 7.2.sp,
-                    lineHeight = 7.8.sp,
+                    color =
+                        MaterialTheme.colorScheme.onSurfaceVariant,
+                    style = KmiTypography.caption.copy(
+                        fontWeight = FontWeight.SemiBold
+                    ),
                     textAlign = textAlign,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
@@ -2206,7 +2269,6 @@ private fun SubTopicHeader(
     expanded: Boolean,
     exerciseCount: Int,
     isEnglish: Boolean,
-    belt: Belt,
     onClick: () -> Unit
 ) {
     val textAlign = if (isEnglish) TextAlign.Left else TextAlign.Right
@@ -2220,7 +2282,7 @@ private fun SubTopicHeader(
         border = null,
         modifier = Modifier
             .fillMaxWidth()
-            .height(40.dp)
+            .heightIn(min = 50.dp)
             .clip(cardShape)
             .clickable(
                 interactionSource = remember { MutableInteractionSource() },
@@ -2252,12 +2314,14 @@ private fun SubTopicHeader(
 
             Surface(
                 shape = CircleShape,
-                color = if (expanded) {
-                    Color(0xFF0F5E9C)
-                } else {
-                    Color(0xFF6B778B)
-                },
-                shadowElevation = 2.dp,
+                color =
+                    if (expanded) {
+                        MaterialTheme.colorScheme.primary
+                    } else {
+                        MaterialTheme.colorScheme.secondary
+                    },
+                tonalElevation = 0.dp,
+                shadowElevation = 0.dp,
                 modifier = Modifier.size(22.dp)
             ) {
                 Box(
@@ -2267,9 +2331,9 @@ private fun SubTopicHeader(
                     Text(
                         text = if (expanded) "−" else "+",
                         color = Color.White,
-                        fontWeight = FontWeight.Black,
-                        fontSize = 12.sp,
-                        lineHeight = 12.sp
+                        style = KmiTypography.caption.copy(
+                            fontWeight = FontWeight.Black
+                        )
                     )
                 }
             }
@@ -2283,10 +2347,11 @@ private fun SubTopicHeader(
             ) {
                 Text(
                     text = title,
-                    color = Color(0xFF1E2A3D),
-                    fontWeight = FontWeight.ExtraBold,
-                    fontSize = 10.6.sp,
-                    lineHeight = 12.sp,
+                    color =
+                        MaterialTheme.colorScheme.onSurface,
+                    style = KmiTypography.caption.copy(
+                        fontWeight = FontWeight.ExtraBold
+                    ),
                     textAlign = textAlign,
                     maxLines = 1,
                     softWrap = false,
@@ -2302,10 +2367,11 @@ private fun SubTopicHeader(
                         "תת נושא • $exerciseCount תרגילים",
                         "Sub-topic • $exerciseCount exercises"
                     ),
-                    color = Color(0xFF5E6C80),
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 7.4.sp,
-                    lineHeight = 8.sp,
+                    color =
+                        MaterialTheme.colorScheme.onSurfaceVariant,
+                    style = KmiTypography.caption.copy(
+                        fontWeight = FontWeight.Bold
+                    ),
                     textAlign = textAlign,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
@@ -2319,11 +2385,33 @@ private fun SubTopicHeader(
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun InternalExamEntryScreen(
+    @Suppress("UNUSED_PARAMETER")
     onBack: () -> Unit,
     onHome: () -> Unit
 ) {
     val ctx = LocalContext.current
     val isEnglish = rememberIsEnglish()
+    val demoPrivacyEnabled =
+        DemoPrivacy.isEnabled()
+
+    fun demoSafeTraineeName(
+        realName: String,
+        demoIndex: Int? = null
+    ): String {
+        val cleanName = realName.trim()
+
+        if (!demoPrivacyEnabled) {
+            return cleanName
+        }
+
+        return TraineeDisplayNameMapper.displayName(
+            realName = cleanName,
+            stableKey =
+                internalExamTraineeKey(cleanName),
+            demoIndex = demoIndex,
+            isEnglish = isEnglish
+        )
+    }
 
     val isDarkMode =
         MaterialTheme.colorScheme.background
@@ -2350,8 +2438,13 @@ fun InternalExamEntryScreen(
     val traineeFocusRequester = remember { FocusRequester() }
     var allowTraineeKeyboard by rememberSaveable { mutableStateOf(false) }
 
-    var examStarted by rememberSaveable { mutableStateOf(false) }
-    var traineeSessionKey by rememberSaveable { mutableStateOf(0) }
+    var examStarted by rememberSaveable {
+        mutableStateOf(false)
+    }
+
+    var traineeSessionKey by rememberSaveable {
+        mutableIntStateOf(0)
+    }
 
     LaunchedEffect(allowTraineeKeyboard, expanded) {
         if (allowTraineeKeyboard && !expanded) {
@@ -2382,61 +2475,6 @@ fun InternalExamEntryScreen(
 
     val hasExamProgress = marksMap.isNotEmpty()
 
-    val beltMainColor = when (currentBelt) {
-        Belt.YELLOW -> Color(0xFFFDE047)
-        Belt.ORANGE -> Color(0xFFFF8A00)
-        Belt.GREEN -> Color(0xFF16A34A)
-        Belt.BLUE -> Color(0xFF2563EB)
-        Belt.BROWN -> Color(0xFF7C3F1D)
-        Belt.BLACK -> Color(0xFF111827)
-        else -> Color(0xFF7C3AED)
-    }
-
-    val beltDarkColor = when (currentBelt) {
-        Belt.YELLOW -> Color(0xFF7A5A00)
-        Belt.ORANGE -> Color(0xFF7C2D12)
-        Belt.GREEN -> Color(0xFF064E3B)
-        Belt.BLUE -> Color(0xFF1E3A8A)
-        Belt.BROWN -> Color(0xFF3B1F12)
-        Belt.BLACK -> Color(0xFF020617)
-        else -> Color(0xFF312E81)
-    }
-
-    val beltSoftColor = when (currentBelt) {
-        Belt.YELLOW -> Color(0xFFFEFCE8)
-        Belt.ORANGE -> Color(0xFFFFEDD5)
-        Belt.GREEN -> Color(0xFFDCFCE7)
-        Belt.BLUE -> Color(0xFFDBEAFE)
-        Belt.BROWN -> Color(0xFFF3E8D6)
-        Belt.BLACK -> Color(0xFFE5E7EB)
-        else -> Color(0xFFEDE9FE)
-    }
-
-    val entryCardColor = when (currentBelt) {
-        Belt.YELLOW -> Color(0xFFFEF9C3).copy(alpha = 0.94f)
-        Belt.ORANGE -> Color(0xFFFFEDD5).copy(alpha = 0.94f)
-        Belt.GREEN -> Color(0xFFDCFCE7).copy(alpha = 0.94f)
-        Belt.BLUE -> Color(0xFFDBEAFE).copy(alpha = 0.94f)
-
-        // חום מורגש יותר, אבל עדיין בהיר מספיק לקריאות
-        Belt.BROWN -> Color(0xFFE8C89A).copy(alpha = 0.94f)
-
-        // שחור/אפור פרימיום, בלי להרוג את הקריאות של הטקסטים
-        Belt.BLACK -> Color(0xFFC7CCD6).copy(alpha = 0.94f)
-
-        else -> Color(0xFFEDE9FE).copy(alpha = 0.94f)
-    }
-
-    val entrySession by remember {
-        derivedStateOf {
-            buildInternalExamSessionForUi(
-                traineeName = traineeName,
-                belt = currentBelt,
-                marksMap = marksMap
-            )
-        }
-    }
-
     val onExportEntryPdf: () -> Unit = {
         val cleanName = traineeName.trim()
 
@@ -2451,17 +2489,19 @@ fun InternalExamEntryScreen(
                 Toast.LENGTH_SHORT
             ).show()
         } else {
-            val pdfSession = buildInternalExamSessionForUi(
-                traineeName = cleanName,
-                belt = currentBelt,
-                marksMap = marksMap
-            )
+            val pdfSession =
+                buildInternalExamSessionForUi(
+                    traineeName = cleanName,
+                    belt = currentBelt,
+                    marksMap = marksMap
+                )
 
-            val uri = InternalExamPdf.createPdf(
-                context = ctx,
-                session = pdfSession,
-                isEnglish = isEnglish
-            )
+            val uri =
+                InternalExamPdf.createPdf(
+                    context = ctx,
+                    session = pdfSession,
+                    isEnglish = isEnglish
+                )
 
             if (uri != null) {
                 InternalExamPdf.sharePdf(
@@ -2709,9 +2749,7 @@ fun InternalExamEntryScreen(
                                         )
                                     )
                             } else {
-                                internalExamEntryScreenBrush(
-                                    currentBelt
-                                )
+                                internalExamEntryScreenBrush()
                             }
                     )
             ) {
@@ -2741,26 +2779,21 @@ fun InternalExamEntryScreen(
                         modifier = Modifier.fillMaxWidth(),
                         shape = RoundedCornerShape(28.dp),
                         color =
-                            if (isDarkMode) {
-                                MaterialTheme
-                                    .colorScheme
-                                    .surface
-                                    .copy(alpha = 0.96f)
-                            } else {
-                                Color.White.copy(alpha = 0.94f)
-                            },
+                            MaterialTheme.colorScheme.surface.copy(
+                                alpha = 0.96f
+                            ),
                         border = BorderStroke(
-                            width = 1.dp,
+                            width = 0.75.dp,
                             color =
-                                if (isDarkMode) {
-                                    MaterialTheme
-                                        .colorScheme
-                                        .outline
-                                        .copy(alpha = 0.48f)
-                                } else {
-                                    Color(0xFFC7D7EE)
-                                        .copy(alpha = 0.82f)
-                                }
+                                MaterialTheme.colorScheme
+                                    .outlineVariant.copy(
+                                        alpha =
+                                            if (isDarkMode) {
+                                                0.58f
+                                            } else {
+                                                0.44f
+                                            }
+                                    )
                         ),
                         tonalElevation = 0.dp,
                         shadowElevation = 0.dp
@@ -2794,19 +2827,21 @@ fun InternalExamEntryScreen(
                                                         )
                                                     } else {
                                                         listOf(
-                                                            Color.White.copy(
-                                                                alpha = 0.96f
-                                                            ),
-                                                            Color(0xFFF7FAFF)
+                                                            MaterialTheme
+                                                                .colorScheme
+                                                                .surface,
+                                                            MaterialTheme
+                                                                .colorScheme
+                                                                .surfaceVariant
                                                                 .copy(
                                                                     alpha =
-                                                                        0.94f
+                                                                        0.58f
                                                                 ),
                                                             examBeltSoftColor(
                                                                 currentBelt
                                                             ).copy(
                                                                 alpha =
-                                                                    0.40f
+                                                                    0.34f
                                                             )
                                                         )
                                                     }
@@ -2846,10 +2881,17 @@ fun InternalExamEntryScreen(
                                     },
                                     readOnly = !allowTraineeKeyboard,
                                     modifier = Modifier
-                                        .menuAnchor()
-                                        .focusRequester(traineeFocusRequester)
+                                        .menuAnchor(
+                                            type =
+                                                MenuAnchorType
+                                                    .PrimaryNotEditable,
+                                            enabled = true
+                                        )
+                                        .focusRequester(
+                                            traineeFocusRequester
+                                        )
                                         .fillMaxWidth()
-                                        .heightIn(min = 78.dp)
+                                        .heightIn(min = 56.dp)
                                         .clickable {
                                             allowTraineeKeyboard = false
                                             keyboard?.hide()
@@ -2869,8 +2911,9 @@ fun InternalExamEntryScreen(
                                                 "שם הנבחן",
                                                 "Trainee name"
                                             ),
-                                            fontSize = 13.sp,
-                                            fontWeight = FontWeight.Bold,
+                                            style = KmiTypography.caption.copy(
+                                                fontWeight = FontWeight.Bold
+                                            ),
                                             maxLines = 1
                                         )
                                     },
@@ -2881,37 +2924,75 @@ fun InternalExamEntryScreen(
                                                 "בחר נבחן מהרשימה",
                                                 "Select a trainee from the list"
                                             ),
-                                            color = Color(0xFF64748B),
-                                            fontWeight = FontWeight.SemiBold,
-                                            fontSize = 13.5.sp,
-                                            lineHeight = 16.sp,
+                                            color =
+                                                MaterialTheme.colorScheme
+                                                    .onSurfaceVariant,
+                                            style =
+                                                KmiTypography.secondary.copy(
+                                                    fontWeight =
+                                                        FontWeight.SemiBold
+                                                ),
                                             maxLines = 1,
                                             overflow = TextOverflow.Ellipsis
                                         )
-                              },
+                                    },
                                     trailingIcon = {
                                         ExposedDropdownMenuDefaults.TrailingIcon(expanded)
                                     },
-                                    colors = OutlinedTextFieldDefaults.colors(
-                                        focusedBorderColor = examBeltMainColor(currentBelt).copy(alpha = 0.78f),
-                                        unfocusedBorderColor = examBeltDarkColor(currentBelt).copy(alpha = 0.26f),
-                                        focusedTextColor = Color(0xFF111827),
-                                        unfocusedTextColor = Color(0xFF111827),
-                                        focusedLabelColor = examBeltDarkColor(currentBelt).copy(alpha = 0.82f),
-                                        unfocusedLabelColor = examBeltDarkColor(currentBelt).copy(alpha = 0.72f),
-                                        cursorColor = examBeltDarkColor(currentBelt),
-                                        focusedContainerColor = Color.White.copy(alpha = 0.64f),
-                                        unfocusedContainerColor = Color.White.copy(alpha = 0.52f),
-                                        disabledContainerColor = Color.Transparent,
-                                        errorContainerColor = Color.Transparent
-                                    ),
-                                    textStyle = MaterialTheme.typography.titleMedium.copy(
-                                        fontWeight = FontWeight.ExtraBold,
-                                        color = Color(0xFF111827),
-                                        fontSize = 18.sp,
-                                        lineHeight = 20.sp,
-                                        textAlign = if (isEnglish) TextAlign.Left else TextAlign.Right
-                                    )
+                                    colors =
+                                        OutlinedTextFieldDefaults.colors(
+                                            focusedBorderColor =
+                                                MaterialTheme.colorScheme
+                                                    .primary.copy(
+                                                        alpha = 0.82f
+                                                    ),
+                                            unfocusedBorderColor =
+                                                MaterialTheme.colorScheme
+                                                    .outlineVariant.copy(
+                                                        alpha = 0.62f
+                                                    ),
+                                            focusedTextColor =
+                                                MaterialTheme.colorScheme
+                                                    .onSurface,
+                                            unfocusedTextColor =
+                                                MaterialTheme.colorScheme
+                                                    .onSurface,
+                                            focusedLabelColor =
+                                                MaterialTheme.colorScheme
+                                                    .primary,
+                                            unfocusedLabelColor =
+                                                MaterialTheme.colorScheme
+                                                    .onSurfaceVariant,
+                                            cursorColor =
+                                                MaterialTheme.colorScheme
+                                                    .primary,
+                                            focusedContainerColor =
+                                                MaterialTheme.colorScheme
+                                                    .surface,
+                                            unfocusedContainerColor =
+                                                MaterialTheme.colorScheme
+                                                    .surface,
+                                            disabledContainerColor =
+                                                MaterialTheme.colorScheme
+                                                    .surfaceVariant,
+                                            errorContainerColor =
+                                                MaterialTheme.colorScheme
+                                                    .surface
+                                        ),
+                                    textStyle =
+                                        KmiTypography.cardTitle.copy(
+                                            fontWeight =
+                                                FontWeight.ExtraBold,
+                                            color =
+                                                MaterialTheme.colorScheme
+                                                    .onSurface,
+                                            textAlign =
+                                                if (isEnglish) {
+                                                    TextAlign.Left
+                                                } else {
+                                                    TextAlign.Right
+                                                }
+                                        )
                                 )
 
                                 ExposedDropdownMenu(
@@ -2922,9 +3003,11 @@ fun InternalExamEntryScreen(
                                         focusManager.clearFocus(force = true)
                                     },
                                     modifier = Modifier
-                                        .fillMaxWidth(0.55f)
-                                        .heightIn(min = 240.dp, max = 300.dp)
-                                        .background(Color(0xFFF8FAFC))
+                                        .fillMaxWidth()
+                                        .heightIn(max = 320.dp)
+                                        .background(
+                                            MaterialTheme.colorScheme.surface
+                                        )
                                 ) {
                                     DropdownMenuItem(
                                         text = {
@@ -2934,13 +3017,25 @@ fun InternalExamEntryScreen(
                                                 } else {
                                                     "➕ נבחן חדש…"
                                                 },
-                                                fontWeight = FontWeight.Bold,
-                                                color = Color(0xFF111827),
-                                                fontSize = 18.sp,
+                                                style =
+                                                    KmiTypography.action.copy(
+                                                        fontWeight =
+                                                            FontWeight.Bold
+                                                    ),
+                                                color =
+                                                    MaterialTheme.colorScheme
+                                                        .onSurface,
                                                 maxLines = 1,
-                                                overflow = TextOverflow.Ellipsis,
-                                                modifier = Modifier.fillMaxWidth(),
-                                                textAlign = if (isEnglish) TextAlign.Left else TextAlign.Right
+                                                overflow =
+                                                    TextOverflow.Ellipsis,
+                                                modifier =
+                                                    Modifier.fillMaxWidth(),
+                                                textAlign =
+                                                    if (isEnglish) {
+                                                        TextAlign.Left
+                                                    } else {
+                                                        TextAlign.Right
+                                                    }
                                             )
                                         },
                                         onClick = {
@@ -2953,11 +3048,15 @@ fun InternalExamEntryScreen(
                                     )
 
                                     if (recentTrainees.isNotEmpty()) {
-                                        Divider()
+                                        HorizontalDivider()
                                     }
 
-                                    recentTrainees.take(20).forEach { name ->
-                                        DropdownMenuItem(
+                                    recentTrainees
+                                        .take(20)
+                                        .forEachIndexed {
+                                                index,
+                                                name ->
+                                            DropdownMenuItem(
                                             text = {
                                                 Row(
                                                     modifier = Modifier.fillMaxWidth(),
@@ -2977,20 +3076,38 @@ fun InternalExamEntryScreen(
                                                         ) {
                                                             Text(
                                                                 text = "🗑",
-                                                                fontSize = 16.sp
+                                                                style =
+                                                                    KmiTypography.action
                                                             )
                                                         }
                                                     }
 
                                                     Text(
-                                                        text = name,
-                                                        fontWeight = FontWeight.SemiBold,
-                                                        color = Color(0xFF111827),
-                                                        fontSize = 17.sp,
+                                                        text =
+                                                            demoSafeTraineeName(
+                                                                realName = name,
+                                                                demoIndex =
+                                                                    index + 1
+                                                            ),
+                                                        style =
+                                                            KmiTypography.body.copy(
+                                                                fontWeight =
+                                                                    FontWeight.SemiBold
+                                                            ),
+                                                        color =
+                                                            MaterialTheme.colorScheme
+                                                                .onSurface,
                                                         maxLines = 1,
-                                                        overflow = TextOverflow.Ellipsis,
-                                                        modifier = Modifier.weight(1f),
-                                                        textAlign = if (isEnglish) TextAlign.Left else TextAlign.Right
+                                                        overflow =
+                                                            TextOverflow.Ellipsis,
+                                                        modifier =
+                                                            Modifier.weight(1f),
+                                                        textAlign =
+                                                            if (isEnglish) {
+                                                                TextAlign.Left
+                                                            } else {
+                                                                TextAlign.Right
+                                                            }
                                                     )
 
                                                     if (!isEnglish) {
@@ -3006,7 +3123,8 @@ fun InternalExamEntryScreen(
                                                         ) {
                                                             Text(
                                                                 text = "🗑",
-                                                                fontSize = 16.sp
+                                                                style =
+                                                                    KmiTypography.action
                                                             )
                                                         }
                                                     }
@@ -3063,12 +3181,14 @@ fun InternalExamEntryScreen(
                                 } else {
                                     examTr(isEnglish, "התחל מבחן", "Start exam")
                                 },
-                                icon = if (hasExamProgress) "⏩" else "▶",
-                                startColor = examBeltDarkColor(currentBelt),
-                                centerColor = examBeltMainColor(currentBelt),
+                                icon = if (hasExamProgress) {
+                                    "⏩"
+                                } else {
+                                    "▶"
+                                },
+                                centerColor =
+                                    examBeltMainColor(currentBelt),
                                 endColor = Color(0xFF7C3AED),
-                                textFontSize = 22.sp,
-                                textLineHeight = 24.sp,
                                 onClick = {
                                     val cleanName = traineeName.trim()
 
@@ -3105,7 +3225,6 @@ fun InternalExamEntryScreen(
                             )
 
                             BottomActionBar(
-                                session = entrySession,
                                 isEnglish = isEnglish,
                                 entryScreenStyle = true,
                                 onSave = {
@@ -3150,8 +3269,7 @@ fun InternalExamEntryScreen(
                                             }
                                         }
                                     }
-                                },
-                                onExportPdf = onExportEntryPdf
+                                }
                             )
                         }
                     }
@@ -3180,24 +3298,40 @@ fun InternalExamEntryScreen(
                 Surface(
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(30.dp),
-                    color = Color(0xFFF8FAFC),
+                    color = MaterialTheme.colorScheme.surface,
                     border = BorderStroke(
-                        width = 1.dp,
-                        color = examBeltMainColor(currentBelt).copy(alpha = 0.28f)
+                        width = 0.75.dp,
+                        color =
+                            MaterialTheme.colorScheme.primary.copy(
+                                alpha = 0.32f
+                            )
                     ),
-                    shadowElevation = 24.dp
+                    tonalElevation = 0.dp,
+                    shadowElevation = 0.dp
                 ) {
                     Column(
                         modifier = Modifier
                             .fillMaxWidth()
                             .background(
-                                brush = androidx.compose.ui.graphics.Brush.verticalGradient(
-                                    listOf(
-                                        Color.White,
-                                        examBeltSoftColor(currentBelt).copy(alpha = 0.78f),
-                                        Color.White
-                                    )
-                                )
+                                brush =
+                                    androidx.compose.ui.graphics.Brush
+                                        .verticalGradient(
+                                            listOf(
+                                                MaterialTheme.colorScheme
+                                                    .surface,
+                                                MaterialTheme.colorScheme
+                                                    .surfaceVariant.copy(
+                                                        alpha = 0.72f
+                                                    ),
+                                                examBeltMainColor(
+                                                    currentBelt
+                                                ).copy(
+                                                    alpha = 0.10f
+                                                ),
+                                                MaterialTheme.colorScheme
+                                                    .surface
+                                            )
+                                        )
                             )
                             .padding(horizontal = 16.dp, vertical = 16.dp),
                         verticalArrangement = Arrangement.spacedBy(10.dp),
@@ -3208,22 +3342,44 @@ fun InternalExamEntryScreen(
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Text(
-                                text = examTr(isEnglish, "היסטוריית מבחנים", "Exam history"),
+                                text = examTr(
+                                    isEnglish,
+                                    "היסטוריית מבחנים",
+                                    "Exam history"
+                                ),
                                 modifier = Modifier.weight(1f),
-                                textAlign = if (isEnglish) TextAlign.Left else TextAlign.Right,
-                                color = Color(0xFF111827),
-                                fontWeight = FontWeight.Black,
-                                fontSize = 21.sp,
+                                textAlign =
+                                    if (isEnglish) {
+                                        TextAlign.Left
+                                    } else {
+                                        TextAlign.Right
+                                    },
+                                color =
+                                    MaterialTheme.colorScheme.onSurface,
+                                style = KmiTypography.sectionTitle.copy(
+                                    fontWeight = FontWeight.Black
+                                ),
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis
                             )
 
                             Surface(
-                                onClick = { showExamHistoryDialog = false },
+                                onClick = {
+                                    showExamHistoryDialog = false
+                                },
                                 shape = CircleShape,
-                                color = Color.White.copy(alpha = 0.80f),
-                                border = BorderStroke(1.dp, Color(0xFFCBD5E1)),
-                                modifier = Modifier.size(36.dp)
+                                color =
+                                    MaterialTheme.colorScheme
+                                        .surfaceVariant,
+                                border = BorderStroke(
+                                    width = 0.75.dp,
+                                    color =
+                                        MaterialTheme.colorScheme
+                                            .outlineVariant
+                                ),
+                                tonalElevation = 0.dp,
+                                shadowElevation = 0.dp,
+                                modifier = Modifier.size(40.dp)
                             ) {
                                 Box(
                                     modifier = Modifier.fillMaxSize(),
@@ -3231,10 +3387,14 @@ fun InternalExamEntryScreen(
                                 ) {
                                     Text(
                                         text = "×",
-                                        color = Color(0xFF334155),
-                                        fontWeight = FontWeight.Black,
-                                        fontSize = 22.sp,
-                                        lineHeight = 22.sp
+                                        color =
+                                            MaterialTheme.colorScheme
+                                                .onSurfaceVariant,
+                                        style =
+                                            KmiTypography.sectionTitle.copy(
+                                                fontWeight =
+                                                    FontWeight.Black
+                                            )
                                     )
                                 }
                             }
@@ -3247,14 +3407,25 @@ fun InternalExamEntryScreen(
                                 "Completed exams saved as final results appear here."
                             ),
                             modifier = Modifier.fillMaxWidth(),
-                            textAlign = if (isEnglish) TextAlign.Left else TextAlign.Right,
-                            color = Color(0xFF64748B),
-                            fontWeight = FontWeight.SemiBold,
-                            fontSize = 13.sp,
-                            lineHeight = 17.sp
+                            textAlign =
+                                if (isEnglish) {
+                                    TextAlign.Left
+                                } else {
+                                    TextAlign.Right
+                                },
+                            color =
+                                MaterialTheme.colorScheme.onSurfaceVariant,
+                            style = KmiTypography.secondary.copy(
+                                fontWeight = FontWeight.SemiBold
+                            )
                         )
 
-                        Divider(color = Color(0xFFCBD5E1).copy(alpha = 0.70f))
+                        HorizontalDivider(
+                            color =
+                                MaterialTheme.colorScheme.outlineVariant.copy(
+                                    alpha = 0.70f
+                                )
+                        )
 
                         if (recentCompletedResults.isEmpty()) {
                             Text(
@@ -3267,9 +3438,12 @@ fun InternalExamEntryScreen(
                                     .fillMaxWidth()
                                     .padding(vertical = 16.dp),
                                 textAlign = TextAlign.Center,
-                                color = Color(0xFF475569),
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 15.sp
+                                color =
+                                    MaterialTheme.colorScheme
+                                        .onSurfaceVariant,
+                                style = KmiTypography.body.copy(
+                                    fontWeight = FontWeight.Bold
+                                )
                             )
                         } else {
                             LazyColumn(
@@ -3278,9 +3452,21 @@ fun InternalExamEntryScreen(
                                     .heightIn(max = 420.dp),
                                 verticalArrangement = Arrangement.spacedBy(8.dp)
                             ) {
-                                items(recentCompletedResults.take(20)) { result ->
+                                itemsIndexed(
+                                    items = recentCompletedResults.take(20),
+                                    key = { _, result ->
+                                        result.resultId
+                                    }
+                                ) { index, result ->
                                     CompletedExamHistoryRow(
                                         result = result,
+                                        displayTraineeName =
+                                            TraineeDisplayNameMapper.displayName(
+                                                realName = result.traineeName,
+                                                stableKey = result.resultId,
+                                                demoIndex = index + 1,
+                                                isEnglish = isEnglish
+                                            ),
                                         isEnglish = isEnglish,
                                         currentBelt = currentBelt,
                                         onDeleteClick = {
@@ -3406,24 +3592,38 @@ private fun CompletedExamPreviewDialog(
         Surface(
             modifier = Modifier.fillMaxWidth(),
             shape = RoundedCornerShape(30.dp),
-            color = Color(0xFFF8FAFC),
+            color = MaterialTheme.colorScheme.surface,
             border = BorderStroke(
-                width = 1.dp,
-                color = examBeltMainColor(currentBelt).copy(alpha = 0.28f)
+                width = 0.75.dp,
+                color =
+                    MaterialTheme.colorScheme.primary.copy(
+                        alpha = 0.32f
+                    )
             ),
-            shadowElevation = 24.dp
+            tonalElevation = 0.dp,
+            shadowElevation = 0.dp
         ) {
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
                     .background(
-                        brush = androidx.compose.ui.graphics.Brush.verticalGradient(
-                            listOf(
-                                Color.White,
-                                examBeltSoftColor(currentBelt).copy(alpha = 0.82f),
-                                Color.White
-                            )
-                        )
+                        brush =
+                            androidx.compose.ui.graphics.Brush
+                                .verticalGradient(
+                                    listOf(
+                                        MaterialTheme.colorScheme.surface,
+                                        MaterialTheme.colorScheme
+                                            .surfaceVariant.copy(
+                                                alpha = 0.74f
+                                            ),
+                                        examBeltMainColor(
+                                            currentBelt
+                                        ).copy(
+                                            alpha = 0.10f
+                                        ),
+                                        MaterialTheme.colorScheme.surface
+                                    )
+                                )
                     )
                     .padding(horizontal = 18.dp, vertical = 18.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
@@ -3454,10 +3654,11 @@ private fun CompletedExamPreviewDialog(
                             ),
                             modifier = Modifier.fillMaxWidth(),
                             textAlign = textAlign,
-                            color = Color(0xFF111827),
-                            fontWeight = FontWeight.Black,
-                            fontSize = 21.sp,
-                            lineHeight = 24.sp,
+                            color =
+                                MaterialTheme.colorScheme.onSurface,
+                            style = KmiTypography.sectionTitle.copy(
+                                fontWeight = FontWeight.Black
+                            ),
                             maxLines = 2,
                             overflow = TextOverflow.Ellipsis
                         )
@@ -3466,10 +3667,12 @@ private fun CompletedExamPreviewDialog(
                             text = session.traineeName,
                             modifier = Modifier.fillMaxWidth(),
                             textAlign = textAlign,
-                            color = Color(0xFF475569),
-                            fontWeight = FontWeight.ExtraBold,
-                            fontSize = 17.sp,
-                            lineHeight = 19.sp,
+                            color =
+                                MaterialTheme.colorScheme
+                                    .onSurfaceVariant,
+                            style = KmiTypography.cardTitle.copy(
+                                fontWeight = FontWeight.ExtraBold
+                            ),
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis
                         )
@@ -3483,7 +3686,7 @@ private fun CompletedExamPreviewDialog(
                     }
                 }
 
-                Divider(color = Color(0xFFCBD5E1).copy(alpha = 0.55f))
+                HorizontalDivider(color = Color(0xFFCBD5E1).copy(alpha = 0.55f))
 
                 CompletedExamPreviewInfoLine(
                     label = examTr(isEnglish, "חגורה", "Belt"),
@@ -3515,7 +3718,7 @@ private fun CompletedExamPreviewDialog(
                     isEnglish = isEnglish
                 )
 
-                Divider(color = Color(0xFFCBD5E1).copy(alpha = 0.55f))
+                HorizontalDivider(color = Color(0xFFCBD5E1).copy(alpha = 0.55f))
 
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -3540,10 +3743,17 @@ private fun CompletedExamPreviewDialog(
                             contentAlignment = Alignment.Center
                         ) {
                             Text(
-                                text = examTr(isEnglish, "סגור", "Close"),
-                                color = Color(0xFF334155),
-                                fontWeight = FontWeight.Black,
-                                fontSize = 15.sp,
+                                text = examTr(
+                                    isEnglish,
+                                    "סגור",
+                                    "Close"
+                                ),
+                                color =
+                                    MaterialTheme.colorScheme
+                                        .onSurfaceVariant,
+                                style = KmiTypography.action.copy(
+                                    fontWeight = FontWeight.Black
+                                ),
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis
                             )
@@ -3598,10 +3808,16 @@ private fun CompletedExamPreviewDialog(
                             contentAlignment = Alignment.Center
                         ) {
                             Text(
-                                text = examTr(isEnglish, "העתק", "Copy"),
-                                color = examBeltDarkColor(currentBelt),
-                                fontWeight = FontWeight.Black,
-                                fontSize = 15.sp,
+                                text = examTr(
+                                    isEnglish,
+                                    "העתק",
+                                    "Copy"
+                                ),
+                                color =
+                                    examBeltDarkColor(currentBelt),
+                                style = KmiTypography.action.copy(
+                                    fontWeight = FontWeight.Black
+                                ),
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis
                             )
@@ -3633,10 +3849,15 @@ private fun CompletedExamPreviewDialog(
                             contentAlignment = Alignment.Center
                         ) {
                             Text(
-                                text = examTr(isEnglish, "שתף PDF", "PDF"),
+                                text = examTr(
+                                    isEnglish,
+                                    "שתף PDF",
+                                    "PDF"
+                                ),
                                 color = Color.White,
-                                fontWeight = FontWeight.Black,
-                                fontSize = 14.sp,
+                                style = KmiTypography.action.copy(
+                                    fontWeight = FontWeight.Black
+                                ),
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis
                             )
@@ -3669,8 +3890,9 @@ private fun CompletedExamPreviewPercentBadge(
             Text(
                 text = "$percent%",
                 color = examBeltDarkColor(currentBelt),
-                fontWeight = FontWeight.Black,
-                fontSize = 16.sp,
+                style = KmiTypography.cardTitle.copy(
+                    fontWeight = FontWeight.Black
+                ),
                 maxLines = 1
             )
         }
@@ -3695,10 +3917,11 @@ private fun CompletedExamPreviewInfoLine(
             text = label,
             modifier = Modifier.fillMaxWidth(),
             textAlign = textAlign,
-            color = Color(0xFF64748B),
-            fontWeight = FontWeight.SemiBold,
-            fontSize = 12.5.sp,
-            lineHeight = 14.sp,
+            color =
+                MaterialTheme.colorScheme.onSurfaceVariant,
+            style = KmiTypography.secondary.copy(
+                fontWeight = FontWeight.SemiBold
+            ),
             maxLines = 1,
             overflow = TextOverflow.Ellipsis
         )
@@ -3707,10 +3930,10 @@ private fun CompletedExamPreviewInfoLine(
             text = value,
             modifier = Modifier.fillMaxWidth(),
             textAlign = textAlign,
-            color = Color(0xFF111827),
-            fontWeight = FontWeight.Black,
-            fontSize = 16.sp,
-            lineHeight = 19.sp,
+            color = MaterialTheme.colorScheme.onSurface,
+            style = KmiTypography.cardTitle.copy(
+                fontWeight = FontWeight.Black
+            ),
             maxLines = 2,
             overflow = TextOverflow.Ellipsis
         )
@@ -3731,6 +3954,7 @@ private fun internalExamResultDateText(completedAtMillis: Long): String {
 @Composable
 private fun CompletedExamHistoryRow(
     result: RecentInternalExamResultUi,
+    displayTraineeName: String,
     isEnglish: Boolean,
     currentBelt: Belt,
     onDeleteClick: () -> Unit,
@@ -3740,15 +3964,40 @@ private fun CompletedExamHistoryRow(
     val textAlign = if (isEnglish) TextAlign.Left else TextAlign.Right
     val horizontalAlignment = if (isEnglish) Alignment.Start else Alignment.End
 
+    val isDarkMode =
+        MaterialTheme.colorScheme.background
+            .luminance() < 0.5f
+
+    val historyCardColor =
+        if (isDarkMode) {
+            MaterialTheme.colorScheme.surfaceVariant
+        } else {
+            examBeltSoftColor(currentBelt)
+                .copy(alpha = 0.78f)
+        }
+
     Surface(
         modifier = Modifier
             .fillMaxWidth()
             .clickable { onClick() },
         shape = RoundedCornerShape(18.dp),
-        color = examBeltSoftColor(currentBelt).copy(alpha = 0.78f),
+        color = historyCardColor,
+        contentColor =
+            MaterialTheme.colorScheme.onSurface,
+        tonalElevation = 0.dp,
+        shadowElevation = 0.dp,
         border = BorderStroke(
-            width = 1.dp,
-            color = examBeltDarkColor(currentBelt).copy(alpha = 0.14f)
+            width = 0.75.dp,
+            color =
+                examBeltMainColor(currentBelt)
+                    .copy(
+                        alpha =
+                            if (isDarkMode) {
+                                0.38f
+                            } else {
+                                0.22f
+                            }
+                    )
         )
     ) {
         Row(
@@ -3781,38 +4030,38 @@ private fun CompletedExamHistoryRow(
                         if (isEnglish) {
                             Text(
                                 text = "📄",
-                                fontSize = 13.sp,
-                                lineHeight = 13.sp,
+                                style = KmiTypography.caption,
                                 maxLines = 1,
                                 modifier = Modifier.padding(end = 5.dp)
                             )
 
                             Text(
-                                text = result.traineeName,
+                                text = displayTraineeName,
                                 textAlign = TextAlign.Left,
-                                color = Color(0xFF111827),
-                                fontWeight = FontWeight.ExtraBold,
-                                fontSize = 16.sp,
-                                lineHeight = 18.sp,
+                                color =
+                                    MaterialTheme.colorScheme.onSurface,
+                                style = KmiTypography.cardTitle.copy(
+                                    fontWeight = FontWeight.ExtraBold
+                                ),
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis
                             )
                         } else {
                             Text(
                                 text = "📄",
-                                fontSize = 13.sp,
-                                lineHeight = 13.sp,
+                                style = KmiTypography.caption,
                                 maxLines = 1,
                                 modifier = Modifier.padding(end = 5.dp)
                             )
 
                             Text(
-                                text = result.traineeName,
+                                text = displayTraineeName,
                                 textAlign = TextAlign.Right,
-                                color = Color(0xFF111827),
-                                fontWeight = FontWeight.ExtraBold,
-                                fontSize = 16.sp,
-                                lineHeight = 18.sp,
+                                color =
+                                    MaterialTheme.colorScheme.onSurface,
+                                style = KmiTypography.cardTitle.copy(
+                                    fontWeight = FontWeight.ExtraBold
+                                ),
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis
                             )
@@ -3824,10 +4073,11 @@ private fun CompletedExamHistoryRow(
                     text = result.beltName,
                     modifier = Modifier.fillMaxWidth(),
                     textAlign = textAlign,
-                    color = Color(0xFF475569),
-                    fontWeight = FontWeight.SemiBold,
-                    fontSize = 12.sp,
-                    lineHeight = 15.sp,
+                    color =
+                        MaterialTheme.colorScheme.onSurfaceVariant,
+                    style = KmiTypography.secondary.copy(
+                        fontWeight = FontWeight.SemiBold
+                    ),
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
@@ -3840,10 +4090,11 @@ private fun CompletedExamHistoryRow(
                     ),
                     modifier = Modifier.fillMaxWidth(),
                     textAlign = textAlign,
-                    color = Color(0xFF475569),
-                    fontWeight = FontWeight.SemiBold,
-                    fontSize = 12.sp,
-                    lineHeight = 15.sp,
+                    color =
+                        MaterialTheme.colorScheme.onSurfaceVariant,
+                    style = KmiTypography.secondary.copy(
+                        fontWeight = FontWeight.SemiBold
+                    ),
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
@@ -3856,10 +4107,11 @@ private fun CompletedExamHistoryRow(
                     ),
                     modifier = Modifier.fillMaxWidth(),
                     textAlign = textAlign,
-                    color = Color(0xFF64748B),
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 11.2.sp,
-                    lineHeight = 14.sp,
+                    color =
+                        MaterialTheme.colorScheme.onSurfaceVariant,
+                    style = KmiTypography.caption.copy(
+                        fontWeight = FontWeight.Bold
+                    ),
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
@@ -3868,10 +4120,18 @@ private fun CompletedExamHistoryRow(
             Surface(
                 onClick = onDeleteClick,
                 shape = CircleShape,
-                color = Color(0xFFFFF1F2),
+                color =
+                    MaterialTheme.colorScheme.errorContainer,
+                contentColor =
+                    MaterialTheme.colorScheme.onErrorContainer,
+                tonalElevation = 0.dp,
+                shadowElevation = 0.dp,
                 border = BorderStroke(
-                    width = 1.dp,
-                    color = Color(0xFFFCA5A5)
+                    width = 0.75.dp,
+                    color =
+                        MaterialTheme.colorScheme.error.copy(
+                            alpha = 0.42f
+                        )
                 ),
                 modifier = Modifier.size(26.dp)
             ) {
@@ -3881,8 +4141,7 @@ private fun CompletedExamHistoryRow(
                 ) {
                     Text(
                         text = "🗑",
-                        fontSize = 12.sp,
-                        lineHeight = 12.sp,
+                        style = KmiTypography.caption,
                         maxLines = 1
                     )
                 }
@@ -3915,143 +4174,11 @@ private fun CompletedExamScoreBubble(
             Text(
                 text = "$percent%",
                 color = examBeltDarkColor(currentBelt),
-                fontWeight = FontWeight.Black,
-                fontSize = 12.sp,
+                style = KmiTypography.caption.copy(
+                    fontWeight = FontWeight.Black
+                ),
                 maxLines = 1
             )
-        }
-    }
-}
-
-@Composable
-private fun RecentCompletedExamResultsCard(
-    results: List<RecentInternalExamResultUi>,
-    isEnglish: Boolean,
-    currentBelt: Belt,
-    onOpenResult: (RecentInternalExamResultUi) -> Unit
-) {
-    if (results.isEmpty()) return
-
-    Surface(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(24.dp),
-        color = Color.White.copy(alpha = 0.86f),
-        border = BorderStroke(
-            width = 1.dp,
-            color = examBeltMainColor(currentBelt).copy(alpha = 0.24f)
-        ),
-        shadowElevation = 10.dp
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 14.dp, vertical = 12.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
-            horizontalAlignment = if (isEnglish) Alignment.Start else Alignment.End
-        ) {
-            Text(
-                text = examTr(
-                    isEnglish,
-                    "מבחנים אחרונים שהושלמו",
-                    "Recent completed exams"
-                ),
-                modifier = Modifier.fillMaxWidth(),
-                textAlign = if (isEnglish) TextAlign.Left else TextAlign.Right,
-                color = Color(0xFF111827),
-                fontWeight = FontWeight.Black,
-                fontSize = 17.sp,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
-
-            Text(
-                text = examTr(
-                    isEnglish,
-                    "לחיצה על מבחן תפתח שיתוף PDF מחדש",
-                    "Tap an exam to share the PDF again"
-                ),
-                modifier = Modifier.fillMaxWidth(),
-                textAlign = if (isEnglish) TextAlign.Left else TextAlign.Right,
-                color = Color(0xFF64748B),
-                fontWeight = FontWeight.SemiBold,
-                fontSize = 12.sp,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
-
-            results.take(5).forEach { result ->
-                Surface(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clickable { onOpenResult(result) },
-                    shape = RoundedCornerShape(18.dp),
-                    color = examBeltSoftColor(currentBelt).copy(alpha = 0.72f),
-                    border = BorderStroke(
-                        width = 1.dp,
-                        color = examBeltDarkColor(currentBelt).copy(alpha = 0.14f)
-                    )
-                ) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 10.dp, vertical = 9.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(10.dp)
-                    ) {
-                        Surface(
-                            shape = CircleShape,
-                            color = examBeltMainColor(currentBelt).copy(alpha = 0.22f),
-                            modifier = Modifier.size(42.dp)
-                        ) {
-                            Box(
-                                modifier = Modifier.fillMaxSize(),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Text(
-                                    text = "${result.percent}%",
-                                    color = examBeltDarkColor(currentBelt),
-                                    fontWeight = FontWeight.Black,
-                                    fontSize = 12.sp,
-                                    maxLines = 1
-                                )
-                            }
-                        }
-
-                        Column(
-                            modifier = Modifier.weight(1f),
-                            horizontalAlignment = if (isEnglish) Alignment.Start else Alignment.End
-                        ) {
-                            Text(
-                                text = result.traineeName,
-                                modifier = Modifier.fillMaxWidth(),
-                                textAlign = if (isEnglish) TextAlign.Left else TextAlign.Right,
-                                color = Color(0xFF111827),
-                                fontWeight = FontWeight.ExtraBold,
-                                fontSize = 15.sp,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis
-                            )
-
-                            Text(
-                                text = "${result.beltName} • ${result.score10.coerceIn(0.0, 10.0).toScoreString()} / 10",
-                                modifier = Modifier.fillMaxWidth(),
-                                textAlign = if (isEnglish) TextAlign.Left else TextAlign.Right,
-                                color = Color(0xFF475569),
-                                fontWeight = FontWeight.SemiBold,
-                                fontSize = 12.sp,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis
-                            )
-                        }
-
-                        Text(
-                            text = "📤",
-                            fontSize = 20.sp,
-                            maxLines = 1
-                        )
-                    }
-                }
-            }
         }
     }
 }
@@ -4065,13 +4192,6 @@ private fun InternalExamEntryHeroCard(
         MaterialTheme.colorScheme.background
             .luminance() < 0.5f
 
-    val titleColor =
-        if (isDarkMode) {
-            MaterialTheme.colorScheme.onSurface
-        } else {
-            Color(0xFF102142)
-        }
-
     val secondaryColor =
         if (isDarkMode) {
             MaterialTheme.colorScheme
@@ -4084,22 +4204,20 @@ private fun InternalExamEntryHeroCard(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(28.dp),
         color =
-            if (isDarkMode) {
-                MaterialTheme.colorScheme.surface
-                    .copy(alpha = 0.96f)
-            } else {
-                Color.White.copy(alpha = 0.84f)
-            },
+            MaterialTheme.colorScheme.surface.copy(
+                alpha = 0.96f
+            ),
         border = BorderStroke(
-            width = 1.dp,
+            width = 0.75.dp,
             color =
-                if (isDarkMode) {
-                    MaterialTheme.colorScheme.outline
-                        .copy(alpha = 0.46f)
-                } else {
-                    Color(0xFFBFD3EE)
-                        .copy(alpha = 0.82f)
-                }
+                MaterialTheme.colorScheme.outlineVariant.copy(
+                    alpha =
+                        if (isDarkMode) {
+                            0.58f
+                        } else {
+                            0.46f
+                        }
+                )
         ),
         tonalElevation = 0.dp,
         shadowElevation = 0.dp
@@ -4125,13 +4243,14 @@ private fun InternalExamEntryHeroCard(
                                         )
                                     } else {
                                         listOf(
-                                            Color.White.copy(
-                                                alpha = 0.97f
-                                            ),
-                                            Color(0xFFEAF4FF)
-                                                .copy(alpha = 0.94f),
+                                            MaterialTheme.colorScheme
+                                                .surface,
+                                            MaterialTheme.colorScheme
+                                                .surfaceVariant.copy(
+                                                    alpha = 0.64f
+                                                ),
                                             examBeltSoftColor(belt)
-                                                .copy(alpha = 0.28f)
+                                                .copy(alpha = 0.24f)
                                         )
                                     }
                             )
@@ -4229,7 +4348,7 @@ private fun InternalExamEntryMetaRow(
     Column(
         modifier = Modifier.fillMaxWidth()
     ) {
-        Divider(
+        HorizontalDivider(
             modifier = Modifier.padding(
                 horizontal = 4.dp
             ),
@@ -4257,7 +4376,7 @@ private fun InternalExamEntryMetaRow(
                 modifier = Modifier.weight(1f)
             )
 
-            InternalExamEntryMetaDivider()
+            InternalExamEntryMetaHorizontalDivider()
 
             InternalExamEntryMetaItem(
                 icon = "◷",
@@ -4270,7 +4389,7 @@ private fun InternalExamEntryMetaRow(
                 modifier = Modifier.weight(1f)
             )
 
-            InternalExamEntryMetaDivider()
+            InternalExamEntryMetaHorizontalDivider()
 
             InternalExamEntryMetaItem(
                 icon = "🥋",
@@ -4317,8 +4436,9 @@ private fun InternalExamEntryMetaItem(
                 Text(
                     text = icon,
                     color = Color(0xFF6551D9),
-                    fontSize = 16.sp,
-                    fontWeight = FontWeight.Black
+                    style = KmiTypography.action.copy(
+                        fontWeight = FontWeight.Black
+                    )
                 )
             }
         }
@@ -4326,10 +4446,10 @@ private fun InternalExamEntryMetaItem(
         Text(
             text = value,
             modifier = Modifier.fillMaxWidth(),
-            color = Color(0xFF22314C),
-            fontWeight = FontWeight.Bold,
-            fontSize = 11.5.sp,
-            lineHeight = 14.sp,
+            color = MaterialTheme.colorScheme.onSurface,
+            style = KmiTypography.caption.copy(
+                fontWeight = FontWeight.Bold
+            ),
             textAlign = TextAlign.Center,
             maxLines = 2,
             overflow = TextOverflow.Ellipsis
@@ -4338,7 +4458,7 @@ private fun InternalExamEntryMetaItem(
 }
 
 @Composable
-private fun InternalExamEntryMetaDivider() {
+private fun InternalExamEntryMetaHorizontalDivider() {
     Box(
         modifier = Modifier
             .padding(top = 5.dp)
@@ -4394,9 +4514,9 @@ private fun PremiumExamArchiveRow(
                         "‹"
                     },
                 color = Color(0xFFB8C5D9),
-                fontSize = 31.sp,
-                lineHeight = 31.sp,
-                fontWeight = FontWeight.Light
+                style = KmiTypography.metric.copy(
+                    fontWeight = FontWeight.Light
+                )
             )
 
             Text(
@@ -4407,9 +4527,9 @@ private fun PremiumExamArchiveRow(
                 ),
                 modifier = Modifier.weight(1f),
                 color = Color.White,
-                fontWeight = FontWeight.ExtraBold,
-                fontSize = 18.sp,
-                lineHeight = 21.sp,
+                style = KmiTypography.sectionTitle.copy(
+                    fontWeight = FontWeight.ExtraBold
+                ),
                 textAlign =
                     if (isEnglish) {
                         TextAlign.Left
@@ -4437,7 +4557,7 @@ private fun PremiumExamArchiveRow(
                 ) {
                     Text(
                         text = "📚",
-                        fontSize = 21.sp
+                        style = KmiTypography.sectionTitle
                     )
                 }
             }
@@ -4855,17 +4975,56 @@ private fun SummaryCard(
 
     val summaryText = examSummaryText(percent, isEnglish)
 
+    val isDarkMode =
+        MaterialTheme.colorScheme.background
+            .luminance() < 0.5f
+
+    val summaryContainerColor =
+        if (isDarkMode) {
+            MaterialTheme.colorScheme.surfaceVariant
+        } else {
+            examBeltSoftColor(currentBelt)
+        }
+
     Card(
         onClick = { expanded = !expanded },
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 12.dp, vertical = 4.dp), // ✅ פחות גובה
-        colors = CardDefaults.cardColors(containerColor = examBeltSoftColor(currentBelt)),
+            .padding(
+                horizontal = 12.dp,
+                vertical = 4.dp
+            ),
+        colors =
+            CardDefaults.cardColors(
+                containerColor = summaryContainerColor,
+                contentColor =
+                    MaterialTheme.colorScheme.onSurface
+            ),
+        border = BorderStroke(
+            width = 0.75.dp,
+            color =
+                examBeltMainColor(currentBelt)
+                    .copy(
+                        alpha =
+                            if (isDarkMode) {
+                                0.42f
+                            } else {
+                                0.24f
+                            }
+                    )
+        ),
+        elevation =
+            CardDefaults.cardElevation(
+                defaultElevation = 0.dp
+            ),
         shape = RoundedCornerShape(16.dp)
     ) {
         Column(
             modifier = Modifier
-                .padding(horizontal = 12.dp, vertical = 10.dp) // ✅ פחות גובה
+                .padding(
+                    horizontal = 12.dp,
+                    vertical = 10.dp
+                )
                 .fillMaxWidth()
         ) {
             Row(
@@ -4883,8 +5042,8 @@ private fun SummaryCard(
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Text(
-                                text = examTr(isEnglish, "סיכום מבחן", "Exam summary"),
-                                style = MaterialTheme.typography.titleMedium.copy(
+                                text = "סיכום מבחן",
+                                style = KmiTypography.cardTitle.copy(
                                     fontWeight = FontWeight.Bold
                                 ),
                                 modifier = Modifier.weight(1f),
@@ -4900,13 +5059,12 @@ private fun SummaryCard(
                         Spacer(Modifier.height(4.dp))
 
                         Text(
-                            text = examTr(
-                                isEnglish,
-                                "מצטבר: ${totalScore10.coerceIn(0.0, 10.0).toScoreString()} / 10  (${percent}%)",
-                                "Total: ${totalScore10.coerceIn(0.0, 10.0).toScoreString()} / 10  (${percent}%)"
-                            ),
+                            text =
+                                "מצטבר: " +
+                                        "${totalScore10.coerceIn(0.0, 10.0).toScoreString()} " +
+                                        "/ 10  (${percent}%)",
                             modifier = Modifier.fillMaxWidth(),
-                            style = MaterialTheme.typography.bodyMedium.copy(
+                            style = KmiTypography.body.copy(
                                 fontWeight = FontWeight.SemiBold
                             ),
                             textAlign = TextAlign.Right
@@ -4915,14 +5073,18 @@ private fun SummaryCard(
                         Text(
                             text = summaryText,
                             modifier = Modifier.fillMaxWidth(),
-                            style = MaterialTheme.typography.bodySmall,
+                            style = KmiTypography.secondary,
                             textAlign = TextAlign.Right
                         )
                     }
 
                     Image(
                         painter = painterResource(id = examBeltDrawableRes(currentBelt)),
-                        contentDescription = examBeltNameForUi(currentBelt, isEnglish),
+                        contentDescription =
+                            examBeltNameForUi(
+                                currentBelt,
+                                false
+                            ),
                         modifier = Modifier
                             .width(104.dp)
                             .height(28.dp),
@@ -4931,7 +5093,11 @@ private fun SummaryCard(
                 } else {
                     Image(
                         painter = painterResource(id = examBeltDrawableRes(currentBelt)),
-                        contentDescription = examBeltNameForUi(currentBelt, isEnglish),
+                        contentDescription =
+                            examBeltNameForUi(
+                                currentBelt,
+                                true
+                            ),
                         modifier = Modifier
                             .width(104.dp)
                             .height(28.dp),
@@ -4947,8 +5113,8 @@ private fun SummaryCard(
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Text(
-                                text = examTr(isEnglish, "סיכום מבחן", "Exam summary"),
-                                style = MaterialTheme.typography.titleMedium.copy(
+                                text = "Exam summary",
+                                style = KmiTypography.cardTitle.copy(
                                     fontWeight = FontWeight.Bold
                                 ),
                                 modifier = Modifier.weight(1f),
@@ -4964,13 +5130,12 @@ private fun SummaryCard(
                         Spacer(Modifier.height(4.dp))
 
                         Text(
-                            text = examTr(
-                                isEnglish,
-                                "מצטבר: ${totalScore10.coerceIn(0.0, 10.0).toScoreString()} / 10  (${percent}%)",
-                                "Total: ${totalScore10.coerceIn(0.0, 10.0).toScoreString()} / 10  (${percent}%)"
-                            ),
+                            text =
+                                "Total: " +
+                                        "${totalScore10.coerceIn(0.0, 10.0).toScoreString()} " +
+                                        "/ 10  (${percent}%)",
                             modifier = Modifier.fillMaxWidth(),
-                            style = MaterialTheme.typography.bodyMedium.copy(
+                            style = KmiTypography.body.copy(
                                 fontWeight = FontWeight.SemiBold
                             ),
                             textAlign = TextAlign.Left
@@ -4979,7 +5144,7 @@ private fun SummaryCard(
                         Text(
                             text = summaryText,
                             modifier = Modifier.fillMaxWidth(),
-                            style = MaterialTheme.typography.bodySmall,
+                            style = KmiTypography.secondary,
                             textAlign = TextAlign.Left
                         )
                     }
@@ -4989,14 +5154,26 @@ private fun SummaryCard(
             // ✅ פירוט רק כשפותחים
             if (expanded && beltScores.isNotEmpty()) {
                 Spacer(Modifier.height(8.dp))
-                Divider()
+                HorizontalDivider()
                 Spacer(Modifier.height(8.dp))
 
                 beltScores.forEach { (belt, score) ->
                     Text(
-                        // ✅ לכל חגורה: 0–10
-                        text = "${examBeltNameForUi(belt, isEnglish)}: ${score.score10.coerceIn(0.0, 10.0).toScoreString()} / 10 (${score.percent}%)",
-                        style = MaterialTheme.typography.bodySmall
+                        text =
+                            "${examBeltNameForUi(belt, isEnglish)}: " +
+                                    "${score.score10.coerceIn(0.0, 10.0).toScoreString()} " +
+                                    "/ 10 (${score.percent}%)",
+                        style = KmiTypography.secondary,
+                        color =
+                            MaterialTheme.colorScheme
+                                .onSurfaceVariant,
+                        textAlign =
+                            if (isEnglish) {
+                                TextAlign.Left
+                            } else {
+                                TextAlign.Right
+                            },
+                        modifier = Modifier.fillMaxWidth()
                     )
                 }
             }
@@ -5015,16 +5192,27 @@ private fun ExerciseRow(
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 10.dp, vertical = 4.dp),
+            .padding(
+                horizontal = 10.dp,
+                vertical = 4.dp
+            ),
         shape = RoundedCornerShape(14.dp),
         colors = CardDefaults.cardColors(
-            containerColor = Color.White.copy(alpha = 0.985f)
+            containerColor =
+                MaterialTheme.colorScheme.surface.copy(
+                    alpha = 0.96f
+                )
         ),
         border = BorderStroke(
-            width = 1.dp,
-            color = Color(0xFFD8E3F5)
+            width = 0.75.dp,
+            color =
+                MaterialTheme.colorScheme.outlineVariant.copy(
+                    alpha = 0.55f
+                )
         ),
-        elevation = CardDefaults.cardElevation(defaultElevation = 3.dp)
+        elevation = CardDefaults.cardElevation(
+            defaultElevation = 0.dp
+        )
     ) {
         Column(
             modifier = Modifier
@@ -5036,13 +5224,16 @@ private fun ExerciseRow(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(bottom = 4.dp),
-                style = MaterialTheme.typography.bodyMedium.copy(
-                    fontSize = 12.8.sp,
-                    lineHeight = 15.sp
+                style = KmiTypography.secondary.copy(
+                    fontWeight = FontWeight.ExtraBold
                 ),
-                fontWeight = FontWeight.ExtraBold,
-                color = Color(0xFF172033),
-                textAlign = if (isEnglish) TextAlign.Left else TextAlign.Right,
+                color = MaterialTheme.colorScheme.onSurface,
+                textAlign =
+                    if (isEnglish) {
+                        TextAlign.Left
+                    } else {
+                        TextAlign.Right
+                    },
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis
             )
@@ -5101,35 +5292,39 @@ private fun scoreColor(value: Int): Color {
 
 @Composable
 private fun OutlinedNumberText(
-    text: String,
-    fontSizeSp: Int = 13,
-    strokeWidthPx: Float = 5f
+    text: String
 ) {
-    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-        // outline
+    Box(
+        modifier = Modifier.fillMaxSize(),
+        contentAlignment = Alignment.Center
+    ) {
         Text(
             text = text,
             maxLines = 1,
             softWrap = false,
             overflow = TextOverflow.Clip,
-            fontWeight = FontWeight.Bold,
-            fontSize = fontSizeSp.sp,
             color = Color.White,
-            style = TextStyle(drawStyle = Stroke(width = strokeWidthPx))
+            style = KmiTypography.caption.copy(
+                fontWeight = FontWeight.Bold,
+                drawStyle = Stroke(
+                    width = 3f
+                )
+            )
         )
-        // fill + tiny shadow
+
         Text(
             text = text,
             maxLines = 1,
             softWrap = false,
             overflow = TextOverflow.Clip,
-            fontWeight = FontWeight.Bold,
-            fontSize = fontSizeSp.sp,
             color = Color.Black,
-            style = TextStyle(
+            style = KmiTypography.caption.copy(
+                fontWeight = FontWeight.Bold,
                 shadow = Shadow(
-                    color = Color.Black.copy(alpha = 0.35f),
-                    blurRadius = 3f
+                    color = Color.Black.copy(
+                        alpha = 0.24f
+                    ),
+                    blurRadius = 2f
                 )
             )
         )
@@ -5161,9 +5356,7 @@ private fun ScoreChip(
         shadowElevation = if (selected) 1.dp else 0.dp
     ) {
         OutlinedNumberText(
-            text = value.toString(),
-            fontSizeSp = 9,
-            strokeWidthPx = 3f
+            text = value.toString()
         )
     }
 }
@@ -5172,11 +5365,8 @@ private fun ScoreChip(
 private fun PremiumExamSetupButton(
     text: String,
     icon: String,
-    startColor: Color,
     centerColor: Color,
     endColor: Color,
-    textFontSize: androidx.compose.ui.unit.TextUnit = 25.sp,
-    textLineHeight: androidx.compose.ui.unit.TextUnit = 26.sp,
     onClick: () -> Unit
 ) {
     val isDarkMode =
@@ -5292,36 +5482,44 @@ private fun PremiumDialogActionButton(
     onClick: () -> Unit
 ) {
     Surface(
-        shape = RoundedCornerShape(22.dp),
+        shape = RoundedCornerShape(18.dp),
         color = Color.Transparent,
-        shadowElevation = 14.dp,
-        modifier = modifier.height(58.dp)
+        tonalElevation = 0.dp,
+        shadowElevation = 0.dp,
+        modifier = modifier.heightIn(min = 52.dp)
     ) {
         Box(
             modifier = Modifier
-                .fillMaxSize()
-                .clip(RoundedCornerShape(22.dp))
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(18.dp))
                 .clickable { onClick() }
                 .background(
-                    brush = androidx.compose.ui.graphics.Brush.horizontalGradient(
-                        listOf(
-                            startColor,
-                            centerColor,
-                            endColor
-                        )
-                    )
+                    brush =
+                        androidx.compose.ui.graphics.Brush
+                            .horizontalGradient(
+                                listOf(
+                                    startColor,
+                                    centerColor,
+                                    endColor
+                                )
+                            )
                 )
-                .padding(horizontal = 8.dp),
+                .padding(
+                    horizontal = 10.dp,
+                    vertical = 12.dp
+                ),
             contentAlignment = Alignment.Center
         ) {
             Row(
+                modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.Center
             ) {
                 Text(
                     text = icon,
-                    fontSize = 17.sp,
-                    fontWeight = FontWeight.Black,
+                    style = KmiTypography.action.copy(
+                        fontWeight = FontWeight.Black
+                    ),
                     color = Color.White,
                     maxLines = 1
                 )
@@ -5331,12 +5529,12 @@ private fun PremiumDialogActionButton(
                 Text(
                     text = text,
                     color = Color.White,
-                    fontWeight = FontWeight.ExtraBold,
-                    fontSize = 15.sp,
+                    style = KmiTypography.action.copy(
+                        fontWeight = FontWeight.ExtraBold
+                    ),
                     textAlign = TextAlign.Center,
-                    maxLines = 1,
-                    softWrap = false,
-                    overflow = TextOverflow.Clip
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis
                 )
             }
         }
@@ -5358,41 +5556,55 @@ private fun ChangeBeltBottomBar(
         Surface(
             shape = RoundedCornerShape(20.dp),
             color = Color.Transparent,
-            shadowElevation = 6.dp,
+            tonalElevation = 0.dp,
+            shadowElevation = 0.dp,
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 22.dp, vertical = 5.dp)
-                .height(40.dp)
+                .padding(
+                    horizontal = 22.dp,
+                    vertical = 5.dp
+                )
+                .heightIn(min = 44.dp)
         ) {
             Box(
                 modifier = Modifier
-                    .fillMaxSize()
+                    .fillMaxWidth()
                     .clip(RoundedCornerShape(20.dp))
-                    .clickable { onChangeBelt() }
+                    .clickable {
+                        onChangeBelt()
+                    }
                     .background(
                         brush = examBeltButtonBrush(belt)
+                    )
+                    .padding(
+                        horizontal = 14.dp,
+                        vertical = 12.dp
                     ),
                 contentAlignment = Alignment.Center
             ) {
                 Row(
+                    modifier = Modifier.fillMaxWidth(),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.Center
                 ) {
                     Text(
                         text = "🥋",
-                        fontSize = 16.sp
+                        style = KmiTypography.action
                     )
 
                     Spacer(Modifier.width(6.dp))
 
                     Text(
-                        text = examTr(isEnglish, "מעבר לחגורה אחרת", "Change belt"),
+                        text = examTr(
+                            isEnglish,
+                            "מעבר לחגורה אחרת",
+                            "Change belt"
+                        ),
                         color = Color.White,
-                        fontWeight = FontWeight.Black,
-                        fontSize = 13.2.sp,
-                        lineHeight = 14.sp,
+                        style = KmiTypography.action.copy(
+                            fontWeight = FontWeight.Black
+                        ),
                         maxLines = 1,
-                        softWrap = false,
                         overflow = TextOverflow.Ellipsis
                     )
                 }
@@ -5403,13 +5615,11 @@ private fun ChangeBeltBottomBar(
 
 @Composable
 private fun BottomActionBar(
-    session: InternalExamSession,
     isEnglish: Boolean,
     isSaving: Boolean = false,
     finishMode: Boolean = false,
     entryScreenStyle: Boolean = false,
-    onSave: () -> Unit,
-    onExportPdf: () -> Unit
+    onSave: () -> Unit
 ) {
     val isDarkMode =
         MaterialTheme.colorScheme.background
@@ -5610,9 +5820,9 @@ private fun buildInternalExamExercisesFromContent(belt: Belt): List<ExamExercise
         KmiSearchBridge.topicTitlesFor(belt)
     }.getOrDefault(emptyList()).ifEmpty {
         runCatching {
-            val sharedBelt: il.kmi.shared.domain.Belt =
-                il.kmi.shared.domain.Belt.fromId(belt.id)
-                    ?: il.kmi.shared.domain.Belt.WHITE
+            val sharedBelt =
+                Belt.fromId(belt.id)
+                    ?: Belt.WHITE
 
             SubTopicRegistry
                 .allForBelt(sharedBelt)
@@ -5956,6 +6166,7 @@ private suspend fun deleteExamDraftAfterCompletion(
 }
 
 private suspend fun loadExamDraft(
+    @Suppress("UNUSED_PARAMETER")
     context: Context,
     traineeName: String,
     belt: Belt
@@ -5974,7 +6185,7 @@ private suspend fun loadExamDraft(
             .await()
 
         if (!snap.exists()) {
-            return@runCatching emptyMap<String, Int>()
+            return@runCatching emptyMap()
         }
 
         val rawMarks = snap.get("marks") as? Map<*, *> ?: return@runCatching emptyMap<String, Int>()
@@ -6042,7 +6253,11 @@ private fun findSubTopicTitleForItemInternal(belt: Belt, topic: String, item: St
     return null
 }
 
-private fun saveLastTrainee(context: Context, name: String) {
+private fun saveLastTrainee(
+    @Suppress("UNUSED_PARAMETER")
+    context: Context,
+    name: String
+) {
     val clean = name.trim()
     if (clean.isBlank()) return
 
@@ -6062,13 +6277,12 @@ private fun saveLastTrainee(context: Context, name: String) {
         )
 }
 
-private fun loadLastTrainee(context: Context): String {
-    // לא בוחרים נבחן אוטומטית במסך הכניסה.
-    // הפונקציה נשארת כדי לא לשבור קריאות קיימות.
-    return ""
-}
-
-private suspend fun loadRecentTrainees(context: Context, limit: Int = 20): List<String> {
+@Suppress("SameParameterValue")
+private suspend fun loadRecentTrainees(
+    @Suppress("UNUSED_PARAMETER")
+    context: Context,
+    limit: Int = 20
+): List<String> {
     val coachUid = internalExamCoachUid() ?: return emptyList()
 
     return runCatching {
@@ -6237,7 +6451,13 @@ private suspend fun loadCompletedInternalExamSessionForPdf(
     )
 }
 
-private fun pushRecentTrainee(context: Context, name: String, limit: Int = 20) {
+private fun pushRecentTrainee(
+    @Suppress("UNUSED_PARAMETER")
+    context: Context,
+    name: String,
+    @Suppress("UNUSED_PARAMETER")
+    limit: Int = 20
+) {
     val clean = name.trim()
     if (clean.isBlank()) return
 

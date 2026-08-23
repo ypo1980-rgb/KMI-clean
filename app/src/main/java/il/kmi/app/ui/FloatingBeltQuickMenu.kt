@@ -9,9 +9,9 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.FormatListBulleted
+import androidx.compose.material.icons.automirrored.filled.FormatListBulleted
 import androidx.compose.material.icons.filled.Mic
-import androidx.compose.material.icons.filled.ReceiptLong
+import androidx.compose.material.icons.automirrored.filled.ReceiptLong
 import androidx.compose.material.icons.filled.SportsMma
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.Icon
@@ -35,7 +35,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import il.kmi.shared.domain.Belt
 import il.kmi.shared.localization.AppLanguage
 import il.kmi.shared.localization.AppLanguageManager
@@ -59,12 +58,14 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.IconButton
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.vector.ImageVector
 
 //============================================================================
+
 
 enum class QuickMenuTriggerMode {
     Fab,
@@ -81,15 +82,15 @@ private data class QuickMenuItemUi(
     val isLocked: Boolean
 )
 
-private fun quickMenuLockTint(accentColor: Color): Color {
-    // ✅ מנעול קבוע בסגנון פרימיום "אמיתי" בכל החגורות
-    // לא לפי צבע חגורה, כדי שלא ייראה כמו צעצוע
+private fun quickMenuLockTint(): Color {
     return Color(0xFFF59E0B)
 }
 
 @Composable
-private fun ModernGlowFab(    accentColor: Color,
+private fun ModernGlowFab(
+    accentColor: Color,
     expanded: Boolean,
+    isEnglish: Boolean,
     onClick: () -> Unit
 ) {
     val shape = RoundedCornerShape(22.dp)
@@ -127,12 +128,16 @@ private fun ModernGlowFab(    accentColor: Color,
     )
 
     Box(
-        modifier = Modifier.size(72.dp),
+        modifier = Modifier.size(
+            scaledIconSize(72.dp)
+        ),
         contentAlignment = Alignment.Center
     ) {
         Box(
             modifier = Modifier
-                .size(88.dp)
+                .size(
+                    scaledIconSize(88.dp)
+                )
                 .graphicsLayer {
                     scaleX = haloScale
                     scaleY = haloScale
@@ -151,12 +156,21 @@ private fun ModernGlowFab(    accentColor: Color,
 
         Box(
             modifier = Modifier
-                .size(62.dp)
+                .size(
+                    scaledIconSize(62.dp)
+                )
                 .clip(shape)
-                .background(Color.White.copy(alpha = 0.96f))
+                .background(
+                    MaterialTheme.colorScheme.surface.copy(
+                        alpha = 0.92f
+                    )
+                )
                 .border(
-                    width = 2.dp,
-                    color = Color.White.copy(alpha = 0.96f),
+                    width = 1.dp,
+                    color =
+                        MaterialTheme.colorScheme.outlineVariant.copy(
+                            alpha = 0.45f
+                        ),
                     shape = shape
                 )
         )
@@ -165,9 +179,15 @@ private fun ModernGlowFab(    accentColor: Color,
             onClick = onClick,
             shape = shape,
             color = Color.Transparent,
-            shadowElevation = 16.dp,
+            shadowElevation = 0.dp,
             tonalElevation = 0.dp,
-            border = BorderStroke(1.dp, Color.Black.copy(alpha = 0.10f)),
+            border = BorderStroke(
+                width = 0.75.dp,
+                color =
+                    MaterialTheme.colorScheme.outlineVariant.copy(
+                        alpha = 0.38f
+                    )
+            ),
             modifier = Modifier.graphicsLayer {
                 scaleX = buttonScale
                 scaleY = buttonScale
@@ -175,7 +195,9 @@ private fun ModernGlowFab(    accentColor: Color,
         ) {
             Box(
                 modifier = Modifier
-                    .size(56.dp)
+                    .size(
+                        scaledIconSize(56.dp)
+                    )
                     .background(
                         Brush.linearGradient(
                             colors = listOf(
@@ -202,7 +224,20 @@ private fun ModernGlowFab(    accentColor: Color,
 
                 Icon(
                     imageVector = Icons.Filled.Menu,
-                    contentDescription = if (expanded) "סגור" else "תפריט מהיר",
+                    contentDescription =
+                        if (expanded) {
+                            if (isEnglish) {
+                                "Close quick menu"
+                            } else {
+                                "סגור תפריט מהיר"
+                            }
+                        } else {
+                            if (isEnglish) {
+                                "Open quick menu"
+                            } else {
+                                "פתח תפריט מהיר"
+                            }
+                        },
                     tint = Color.White,
                     modifier = Modifier
                         .size(KmiIconSize.large)
@@ -217,36 +252,45 @@ private fun ModernGlowFab(    accentColor: Color,
 private fun SideRailQuickMenuTrigger(
     accentColor: Color,
     expanded: Boolean,
+    isEnglish: Boolean,
     onClick: () -> Unit
 ) {
     val iconRotation by animateFloatAsState(
         targetValue = if (expanded) 180f else 0f,
-        animationSpec = spring(dampingRatio = 0.72f, stiffness = 500f),
+        animationSpec = spring(
+            dampingRatio = 0.72f,
+            stiffness = 500f
+        ),
         label = "sideRailIconRotation"
+    )
+
+    val triggerShape = RoundedCornerShape(
+        topEnd = 18.dp,
+        bottomEnd = 18.dp,
+        topStart = 0.dp,
+        bottomStart = 0.dp
     )
 
     Surface(
         onClick = onClick,
-        shape = RoundedCornerShape(
-            topEnd = 18.dp,
-            bottomEnd = 18.dp,
-            topStart = 0.dp,
-            bottomStart = 0.dp
-        ),
+        shape = triggerShape,
         color = Color.Transparent,
-        shadowElevation = 12.dp,
+        shadowElevation = 0.dp,
         tonalElevation = 0.dp,
         border = BorderStroke(
-            width = 1.dp,
-            color = Color.White.copy(alpha = 0.72f)
+            width = 0.75.dp,
+            color = MaterialTheme.colorScheme.outlineVariant.copy(
+                alpha = 0.55f
+            )
         ),
         modifier = Modifier
-            .width(42.dp)
-            .height(86.dp)
+            .width(38.dp)
+            .height(72.dp)
     ) {
         Box(
             modifier = Modifier
                 .fillMaxSize()
+                .clip(triggerShape)
                 .background(
                     Brush.verticalGradient(
                         colors = listOf(
@@ -273,73 +317,26 @@ private fun SideRailQuickMenuTrigger(
 
             Icon(
                 imageVector = Icons.Filled.Menu,
-                contentDescription = if (expanded) "סגור תפריט מהיר" else "פתח תפריט מהיר",
+                contentDescription =
+                    if (expanded) {
+                        if (isEnglish) {
+                            "Close quick menu"
+                        } else {
+                            "סגור תפריט מהיר"
+                        }
+                    } else {
+                        if (isEnglish) {
+                            "Open quick menu"
+                        } else {
+                            "פתח תפריט מהיר"
+                        }
+                    },
                 tint = Color.White,
                 modifier = Modifier
                     .size(KmiIconSize.large)
                     .graphicsLayer {
                         rotationZ = iconRotation
                     }
-            )
-        }
-    }
-}
-
-@Composable
-private fun BottomQuickMenuButton(
-    belt: Belt,
-    isEnglish: Boolean,
-    onClick: () -> Unit
-) {
-    Surface(
-        onClick = onClick,
-        shape = RoundedCornerShape(18.dp),
-        shadowElevation = 8.dp,
-        color = Color.White,
-        border = BorderStroke(
-            1.dp,
-            belt.color.copy(alpha = 0.22f)
-        ),
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(60.dp)
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(
-                    brush = Brush.verticalGradient(
-                        colors = listOf(
-                            belt.color.copy(alpha = 0.10f),
-                            Color.White,
-                            belt.color.copy(alpha = 0.05f)
-                        )
-                    )
-                )
-                .padding(horizontal = 16.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.Center
-        ) {
-            Icon(
-                imageVector = Icons.Filled.Menu,
-                contentDescription = null,
-                tint = belt.color,
-                modifier = Modifier.size(KmiIconSize.small)
-            )
-
-            Spacer(Modifier.width(8.dp))
-
-            Text(
-                text =
-                    if (isEnglish) {
-                        "More Actions"
-                    } else {
-                        "פעולות נוספות"
-                    },
-                style = KmiTypography.action,
-                color = belt.color,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
             )
         }
     }
@@ -363,6 +360,7 @@ fun FloatingQuickMenu(
     onPractice: () -> Unit = {},
     onSummary: () -> Unit,
     onVoice: () -> Unit,
+    @Suppress("UNUSED_PARAMETER")
     onPdf: () -> Unit
 ) {
     val ctx = LocalContext.current
@@ -432,7 +430,18 @@ fun FloatingQuickMenu(
         action()
     }
 
-    val items = remember(isMenuLocked, isEnglish, includeAllLists, includePractice, includeSummary) {
+    val items = remember(
+        isMenuLocked,
+        isEnglish,
+        includeAllLists,
+        includePractice,
+        includeSummary,
+        onWeakPoints,
+        onAllLists,
+        onPractice,
+        onSummary,
+        onVoice
+    ) {
         buildList {
         add(
             QuickMenuItemUi(
@@ -447,7 +456,9 @@ fun FloatingQuickMenu(
             add(
                 QuickMenuItemUi(
                     title = tr("כל הרשימות", "All Lists"),
-                    icon = Icons.Filled.FormatListBulleted,
+                    icon =
+                        Icons.AutoMirrored.Filled
+                            .FormatListBulleted,
                     action = onAllLists,
                     isLocked = isMenuLocked
                 )
@@ -469,7 +480,9 @@ fun FloatingQuickMenu(
             add(
                 QuickMenuItemUi(
                     title = tr("מסך סיכום", "Summary"),
-                    icon = Icons.Filled.ReceiptLong,
+                    icon =
+                        Icons.AutoMirrored.Filled
+                            .ReceiptLong,
                     action = onSummary,
                     isLocked = isMenuLocked
                 )
@@ -492,9 +505,6 @@ fun FloatingQuickMenu(
         menuVisibilityState.targetState = expanded
     }
 
-    // ✅ מוריד את טריגר התפריט המהיר והפאנל שלו מעט למטה
-    val sideRailVerticalOffset = 88.dp
-
     Box(
         modifier = modifier,
         contentAlignment = when (triggerMode) {
@@ -508,6 +518,9 @@ fun FloatingQuickMenu(
                 modifier = Modifier
                     .matchParentSize()
                     .background(Color.Transparent)
+                    .clickable {
+                        onExpandedChange(false)
+                    }
             )
         }
 
@@ -527,11 +540,11 @@ fun FloatingQuickMenu(
                     .offset(y = (-6).dp)
 
                 QuickMenuTriggerMode.SideRail -> Modifier
-                    .align(Alignment.CenterStart)
+                    .align(Alignment.TopStart)
                     .wrapContentSize()
                     .offset(
                         x = 46.dp,
-                        y = sideRailVerticalOffset
+                        y = 88.dp
                     )
             }
         ) {
@@ -588,43 +601,50 @@ fun FloatingQuickMenu(
                     !menuVisibilityState.targetState
 
         if (shouldShowTrigger) {
+            val isSideRail =
+                triggerMode ==
+                        QuickMenuTriggerMode.SideRail
+
             Box(
-                modifier = Modifier
-                    .align(
-                        when (triggerMode) {
-                            QuickMenuTriggerMode.SideRail -> Alignment.CenterStart
-                            QuickMenuTriggerMode.Fab ->
-                                if (isEnglish) Alignment.BottomEnd else Alignment.BottomStart
-                            QuickMenuTriggerMode.BottomBar -> Alignment.BottomCenter
-                        }
-                    )
-                    .offset(
-                        y = if (triggerMode == QuickMenuTriggerMode.SideRail) {
-                            sideRailVerticalOffset
-                        } else {
-                            0.dp
-                        }
-                    ),
+                modifier =
+                    Modifier
+                        .align(
+                            if (isSideRail) {
+                                Alignment.TopStart
+                            } else if (isEnglish) {
+                                Alignment.BottomEnd
+                            } else {
+                                Alignment.BottomStart
+                            }
+                        )
+                        .offset(
+                            y =
+                                if (isSideRail) {
+                                    88.dp
+                                } else {
+                                    0.dp
+                                }
+                        ),
                 contentAlignment = Alignment.Center
             ) {
-                when (triggerMode) {
-                    QuickMenuTriggerMode.SideRail -> {
-                        SideRailQuickMenuTrigger(
-                            accentColor = accentColor,
-                            expanded = expanded,
-                            onClick = { onExpandedChange(true) }
-                        )
-                    }
-
-                    QuickMenuTriggerMode.Fab -> {
-                        ModernGlowFab(
-                            accentColor = accentColor,
-                            expanded = expanded,
-                            onClick = { onExpandedChange(true) }
-                        )
-                    }
-
-                    QuickMenuTriggerMode.BottomBar -> Unit
+                if (isSideRail) {
+                    SideRailQuickMenuTrigger(
+                        accentColor = accentColor,
+                        expanded = expanded,
+                        isEnglish = isEnglish,
+                        onClick = {
+                            onExpandedChange(true)
+                        }
+                    )
+                } else {
+                    ModernGlowFab(
+                        accentColor = accentColor,
+                        expanded = expanded,
+                        isEnglish = isEnglish,
+                        onClick = {
+                            onExpandedChange(true)
+                        }
+                    )
                 }
             }
         }
@@ -643,11 +663,9 @@ private fun PremiumQuickMenuPanel(
     onClose: () -> Unit
 ) {
     /*
-     * רוחב זהה למסך הבית. הגובה יכול לגדול
-     * כאשר המשתמש בוחר גודל כתב גדול.
+     * הכרטיס קומפקטי בכתב קטן ומתרחב לפי התוכן.
+     * הרוחב המרבי משאיר שוליים בטוחים במסכים קטנים.
      */
-    val panelWidth = 190.dp
-    val panelMinHeight = 214.dp
     val panelShape = RoundedCornerShape(20.dp)
 
     val colorScheme = MaterialTheme.colorScheme
@@ -655,23 +673,14 @@ private fun PremiumQuickMenuPanel(
         colorScheme.background.luminance() < 0.5f
 
     /*
-     * במצב בהיר התפריט נשאר לבן לחלוטין,
-     * ללא גוון אפור של surfaceVariant.
-     * במצב כהה משתמשים בצבעי ערכת הנושא.
+     * צבעי הכרטיס נלקחים מערכת הנושא כדי לשמור
+     * על ניגודיות עקבית במצב בהיר ובמצב כהה.
      */
     val panelColor =
-        if (isDarkMode) {
-            colorScheme.surface
-        } else {
-            Color.White
-        }
+        colorScheme.surface
 
     val panelSecondaryColor =
-        if (isDarkMode) {
-            colorScheme.surfaceVariant
-        } else {
-            Color.White
-        }
+        colorScheme.surfaceContainerHigh
 
     /*
      * בחגורה כהה משתמשים בצבע הטקסט של ערכת הנושא,
@@ -694,14 +703,6 @@ private fun PremiumQuickMenuPanel(
             accentColor
     }
 
-    val textColor = readableAccent
-    val titleAccent = readableAccent
-
-    val softAccent =
-        readableAccent.copy(
-            alpha = if (isDarkMode) 0.14f else 0.12f
-        )
-
     val borderAccent =
         if (
             isDarkMode &&
@@ -722,42 +723,39 @@ private fun PremiumQuickMenuPanel(
         }
 
     /*
-     * במצב בהיר משתמשים בלבן מלא בלבד.
-     * כך אין שכבת אפור או גוון של צבע החגורה.
+     * גרדיאנט עדין המבוסס על ערכת הנושא וצבע החגורה.
      */
     val panelGradientColors =
-        if (isDarkMode) {
-            listOf(
-                panelColor,
-                panelSecondaryColor.copy(alpha = 0.94f),
-                readableAccent.copy(alpha = 0.14f),
-                panelSecondaryColor.copy(alpha = 0.88f),
-                panelColor
-            )
-        } else {
-            listOf(
-                Color.White,
-                Color.White
-            )
-        }
+        listOf(
+            panelColor,
+            panelSecondaryColor.copy(
+                alpha = if (isDarkMode) 0.92f else 0.72f
+            ),
+            readableAccent.copy(
+                alpha = if (isDarkMode) 0.12f else 0.07f
+            ),
+            panelColor
+        )
 
     Surface(
         shape = panelShape,
         color = panelColor,
         tonalElevation = 0.dp,
-        shadowElevation = 14.dp,
+        shadowElevation = 0.dp,
         border = BorderStroke(
-            width = 1.dp,
+            width = 0.75.dp,
             color = borderAccent
         ),
         modifier = Modifier
-            .width(panelWidth)
-            .heightIn(min = panelMinHeight)
+            .widthIn(
+                min = 190.dp,
+                max = 230.dp
+            )
+            .fillMaxWidth()
     ) {
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .heightIn(min = panelMinHeight)
                 .clip(panelShape)
                 .background(
                     brush = Brush.verticalGradient(
@@ -787,7 +785,7 @@ private fun PremiumQuickMenuPanel(
                             Text(
                                 text = title,
                                 style = KmiTypography.cardTitle,
-                                color = titleAccent,
+                                color = readableAccent,
                                 textAlign = TextAlign.Start,
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis,
@@ -797,14 +795,24 @@ private fun PremiumQuickMenuPanel(
 
                         Spacer(Modifier.width(8.dp))
 
-                        Icon(
-                            imageVector = Icons.Filled.Close,
-                            contentDescription = "close",
-                            tint = titleAccent,
-                            modifier = Modifier
-                                .size(KmiIconSize.small)
-                                .clickable { onClose() }
-                        )
+                        IconButton(
+                            onClick = onClose,
+                            modifier = Modifier.size(40.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Filled.Close,
+                                contentDescription =
+                                    if (isEnglish) {
+                                        "Close quick menu"
+                                    } else {
+                                        "סגור תפריט מהיר"
+                                    },
+                                tint = readableAccent,
+                                modifier = Modifier.size(
+                                    KmiIconSize.small
+                                )
+                            )
+                        }
                     } else {
                         Box(
                             modifier = Modifier.weight(1f),
@@ -813,7 +821,7 @@ private fun PremiumQuickMenuPanel(
                             Text(
                                 text = title,
                                 style = KmiTypography.cardTitle,
-                                color = titleAccent,
+                                color = readableAccent,
                                 textAlign = TextAlign.Right,
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis,
@@ -823,14 +831,24 @@ private fun PremiumQuickMenuPanel(
 
                         Spacer(Modifier.width(8.dp))
 
-                        Icon(
-                            imageVector = Icons.Filled.Close,
-                            contentDescription = "close",
-                            tint = titleAccent,
-                            modifier = Modifier
-                                .size(KmiIconSize.small)
-                                .clickable { onClose() }
-                        )
+                        IconButton(
+                            onClick = onClose,
+                            modifier = Modifier.size(40.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Filled.Close,
+                                contentDescription =
+                                    if (isEnglish) {
+                                        "Close quick menu"
+                                    } else {
+                                        "סגור תפריט מהיר"
+                                    },
+                                tint = readableAccent,
+                                modifier = Modifier.size(
+                                    KmiIconSize.small
+                                )
+                            )
+                        }
                     }
                 }
 
@@ -843,8 +861,8 @@ private fun PremiumQuickMenuPanel(
                         text = item.title,
                         icon = item.icon,
                         accentColor = accentColor,
-                        textColor = textColor,
-                        lockColor = quickMenuLockTint(accentColor),
+                        textColor = readableAccent,
+                        lockColor = quickMenuLockTint(),
                         isEnglish = isEnglish,
                         isLocked = lockedForUi,
                         onClick = {
@@ -893,22 +911,16 @@ private fun PremiumQuickMenuRow(
         label = "quickMenuLockScale"
     )
 
-    val lockGlowAlpha by lockPulse.animateFloat(
-        initialValue = 0.05f,
-        targetValue = 0.14f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(900, easing = LinearEasing),
-            repeatMode = RepeatMode.Reverse
-        ),
-        label = "quickMenuLockGlow"
-    )
-
     Row(
         modifier = Modifier
             .fillMaxWidth()
+            .heightIn(min = 44.dp)
             .clip(RoundedCornerShape(12.dp))
             .clickable(onClick = onClick)
-            .padding(horizontal = 4.dp, vertical = 5.dp),
+            .padding(
+                horizontal = 4.dp,
+                vertical = 5.dp
+            ),
         verticalAlignment = Alignment.CenterVertically
     ) {
         if (isEnglish) {
@@ -926,10 +938,11 @@ private fun PremiumQuickMenuRow(
             ) {
                 Text(
                     text = text,
-                    style = KmiTypography.action.copy(
-                        fontWeight = FontWeight.SemiBold,
-                        letterSpacing = (-0.14).sp
-                    ),
+                    style =
+                        KmiTypography.action.copy(
+                            fontWeight =
+                                FontWeight.SemiBold
+                        ),
                     color = textColor,
                     textAlign = TextAlign.Start,
                     maxLines = 2,
@@ -942,8 +955,7 @@ private fun PremiumQuickMenuRow(
 
                     PremiumAnimatedLockIcon(
                         accentColor = lockColor,
-                        scale = lockScale,
-                        glowAlpha = lockGlowAlpha
+                        scale = lockScale
                     )
                 }
             }
@@ -966,10 +978,11 @@ private fun PremiumQuickMenuRow(
             ) {
                 Text(
                     text = text,
-                    style = KmiTypography.action.copy(
-                        fontWeight = FontWeight.SemiBold,
-                        letterSpacing = (-0.14).sp
-                    ),
+                    style =
+                        KmiTypography.action.copy(
+                            fontWeight =
+                                FontWeight.SemiBold
+                        ),
                     color = textColor,
                     textAlign = TextAlign.Right,
                     maxLines = 2,
@@ -982,8 +995,7 @@ private fun PremiumQuickMenuRow(
 
                     PremiumAnimatedLockIcon(
                         accentColor = lockColor,
-                        scale = lockScale,
-                        glowAlpha = lockGlowAlpha
+                        scale = lockScale
                     )
                 }
             }
@@ -994,8 +1006,7 @@ private fun PremiumQuickMenuRow(
 @Composable
 private fun PremiumAnimatedLockIcon(
     accentColor: Color,
-    scale: Float,
-    glowAlpha: Float
+    scale: Float
 ) {
     Icon(
         imageVector = Icons.Filled.Lock,
@@ -1018,7 +1029,9 @@ private fun PremiumQuickMenuIcon(
 ) {
     Box(
         modifier = Modifier
-            .size(20.dp)
+            .size(
+                scaledIconSize(20.dp)
+            )
             .clip(CircleShape)
             .background(accentColor.copy(alpha = 0.10f))
             .border(
