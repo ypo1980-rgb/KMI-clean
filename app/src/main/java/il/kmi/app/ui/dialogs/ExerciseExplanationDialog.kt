@@ -18,6 +18,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -28,11 +29,14 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.lerp
+import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.graphics.luminance
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import il.kmi.app.ui.KmiTypography
+import il.kmi.app.ui.LocalAppIconScale
 import il.kmi.app.ui.StyledExplanationText
 
 @Composable
@@ -65,22 +69,87 @@ fun ExerciseExplanationDialog(
         localIsFavorite = isFavorite
     }
 
-    AlertDialog(
-        modifier = Modifier
-            .shadow(
-                elevation = 22.dp,
-                shape = RoundedCornerShape(34.dp),
-                clip = false
-            )
-            .background(
-                brush = backgroundBrush,
-                shape = RoundedCornerShape(34.dp)
-            )
-            .border(
-                width = 1.dp,
-                color = accentColor.copy(alpha = 0.20f),
-                shape = RoundedCornerShape(34.dp)
-            ),
+    val isDarkTheme =
+        MaterialTheme.colorScheme.background.luminance() < 0.5f
+
+    val layoutDirection =
+        if (isEnglish) {
+            LayoutDirection.Ltr
+        } else {
+            LayoutDirection.Rtl
+        }
+
+    val dialogBackground =
+        if (isDarkTheme) {
+            MaterialTheme.colorScheme.surface
+        } else {
+            Color.White
+        }
+
+    val cardBackground =
+        if (isDarkTheme) {
+            MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.72f)
+        } else {
+            Color.White.copy(alpha = 0.96f)
+        }
+
+    val primaryTextColor =
+        MaterialTheme.colorScheme.onSurface
+
+    /*
+     * בחירת גודל הכתב של המשתמש:
+     * SMALL  = 0.80
+     * MEDIUM = 1.00
+     * LARGE  = 1.15
+     *
+     * LocalAppIconScale מגיע מאותו AppFontSize גלובלי,
+     * ולכן אין כאן מקור אמת נוסף.
+     */
+    val userFontScale =
+        LocalAppIconScale.current
+
+    fun scaledTextStyle(
+        base: androidx.compose.ui.text.TextStyle
+    ): androidx.compose.ui.text.TextStyle {
+        return base.copy(
+            fontSize = base.fontSize * userFontScale,
+            lineHeight = base.lineHeight * userFontScale
+        )
+    }
+
+    val softBorderColor =
+        accentColor.copy(
+            alpha = if (isDarkTheme) 0.34f else 0.16f
+        )
+
+    CompositionLocalProvider(
+        LocalLayoutDirection provides layoutDirection
+    ) {
+        AlertDialog(
+            modifier = Modifier
+                .shadow(
+                    elevation = if (isDarkTheme) 10.dp else 22.dp,
+                    shape = RoundedCornerShape(34.dp),
+                    clip = false
+                )
+                .then(
+                    if (isDarkTheme) {
+                        Modifier.background(
+                            color = dialogBackground,
+                            shape = RoundedCornerShape(34.dp)
+                        )
+                    } else {
+                        Modifier.background(
+                            brush = backgroundBrush,
+                            shape = RoundedCornerShape(34.dp)
+                        )
+                    }
+                )
+                .border(
+                    width = 1.dp,
+                    color = softBorderColor,
+                    shape = RoundedCornerShape(34.dp)
+                ),
         onDismissRequest = { },
         properties = androidx.compose.ui.window.DialogProperties(
             dismissOnClickOutside = false,
@@ -94,26 +163,22 @@ fun ExerciseExplanationDialog(
                 modifier = Modifier
                     .fillMaxWidth()
                     .background(
-                        brush = Brush.verticalGradient(
-                            colors = listOf(
-                                Color.White.copy(alpha = 0.99f),
-                                accentColor.copy(alpha = 0.07f),
-                                Color.White.copy(alpha = 0.98f)
-                            )
-                        ),
+                        color = cardBackground,
                         shape = RoundedCornerShape(24.dp)
                     )
                     .border(
-                        1.dp,
-                        accentColor.copy(alpha = 0.13f),
-                        RoundedCornerShape(24.dp)
+                        width = 1.dp,
+                        color = softBorderColor,
+                        shape = RoundedCornerShape(24.dp)
                     )
                     .padding(horizontal = 12.dp, vertical = 10.dp),
                 horizontalAlignment = if (isEnglish) Alignment.Start else Alignment.End
             ) {
                 Text(
                     text = title,
-                    style = KmiTypography.sectionTitle.copy(
+                    style = scaledTextStyle(
+                        KmiTypography.sectionTitle
+                    ).copy(
                         fontWeight = FontWeight.Black
                     ),
                     textAlign =
@@ -123,8 +188,8 @@ fun ExerciseExplanationDialog(
                             TextAlign.Right
                         },
                     modifier = Modifier.fillMaxWidth(),
-                    color = Color(0xFF1F2937),
-                    maxLines = 2
+                    color = primaryTextColor,
+                    maxLines = 3
                 )
 
                 Spacer(modifier = Modifier.height(6.dp))
@@ -136,7 +201,9 @@ fun ExerciseExplanationDialog(
                 ) {
                     Text(
                         text = beltLabel,
-                        style = KmiTypography.secondary.copy(
+                        style = scaledTextStyle(
+                            KmiTypography.body
+                        ).copy(
                             fontWeight = FontWeight.Black
                         ),
                         textAlign =
@@ -162,12 +229,12 @@ fun ExerciseExplanationDialog(
                                     }
                             ),
                         color =
-                            if (isEnglish) {
-                                Color(0xFFB08900)
+                            if (isDarkTheme) {
+                                MaterialTheme.colorScheme.onSurface
                             } else {
                                 accentColor
                             },
-                        maxLines = 1
+                        maxLines = 2
                     )
 
                     Row(
@@ -177,28 +244,52 @@ fun ExerciseExplanationDialog(
                         Surface(
                             onClick = onEditNote,
                             shape = RoundedCornerShape(14.dp),
-                            color = if (noteText.isNotBlank()) {
-                                MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)
-                            } else {
-                                Color.White.copy(alpha = 0.78f)
-                            },
+                            color =
+                                if (noteText.isNotBlank()) {
+                                    if (isDarkTheme) {
+                                        accentColor.copy(alpha = 0.24f)
+                                    } else {
+                                        MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)
+                                    }
+                                } else {
+                                    if (isDarkTheme) {
+                                        MaterialTheme.colorScheme.surfaceVariant
+                                    } else {
+                                        Color.White.copy(alpha = 0.78f)
+                                    }
+                                },
                             border = BorderStroke(
-                                1.dp,
-                                accentColor.copy(alpha = 0.13f)
+                                width = 1.dp,
+                                color =
+                                    if (isDarkTheme) {
+                                        MaterialTheme.colorScheme.outlineVariant
+                                    } else {
+                                        accentColor.copy(alpha = 0.13f)
+                                    }
                             ),
-                            shadowElevation = 2.dp,
-                            modifier = Modifier.size(32.dp)
+                            shadowElevation = if (isDarkTheme) 0.dp else 2.dp,
+                            modifier = Modifier.size(36.dp)
                         ) {
                             Box(contentAlignment = Alignment.Center) {
                                 Icon(
                                     imageVector = Icons.Filled.Edit,
-                                    contentDescription = if (isEnglish) "Edit note" else "עריכת הערה",
-                                    tint = if (noteText.isNotBlank()) {
-                                        MaterialTheme.colorScheme.primary
-                                    } else {
-                                        MaterialTheme.colorScheme.onSurfaceVariant
-                                    },
-                                    modifier = Modifier.size(18.dp)
+                                    contentDescription =
+                                        if (isEnglish) {
+                                            "Edit note"
+                                        } else {
+                                            "עריכת הערה"
+                                        },
+                                    tint =
+                                        if (noteText.isNotBlank()) {
+                                            if (isDarkTheme) {
+                                                MaterialTheme.colorScheme.onSurface
+                                            } else {
+                                                MaterialTheme.colorScheme.primary
+                                            }
+                                        } else {
+                                            MaterialTheme.colorScheme.onSurfaceVariant
+                                        },
+                                    modifier = Modifier.size(20.dp)
                                 )
                             }
                         }
@@ -209,40 +300,67 @@ fun ExerciseExplanationDialog(
                                 onToggleFavorite()
                             },
                             shape = RoundedCornerShape(14.dp),
-                            color = if (localIsFavorite) {
-                                Color(0xFFFFF8E1)
-                            } else {
-                                Color.White.copy(alpha = 0.78f)
-                            },
-                            border = BorderStroke(
-                                1.dp,
+                            color =
                                 if (localIsFavorite) {
-                                    Color(0xFFFFC107).copy(alpha = 0.55f)
+                                    if (isDarkTheme) {
+                                        Color(0xFFFFC107).copy(alpha = 0.18f)
+                                    } else {
+                                        Color(0xFFFFF8E1)
+                                    }
                                 } else {
-                                    accentColor.copy(alpha = 0.13f)
-                                }
+                                    if (isDarkTheme) {
+                                        MaterialTheme.colorScheme.surfaceVariant
+                                    } else {
+                                        Color.White.copy(alpha = 0.78f)
+                                    }
+                                },
+                            border = BorderStroke(
+                                width = 1.dp,
+                                color =
+                                    if (localIsFavorite) {
+                                        Color(0xFFFFC107).copy(
+                                            alpha = if (isDarkTheme) 0.72f else 0.55f
+                                        )
+                                    } else {
+                                        if (isDarkTheme) {
+                                            MaterialTheme.colorScheme.outlineVariant
+                                        } else {
+                                            accentColor.copy(alpha = 0.13f)
+                                        }
+                                    }
                             ),
-                            shadowElevation = 2.dp,
-                            modifier = Modifier.size(32.dp)
+                            shadowElevation = if (isDarkTheme) 0.dp else 2.dp,
+                            modifier = Modifier.size(36.dp)
                         ) {
                             Box(contentAlignment = Alignment.Center) {
                                 Icon(
-                                    imageVector = if (localIsFavorite) {
-                                        Icons.Filled.Star
-                                    } else {
-                                        Icons.Outlined.StarBorder
-                                    },
-                                    contentDescription = if (localIsFavorite) {
-                                        if (isEnglish) "Remove from favorites" else "הסר ממועדפים"
-                                    } else {
-                                        if (isEnglish) "Add to favorites" else "הוסף למועדפים"
-                                    },
-                                    tint = if (localIsFavorite) {
-                                        Color(0xFFFFC107)
-                                    } else {
-                                        MaterialTheme.colorScheme.onSurfaceVariant
-                                    },
-                                    modifier = Modifier.size(19.dp)
+                                    imageVector =
+                                        if (localIsFavorite) {
+                                            Icons.Filled.Star
+                                        } else {
+                                            Icons.Outlined.StarBorder
+                                        },
+                                    contentDescription =
+                                        if (localIsFavorite) {
+                                            if (isEnglish) {
+                                                "Remove from favorites"
+                                            } else {
+                                                "הסר ממועדפים"
+                                            }
+                                        } else {
+                                            if (isEnglish) {
+                                                "Add to favorites"
+                                            } else {
+                                                "הוסף למועדפים"
+                                            }
+                                        },
+                                    tint =
+                                        if (localIsFavorite) {
+                                            Color(0xFFFFC107)
+                                        } else {
+                                            MaterialTheme.colorScheme.onSurfaceVariant
+                                        },
+                                    modifier = Modifier.size(21.dp)
                                 )
                             }
                         }
@@ -256,25 +374,21 @@ fun ExerciseExplanationDialog(
                 modifier = Modifier
                     .fillMaxWidth()
                     .background(
-                        brush = Brush.verticalGradient(
-                            colors = listOf(
-                                Color.White.copy(alpha = 0.99f),
-                                accentColor.copy(alpha = 0.035f),
-                                Color.White.copy(alpha = 0.97f)
-                            )
-                        ),
+                        color = cardBackground,
                         shape = RoundedCornerShape(24.dp)
                     )
                     .border(
-                        1.dp,
-                        accentColor.copy(alpha = 0.11f),
-                        RoundedCornerShape(24.dp)
+                        width = 1.dp,
+                        color = softBorderColor,
+                        shape = RoundedCornerShape(24.dp)
                     )
                     .padding(horizontal = 12.dp, vertical = 12.dp)
             ) {
                 StyledExplanationText(
                     raw = explanation,
-                    style = KmiTypography.body,
+                    style = scaledTextStyle(
+                        KmiTypography.body
+                    ),
                     textAlign =
                         if (isEnglish) {
                             TextAlign.Left
@@ -282,7 +396,7 @@ fun ExerciseExplanationDialog(
                             TextAlign.Right
                         },
                     modifier = Modifier.fillMaxWidth(),
-                    color = Color(0xFF1B1B1B)
+                    color = primaryTextColor
                 )
 
                 if (noteText.isNotBlank()) {
@@ -291,118 +405,130 @@ fun ExerciseExplanationDialog(
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = if (isEnglish) {
-                            Arrangement.Start
-                        } else {
-                            Arrangement.End
-                        }
+                        horizontalArrangement =
+                            if (isEnglish) {
+                                Arrangement.Start
+                            } else {
+                                Arrangement.End
+                            }
                     ) {
-                        if (isEnglish) {
-                            Text(
-                                text = "Trainee note:",
-                                style = KmiTypography.cardTitle,
-                                textAlign = TextAlign.Left,
-                                color = Color(0xFFB08900)
-                            )
-
-                            Spacer(Modifier.width(8.dp))
-
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(6.dp)
-                            ) {
-                                Surface(
-                                    onClick = onEditNote,
-                                    shape = RoundedCornerShape(10.dp),
-                                    color = accentColor.copy(alpha = 0.10f),
-                                    border = BorderStroke(
-                                        1.dp,
-                                        accentColor.copy(alpha = 0.16f)
-                                    ),
-                                    modifier = Modifier.size(32.dp)
-                                ) {
-                                    Box(contentAlignment = Alignment.Center) {
-                                        Icon(
-                                            imageVector = Icons.Filled.Edit,
-                                            contentDescription = "Edit note",
-                                            tint = accentColor,
-                                            modifier = Modifier.size(18.dp)
-                                        )
-                                    }
+                        Text(
+                            text =
+                                if (isEnglish) {
+                                    "Trainee note:"
+                                } else {
+                                    "הערה של המתאמן:"
+                                },
+                            style = scaledTextStyle(
+                                KmiTypography.cardTitle
+                            ).copy(
+                                fontWeight = FontWeight.Black
+                            ),
+                            textAlign =
+                                if (isEnglish) {
+                                    TextAlign.Left
+                                } else {
+                                    TextAlign.Right
+                                },
+                            color =
+                                if (isDarkTheme) {
+                                    MaterialTheme.colorScheme.onSurface
+                                } else {
+                                    accentColor
                                 }
+                        )
 
-                                Surface(
-                                    onClick = onDeleteNote,
-                                    shape = RoundedCornerShape(10.dp),
-                                    color = Color(0xFFFFEBEE),
-                                    border = BorderStroke(
-                                        1.dp,
-                                        Color(0xFFE57373).copy(alpha = 0.35f)
-                                    ),
-                                    modifier = Modifier.size(32.dp)
+                        Spacer(Modifier.width(8.dp))
+
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            // עריכת הערה
+                            Surface(
+                                onClick = onEditNote,
+                                shape = RoundedCornerShape(10.dp),
+                                color =
+                                    if (isDarkTheme) {
+                                        MaterialTheme.colorScheme.surfaceVariant
+                                    } else {
+                                        accentColor.copy(alpha = 0.10f)
+                                    },
+                                border = BorderStroke(
+                                    width = 1.dp,
+                                    color =
+                                        if (isDarkTheme) {
+                                            MaterialTheme.colorScheme.outlineVariant
+                                        } else {
+                                            accentColor.copy(alpha = 0.16f)
+                                        }
+                                ),
+                                shadowElevation = if (isDarkTheme) 0.dp else 1.dp,
+                                modifier = Modifier.size(36.dp)
+                            ) {
+                                Box(
+                                    contentAlignment = Alignment.Center
                                 ) {
-                                    Box(contentAlignment = Alignment.Center) {
-                                        Icon(
-                                            imageVector = Icons.Filled.Delete,
-                                            contentDescription = "Delete note",
-                                            tint = Color(0xFFD32F2F),
-                                            modifier = Modifier.size(18.dp)
-                                        )
-                                    }
+                                    Icon(
+                                        imageVector = Icons.Filled.Edit,
+                                        contentDescription =
+                                            if (isEnglish) {
+                                                "Edit note"
+                                            } else {
+                                                "עריכת הערה"
+                                            },
+                                        tint =
+                                            if (isDarkTheme) {
+                                                MaterialTheme.colorScheme.onSurfaceVariant
+                                            } else {
+                                                accentColor
+                                            },
+                                        modifier = Modifier.size(20.dp)
+                                    )
                                 }
                             }
-                        } else {
-                            Text(
-                                text = "הערה של המתאמן:",
-                                style = KmiTypography.cardTitle,
-                                textAlign = TextAlign.Right,
-                                color = accentColor
-                            )
 
-                            Spacer(Modifier.width(8.dp))
-
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                            // מחיקת הערה
+                            Surface(
+                                onClick = onDeleteNote,
+                                shape = RoundedCornerShape(10.dp),
+                                color =
+                                    if (isDarkTheme) {
+                                        MaterialTheme.colorScheme.errorContainer
+                                    } else {
+                                        Color(0xFFFFEBEE)
+                                    },
+                                border = BorderStroke(
+                                    width = 1.dp,
+                                    color =
+                                        if (isDarkTheme) {
+                                            MaterialTheme.colorScheme.error.copy(alpha = 0.38f)
+                                        } else {
+                                            Color(0xFFE57373).copy(alpha = 0.35f)
+                                        }
+                                ),
+                                shadowElevation = if (isDarkTheme) 0.dp else 1.dp,
+                                modifier = Modifier.size(36.dp)
                             ) {
-                                Surface(
-                                    onClick = onEditNote,
-                                    shape = RoundedCornerShape(10.dp),
-                                    color = accentColor.copy(alpha = 0.10f),
-                                    border = BorderStroke(
-                                        1.dp,
-                                        accentColor.copy(alpha = 0.16f)
-                                    ),
-                                    modifier = Modifier.size(32.dp)
+                                Box(
+                                    contentAlignment = Alignment.Center
                                 ) {
-                                    Box(contentAlignment = Alignment.Center) {
-                                        Icon(
-                                            imageVector = Icons.Filled.Edit,
-                                            contentDescription = "עריכת הערה",
-                                            tint = accentColor,
-                                            modifier = Modifier.size(18.dp)
-                                        )
-                                    }
-                                }
-
-                                Surface(
-                                    onClick = onDeleteNote,
-                                    shape = RoundedCornerShape(10.dp),
-                                    color = Color(0xFFFFEBEE),
-                                    border = BorderStroke(
-                                        1.dp,
-                                        Color(0xFFE57373).copy(alpha = 0.35f)
-                                    ),
-                                    modifier = Modifier.size(32.dp)
-                                ) {
-                                    Box(contentAlignment = Alignment.Center) {
-                                        Icon(
-                                            imageVector = Icons.Filled.Delete,
-                                            contentDescription = "מחיקת הערה",
-                                            tint = Color(0xFFD32F2F),
-                                            modifier = Modifier.size(18.dp)
-                                        )
-                                    }
+                                    Icon(
+                                        imageVector = Icons.Filled.Delete,
+                                        contentDescription =
+                                            if (isEnglish) {
+                                                "Delete note"
+                                            } else {
+                                                "מחיקת הערה"
+                                            },
+                                        tint =
+                                            if (isDarkTheme) {
+                                                MaterialTheme.colorScheme.onErrorContainer
+                                            } else {
+                                                Color(0xFFD32F2F)
+                                            },
+                                        modifier = Modifier.size(20.dp)
+                                    )
                                 }
                             }
                         }
@@ -410,7 +536,9 @@ fun ExerciseExplanationDialog(
 
                     Text(
                         text = noteText,
-                        style = KmiTypography.body,
+                        style = scaledTextStyle(
+                            KmiTypography.body
+                        ),
                         textAlign =
                             if (isEnglish) {
                                 TextAlign.Left
@@ -418,44 +546,73 @@ fun ExerciseExplanationDialog(
                                 TextAlign.Right
                             },
                         modifier = Modifier.fillMaxWidth(),
-                        color = Color(0xFF1B1B1B)
+                        color = primaryTextColor
                     )
                 }
             }
         },
-        confirmButton = {
-            Surface(
-                onClick = onDismiss,
-                shape = RoundedCornerShape(18.dp),
-                color = accentColor.copy(alpha = 0.12f),
-                border = BorderStroke(
-                    width = 1.dp,
-                    color = accentColor.copy(alpha = 0.18f)
-                ),
-                modifier = Modifier
-                    .height(38.dp)
-                    .widthIn(min = 96.dp)
-            ) {
-                Box(
+            confirmButton = {
+                Surface(
+                    onClick = onDismiss,
+                    shape = RoundedCornerShape(18.dp),
+                    color =
+                        if (isDarkTheme) {
+                            MaterialTheme.colorScheme.surfaceVariant
+                        } else {
+                            accentColor.copy(alpha = 0.12f)
+                        },
+                    border = BorderStroke(
+                        width = 1.dp,
+                        color =
+                            if (isDarkTheme) {
+                                MaterialTheme.colorScheme.outlineVariant
+                            } else {
+                                accentColor.copy(alpha = 0.18f)
+                            }
+                    ),
+                    shadowElevation = if (isDarkTheme) 0.dp else 1.dp,
                     modifier = Modifier
-                        .fillMaxSize()
-                        .padding(horizontal = 18.dp),
-                    contentAlignment = Alignment.Center
+                        .heightIn(min = 42.dp)
+                        .widthIn(min = 104.dp)
                 ) {
-                    Text(
-                        text = if (isEnglish) "Close" else "סגור",
-                        style = KmiTypography.action.copy(
-                            fontWeight = FontWeight.Black
-                        ),
-                        color = Color(0xFF6D5BA6)
-                    )
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(
+                                horizontal = 18.dp,
+                                vertical = 8.dp
+                            ),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text =
+                                if (isEnglish) {
+                                    "Close"
+                                } else {
+                                    "סגור"
+                                },
+                            style = scaledTextStyle(
+                                KmiTypography.action
+                            ).copy(
+                                fontWeight = FontWeight.Black
+                            ),
+                            color =
+                                if (isDarkTheme) {
+                                    MaterialTheme.colorScheme.onSurfaceVariant
+                                } else {
+                                    accentColor
+                                },
+                            textAlign = TextAlign.Center,
+                            maxLines = 2
+                        )
+                    }
                 }
             }
-        }
     )
 
-    BackHandler(enabled = true) {
-        onDismiss()
+        BackHandler(enabled = true) {
+            onDismiss()
+        }
     }
 }
 
@@ -470,7 +627,63 @@ fun ExerciseNoteEditorDialog(
     onSave: () -> Unit,
     onDelete: (() -> Unit)? = null
 ) {
-    AlertDialog(
+    val isDarkTheme =
+        MaterialTheme.colorScheme.background.luminance() < 0.5f
+
+    val layoutDirection =
+        if (isEnglish) {
+            LayoutDirection.Ltr
+        } else {
+            LayoutDirection.Rtl
+        }
+
+    val dialogBackground =
+        if (isDarkTheme) {
+            MaterialTheme.colorScheme.surface
+        } else {
+            Color.White
+        }
+
+    val cardBackground =
+        if (isDarkTheme) {
+            MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.78f)
+        } else {
+            Color.White.copy(alpha = 0.96f)
+        }
+
+    val primaryTextColor =
+        MaterialTheme.colorScheme.onSurface
+
+    val secondaryTextColor =
+        MaterialTheme.colorScheme.onSurfaceVariant
+
+    /*
+     * בחירת גודל הכתב של המשתמש:
+     * SMALL  = 0.80
+     * MEDIUM = 1.00
+     * LARGE  = 1.15
+     */
+    val userFontScale =
+        LocalAppIconScale.current
+
+    fun scaledTextStyle(
+        base: androidx.compose.ui.text.TextStyle
+    ): androidx.compose.ui.text.TextStyle {
+        return base.copy(
+            fontSize = base.fontSize * userFontScale,
+            lineHeight = base.lineHeight * userFontScale
+        )
+    }
+
+    val softBorderColor =
+        accentColor.copy(
+            alpha = if (isDarkTheme) 0.34f else 0.20f
+        )
+
+    CompositionLocalProvider(
+        LocalLayoutDirection provides layoutDirection
+    ) {
+        AlertDialog(
         onDismissRequest = onDismiss,
         properties = androidx.compose.ui.window.DialogProperties(
             dismissOnClickOutside = false,
@@ -485,15 +698,15 @@ fun ExerciseNoteEditorDialog(
                 modifier = Modifier
                     .fillMaxWidth()
                     .shadow(
-                        elevation = 22.dp,
+                        elevation = if (isDarkTheme) 10.dp else 22.dp,
                         shape = RoundedCornerShape(34.dp),
                         clip = false
                     ),
                 shape = RoundedCornerShape(34.dp),
-                color = Color.White.copy(alpha = 0.99f),
+                color = dialogBackground,
                 border = BorderStroke(
                     width = 1.dp,
-                    color = accentColor.copy(alpha = 0.22f)
+                    color = softBorderColor
                 )
             ) {
                 Column(
@@ -502,13 +715,16 @@ fun ExerciseNoteEditorDialog(
                         .imePadding()
                         .verticalScroll(rememberScrollState())
                         .background(
-                            brush = Brush.verticalGradient(
-                                colors = listOf(
-                                    Color.White,
-                                    lerp(Color.White, accentColor, 0.08f),
-                                    lerp(Color.White, accentColor, 0.16f)
-                                )
-                            )
+                            color =
+                                if (isDarkTheme) {
+                                    dialogBackground
+                                } else {
+                                    lerp(
+                                        Color.White,
+                                        accentColor,
+                                        0.06f
+                                    )
+                                }
                         )
                         .padding(horizontal = 22.dp, vertical = 18.dp),
                     horizontalAlignment = Alignment.CenterHorizontally,
@@ -523,10 +739,12 @@ fun ExerciseNoteEditorDialog(
                             },
                         modifier = Modifier.fillMaxWidth(),
                         textAlign = TextAlign.Center,
-                        style = KmiTypography.screenTitle.copy(
+                        style = scaledTextStyle(
+                            KmiTypography.screenTitle
+                        ).copy(
                             fontWeight = FontWeight.Black
                         ),
-                        color = Color(0xFF1E2A3D)
+                        color = primaryTextColor
                     )
 
                     if (exerciseTitle.isNotBlank()) {
@@ -534,11 +752,18 @@ fun ExerciseNoteEditorDialog(
                             text = exerciseTitle,
                             modifier = Modifier.fillMaxWidth(),
                             textAlign = TextAlign.Center,
-                            style = KmiTypography.cardTitle.copy(
+                            style = scaledTextStyle(
+                                KmiTypography.cardTitle
+                            ).copy(
                                 fontWeight = FontWeight.Black
                             ),
-                            color = accentColor,
-                            maxLines = 2
+                            color =
+                                if (isDarkTheme) {
+                                    MaterialTheme.colorScheme.onSurface
+                                } else {
+                                    accentColor
+                                },
+                            maxLines = 3
                         )
                     }
 
@@ -551,20 +776,22 @@ fun ExerciseNoteEditorDialog(
                             },
                         modifier = Modifier.fillMaxWidth(),
                         textAlign = TextAlign.Center,
-                        style = KmiTypography.body.copy(
+                        style = scaledTextStyle(
+                            KmiTypography.body
+                        ).copy(
                             fontWeight = FontWeight.ExtraBold
                         ),
-                        color = Color(0xFF64748B)
+                        color = secondaryTextColor
                     )
 
                     Surface(
                         modifier = Modifier.fillMaxWidth(),
                         shape = RoundedCornerShape(24.dp),
-                        color = Color.White.copy(alpha = 0.94f),
-                        shadowElevation = 8.dp,
+                        color = cardBackground,
+                        shadowElevation = if (isDarkTheme) 2.dp else 8.dp,
                         border = BorderStroke(
                             width = 1.dp,
-                            color = accentColor.copy(alpha = 0.20f)
+                            color = softBorderColor
                         )
                     ) {
                         OutlinedTextField(
@@ -576,7 +803,9 @@ fun ExerciseNoteEditorDialog(
                                 .padding(horizontal = 14.dp, vertical = 12.dp),
                             minLines = 5,
                             maxLines = 8,
-                            textStyle = KmiTypography.body.copy(
+                            textStyle = scaledTextStyle(
+                                KmiTypography.body
+                            ).copy(
                                 textAlign =
                                     if (isEnglish) {
                                         TextAlign.Left
@@ -584,7 +813,7 @@ fun ExerciseNoteEditorDialog(
                                         TextAlign.Right
                                     },
                                 fontWeight = FontWeight.ExtraBold,
-                                color = Color(0xFF1E2A3D)
+                                color = primaryTextColor
                             ),
                             placeholder = {
                                 Text(
@@ -596,10 +825,12 @@ fun ExerciseNoteEditorDialog(
                                         },
                                     modifier = Modifier.fillMaxWidth(),
                                     textAlign = TextAlign.Center,
-                                    style = KmiTypography.body.copy(
+                                    style = scaledTextStyle(
+                                        KmiTypography.body
+                                    ).copy(
                                         fontWeight = FontWeight.Black
                                     ),
-                                    color = Color(0xFF94A3B8)
+                                    color = secondaryTextColor
                                 )
                             },
                             shape = RoundedCornerShape(20.dp),
@@ -609,8 +840,8 @@ fun ExerciseNoteEditorDialog(
                                 focusedContainerColor = Color.Transparent,
                                 unfocusedContainerColor = Color.Transparent,
                                 cursorColor = accentColor,
-                                focusedTextColor = Color(0xFF1E2A3D),
-                                unfocusedTextColor = Color(0xFF1E2A3D)
+                                focusedTextColor = primaryTextColor,
+                                unfocusedTextColor = primaryTextColor
                             )
                         )
                     }
@@ -625,17 +856,32 @@ fun ExerciseNoteEditorDialog(
                             onClick = onDismiss,
                             modifier = Modifier
                                 .weight(1f)
-                                .height(50.dp),
+                                .heightIn(min = 50.dp),
                             shape = RoundedCornerShape(16.dp),
-                            color = Color.White.copy(alpha = 0.80f),
+                            color =
+                                if (isDarkTheme) {
+                                    MaterialTheme.colorScheme.surfaceVariant
+                                } else {
+                                    Color.White.copy(alpha = 0.80f)
+                                },
                             border = BorderStroke(
                                 width = 1.dp,
-                                color = Color(0xFF6D5BA6).copy(alpha = 0.22f)
+                                color =
+                                    if (isDarkTheme) {
+                                        MaterialTheme.colorScheme.outlineVariant
+                                    } else {
+                                        Color(0xFF6D5BA6).copy(alpha = 0.22f)
+                                    }
                             ),
-                            shadowElevation = 2.dp
+                            shadowElevation = if (isDarkTheme) 1.dp else 2.dp
                         ) {
                             Column(
-                                modifier = Modifier.fillMaxSize(),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(
+                                        horizontal = 6.dp,
+                                        vertical = 7.dp
+                                    ),
                                 horizontalAlignment = Alignment.CenterHorizontally,
                                 verticalArrangement = Arrangement.Center
                             ) {
@@ -643,7 +889,12 @@ fun ExerciseNoteEditorDialog(
                                     imageVector = Icons.Filled.Close,
                                     contentDescription =
                                         if (isEnglish) "Cancel" else "בטל",
-                                    tint = Color(0xFF6D5BA6),
+                                    tint =
+                                        if (isDarkTheme) {
+                                            MaterialTheme.colorScheme.onSurfaceVariant
+                                        } else {
+                                            Color(0xFF6D5BA6)
+                                        },
                                     modifier = Modifier.size(17.dp)
                                 )
 
@@ -651,11 +902,19 @@ fun ExerciseNoteEditorDialog(
 
                                 Text(
                                     text = if (isEnglish) "Cancel" else "בטל",
-                                    style = KmiTypography.action.copy(
+                                    style = scaledTextStyle(
+                                        KmiTypography.action
+                                    ).copy(
                                         fontWeight = FontWeight.Black
                                     ),
-                                    color = Color(0xFF6D5BA6),
-                                    maxLines = 1
+                                    color =
+                                        if (isDarkTheme) {
+                                            MaterialTheme.colorScheme.onSurfaceVariant
+                                        } else {
+                                            Color(0xFF6D5BA6)
+                                        },
+                                    textAlign = TextAlign.Center,
+                                    maxLines = 2
                                 )
                             }
                         }
@@ -670,32 +929,68 @@ fun ExerciseNoteEditorDialog(
                             },
                             modifier = Modifier
                                 .weight(1f)
-                                .height(50.dp),
+                                .heightIn(min = 50.dp),
                             shape = RoundedCornerShape(16.dp),
                             color =
-                                if (noteText.isNotBlank()) {
-                                    Color(0xFFFFEBEE)
-                                } else {
-                                    Color(0xFFF4F4F5)
+                                when {
+                                    noteText.isNotBlank() && isDarkTheme ->
+                                        MaterialTheme.colorScheme.errorContainer
+
+                                    noteText.isNotBlank() ->
+                                        Color(0xFFFFEBEE)
+
+                                    isDarkTheme ->
+                                        MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f)
+
+                                    else ->
+                                        Color(0xFFF4F4F5)
                                 },
                             border = BorderStroke(
                                 width = 1.dp,
                                 color =
-                                    if (noteText.isNotBlank()) {
-                                        Color(0xFFE57373).copy(alpha = 0.42f)
-                                    } else {
-                                        Color(0xFFD4D4D8).copy(alpha = 0.55f)
+                                    when {
+                                        noteText.isNotBlank() && isDarkTheme ->
+                                            MaterialTheme.colorScheme.error.copy(alpha = 0.38f)
+
+                                        noteText.isNotBlank() ->
+                                            Color(0xFFE57373).copy(alpha = 0.42f)
+
+                                        isDarkTheme ->
+                                            MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.55f)
+
+                                        else ->
+                                            Color(0xFFD4D4D8).copy(alpha = 0.55f)
                                     }
                             ),
                             shadowElevation =
-                                if (noteText.isNotBlank()) {
+                                if (noteText.isNotBlank() && !isDarkTheme) {
                                     2.dp
                                 } else {
                                     0.dp
                                 }
                         ) {
+                            val deleteContentColor =
+                                when {
+                                    noteText.isNotBlank() && isDarkTheme ->
+                                        MaterialTheme.colorScheme.onErrorContainer
+
+                                    noteText.isNotBlank() ->
+                                        Color(0xFFD32F2F)
+
+                                    isDarkTheme ->
+                                        MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.50f)
+
+                                    else ->
+                                        Color(0xFFA1A1AA)
+                                }
+
                             Column(
-                                modifier = Modifier.fillMaxSize(),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(
+                                        horizontal = 6.dp,
+                                        vertical = 7.dp
+                                    ),
                                 horizontalAlignment = Alignment.CenterHorizontally,
                                 verticalArrangement = Arrangement.Center
                             ) {
@@ -703,12 +998,7 @@ fun ExerciseNoteEditorDialog(
                                     imageVector = Icons.Filled.Delete,
                                     contentDescription =
                                         if (isEnglish) "Delete" else "מחק",
-                                    tint =
-                                        if (noteText.isNotBlank()) {
-                                            Color(0xFFD32F2F)
-                                        } else {
-                                            Color(0xFFA1A1AA)
-                                        },
+                                    tint = deleteContentColor,
                                     modifier = Modifier.size(17.dp)
                                 )
 
@@ -716,52 +1006,96 @@ fun ExerciseNoteEditorDialog(
 
                                 Text(
                                     text = if (isEnglish) "Delete" else "מחק",
-                                    style = KmiTypography.action.copy(
+                                    style = scaledTextStyle(
+                                        KmiTypography.action
+                                    ).copy(
                                         fontWeight = FontWeight.Black
                                     ),
-                                    color =
-                                        if (noteText.isNotBlank()) {
-                                            Color(0xFFD32F2F)
-                                        } else {
-                                            Color(0xFFA1A1AA)
-                                        },
-                                    maxLines = 1
+                                    color = deleteContentColor,
+                                    textAlign = TextAlign.Center,
+                                    maxLines = 2
                                 )
                             }
                         }
 
                         // שמור
+                        val saveButtonColor =
+                            if (isDarkTheme) {
+                                lerp(
+                                    MaterialTheme.colorScheme.primary,
+                                    accentColor,
+                                    0.22f
+                                )
+                            } else {
+                                accentColor.copy(alpha = 0.86f)
+                            }
+
+                        val saveContentColor =
+                            if (isDarkTheme) {
+                                MaterialTheme.colorScheme.onPrimary
+                            } else {
+                                Color.White
+                            }
+
                         Surface(
                             onClick = onSave,
                             modifier = Modifier
                                 .weight(1f)
-                                .height(50.dp),
+                                .heightIn(min = 50.dp),
                             shape = RoundedCornerShape(16.dp),
-                            color = accentColor.copy(alpha = 0.86f),
-                            shadowElevation = 6.dp
+                            color = saveButtonColor,
+                            border =
+                                if (isDarkTheme) {
+                                    BorderStroke(
+                                        width = 1.dp,
+                                        color = MaterialTheme.colorScheme.onPrimary.copy(
+                                            alpha = 0.18f
+                                        )
+                                    )
+                                } else {
+                                    null
+                                },
+                            shadowElevation = if (isDarkTheme) 2.dp else 6.dp
                         ) {
                             Column(
-                                modifier = Modifier.fillMaxSize(),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(
+                                        horizontal = 6.dp,
+                                        vertical = 7.dp
+                                    ),
                                 horizontalAlignment = Alignment.CenterHorizontally,
                                 verticalArrangement = Arrangement.Center
                             ) {
                                 Icon(
                                     imageVector = Icons.Filled.Check,
                                     contentDescription =
-                                        if (isEnglish) "Save" else "שמור",
-                                    tint = Color.White,
+                                        if (isEnglish) {
+                                            "Save"
+                                        } else {
+                                            "שמור"
+                                        },
+                                    tint = saveContentColor,
                                     modifier = Modifier.size(18.dp)
                                 )
 
                                 Spacer(Modifier.height(2.dp))
 
                                 Text(
-                                    text = if (isEnglish) "Save" else "שמור",
-                                    style = KmiTypography.action.copy(
+                                    text =
+                                        if (isEnglish) {
+                                            "Save"
+                                        } else {
+                                            "שמור"
+                                        },
+                                    style = scaledTextStyle(
+                                        KmiTypography.action
+                                    ).copy(
                                         fontWeight = FontWeight.Black
                                     ),
-                                    color = Color.White,
-                                    maxLines = 1
+                                    color = saveContentColor,
+                                    textAlign = TextAlign.Center,
+                                    maxLines = 2
                                 )
                             }
                         }
@@ -773,7 +1107,8 @@ fun ExerciseNoteEditorDialog(
         dismissButton = {}
     )
 
-    BackHandler(enabled = true) {
-        onDismiss()
+        BackHandler(enabled = true) {
+            onDismiss()
+        }
     }
 }
