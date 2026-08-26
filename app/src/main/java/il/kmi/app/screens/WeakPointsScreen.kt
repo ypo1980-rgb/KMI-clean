@@ -14,11 +14,11 @@ import android.graphics.Paint
 import android.graphics.Typeface
 import android.graphics.pdf.PdfDocument
 import androidx.core.content.FileProvider
-import androidx.core.graphics.ColorUtils
 import java.io.File
 import java.io.FileOutputStream
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
@@ -27,10 +27,14 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import android.app.Activity
-import androidx.compose.runtime.remember
 import androidx.compose.ui.platform.LocalContext
 import il.kmi.shared.localization.AppLanguage
 import il.kmi.shared.localization.AppLanguageManager
+import il.kmi.app.ui.KmiIconSize
+import il.kmi.app.ui.KmiTopBar
+import il.kmi.app.ui.KmiTypography
+
+//================================================================
 
 private fun weakTr(
     isEnglish: Boolean,
@@ -61,28 +65,31 @@ fun WeakPointsScreen(
     fun tr(he: String, en: String): String =
         weakTr(isEnglish, he, en)
 
-    val backgroundBrush = Brush.verticalGradient(
-        colors = listOf(
-            Color(0xFFF8FBFF),
-            Color(0xFFEAF4FF),
-            Color(0xFFB7DDF7),
-            Color(0xFF1F78B4),
-            Color(0xFF062B4A)
+    val backgroundBrush =
+        Brush.verticalGradient(
+            colors = listOf(
+                MaterialTheme.colorScheme.background,
+                MaterialTheme.colorScheme.surfaceVariant,
+                MaterialTheme.colorScheme.primaryContainer,
+                MaterialTheme.colorScheme.background
+            )
         )
-    )
 
     Scaffold(
         topBar = {
-            il.kmi.app.ui.KmiTopBar(
+            KmiTopBar(
                 title = tr("נקודות תורפה", "Weak Points"),
                 onHome = onOpenHome,
-                onSearch = onOpenSearch?.let { { it() } },
+                onSearch = onOpenSearch,
+                onSettings = onOpenSettings,
                 showBottomActions = true,
                 showTopHome = false,
                 showRoleStatus = false,
+                showSettings = true,
                 centerTitle = true,
                 alignTitleEnd = false,
-                showTopShare = false,
+
+                showTopShare = true,
                 onShare = {
                     shareWeakPointsPdf(
                         context = ctx,
@@ -109,6 +116,7 @@ fun WeakPointsScreen(
                 .fillMaxSize()
                 .background(backgroundBrush)
                 .padding(p)
+                .navigationBarsPadding()
                 .padding(horizontal = 16.dp, vertical = 12.dp)
                 .verticalScroll(rememberScrollState()),
             verticalArrangement = Arrangement.spacedBy(12.dp)
@@ -721,11 +729,10 @@ private fun createWeakPointsPdf(
 
     val firstPageCapacity = 5
     val nextPageCapacity = 7
-    val totalPages = if (items.size <= firstPageCapacity) {
-        1
-    } else {
-        1 + kotlin.math.ceil((items.size - firstPageCapacity) / nextPageCapacity.toDouble()).toInt()
-    }
+    val totalPages =
+        1 + kotlin.math.ceil(
+            (items.size - firstPageCapacity) / nextPageCapacity.toDouble()
+        ).toInt()
 
     var pageNumber = 1
     var itemIndex = 0
@@ -770,12 +777,26 @@ private fun createWeakPointsPdf(
 
             val item = items[itemIndex]
             val bottom = y + 82f
-            val left = margin
             val right = pageWidth - margin
             val mid = pageWidth / 2f
 
-            drawRound(canvas, left, y, right, bottom, if (itemIndex % 2 == 0) lightBlue else softBlue)
-            drawRound(canvas, left, y, right, bottom, borderBlue, stroke = true)
+            drawRound(
+                canvas,
+                margin,
+                y,
+                right,
+                bottom,
+                if (itemIndex % 2 == 0) lightBlue else softBlue
+            )
+            drawRound(
+                canvas,
+                margin,
+                y,
+                right,
+                bottom,
+                borderBlue,
+                stroke = true
+            )
 
             canvas.drawLine(mid, y + 22f, mid, bottom - 18f, Paint(Paint.ANTI_ALIAS_FLAG).apply {
                 color = borderBlue
@@ -806,14 +827,42 @@ private fun createWeakPointsPdf(
         pageNumber++
     }
 
-    val dir = File(context.cacheDir, "pdfs").apply { mkdirs() }
-    val file = File(dir, "weak_points_${System.currentTimeMillis()}.pdf")
+    val dir =
+        File(
+            context.cacheDir,
+            "shared_pdfs"
+        ).apply {
+            mkdirs()
+        }
 
-    FileOutputStream(file).use { output ->
+    /*
+     * שם קבוע לפי שפת האפליקציה.
+     *
+     * כל יצירה חדשה מחליפה את הקובץ הקודם
+     * במקום ליצור עותק נוסף עם timestamp.
+     */
+    val fileName =
+        if (isEnglish) {
+            "Weak Points.pdf"
+        } else {
+            "נקודות תורפה.pdf"
+        }
+
+    val file =
+        File(
+            dir,
+            fileName
+        )
+
+    FileOutputStream(
+        file,
+        false
+    ).use { output ->
         document.writeTo(output)
     }
 
     document.close()
+
     return file
 }
 
@@ -824,12 +873,17 @@ private fun SectionTitle(
 ) {
     Text(
         text = text,
-        color = Color(0xFF111827),
-        fontWeight = FontWeight.ExtraBold,
+        style =
+            KmiTypography.sectionTitle.copy(
+                fontWeight = FontWeight.ExtraBold
+            ),
         textAlign = weakTextAlign(isEnglish),
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 2.dp, vertical = 8.dp)
+            .padding(
+                horizontal = 2.dp,
+                vertical = 8.dp
+            )
     )
 }
 
@@ -840,9 +894,13 @@ private fun SafetyWarningCard(
 ) {
     Surface(
         shape = RoundedCornerShape(18.dp),
-        color = Color(0xFFFFF3E0),
-        border = BorderStroke(1.dp, Color(0xFFFFB74D)),
-        tonalElevation = 2.dp
+        color = MaterialTheme.colorScheme.tertiaryContainer,
+        border = BorderStroke(
+            1.dp,
+            MaterialTheme.colorScheme.tertiary.copy(alpha = 0.65f)
+        ),
+        tonalElevation = 0.dp,
+        shadowElevation = 0.dp
     ) {
         Row(
             modifier = Modifier
@@ -855,7 +913,8 @@ private fun SafetyWarningCard(
                 Icon(
                     imageVector = Icons.Filled.Report,
                     contentDescription = null,
-                    tint = Color(0xFFF57C00)
+                    tint = MaterialTheme.colorScheme.tertiary,
+                    modifier = Modifier.size(KmiIconSize.medium)
                 )
 
                 Spacer(Modifier.width(10.dp))
@@ -863,8 +922,8 @@ private fun SafetyWarningCard(
 
             Text(
                 text = text,
-                color = Color(0xFF4E342E),
-                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onTertiaryContainer,
+                style = KmiTypography.body,
                 textAlign = weakTextAlign(isEnglish),
                 modifier = Modifier.weight(1f)
             )
@@ -875,7 +934,8 @@ private fun SafetyWarningCard(
                 Icon(
                     imageVector = Icons.Filled.Report,
                     contentDescription = null,
-                    tint = Color(0xFFF57C00)
+                    tint = MaterialTheme.colorScheme.tertiary,
+                    modifier = Modifier.size(KmiIconSize.medium)
                 )
             }
         }
@@ -891,9 +951,12 @@ private fun InfoCard(
     Surface(
         shape = RoundedCornerShape(18.dp),
         color = Color.Transparent,
-        border = BorderStroke(1.dp, Color(0xFF2563EB).copy(alpha = 0.82f)),
+        border = BorderStroke(
+            1.dp,
+            MaterialTheme.colorScheme.outline.copy(alpha = 0.55f)
+        ),
         tonalElevation = 0.dp,
-        shadowElevation = 4.dp
+        shadowElevation = 0.dp
     ) {
         Box(
             modifier = Modifier
@@ -901,9 +964,9 @@ private fun InfoCard(
                 .background(
                     Brush.linearGradient(
                         colors = listOf(
-                            Color(0xFF061426),
-                            Color(0xFF102B5C),
-                            Color(0xFF2563EB)
+                            MaterialTheme.colorScheme.surface,
+                            MaterialTheme.colorScheme.surfaceVariant,
+                            MaterialTheme.colorScheme.primaryContainer
                         )
                     )
                 )
@@ -916,16 +979,21 @@ private fun InfoCard(
                 horizontalAlignment = weakHorizontalAlignment(isEnglish)
             ) {
                 Text(
-                    title,
-                    color = Color.White,
-                    fontWeight = FontWeight.ExtraBold,
+                    text = title,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    style = KmiTypography.body.copy(
+                        fontWeight = FontWeight.ExtraBold
+                    ),
                     textAlign = weakTextAlign(isEnglish),
                     modifier = Modifier.fillMaxWidth()
                 )
+
                 Text(
                     text = body,
-                    color = Color(0xFFEAF4FF),
-                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    style = KmiTypography.body.copy(
+                        fontWeight = FontWeight.SemiBold
+                    ),
                     textAlign = weakTextAlign(isEnglish),
                     modifier = Modifier.fillMaxWidth()
                 )
@@ -944,9 +1012,12 @@ private fun WeakPointRow(
     Surface(
         shape = RoundedCornerShape(18.dp),
         color = Color.Transparent,
-        border = BorderStroke(1.dp, Color(0xFF2563EB).copy(alpha = 0.86f)),
+        border = BorderStroke(
+            1.dp,
+            MaterialTheme.colorScheme.outline.copy(alpha = 0.55f)
+        ),
         tonalElevation = 0.dp,
-        shadowElevation = 5.dp
+        shadowElevation = 0.dp
     ) {
         Box(
             modifier = Modifier
@@ -954,10 +1025,9 @@ private fun WeakPointRow(
                 .background(
                     Brush.linearGradient(
                         colors = listOf(
-                            Color(0xFF061426),
-                            Color(0xFF123B8A),
-                            Color(0xFF2563EB),
-                            Color(0xFF22D3EE)
+                            MaterialTheme.colorScheme.surface,
+                            MaterialTheme.colorScheme.surfaceVariant,
+                            MaterialTheme.colorScheme.primaryContainer
                         )
                     )
                 )
@@ -971,22 +1041,30 @@ private fun WeakPointRow(
             ) {
                 Text(
                     text = place,
-                    color = Color.White,
-                    fontWeight = FontWeight.ExtraBold,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    style = KmiTypography.body.copy(
+                        fontWeight = FontWeight.ExtraBold
+                    ),
                     textAlign = weakTextAlign(isEnglish),
                     modifier = Modifier.fillMaxWidth()
                 )
+
                 Text(
                     text = bodyPart,
-                    color = Color(0xFFEAF4FF),
-                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.primary,
+                    style = KmiTypography.caption.copy(
+                        fontWeight = FontWeight.Bold
+                    ),
                     textAlign = weakTextAlign(isEnglish),
                     modifier = Modifier.fillMaxWidth()
                 )
+
                 Text(
                     text = effect,
-                    color = Color.White,
-                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    style = KmiTypography.body.copy(
+                        fontWeight = FontWeight.SemiBold
+                    ),
                     textAlign = weakTextAlign(isEnglish),
                     modifier = Modifier.fillMaxWidth()
                 )

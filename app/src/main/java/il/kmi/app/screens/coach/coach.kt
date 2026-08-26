@@ -29,8 +29,9 @@ import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
-import androidx.compose.material3.Divider
 import androidx.compose.material3.ExposedDropdownMenuBox
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.MenuAnchorType
 import androidx.compose.material3.ExposedDropdownMenuDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -67,6 +68,7 @@ import il.kmi.app.privacy.TraineeDisplayNameMapper
 import il.kmi.app.screens.registration.CoachBranchAssignment
 import il.kmi.app.screens.registration.CoachBranchAssignmentsCodec
 import il.kmi.app.training.TrainingCatalog
+import il.kmi.app.ui.KmiIconSize
 import il.kmi.app.ui.KmiPremiumDropdown
 import il.kmi.app.ui.KmiTopBar
 import il.kmi.app.ui.KmiTypography
@@ -610,9 +612,7 @@ fun CoachTraineesScreen(
          * במבנה המקומי החדש.
          */
         val resolvedAssignments =
-            if (serverAssignments.isNotEmpty()) {
-                serverAssignments
-            } else {
+            serverAssignments.ifEmpty {
                 localAssignments
             }
 
@@ -910,17 +910,15 @@ fun CoachTraineesScreen(
         }
     }
 
-    val backgroundBrush = remember {
+    val backgroundBrush =
         Brush.verticalGradient(
             colors = listOf(
-                Color(0xFFF8FBFF),
-                Color(0xFFEAF4FF),
-                Color(0xFFB7DDF7),
-                Color(0xFF1F78B4),
-                Color(0xFF062B4A)
+                MaterialTheme.colorScheme.background,
+                MaterialTheme.colorScheme.surfaceVariant,
+                MaterialTheme.colorScheme.primaryContainer,
+                MaterialTheme.colorScheme.background
             )
         )
-    }
 
     // --- טעינת מתאמנים אמיתיים + חישוב אחוז נוכחות לכל מתאמן ---
     val app = ctx.applicationContext as Application
@@ -1043,7 +1041,9 @@ fun CoachTraineesScreen(
             if (usersSnap == null || usersSnap.isEmpty) {
                 for (cand in branchKeys.drop(1)) {
                     val tmp = runCatching { fetchUsersByBranchesArray(cand) }.getOrNull()
-                    if (tmp != null && !tmp.isEmpty) { usersSnap = tmp; break }
+                    if (tmp != null && !tmp.isEmpty) {
+                        usersSnap = tmp; break
+                    }
                 }
             }
 
@@ -1052,7 +1052,9 @@ fun CoachTraineesScreen(
                 if (usersSnap == null || usersSnap.isEmpty) {
                     for (cand in branchKeys.drop(1)) {
                         val tmp = runCatching { fetchUsersByBranchesCsv(cand) }.getOrNull()
-                        if (tmp != null && !tmp.isEmpty) { usersSnap = tmp; break }
+                        if (tmp != null && !tmp.isEmpty) {
+                            usersSnap = tmp; break
+                        }
                     }
                 }
             }
@@ -1062,7 +1064,9 @@ fun CoachTraineesScreen(
                 if (usersSnap == null || usersSnap.isEmpty) {
                     for (cand in branchKeys.drop(1)) {
                         val tmp = runCatching { fetchUsersBySingleBranch(cand) }.getOrNull()
-                        if (tmp != null && !tmp.isEmpty) { usersSnap = tmp; break }
+                        if (tmp != null && !tmp.isEmpty) {
+                            usersSnap = tmp; break
+                        }
                     }
                 }
             }
@@ -1118,12 +1122,14 @@ fun CoachTraineesScreen(
 
             var d = from
             while (!d.isAfter(today)) {
-                val records = repo.attendanceForDay(branchDbKey, groupName, d).firstOrNull().orEmpty()
+                val records =
+                    repo.attendanceForDay(branchDbKey, groupName, d).firstOrNull().orEmpty()
                 for (record in records) {
                     val mid = extractMemberId(record) ?: continue
                     val status = recordStatus(record) ?: continue
                     val (p, t) = statsMap[mid] ?: (0 to 0)
-                    statsMap[mid] = (p + if (status == AttendanceStatus.PRESENT) 1 else 0) to (t + 1)
+                    statsMap[mid] =
+                        (p + if (status == AttendanceStatus.PRESENT) 1 else 0) to (t + 1)
                 }
                 d = d.plusDays(1)
             }
@@ -1174,13 +1180,34 @@ fun CoachTraineesScreen(
                     .trim()
 
                 return when {
-                    clean == "white" || clean.contains("white") || clean == "לבנה" || clean.contains("לבנ") -> "לבנה"
-                    clean == "yellow" || clean.contains("yellow") || clean == "צהובה" || clean.contains("צהוב") -> "צהובה"
-                    clean == "orange" || clean.contains("orange") || clean == "כתומה" || clean.contains("כתומ") -> "כתומה"
-                    clean == "green" || clean.contains("green") || clean == "ירוקה" || clean.contains("ירוק") -> "ירוקה"
-                    clean == "blue" || clean.contains("blue") || clean == "כחולה" || clean.contains("כחול") -> "כחולה"
-                    clean == "brown" || clean.contains("brown") || clean == "חומה" || clean.contains("חומ") -> "חומה"
-                    clean == "black" || clean.contains("black") || clean == "שחורה" || clean.contains("שחור") -> "שחורה"
+                    clean == "white" || clean.contains("white") || clean == "לבנה" || clean.contains(
+                        "לבנ"
+                    ) -> "לבנה"
+
+                    clean == "yellow" || clean.contains("yellow") || clean == "צהובה" || clean.contains(
+                        "צהוב"
+                    ) -> "צהובה"
+
+                    clean == "orange" || clean.contains("orange") || clean == "כתומה" || clean.contains(
+                        "כתומ"
+                    ) -> "כתומה"
+
+                    clean == "green" || clean.contains("green") || clean == "ירוקה" || clean.contains(
+                        "ירוק"
+                    ) -> "ירוקה"
+
+                    clean == "blue" || clean.contains("blue") || clean == "כחולה" || clean.contains(
+                        "כחול"
+                    ) -> "כחולה"
+
+                    clean == "brown" || clean.contains("brown") || clean == "חומה" || clean.contains(
+                        "חומ"
+                    ) -> "חומה"
+
+                    clean == "black" || clean.contains("black") || clean == "שחורה" || clean.contains(
+                        "שחור"
+                    ) -> "שחורה"
+
                     else -> beltHeb(raw)
                 }
             }
@@ -1225,7 +1252,7 @@ fun CoachTraineesScreen(
 
                 val startAge = when (startRaw) {
                     is String -> runCatching {
-                        java.time.LocalDate.parse(startRaw.trim())
+                        LocalDate.parse(startRaw.trim())
                     }.getOrNull()
 
                     is com.google.firebase.Timestamp -> runCatching {
@@ -1251,7 +1278,7 @@ fun CoachTraineesScreen(
                 }
 
                 if (startAge != null) {
-                    val years = java.time.Period.between(startAge, java.time.LocalDate.now()).years
+                    val years = java.time.Period.between(startAge, LocalDate.now()).years
                     if (years > 0) return "$years שנים"
                 }
 
@@ -1259,8 +1286,8 @@ fun CoachTraineesScreen(
             }
 
             fun ageFromBirthDateRaw(raw: Any?): Int {
-                fun yearsFromDate(dob: java.time.LocalDate): Int {
-                    val years = java.time.Period.between(dob, java.time.LocalDate.now()).years
+                fun yearsFromDate(dob: LocalDate): Int {
+                    val years = java.time.Period.between(dob, LocalDate.now()).years
                     return years.coerceIn(0, 120)
                 }
 
@@ -1270,7 +1297,7 @@ fun CoachTraineesScreen(
                         if (s.isBlank()) return 0
 
                         runCatching {
-                            yearsFromDate(java.time.LocalDate.parse(s))
+                            yearsFromDate(LocalDate.parse(s))
                         }.getOrElse {
                             runCatching {
                                 val parts = s.split("/", ".", "-")
@@ -1283,9 +1310,9 @@ fun CoachTraineesScreen(
                                     val c = parts[2].toInt()
 
                                     val dob = if (a > 1900) {
-                                        java.time.LocalDate.of(a, b, c)
+                                        LocalDate.of(a, b, c)
                                     } else {
-                                        java.time.LocalDate.of(c, b, a)
+                                        LocalDate.of(c, b, a)
                                     }
 
                                     yearsFromDate(dob)
@@ -1351,7 +1378,7 @@ fun CoachTraineesScreen(
 
                         if (day != null && month != null && year != null) {
                             runCatching {
-                                yearsFromDate(java.time.LocalDate.of(year, month, day))
+                                yearsFromDate(LocalDate.of(year, month, day))
                             }.getOrDefault(0)
                         } else {
                             0
@@ -1401,8 +1428,8 @@ fun CoachTraineesScreen(
                 return if (day != null && month != null && year != null) {
                     runCatching {
                         java.time.Period.between(
-                            java.time.LocalDate.of(year, month, day),
-                            java.time.LocalDate.now()
+                            LocalDate.of(year, month, day),
+                            LocalDate.now()
                         ).years.coerceIn(0, 120)
                     }.getOrDefault(0)
                 } else {
@@ -1516,7 +1543,9 @@ fun CoachTraineesScreen(
                                         branchSet.any { candidate ->
                                             candidate.length >= 3 &&
                                                     docBranch.length >= 3 &&
-                                                    (docBranch.contains(candidate) || candidate.contains(docBranch))
+                                                    (docBranch.contains(candidate) || candidate.contains(
+                                                        docBranch
+                                                    ))
                                         }
                             }
 
@@ -1740,22 +1769,28 @@ fun CoachTraineesScreen(
 
                     return raw.entries.associate { entry ->
                         val key = entry.key.toString()
-                        val value = entry.value
 
-                        val parsed = when (value) {
-                            is Map<*, *> -> CoachDateEntry(
-                                date = value["date"]?.toString().orEmpty(),
-                                description = value["description"]?.toString().orEmpty()
-                            )
+                        val parsed =
+                            when (val value = entry.value) {
+                                is Map<*, *> -> CoachDateEntry(
+                                    date =
+                                        value["date"]
+                                            ?.toString()
+                                            .orEmpty(),
+                                    description =
+                                        value["description"]
+                                            ?.toString()
+                                            .orEmpty()
+                                )
 
-                            // ✅ תאימות לאחור: אם בעבר נשמר רק תאריך כמחרוזת
-                            is String -> CoachDateEntry(
-                                date = value,
-                                description = ""
-                            )
+                                // ✅ תאימות לאחור: אם בעבר נשמר רק תאריך כמחרוזת
+                                is String -> CoachDateEntry(
+                                    date = value,
+                                    description = ""
+                                )
 
-                            else -> CoachDateEntry()
-                        }
+                                else -> CoachDateEntry()
+                            }
 
                         key to parsed
                     }
@@ -1964,10 +1999,16 @@ fun CoachTraineesScreen(
                 contentAlignment = Alignment.Center
             ) {
                 Text(
-                    text = coachTr(isEnglish, "המסך זמין למאמנים בלבד", "This screen is available for coaches only"),
-                    style = MaterialTheme.typography.titleMedium,
+                    text = coachTr(
+                        isEnglish,
+                        "המסך זמין למאמנים בלבד",
+                        "This screen is available for coaches only"
+                    ),
+                    style = KmiTypography.sectionTitle.copy(
+                        fontWeight = FontWeight.ExtraBold
+                    ),
                     textAlign = TextAlign.Center,
-                    color = Color.White
+                    color = MaterialTheme.colorScheme.onBackground
                 )
             }
         }
@@ -2177,7 +2218,8 @@ fun CoachTraineesScreen(
     // ✅ שדות נוספים למילוי ע"י המאמן לפי מתאמן: תאריך + תיאור
     val seminarDatesState = remember { mutableStateMapOf<String, Map<String, CoachDateEntry>>() }
     val campDatesState = remember { mutableStateMapOf<String, Map<String, CoachDateEntry>>() }
-    val certificationDatesState = remember { mutableStateMapOf<String, Map<String, CoachDateEntry>>() }
+    val certificationDatesState =
+        remember { mutableStateMapOf<String, Map<String, CoachDateEntry>>() }
 
     var showStatsSheet by remember { mutableStateOf(false) }
 
@@ -2209,7 +2251,6 @@ fun CoachTraineesScreen(
     val seminarsSectionKey = "seminars"
     val campsSectionKey = "camps"
     val certificationsSectionKey = "certifications"
-    val notesSectionKey = "coach_notes"
 
     val groupStats =
         remember(
@@ -2317,9 +2358,10 @@ fun CoachTraineesScreen(
             "beltAwardDates.$beltName" to dateValue
         }
 
-        val descriptionUpdates = cleanedDescriptions.entries.associate { (beltName, descriptionValue) ->
-            "beltAwardDescriptions.$beltName" to descriptionValue
-        }
+        val descriptionUpdates =
+            cleanedDescriptions.entries.associate { (beltName, descriptionValue) ->
+                "beltAwardDescriptions.$beltName" to descriptionValue
+            }
 
         Firebase.firestore.collection("users")
             .document(userDocId)
@@ -2649,7 +2691,8 @@ fun CoachTraineesScreen(
                                                 Color.Transparent
                                             )
                                         ),
-                                        shape = androidx.compose.foundation.shape.CircleShape
+                                        shape =
+                                            CircleShape
                                     )
                             )
 
@@ -2799,29 +2842,21 @@ fun CoachTraineesScreen(
                 }
 
                 item {
-                    val isDarkMode =
-                        MaterialTheme.colorScheme.background
-                            .luminance() < 0.5f
-
                     Surface(
                         color =
-                            if (isDarkMode) {
-                                MaterialTheme.colorScheme.surface
-                            } else {
-                                Color(0xFFF4F8FF)
-                            },
+                            MaterialTheme
+                                .colorScheme
+                                .surface,
                         shape = RoundedCornerShape(20.dp),
                         shadowElevation = 0.dp,
                         tonalElevation = 0.dp,
                         border = BorderStroke(
                             width = 1.dp,
                             color =
-                                if (isDarkMode) {
-                                    MaterialTheme.colorScheme.outline
-                                        .copy(alpha = 0.45f)
-                                } else {
-                                    Color(0xFFD8E4F4)
-                                }
+                                MaterialTheme
+                                    .colorScheme
+                                    .outline
+                                    .copy(alpha = 0.45f)
                         ),
                         modifier = Modifier.fillMaxWidth()
                     ) {
@@ -2848,14 +2883,21 @@ fun CoachTraineesScreen(
                                 horizontalArrangement = Arrangement.SpaceBetween
                             ) {
                                 Icon(
-                                    imageVector = if (isTraineePickerExpanded) {
-                                        Icons.Default.KeyboardArrowUp
-                                    } else {
-                                        Icons.Default.KeyboardArrowDown
-                                    },
+                                    imageVector =
+                                        if (isTraineePickerExpanded) {
+                                            Icons.Default.KeyboardArrowUp
+                                        } else {
+                                            Icons.Default.KeyboardArrowDown
+                                        },
                                     contentDescription = null,
-                                    tint = Color(0xFF4F46E5),
-                                    modifier = Modifier.size(24.dp)
+                                    tint =
+                                        MaterialTheme
+                                            .colorScheme
+                                            .primary,
+                                    modifier =
+                                        Modifier.size(
+                                            KmiIconSize.medium
+                                        )
                                 )
 
                                 Spacer(Modifier.width(6.dp))
@@ -2883,18 +2925,14 @@ fun CoachTraineesScreen(
                                     modifier =
                                         Modifier.weight(1f),
                                     style =
-                                        MaterialTheme.typography
-                                            .titleMedium,
-                                    fontWeight =
-                                        FontWeight.ExtraBold,
+                                        KmiTypography.sectionTitle.copy(
+                                            fontWeight =
+                                                FontWeight.ExtraBold
+                                        ),
                                     color =
-                                        if (isDarkMode) {
-                                            MaterialTheme
-                                                .colorScheme
-                                                .onSurface
-                                        } else {
-                                            Color(0xFF172036)
-                                        },
+                                        MaterialTheme
+                                            .colorScheme
+                                            .onSurface,
                                     textAlign =
                                         screenTextAlign,
                                     maxLines = 1,
@@ -3043,20 +3081,9 @@ fun CoachTraineesScreen(
                                         singleLine = true,
                                         textStyle =
                                             KmiTypography.secondary.copy(
-                                                fontWeight =
-                                                    FontWeight.ExtraBold,
-                                                textAlign =
-                                                    coachTextAlign(
-                                                        isEnglish
-                                                    ),
-                                                color =
-                                                    if (isDarkMode) {
-                                                        MaterialTheme
-                                                            .colorScheme
-                                                            .onSurface
-                                                    } else {
-                                                        Color(0xFF172036)
-                                                    }
+                                                fontWeight = FontWeight.ExtraBold,
+                                                textAlign = coachTextAlign(isEnglish),
+                                                color = MaterialTheme.colorScheme.onSurface
                                             ),
                                         placeholder = {
                                             Text(
@@ -3091,13 +3118,7 @@ fun CoachTraineesScreen(
                                                             FontWeight.Bold
                                                     ),
                                                 color =
-                                                    if (isDarkMode) {
-                                                        MaterialTheme
-                                                            .colorScheme
-                                                            .onSurfaceVariant
-                                                    } else {
-                                                        Color(0xFF7C879B)
-                                                    },
+                                                    MaterialTheme.colorScheme.onSurfaceVariant,
                                                 textAlign =
                                                     coachTextAlign(
                                                         isEnglish
@@ -3120,30 +3141,20 @@ fun CoachTraineesScreen(
                                                     .isNotBlank()
                                             ) {
                                                 Icon(
-                                                    imageVector =
-                                                        Icons.Default.Close,
+                                                    imageVector = Icons.Default.Close,
                                                     contentDescription =
                                                         coachTr(
                                                             isEnglish,
                                                             "נקה חיפוש",
                                                             "Clear search"
                                                         ),
-                                                    tint =
-                                                        if (isDarkMode) {
-                                                            MaterialTheme
-                                                                .colorScheme
-                                                                .onSurfaceVariant
-                                                        } else {
-                                                            Color(0xFF64748B)
-                                                        },
+                                                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
                                                     modifier =
                                                         Modifier
-                                                            .size(18.dp)
+                                                            .size(KmiIconSize.small)
                                                             .clickable {
-                                                                traineeSearchQuery =
-                                                                    ""
-                                                                isTraineeMenuExpanded =
-                                                                    true
+                                                                traineeSearchQuery = ""
+                                                                isTraineeMenuExpanded = true
                                                             }
                                                 )
                                             } else {
@@ -3160,33 +3171,15 @@ fun CoachTraineesScreen(
                                             OutlinedTextFieldDefaults
                                                 .colors(
                                                     focusedTextColor =
-                                                        if (isDarkMode) {
-                                                            MaterialTheme
-                                                                .colorScheme
-                                                                .onSurface
-                                                        } else {
-                                                            Color(0xFF172036)
-                                                        },
+                                                        MaterialTheme.colorScheme.onSurface,
                                                     unfocusedTextColor =
-                                                        if (isDarkMode) {
-                                                            MaterialTheme
-                                                                .colorScheme
-                                                                .onSurface
-                                                        } else {
-                                                            Color(0xFF172036)
-                                                        },
+                                                        MaterialTheme.colorScheme.onSurface,
                                                     cursorColor =
-                                                        Color(0xFF4F46E5),
+                                                        MaterialTheme.colorScheme.primary,
                                                     focusedBorderColor =
-                                                        Color(0xFF7C5CE7),
+                                                        MaterialTheme.colorScheme.primary,
                                                     unfocusedBorderColor =
-                                                        if (isDarkMode) {
-                                                            MaterialTheme
-                                                                .colorScheme
-                                                                .outline
-                                                        } else {
-                                                            Color(0xFFCBD8EA)
-                                                        },
+                                                        MaterialTheme.colorScheme.outline,
                                                     focusedContainerColor =
                                                         MaterialTheme
                                                             .colorScheme
@@ -3202,14 +3195,18 @@ fun CoachTraineesScreen(
                                                 ),
                                         modifier =
                                             Modifier
-                                                .menuAnchor()
+                                                .menuAnchor(
+                                                    type =
+                                                        MenuAnchorType
+                                                            .PrimaryEditable,
+                                                    enabled = true
+                                                )
                                                 .fillMaxWidth()
                                                 .heightIn(min = 50.dp)
                                     )
 
                                     ExposedDropdownMenu(
-                                        expanded =
-                                            isTraineeMenuExpanded,
+                                        expanded = isTraineeMenuExpanded,
                                         onDismissRequest = {
                                             isTraineeMenuExpanded = false
                                         },
@@ -3217,13 +3214,11 @@ fun CoachTraineesScreen(
                                             Modifier
                                                 .heightIn(max = 280.dp)
                                                 .clip(
-                                                    RoundedCornerShape(
-                                                        16.dp
-                                                    )
+                                                    RoundedCornerShape(16.dp)
                                                 ),
                                         containerColor =
-                                            Color(0xFF0A234A),
-                                        shadowElevation = 2.dp,
+                                            MaterialTheme.colorScheme.surface,
+                                        shadowElevation = 0.dp,
                                         tonalElevation = 0.dp
                                     ) {
                                         Column(
@@ -3272,9 +3267,8 @@ fun CoachTraineesScreen(
                                                             )
                                                 )
                                             } else {
-                                                uiProfiles.forEachIndexed {
-                                                        index,
-                                                        trainee ->
+                                                uiProfiles.forEachIndexed { index,
+                                                                            trainee ->
 
                                                     val traineeName =
                                                         demoSafeName(
@@ -3417,7 +3411,7 @@ fun CoachTraineesScreen(
                                                         index <
                                                         uiProfiles.lastIndex
                                                     ) {
-                                                        Divider(
+                                                        HorizontalDivider(
                                                             modifier =
                                                                 Modifier.padding(
                                                                     horizontal =
@@ -3500,844 +3494,1044 @@ fun CoachTraineesScreen(
                                         shape = RoundedCornerShape(24.dp)
                                     )
                             ) {
-                                if (selected == null) {
-                                    Box(
-                                        Modifier
-                                            .fillMaxWidth()
-                                            .padding(24.dp),
-                                        contentAlignment = Alignment.Center
-                                    ) {
-                                        Text(
-                                            text = coachTr(
-                                                isEnglish,
-                                                "בחר מתאמן מהרשימה למעלה",
-                                                "Select a trainee from the list above"
+                                Column(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(
+                                            horizontal = 16.dp,
+                                            vertical = 16.dp
+                                        ),
+                                    verticalArrangement =
+                                        Arrangement.spacedBy(10.dp),
+                                    horizontalAlignment =
+                                        screenHorizontalAlignment
+                                ) {
+                                    Text(
+                                        text = demoSafeName(selected),
+                                        style =
+                                            KmiTypography.sectionTitle.copy(
+                                                fontWeight =
+                                                    FontWeight.ExtraBold
                                             ),
-                                            color = Color.White.copy(alpha = 0.78f),
-                                            style = MaterialTheme.typography.bodyMedium,
-                                            textAlign = TextAlign.Center
-                                        )
-                                    }
-                                } else {
+                                        color =
+                                            MaterialTheme
+                                                .colorScheme
+                                                .onSurface,
+                                        textAlign = screenTextAlign,
+                                        maxLines = 2,
+                                        overflow =
+                                            TextOverflow.Ellipsis,
+                                        modifier =
+                                            Modifier.fillMaxWidth()
+                                    )
+
+                                    Text(
+                                        text =
+                                            coachTr(
+                                                isEnglish,
+                                                "פרופיל מתאמן",
+                                                "Trainee profile"
+                                            ),
+                                        style =
+                                            KmiTypography.caption.copy(
+                                                fontWeight =
+                                                    FontWeight.SemiBold
+                                            ),
+                                        color =
+                                            MaterialTheme
+                                                .colorScheme
+                                                .onSurfaceVariant,
+                                        textAlign = screenTextAlign,
+                                        modifier =
+                                            Modifier.fillMaxWidth()
+                                    )
+
+                                    HorizontalDivider(
+                                        color =
+                                            if (isDarkMode) {
+                                                Color(0xFF475569).copy(
+                                                    alpha = 0.58f
+                                                )
+                                            } else {
+                                                Color(0xFFD8E4F4)
+                                            }
+                                    )
+
                                     Column(
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .padding(horizontal = 16.dp, vertical = 16.dp),
-                                        verticalArrangement = Arrangement.spacedBy(10.dp),
-                                        horizontalAlignment = screenHorizontalAlignment
+                                        modifier = Modifier.fillMaxWidth(),
+                                        verticalArrangement = Arrangement.spacedBy(8.dp)
                                     ) {
-                                        Text(
-                                            text = demoSafeName(selected),
-                                            style =
-                                                KmiTypography.sectionTitle.copy(
-                                                    fontWeight =
-                                                        FontWeight.ExtraBold
-                                                ),
-                                            color =
-                                                MaterialTheme
-                                                    .colorScheme
-                                                    .onSurface,
-                                            textAlign = screenTextAlign,
-                                            maxLines = 2,
-                                            overflow =
-                                                TextOverflow.Ellipsis,
-                                            modifier =
-                                                Modifier.fillMaxWidth()
-                                        )
-
-                                        Text(
-                                            text =
-                                                coachTr(
-                                                    isEnglish,
-                                                    "פרופיל מתאמן",
-                                                    "Trainee profile"
-                                                ),
-                                            style =
-                                                KmiTypography.caption.copy(
-                                                    fontWeight =
-                                                        FontWeight.SemiBold
-                                                ),
-                                            color =
-                                                MaterialTheme
-                                                    .colorScheme
-                                                    .onSurfaceVariant,
-                                            textAlign = screenTextAlign,
-                                            modifier =
-                                                Modifier.fillMaxWidth()
-                                        )
-
-                                        Divider(
-                                            color =
-                                                if (isDarkMode) {
-                                                    Color(0xFF475569).copy(
-                                                        alpha = 0.58f
-                                                    )
-                                                } else {
-                                                    Color(0xFFD8E4F4)
-                                                }
-                                        )
-
-                                        Column(
+                                        Row(
                                             modifier = Modifier.fillMaxWidth(),
-                                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                                            horizontalArrangement = Arrangement.spacedBy(8.dp)
                                         ) {
-                                            Row(
-                                                modifier = Modifier.fillMaxWidth(),
-                                                horizontalArrangement = Arrangement.spacedBy(8.dp)
-                                            ) {
-                                                LabeledField(
-                                                    label = coachTr(isEnglish, "גיל", "Age"),
-                                                    value = if (selected.age > 0) "${selected.age}" else "—",
-                                                    isEnglish = isEnglish,
-                                                    modifier = Modifier.weight(1f)
-                                                )
-
-                                                LabeledField(
-                                                    label = coachTr(isEnglish, "ותק", "Seniority"),
-                                                    value = selected.seniority.ifBlank { "—" },
-                                                    isEnglish = isEnglish,
-                                                    modifier = Modifier.weight(1f)
-                                                )
-                                            }
-
-                                            Row(
-                                                modifier = Modifier.fillMaxWidth(),
-                                                horizontalArrangement = Arrangement.spacedBy(8.dp)
-                                            ) {
-                                                LabeledField(
-                                                    label = coachTr(isEnglish, "דרגה", "Rank"),
-                                                    value = coachBeltNameForUi(selected.belt.ifBlank { "—" }, isEnglish),
-                                                    isEnglish = isEnglish,
-                                                    modifier = Modifier.weight(1f)
-                                                )
-
-                                                LabeledField(
-                                                    label = coachTr(isEnglish, "סניף", "Branch"),
-                                                    value = selected.branch.ifBlank { "—" },
-                                                    isEnglish = isEnglish,
-                                                    modifier = Modifier.weight(1f)
-                                                )
-                                            }
-
-                                            Row(
-                                                modifier = Modifier.fillMaxWidth(),
-                                                horizontalArrangement = Arrangement.spacedBy(8.dp)
-                                            ) {
-                                                LabeledField(
-                                                    label = coachTr(isEnglish, "קבוצה", "Group"),
-                                                    value = selected.groupKey.ifBlank { "—" },
-                                                    isEnglish = isEnglish,
-                                                    modifier = Modifier.weight(1f)
-                                                )
-
-                                                LabeledField(
-                                                    label = coachTr(
-                                                        isEnglish,
-                                                        "נוכחות",
-                                                        "Attendance"
-                                                    ),
-                                                    value = if (selected.attendancePct > 0) "${selected.attendancePct}%" else "—",
-                                                    isEnglish = isEnglish,
-                                                    modifier = Modifier.weight(1f)
-                                                )
-                                            }
-                                        }
-
-                                        Divider(
-                                            color = Color(0xFFD8E4F4)
-                                        )
-
-                                        Column(
-                                            modifier = Modifier.fillMaxWidth(),
-                                            verticalArrangement = Arrangement.spacedBy(10.dp)
-                                        ) {
-                                            val isBeltDatesSectionExpanded = expandedCoachSection == beltDatesSectionKey
-
-                                            PremiumCoachCompactSectionHeader(
-                                                title = coachTr(isEnglish, "תאריכי קבלת חגורות", "Belt award dates"),
-                                                subtitle = if (isBeltDatesSectionExpanded) {
-                                                    coachTr(isEnglish, "עדכון תאריכים לפי חגורה", "Update dates by belt")
-                                                } else {
-                                                    coachTr(isEnglish, "לחצו לפתיחת רשימת החגורות", "Tap to open the belt list")
-                                                },
-                                                iconText = "📅",
-                                                isExpanded = isBeltDatesSectionExpanded,
-                                                accent = Color(0xFF6D56B8),
+                                            LabeledField(
+                                                label = coachTr(isEnglish, "גיל", "Age"),
+                                                value = if (selected.age > 0) "${selected.age}" else "—",
                                                 isEnglish = isEnglish,
-                                                onClick = {
-                                                    expandedCoachSection =
-                                                        if (expandedCoachSection == beltDatesSectionKey) {
-                                                            null
-                                                        } else {
-                                                            beltDatesSectionKey
-                                                        }
-                                                }
+                                                modifier = Modifier.weight(1f)
                                             )
 
-                                            if (isBeltDatesSectionExpanded) {
-                                                val beltOrder = listOf(
-                                                    "צהובה",
-                                                    "כתומה",
-                                                    "ירוקה",
-                                                    "כחולה",
-                                                    "חומה",
-                                                    "שחורה"
-                                                )
-
-                                                val beltAccentMap = mapOf(
-                                                    "צהובה" to Color(0xFFFACC15),
-                                                    "כתומה" to Color(0xFFF97316),
-                                                    "ירוקה" to Color(0xFF22C55E),
-                                                    "כחולה" to Color(0xFF3B82F6),
-                                                    "חומה" to Color(0xFF8B5A2B),
-                                                    "שחורה" to Color(0xFF111111)
-                                                )
-
-                                                val selectedDates = beltAwardDatesState[selected.id] ?: emptyMap()
-                                                var expandedBelt by remember(selected.id) { mutableStateOf<String?>(null) }
-
-                                                beltOrder.forEach { beltName ->
-                                                    val beltAccent = beltAccentMap[beltName] ?: Color(0xFF6366F1)
-                                                    val currentDate = selectedDates[beltName].orEmpty()
-                                                    val hasDate = currentDate.isNotBlank()
-                                                    val isExpanded = expandedBelt == beltName
-                                                    val selectedDescriptions =
-                                                        beltAwardDescriptionsState[selected.id] ?: emptyMap()
-
-                                                    val currentDescription =
-                                                        selectedDescriptions[beltName].orEmpty()
-
-                                                    Surface(
-                                                        color = Color.White,
-                                                        shape = RoundedCornerShape(16.dp),
-                                                        shadowElevation = 1.dp,
-                                                        border = BorderStroke(
-                                                            1.dp,
-                                                            beltAccent.copy(alpha = 0.16f)
-                                                        ),
-                                                        modifier = Modifier
-                                                            .fillMaxWidth()
-                                                            .clickable {
-                                                                expandedBelt =
-                                                                    if (isExpanded) null else beltName
-                                                            }
-                                                    ) {
-                                                        Column(
-                                                            modifier = Modifier
-                                                                .fillMaxWidth()
-                                                                .padding(
-                                                                    horizontal = 10.dp,
-                                                                    vertical = 8.dp
-                                                                ),
-                                                            verticalArrangement = Arrangement.spacedBy(6.dp)
-                                                        ) {
-                                                            Row(
-                                                                modifier = Modifier.fillMaxWidth(),
-                                                                verticalAlignment = Alignment.CenterVertically
-                                                            ) {
-                                                                Box(
-                                                                    modifier = Modifier
-                                                                        .size(10.dp)
-                                                                        .clip(CircleShape)
-                                                                        .background(beltAccent)
-                                                                )
-
-                                                                Spacer(Modifier.width(8.dp))
-
-                                                                Column(
-                                                                    modifier = Modifier.weight(1f),
-                                                                    verticalArrangement = Arrangement.spacedBy(2.dp)
-                                                                ) {
-                                                                    Text(
-                                                                        text = if (isEnglish) {
-                                                                            coachBeltNameForUi(beltName, true)
-                                                                        } else {
-                                                                            "חגורה $beltName"
-                                                                        },
-                                                                        style = MaterialTheme.typography.titleSmall,
-                                                                        fontWeight = FontWeight.Bold,
-                                                                        color = Color(0xFF1F2937)
-                                                                    )
-
-                                                                    Text(
-                                                                        text = if (hasDate) {
-                                                                            coachTr(isEnglish, "תאריך קבלה: $currentDate", "Award date: $currentDate")
-                                                                        } else {
-                                                                            coachTr(isEnglish, "אין תאריך קבלה", "No award date")
-                                                                        },
-                                                                        style = MaterialTheme.typography.bodySmall,
-                                                                        color = if (hasDate) Color(0xFF0F766E) else Color(0xFF94A3B8)
-                                                                    )
-                                                                }
-
-                                                                Icon(
-                                                                    imageVector = if (hasDate) Icons.Default.CheckCircle else Icons.Default.Cancel,
-                                                                    contentDescription = null,
-                                                                    tint = if (hasDate) Color(0xFF16A34A) else Color(0xFFDC2626)
-                                                                )
-
-                                                                Spacer(Modifier.width(6.dp))
-
-                                                                Icon(
-                                                                    imageVector = if (isExpanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
-                                                                    contentDescription = null,
-                                                                    tint = Color(0xFF64748B)
-                                                                )
-                                                            }
-
-                                                            if (isExpanded) {
-                                                                var showBeltDatePicker by remember(selected.id, beltName) {
-                                                                    mutableStateOf(false)
-                                                                }
-
-                                                                PremiumCoachDateField(
-                                                                    label = coachTr(isEnglish, "תאריך קבלה", "Award date"),
-                                                                    value = currentDate,
-                                                                    placeholder = coachTr(
-                                                                        isEnglish,
-                                                                        "בחר תאריך מלוח השנה",
-                                                                        "Choose a date from calendar"
-                                                                    ),
-                                                                    accent = beltAccent,
-                                                                    isEnglish = isEnglish,
-                                                                    onClick = {
-                                                                        showBeltDatePicker = true
-                                                                    }
-                                                                )
-
-                                                                if (showBeltDatePicker) {
-                                                                    PremiumCoachDatePickerDialog(
-                                                                        title = coachTr(
-                                                                            isEnglish,
-                                                                            "בחר תאריך קבלת חגורה",
-                                                                            "Choose belt award date"
-                                                                        ),
-                                                                        selectedDate = currentDate,
-                                                                        accent = beltAccent,
-                                                                        isEnglish = isEnglish,
-                                                                        onDismiss = {
-                                                                            showBeltDatePicker = false
-                                                                        },
-                                                                        onDateSelected = { newDate ->
-                                                                            val current = beltAwardDatesState[selected.id]
-                                                                                .orEmpty()
-                                                                                .toMutableMap()
-
-                                                                            current[beltName] = newDate
-                                                                            beltAwardDatesState[selected.id] = current
-                                                                        }
-                                                                    )
-                                                                }
-
-                                                                OutlinedTextField(
-                                                                    value = currentDescription,
-                                                                    onValueChange = { newValue ->
-                                                                        val current = beltAwardDescriptionsState[selected.id]
-                                                                            .orEmpty()
-                                                                            .toMutableMap()
-
-                                                                        current[beltName] = newValue
-                                                                        beltAwardDescriptionsState[selected.id] = current
-                                                                    },
-                                                                    label = {
-                                                                        Text(
-                                                                            coachTr(
-                                                                                isEnglish,
-                                                                                "תיאור",
-                                                                                "Description"
-                                                                            )
-                                                                        )
-                                                                    },
-                                                                    placeholder = {
-                                                                        Text(
-                                                                            coachTr(
-                                                                                isEnglish,
-                                                                                "לדוגמה: מבחן חגורה, הערת מאמן, הערכה מיוחדת",
-                                                                                "Example: belt test, coach note, special remark"
-                                                                            ),
-                                                                            textAlign = coachTextAlign(isEnglish),
-                                                                            modifier = Modifier.fillMaxWidth()
-                                                                        )
-                                                                    },
-                                                                    modifier = Modifier.fillMaxWidth(),
-                                                                    minLines = 2,
-                                                                    textStyle = MaterialTheme.typography.bodyLarge.copy(
-                                                                        textAlign = coachTextAlign(isEnglish)
-                                                                    ),
-                                                                    shape = RoundedCornerShape(16.dp)
-                                                                )
-                                                            }
-                                                        }
-
-                                                    }
-                                                }
-
-                                                var isSavingBeltDates by remember(selected.id) { mutableStateOf(false) }
-                                                var beltDatesSaveMessage by remember(selected.id) { mutableStateOf<String?>(null) }
-
-                                                Surface(
-                                                    onClick = {
-                                                        val selectedProfile = selected
-                                                        if (selectedProfile != null && !isSavingBeltDates) {
-                                                            val datesToSave = beltAwardDatesState[selectedProfile.id]
-                                                                .orEmpty()
-                                                                .filterValues { it.isNotBlank() }
-
-                                                            val descriptionsToSave = beltAwardDescriptionsState[selectedProfile.id]
-                                                                .orEmpty()
-                                                                .filterValues { it.isNotBlank() }
-
-                                                            if (datesToSave.isEmpty() && descriptionsToSave.isEmpty()) {
-                                                                beltDatesSaveMessage = coachTr(
-                                                                    isEnglish,
-                                                                    "אין תאריכים או תיאורים לשמירה",
-                                                                    "No dates or descriptions to save"
-                                                                )
-                                                                return@Surface
-                                                            }
-
-                                                            screenScope.launch {
-                                                                isSavingBeltDates = true
-                                                                beltDatesSaveMessage = null
-
-                                                                runCatching {
-                                                                    saveBeltAwardDatesForSelected(
-                                                                        selectedProfile = selectedProfile,
-                                                                        dates = datesToSave,
-                                                                        descriptions = descriptionsToSave
-                                                                    )
-                                                                }.onSuccess {
-                                                                    beltDatesSaveMessage = coachTr(isEnglish, "תאריכי החגורות נשמרו", "Belt dates saved")
-                                                                }.onFailure {
-                                                                    beltDatesSaveMessage = coachTr(
-                                                                        isEnglish,
-                                                                        "שמירת תאריכי החגורות נכשלה",
-                                                                        "Failed to save belt dates"
-                                                                    )
-                                                                }
-
-                                                                isSavingBeltDates = false
-                                                            }
-                                                        }
-                                                    },
-                                                    shape = RoundedCornerShape(18.dp),
-                                                    color = Color.Transparent,
-                                                    shadowElevation = 6.dp,
-                                                    modifier = Modifier.fillMaxWidth()
-                                                ) {
-                                                    Box(
-                                                        modifier = Modifier
-                                                            .fillMaxWidth()
-                                                            .background(
-                                                                brush = Brush.horizontalGradient(
-                                                                    colors = listOf(
-                                                                        Color(0xFF7C3AED),
-                                                                        Color(0xFF6366F1),
-                                                                        Color(0xFF0EA5E9)
-                                                                    )
-                                                                ),
-                                                                shape = RoundedCornerShape(18.dp)
-                                                            )
-                                                            .padding(vertical = 14.dp),
-                                                        contentAlignment = Alignment.Center
-                                                    ) {
-                                                        Text(
-                                                            text = if (isSavingBeltDates) {
-                                                                coachTr(isEnglish, "שומר...", "Saving...")
-                                                            } else {
-                                                                coachTr(isEnglish, "שמור תאריכי חגורות", "Save belt dates")
-                                                            },
-                                                            style = MaterialTheme.typography.titleSmall,
-                                                            fontWeight = FontWeight.ExtraBold,
-                                                            color = Color.White
-                                                        )
-                                                    }
-                                                }
-
-                                                beltDatesSaveMessage?.let { msg ->
-                                                    Surface(
-                                                        color = if (msg.contains("נשמרו") || msg.contains("saved", ignoreCase = true)) {
-                                                            Color(0xFFDCFCE7)
-                                                        } else {
-                                                            Color(0xFFFEE2E2)
-                                                        },
-                                                        shape = RoundedCornerShape(14.dp),
-                                                        modifier = Modifier.fillMaxWidth()
-                                                    ) {
-                                                        Text(
-                                                            text = msg,
-                                                            style = MaterialTheme.typography.bodySmall,
-                                                            fontWeight = FontWeight.Bold,
-                                                            color = if (msg.contains("נשמרו") || msg.contains("saved", ignoreCase = true)) Color(0xFF166534) else Color(0xFF991B1B),
-                                                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp)
-                                                        )
-                                                    }
-                                                }
-                                            }
+                                            LabeledField(
+                                                label = coachTr(isEnglish, "ותק", "Seniority"),
+                                                value = selected.seniority.ifBlank { "—" },
+                                                isEnglish = isEnglish,
+                                                modifier = Modifier.weight(1f)
+                                            )
                                         }
 
-                                        CoachDateSectionCard(
-                                            title = "השתלמויות",
-                                            collapsedSubtitle = coachTr(isEnglish, "לחצו לפתיחת רשימת השתלמויות", "Tap to open the seminar list"),
-                                            expandedSubtitle = coachTr(isEnglish, "הוסיפו תאריך ותיאור להשתלמויות שהמתאמן עבר", "Add a date and description for seminars completed by the trainee"),
-                                            defaultItems = listOf(
-                                                "השתלמות 1",
-                                                "השתלמות 2",
-                                                "השתלמות 3"
-                                            ),
-                                            selectedId = selected.id,
-                                            stateMap = seminarDatesState,
-                                            firestoreFieldName = "seminarDates",
-                                            selectedProfile = selected,
-                                            screenScope = screenScope,
-                                            isEnglish = isEnglish,
-                                            isExpanded = expandedCoachSection == seminarsSectionKey,
-                                            onToggleExpanded = {
-                                                expandedCoachSection =
-                                                    if (expandedCoachSection == seminarsSectionKey) {
-                                                        null
-                                                    } else {
-                                                        seminarsSectionKey
-                                                    }
-                                            },
-                                            onSave = ::saveCoachDateSectionForSelected
-                                        )
-
-                                        CoachDateSectionCard(
-                                            title = "מחנות אימונים",
-                                            collapsedSubtitle = coachTr(isEnglish, "לחצו לפתיחת רשימת מחנות אימונים", "Tap to open the training camp list"),
-                                            expandedSubtitle = coachTr(isEnglish, "הוסיפו תאריך ותיאור למחנות אימונים שבהם המתאמן השתתף", "Add a date and description for training camps attended by the trainee"),
-                                            defaultItems = listOf(
-                                                "מחנה אימונים 1",
-                                                "מחנה אימונים 2",
-                                                "מחנה אימונים 3"
-                                            ),
-                                            selectedId = selected.id,
-                                            stateMap = campDatesState,
-                                            firestoreFieldName = "campDates",
-                                            selectedProfile = selected,
-                                            screenScope = screenScope,
-                                            isEnglish = isEnglish,
-                                            isExpanded = expandedCoachSection == campsSectionKey,
-                                            onToggleExpanded = {
-                                                expandedCoachSection =
-                                                    if (expandedCoachSection == campsSectionKey) {
-                                                        null
-                                                    } else {
-                                                        campsSectionKey
-                                                    }
-                                            },
-                                            onSave = ::saveCoachDateSectionForSelected
-                                        )
-
-                                        CoachDateSectionCard(
-                                            title = "הסמכות",
-                                            collapsedSubtitle = coachTr(isEnglish, "לחצו לפתיחת רשימת הסמכות", "Tap to open the certification list"),
-                                            expandedSubtitle = coachTr(isEnglish, "הוסיפו תאריך ותיאור להסמכות שהמתאמן קיבל", "Add a date and description for certifications received by the trainee"),
-                                            defaultItems = listOf(
-                                                "הסמכה 1",
-                                                "הסמכה 2",
-                                                "הסמכה 3"
-                                            ),
-                                            selectedId = selected.id,
-                                            stateMap = certificationDatesState,
-                                            firestoreFieldName = "certificationDates",
-                                            selectedProfile = selected,
-                                            screenScope = screenScope,
-                                            isEnglish = isEnglish,
-                                            isExpanded = expandedCoachSection == certificationsSectionKey,
-                                            onToggleExpanded = {
-                                                expandedCoachSection =
-                                                    if (expandedCoachSection == certificationsSectionKey) {
-                                                        null
-                                                    } else {
-                                                        certificationsSectionKey
-                                                    }
-                                            },
-                                            onSave = ::saveCoachDateSectionForSelected
-                                        )
-
-                                        var isSavingCoachNotes by remember(selected.id) {
-                                            mutableStateOf(false)
-                                        }
-
-                                        var coachNotesSaveMessage by remember(selected.id) {
-                                            mutableStateOf<String?>(null)
-                                        }
-
-                                        val isCoachNotesDarkMode =
-                                            MaterialTheme.colorScheme.background
-                                                .luminance() < 0.5f
-
-                                        val coachNotesContainerColor =
-                                            if (isCoachNotesDarkMode) {
-                                                Color(0xFF172036)
-                                            } else {
-                                                Color(0xFFF8FAFC)
-                                            }
-
-                                        val coachNotesBorderColor =
-                                            if (isCoachNotesDarkMode) {
-                                                Color(0xFF475569).copy(alpha = 0.62f)
-                                            } else {
-                                                Color(0xFFD6E2F1)
-                                            }
-
-                                        Column(
+                                        Row(
                                             modifier = Modifier.fillMaxWidth(),
-                                            verticalArrangement = Arrangement.spacedBy(4.dp),
-                                            horizontalAlignment = screenHorizontalAlignment
+                                            horizontalArrangement = Arrangement.spacedBy(8.dp)
                                         ) {
-                                            Surface(
-                                                color = coachNotesContainerColor,
-                                                shape = RoundedCornerShape(20.dp),
-                                                shadowElevation = 0.dp,
-                                                border = BorderStroke(
-                                                    1.dp,
-                                                    coachNotesBorderColor
+                                            LabeledField(
+                                                label = coachTr(isEnglish, "דרגה", "Rank"),
+                                                value = coachBeltNameForUi(
+                                                    selected.belt.ifBlank { "—" },
+                                                    isEnglish
                                                 ),
-                                                modifier = Modifier.fillMaxWidth()
-                                            ) {
-                                                Column(
-                                                    modifier = Modifier
-                                                        .fillMaxWidth()
-                                                        .padding(
-                                                            horizontal = 12.dp,
-                                                            vertical = 12.dp
-                                                        ),
-                                                    verticalArrangement = Arrangement.spacedBy(8.dp),
-                                                    horizontalAlignment = screenHorizontalAlignment
-                                                ) {
-                                                    Text(
-                                                        text =
-                                                            coachTr(
-                                                                isEnglish,
-                                                                "הערות מאמן",
-                                                                "Coach notes"
-                                                            ),
-                                                        style =
-                                                            KmiTypography.caption.copy(
-                                                                fontWeight =
-                                                                    FontWeight.ExtraBold
-                                                            ),
-                                                        color =
-                                                            MaterialTheme
-                                                                .colorScheme
-                                                                .onSurfaceVariant,
-                                                        textAlign =
-                                                            screenTextAlign,
-                                                        modifier =
-                                                            Modifier.fillMaxWidth()
-                                                    )
+                                                isEnglish = isEnglish,
+                                                modifier = Modifier.weight(1f)
+                                            )
 
-                                                    OutlinedTextField(
-                                                        value = coachNotes[selected.id] ?: "",
-                                                        onValueChange = {
-                                                            coachNotes[selected.id] = it
-                                                            coachNotesSaveMessage = null
-                                                        },
-                                                        placeholder = {
-                                                            Text(
-                                                                text = coachTr(
-                                                                    isEnglish,
-                                                                    "כתוב כאן הערות על המתאמן...",
-                                                                    "Write coach notes here..."
-                                                                ),
-                                                                color =
-                                                                    MaterialTheme
-                                                                        .colorScheme
-                                                                        .onSurfaceVariant,
-                                                                style =
-                                                                    KmiTypography.body.copy(
-                                                                        textAlign =
-                                                                            screenTextAlign
-                                                                    ),
-                                                                modifier = Modifier.fillMaxWidth()
-                                                            )
-                                                        },
-                                                        textStyle =
-                                                            KmiTypography.body.copy(
-                                                                color =
-                                                                    MaterialTheme
-                                                                        .colorScheme
-                                                                        .onSurface,
-                                                                textAlign =
-                                                                    screenTextAlign
-                                                            ),
-                                                        modifier =
-                                                            Modifier.fillMaxWidth(),
-                                                        minLines = 4,
-                                                        shape = RoundedCornerShape(16.dp),
-                                                        colors = OutlinedTextFieldDefaults.colors(
-                                                            focusedTextColor =
-                                                                MaterialTheme.colorScheme.onSurface,
-                                                            unfocusedTextColor =
-                                                                MaterialTheme.colorScheme.onSurface,
-                                                            disabledTextColor =
-                                                                MaterialTheme.colorScheme.onSurfaceVariant,
-                                                            cursorColor =
-                                                                MaterialTheme.colorScheme.primary,
-                                                            focusedBorderColor =
-                                                                MaterialTheme.colorScheme.primary,
-                                                            unfocusedBorderColor =
-                                                                coachNotesBorderColor,
-                                                            focusedContainerColor =
-                                                                if (isCoachNotesDarkMode) {
-                                                                    Color(0xFF0F172A)
-                                                                } else {
-                                                                    Color.White
-                                                                },
-                                                            unfocusedContainerColor =
-                                                                if (isCoachNotesDarkMode) {
-                                                                    Color(0xFF0F172A)
-                                                                } else {
-                                                                    Color.White
-                                                                },
-                                                            disabledContainerColor =
-                                                                coachNotesContainerColor,
-                                                            focusedPlaceholderColor =
-                                                                MaterialTheme.colorScheme.onSurfaceVariant,
-                                                            unfocusedPlaceholderColor =
-                                                                MaterialTheme.colorScheme.onSurfaceVariant
-                                                        )
-                                                    )
-                                                }
+                                            LabeledField(
+                                                label = coachTr(isEnglish, "סניף", "Branch"),
+                                                value = selected.branch.ifBlank { "—" },
+                                                isEnglish = isEnglish,
+                                                modifier = Modifier.weight(1f)
+                                            )
+                                        }
+
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                        ) {
+                                            LabeledField(
+                                                label = coachTr(isEnglish, "קבוצה", "Group"),
+                                                value = selected.groupKey.ifBlank { "—" },
+                                                isEnglish = isEnglish,
+                                                modifier = Modifier.weight(1f)
+                                            )
+
+                                            LabeledField(
+                                                label = coachTr(
+                                                    isEnglish,
+                                                    "נוכחות",
+                                                    "Attendance"
+                                                ),
+                                                value = if (selected.attendancePct > 0) "${selected.attendancePct}%" else "—",
+                                                isEnglish = isEnglish,
+                                                modifier = Modifier.weight(1f)
+                                            )
+                                        }
+                                    }
+
+                                    HorizontalDivider(
+                                        color = Color(0xFFD8E4F4)
+                                    )
+
+                                    Column(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        verticalArrangement = Arrangement.spacedBy(10.dp)
+                                    ) {
+                                        val isBeltDatesSectionExpanded =
+                                            expandedCoachSection == beltDatesSectionKey
+
+                                        PremiumCoachCompactSectionHeader(
+                                            title = coachTr(
+                                                isEnglish,
+                                                "תאריכי קבלת חגורות",
+                                                "Belt award dates"
+                                            ),
+                                            subtitle = if (isBeltDatesSectionExpanded) {
+                                                coachTr(
+                                                    isEnglish,
+                                                    "עדכון תאריכים לפי חגורה",
+                                                    "Update dates by belt"
+                                                )
+                                            } else {
+                                                coachTr(
+                                                    isEnglish,
+                                                    "לחצו לפתיחת רשימת החגורות",
+                                                    "Tap to open the belt list"
+                                                )
+                                            },
+                                            iconText = "📅",
+                                            isExpanded = isBeltDatesSectionExpanded,
+                                            accent = Color(0xFF6D56B8),
+                                            isEnglish = isEnglish,
+                                            onClick = {
+                                                expandedCoachSection =
+                                                    if (expandedCoachSection == beltDatesSectionKey) {
+                                                        null
+                                                    } else {
+                                                        beltDatesSectionKey
+                                                    }
+                                            }
+                                        )
+
+                                        if (isBeltDatesSectionExpanded) {
+                                            val beltOrder = listOf(
+                                                "צהובה",
+                                                "כתומה",
+                                                "ירוקה",
+                                                "כחולה",
+                                                "חומה",
+                                                "שחורה"
+                                            )
+
+                                            val beltAccentMap = mapOf(
+                                                "צהובה" to Color(0xFFFACC15),
+                                                "כתומה" to Color(0xFFF97316),
+                                                "ירוקה" to Color(0xFF22C55E),
+                                                "כחולה" to Color(0xFF3B82F6),
+                                                "חומה" to Color(0xFF8B5A2B),
+                                                "שחורה" to Color(0xFF111111)
+                                            )
+
+                                            val selectedDates =
+                                                beltAwardDatesState[selected.id] ?: emptyMap()
+                                            var expandedBelt by remember(selected.id) {
+                                                mutableStateOf<String?>(
+                                                    null
+                                                )
                                             }
 
-                                            Row(
-                                                modifier = Modifier.fillMaxWidth(),
-                                                horizontalArrangement = if (isEnglish) {
-                                                    Arrangement.Start
-                                                } else {
-                                                    Arrangement.End
-                                                }
-                                            ) {
+                                            beltOrder.forEach { beltName ->
+                                                val beltAccent =
+                                                    beltAccentMap[beltName] ?: Color(0xFF6366F1)
+                                                val currentDate = selectedDates[beltName].orEmpty()
+                                                val hasDate = currentDate.isNotBlank()
+                                                val isExpanded = expandedBelt == beltName
+                                                val selectedDescriptions =
+                                                    beltAwardDescriptionsState[selected.id]
+                                                        ?: emptyMap()
+
+                                                val currentDescription =
+                                                    selectedDescriptions[beltName].orEmpty()
+
                                                 Surface(
-                                                    onClick = {
-                                                        val selectedProfile = selected
-                                                        if (selectedProfile != null && !isSavingCoachNotes) {
-                                                            val noteToSave = coachNotes[selectedProfile.id].orEmpty()
-
-                                                            screenScope.launch {
-                                                                isSavingCoachNotes = true
-                                                                coachNotesSaveMessage = null
-
-                                                                runCatching {
-                                                                    saveCoachNotesForSelected(
-                                                                        selectedProfile = selectedProfile,
-                                                                        note = noteToSave
-                                                                    )
-                                                                }.onSuccess {
-                                                                    coachNotesSaveMessage = coachTr(
-                                                                        isEnglish,
-                                                                        "הערות המאמן נשמרו",
-                                                                        "Coach notes saved"
-                                                                    )
-                                                                }.onFailure {
-                                                                    coachNotesSaveMessage = coachTr(
-                                                                        isEnglish,
-                                                                        "שמירת הערות המאמן נכשלה",
-                                                                        "Failed to save coach notes"
-                                                                    )
-                                                                }
-
-                                                                isSavingCoachNotes = false
-                                                            }
-                                                        }
-                                                    },
-                                                    shape = RoundedCornerShape(999.dp),
                                                     color =
                                                         MaterialTheme
                                                             .colorScheme
-                                                            .primary,
+                                                            .surface,
+                                                    shape = RoundedCornerShape(16.dp),
                                                     shadowElevation = 0.dp,
                                                     tonalElevation = 0.dp,
                                                     border = BorderStroke(
                                                         1.dp,
-                                                        MaterialTheme
-                                                            .colorScheme
-                                                            .primary
-                                                            .copy(alpha = 0.75f)
+                                                        beltAccent.copy(alpha = 0.24f)
                                                     ),
-                                                    modifier = Modifier.widthIn(min = 118.dp)
+                                                    modifier = Modifier
+                                                        .fillMaxWidth()
+                                                        .clickable {
+                                                            expandedBelt =
+                                                                if (isExpanded) null else beltName
+                                                        }
                                                 ) {
-                                                    Box(
+                                                    Column(
                                                         modifier = Modifier
+                                                            .fillMaxWidth()
                                                             .padding(
-                                                                horizontal = 16.dp,
-                                                                vertical = 7.dp
+                                                                horizontal = 10.dp,
+                                                                vertical = 8.dp
                                                             ),
-                                                        contentAlignment = Alignment.Center
+                                                        verticalArrangement = Arrangement.spacedBy(6.dp)
                                                     ) {
-                                                        Text(
-                                                            text =
-                                                                if (
-                                                                    isSavingCoachNotes
-                                                                ) {
-                                                                    coachTr(
-                                                                        isEnglish,
-                                                                        "שומר...",
-                                                                        "Saving..."
+                                                        Row(
+                                                            modifier = Modifier.fillMaxWidth(),
+                                                            verticalAlignment = Alignment.CenterVertically
+                                                        ) {
+                                                            Box(
+                                                                modifier = Modifier
+                                                                    .size(10.dp)
+                                                                    .clip(CircleShape)
+                                                                    .background(beltAccent)
+                                                            )
+
+                                                            Spacer(Modifier.width(8.dp))
+
+                                                            Column(
+                                                                modifier = Modifier.weight(1f),
+                                                                verticalArrangement = Arrangement.spacedBy(
+                                                                    2.dp
+                                                                )
+                                                            ) {
+                                                                Text(
+                                                                    text =
+                                                                        if (isEnglish) {
+                                                                            coachBeltNameForUi(
+                                                                                beltName,
+                                                                                true
+                                                                            )
+                                                                        } else {
+                                                                            "חגורה $beltName"
+                                                                        },
+                                                                    style =
+                                                                        KmiTypography.secondary.copy(
+                                                                            fontWeight =
+                                                                                FontWeight.Bold
+                                                                        ),
+                                                                    color =
+                                                                        MaterialTheme
+                                                                            .colorScheme
+                                                                            .onSurface
+                                                                )
+
+                                                                Text(
+                                                                    text =
+                                                                        if (hasDate) {
+                                                                            coachTr(
+                                                                                isEnglish,
+                                                                                "תאריך קבלה: $currentDate",
+                                                                                "Award date: $currentDate"
+                                                                            )
+                                                                        } else {
+                                                                            coachTr(
+                                                                                isEnglish,
+                                                                                "אין תאריך קבלה",
+                                                                                "No award date"
+                                                                            )
+                                                                        },
+                                                                    style =
+                                                                        KmiTypography.caption,
+                                                                    color =
+                                                                        if (hasDate) {
+                                                                            MaterialTheme
+                                                                                .colorScheme
+                                                                                .primary
+                                                                        } else {
+                                                                            MaterialTheme
+                                                                                .colorScheme
+                                                                                .onSurfaceVariant
+                                                                        }
+                                                                )
+                                                            }
+
+                                                            Icon(
+                                                                imageVector =
+                                                                    if (hasDate) {
+                                                                        Icons.Default.CheckCircle
+                                                                    } else {
+                                                                        Icons.Default.Cancel
+                                                                    },
+                                                                contentDescription = null,
+                                                                tint =
+                                                                    if (hasDate) {
+                                                                        MaterialTheme
+                                                                            .colorScheme
+                                                                            .primary
+                                                                    } else {
+                                                                        MaterialTheme
+                                                                            .colorScheme
+                                                                            .error
+                                                                    },
+                                                                modifier =
+                                                                    Modifier.size(
+                                                                        KmiIconSize.small
                                                                     )
-                                                                } else {
-                                                                    coachTr(
+                                                            )
+
+                                                            Spacer(Modifier.width(6.dp))
+
+                                                            Icon(
+                                                                imageVector =
+                                                                    if (isExpanded) {
+                                                                        Icons.Default.KeyboardArrowUp
+                                                                    } else {
+                                                                        Icons.Default.KeyboardArrowDown
+                                                                    },
+                                                                contentDescription = null,
+                                                                tint =
+                                                                    MaterialTheme
+                                                                        .colorScheme
+                                                                        .onSurfaceVariant,
+                                                                modifier =
+                                                                    Modifier.size(
+                                                                        KmiIconSize.small
+                                                                    )
+                                                            )
+                                                        }
+
+                                                        if (isExpanded) {
+                                                            var showBeltDatePicker by remember(
+                                                                selected.id,
+                                                                beltName
+                                                            ) {
+                                                                mutableStateOf(false)
+                                                            }
+
+                                                            PremiumCoachDateField(
+                                                                label = coachTr(
+                                                                    isEnglish,
+                                                                    "תאריך קבלה",
+                                                                    "Award date"
+                                                                ),
+                                                                value = currentDate,
+                                                                placeholder = coachTr(
+                                                                    isEnglish,
+                                                                    "בחר תאריך מלוח השנה",
+                                                                    "Choose a date from calendar"
+                                                                ),
+                                                                accent = beltAccent,
+                                                                isEnglish = isEnglish,
+                                                                onClick = {
+                                                                    showBeltDatePicker = true
+                                                                }
+                                                            )
+
+                                                            if (showBeltDatePicker) {
+                                                                PremiumCoachDatePickerDialog(
+                                                                    title = coachTr(
                                                                         isEnglish,
-                                                                        "שמור",
-                                                                        "Save"
+                                                                        "בחר תאריך קבלת חגורה",
+                                                                        "Choose belt award date"
+                                                                    ),
+                                                                    selectedDate = currentDate,
+                                                                    accent = beltAccent,
+                                                                    isEnglish = isEnglish,
+                                                                    onDismiss = {
+                                                                        showBeltDatePicker = false
+                                                                    },
+                                                                    onDateSelected = { newDate ->
+                                                                        val current =
+                                                                            beltAwardDatesState[selected.id]
+                                                                                .orEmpty()
+                                                                                .toMutableMap()
+
+                                                                        current[beltName] = newDate
+                                                                        beltAwardDatesState[selected.id] =
+                                                                            current
+                                                                    }
+                                                                )
+                                                            }
+
+                                                            OutlinedTextField(
+                                                                value = currentDescription,
+                                                                onValueChange = { newValue ->
+                                                                    val current =
+                                                                        beltAwardDescriptionsState[selected.id]
+                                                                            .orEmpty()
+                                                                            .toMutableMap()
+
+                                                                    current[beltName] = newValue
+                                                                    beltAwardDescriptionsState[selected.id] =
+                                                                        current
+                                                                },
+                                                                label = {
+                                                                    Text(
+                                                                        coachTr(
+                                                                            isEnglish,
+                                                                            "תיאור",
+                                                                            "Description"
+                                                                        )
                                                                     )
                                                                 },
-                                                            style =
-                                                                KmiTypography.action.copy(
-                                                                    fontWeight =
-                                                                        FontWeight.Bold
-                                                                ),
-                                                            color =
+                                                                placeholder = {
+                                                                    Text(
+                                                                        coachTr(
+                                                                            isEnglish,
+                                                                            "לדוגמה: מבחן חגורה, הערת מאמן, הערכה מיוחדת",
+                                                                            "Example: belt test, coach note, special remark"
+                                                                        ),
+                                                                        textAlign = coachTextAlign(
+                                                                            isEnglish
+                                                                        ),
+                                                                        modifier = Modifier.fillMaxWidth()
+                                                                    )
+                                                                },
+                                                                modifier = Modifier.fillMaxWidth(),
+                                                                minLines = 2,
+                                                                textStyle =
+                                                                    KmiTypography.body.copy(
+                                                                        textAlign =
+                                                                            coachTextAlign(
+                                                                                isEnglish
+                                                                            )
+                                                                    ),
+                                                                shape = RoundedCornerShape(16.dp)
+                                                            )
+                                                        }
+                                                    }
+
+                                                }
+                                            }
+
+                                            var isSavingBeltDates by remember(selected.id) {
+                                                mutableStateOf(
+                                                    false
+                                                )
+                                            }
+                                            var beltDatesSaveMessage by remember(selected.id) {
+                                                mutableStateOf<String?>(
+                                                    null
+                                                )
+                                            }
+
+                                            Surface(
+                                                onClick = {
+                                                    if (!isSavingBeltDates) {
+                                                        val datesToSave =
+                                                            beltAwardDatesState[selected.id]
+                                                                .orEmpty()
+                                                                .filterValues {
+                                                                    it.isNotBlank()
+                                                                }
+
+                                                        val descriptionsToSave =
+                                                            beltAwardDescriptionsState[selected.id]
+                                                                .orEmpty()
+                                                                .filterValues {
+                                                                    it.isNotBlank()
+                                                                }
+
+                                                        if (datesToSave.isEmpty() && descriptionsToSave.isEmpty()) {
+                                                            beltDatesSaveMessage = coachTr(
+                                                                isEnglish,
+                                                                "אין תאריכים או תיאורים לשמירה",
+                                                                "No dates or descriptions to save"
+                                                            )
+                                                            return@Surface
+                                                        }
+
+                                                        screenScope.launch {
+                                                            isSavingBeltDates = true
+                                                            beltDatesSaveMessage = null
+
+                                                            runCatching {
+                                                                saveBeltAwardDatesForSelected(
+                                                                    selectedProfile = selected,
+                                                                    dates = datesToSave,
+                                                                    descriptions = descriptionsToSave
+                                                                )
+                                                            }.onSuccess {
+                                                                beltDatesSaveMessage =
+                                                                    coachTr(
+                                                                        isEnglish,
+                                                                        "תאריכי החגורות נשמרו",
+                                                                        "Belt dates saved"
+                                                                    )
+                                                            }.onFailure {
+                                                                beltDatesSaveMessage =
+                                                                    coachTr(
+                                                                        isEnglish,
+                                                                        "שמירת תאריכי החגורות נכשלה",
+                                                                        "Failed to save belt dates"
+                                                                    )
+                                                            }
+
+                                                            isSavingBeltDates = false
+                                                        }
+                                                    }
+                                                },
+                                                shape = RoundedCornerShape(18.dp),
+                                                color = Color.Transparent,
+                                                shadowElevation = 0.dp,
+                                                tonalElevation = 0.dp,
+                                                modifier = Modifier.fillMaxWidth()
+                                            ) {
+                                                Box(
+                                                    modifier = Modifier
+                                                        .fillMaxWidth()
+                                                        .background(
+                                                            brush = Brush.horizontalGradient(
+                                                                colors = listOf(
+                                                                    Color(0xFF7C3AED),
+                                                                    Color(0xFF6366F1),
+                                                                    Color(0xFF0EA5E9)
+                                                                )
+                                                            ),
+                                                            shape = RoundedCornerShape(18.dp)
+                                                        )
+                                                        .padding(vertical = 14.dp),
+                                                    contentAlignment = Alignment.Center
+                                                ) {
+                                                    Text(
+                                                        text =
+                                                            if (isSavingBeltDates) {
+                                                                coachTr(
+                                                                    isEnglish,
+                                                                    "שומר...",
+                                                                    "Saving..."
+                                                                )
+                                                            } else {
+                                                                coachTr(
+                                                                    isEnglish,
+                                                                    "שמור תאריכי חגורות",
+                                                                    "Save belt dates"
+                                                                )
+                                                            },
+                                                        style =
+                                                            KmiTypography.action.copy(
+                                                                fontWeight =
+                                                                    FontWeight.ExtraBold
+                                                            ),
+                                                        color = Color.White,
+                                                        textAlign = TextAlign.Center
+                                                    )
+                                                }
+                                            }
+
+                                            beltDatesSaveMessage?.let { msg ->
+                                                val isSuccess =
+                                                    msg.contains("נשמרו") ||
+                                                            msg.contains(
+                                                                "saved",
+                                                                ignoreCase = true
+                                                            )
+
+                                                Surface(
+                                                    color =
+                                                        if (isSuccess) {
+                                                            MaterialTheme
+                                                                .colorScheme
+                                                                .primaryContainer
+                                                        } else {
+                                                            MaterialTheme
+                                                                .colorScheme
+                                                                .errorContainer
+                                                        },
+                                                    shape = RoundedCornerShape(14.dp),
+                                                    tonalElevation = 0.dp,
+                                                    shadowElevation = 0.dp,
+                                                    modifier = Modifier.fillMaxWidth()
+                                                ) {
+                                                    Text(
+                                                        text = msg,
+                                                        style =
+                                                            KmiTypography.caption.copy(
+                                                                fontWeight =
+                                                                    FontWeight.Bold
+                                                            ),
+                                                        color =
+                                                            if (isSuccess) {
                                                                 MaterialTheme
                                                                     .colorScheme
-                                                                    .onPrimary,
-                                                            textAlign =
-                                                                TextAlign.Center,
-                                                            maxLines = 1
-                                                        )
-                                                    }
+                                                                    .onPrimaryContainer
+                                                            } else {
+                                                                MaterialTheme
+                                                                    .colorScheme
+                                                                    .onErrorContainer
+                                                            },
+                                                        textAlign =
+                                                            coachTextAlign(
+                                                                isEnglish
+                                                            ),
+                                                        modifier =
+                                                            Modifier.padding(
+                                                                horizontal = 12.dp,
+                                                                vertical = 10.dp
+                                                            )
+                                                    )
                                                 }
                                             }
                                         }
+                                    }
 
-                                        coachNotesSaveMessage?.let { msg ->
-                                            Surface(
-                                                color = if (
-                                                    msg.contains("נשמרו") ||
-                                                    msg.contains("saved", ignoreCase = true)
-                                                ) {
-                                                    Color(0xFFDCFCE7)
+                                    CoachDateSectionCard(
+                                        title = "השתלמויות",
+                                        collapsedSubtitle = coachTr(
+                                            isEnglish,
+                                            "לחצו לפתיחת רשימת השתלמויות",
+                                            "Tap to open the seminar list"
+                                        ),
+                                        expandedSubtitle = coachTr(
+                                            isEnglish,
+                                            "הוסיפו תאריך ותיאור להשתלמויות שהמתאמן עבר",
+                                            "Add a date and description for seminars completed by the trainee"
+                                        ),
+                                        defaultItems = listOf(
+                                            "השתלמות 1",
+                                            "השתלמות 2",
+                                            "השתלמות 3"
+                                        ),
+                                        selectedId = selected.id,
+                                        stateMap = seminarDatesState,
+                                        firestoreFieldName = "seminarDates",
+                                        selectedProfile = selected,
+                                        screenScope = screenScope,
+                                        isEnglish = isEnglish,
+                                        isExpanded = expandedCoachSection == seminarsSectionKey,
+                                        onToggleExpanded = {
+                                            expandedCoachSection =
+                                                if (expandedCoachSection == seminarsSectionKey) {
+                                                    null
                                                 } else {
-                                                    Color(0xFFFEE2E2)
-                                                },
-                                                shape = RoundedCornerShape(14.dp),
-                                                modifier = Modifier.fillMaxWidth()
+                                                    seminarsSectionKey
+                                                }
+                                        },
+                                        onSave = ::saveCoachDateSectionForSelected
+                                    )
+
+                                    CoachDateSectionCard(
+                                        title = "מחנות אימונים",
+                                        collapsedSubtitle = coachTr(
+                                            isEnglish,
+                                            "לחצו לפתיחת רשימת מחנות אימונים",
+                                            "Tap to open the training camp list"
+                                        ),
+                                        expandedSubtitle = coachTr(
+                                            isEnglish,
+                                            "הוסיפו תאריך ותיאור למחנות אימונים שבהם המתאמן השתתף",
+                                            "Add a date and description for training camps attended by the trainee"
+                                        ),
+                                        defaultItems = listOf(
+                                            "מחנה אימונים 1",
+                                            "מחנה אימונים 2",
+                                            "מחנה אימונים 3"
+                                        ),
+                                        selectedId = selected.id,
+                                        stateMap = campDatesState,
+                                        firestoreFieldName = "campDates",
+                                        selectedProfile = selected,
+                                        screenScope = screenScope,
+                                        isEnglish = isEnglish,
+                                        isExpanded = expandedCoachSection == campsSectionKey,
+                                        onToggleExpanded = {
+                                            expandedCoachSection =
+                                                if (expandedCoachSection == campsSectionKey) {
+                                                    null
+                                                } else {
+                                                    campsSectionKey
+                                                }
+                                        },
+                                        onSave = ::saveCoachDateSectionForSelected
+                                    )
+
+                                    CoachDateSectionCard(
+                                        title = "הסמכות",
+                                        collapsedSubtitle = coachTr(
+                                            isEnglish,
+                                            "לחצו לפתיחת רשימת הסמכות",
+                                            "Tap to open the certification list"
+                                        ),
+                                        expandedSubtitle = coachTr(
+                                            isEnglish,
+                                            "הוסיפו תאריך ותיאור להסמכות שהמתאמן קיבל",
+                                            "Add a date and description for certifications received by the trainee"
+                                        ),
+                                        defaultItems = listOf(
+                                            "הסמכה 1",
+                                            "הסמכה 2",
+                                            "הסמכה 3"
+                                        ),
+                                        selectedId = selected.id,
+                                        stateMap = certificationDatesState,
+                                        firestoreFieldName = "certificationDates",
+                                        selectedProfile = selected,
+                                        screenScope = screenScope,
+                                        isEnglish = isEnglish,
+                                        isExpanded = expandedCoachSection == certificationsSectionKey,
+                                        onToggleExpanded = {
+                                            expandedCoachSection =
+                                                if (expandedCoachSection == certificationsSectionKey) {
+                                                    null
+                                                } else {
+                                                    certificationsSectionKey
+                                                }
+                                        },
+                                        onSave = ::saveCoachDateSectionForSelected
+                                    )
+
+                                    var isSavingCoachNotes by remember(selected.id) {
+                                        mutableStateOf(false)
+                                    }
+
+                                    var coachNotesSaveMessage by remember(selected.id) {
+                                        mutableStateOf<String?>(null)
+                                    }
+
+                                    val coachNotesContainerColor =
+                                        MaterialTheme
+                                            .colorScheme
+                                            .surface
+
+                                    val coachNotesBorderColor =
+                                        MaterialTheme
+                                            .colorScheme
+                                            .outline
+                                            .copy(alpha = 0.55f)
+
+                                    Column(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        verticalArrangement = Arrangement.spacedBy(4.dp),
+                                        horizontalAlignment = screenHorizontalAlignment
+                                    ) {
+                                        Surface(
+                                            color = coachNotesContainerColor,
+                                            shape = RoundedCornerShape(20.dp),
+                                            shadowElevation = 0.dp,
+                                            tonalElevation = 0.dp,
+                                            border = BorderStroke(
+                                                1.dp,
+                                                coachNotesBorderColor
+                                            ),
+                                            modifier = Modifier.fillMaxWidth()
+                                        ) {
+                                            Column(
+                                                modifier = Modifier
+                                                    .fillMaxWidth()
+                                                    .padding(
+                                                        horizontal = 12.dp,
+                                                        vertical = 12.dp
+                                                    ),
+                                                verticalArrangement = Arrangement.spacedBy(8.dp),
+                                                horizontalAlignment = screenHorizontalAlignment
                                             ) {
                                                 Text(
-                                                    text = msg,
-                                                    style = MaterialTheme.typography.bodySmall,
-                                                    fontWeight = FontWeight.Bold,
-                                                    color = if (
-                                                        msg.contains("נשמרו") ||
-                                                        msg.contains("saved", ignoreCase = true)
-                                                    ) {
-                                                        Color(0xFF166534)
-                                                    } else {
-                                                        Color(0xFF991B1B)
+                                                    text =
+                                                        coachTr(
+                                                            isEnglish,
+                                                            "הערות מאמן",
+                                                            "Coach notes"
+                                                        ),
+                                                    style =
+                                                        KmiTypography.caption.copy(
+                                                            fontWeight =
+                                                                FontWeight.ExtraBold
+                                                        ),
+                                                    color =
+                                                        MaterialTheme
+                                                            .colorScheme
+                                                            .onSurfaceVariant,
+                                                    textAlign =
+                                                        screenTextAlign,
+                                                    modifier =
+                                                        Modifier.fillMaxWidth()
+                                                )
+
+                                                OutlinedTextField(
+                                                    value = coachNotes[selected.id] ?: "",
+                                                    onValueChange = {
+                                                        coachNotes[selected.id] = it
+                                                        coachNotesSaveMessage = null
                                                     },
-                                                    textAlign = screenTextAlign,
+                                                    placeholder = {
+                                                        Text(
+                                                            text = coachTr(
+                                                                isEnglish,
+                                                                "כתוב כאן הערות על המתאמן...",
+                                                                "Write coach notes here..."
+                                                            ),
+                                                            color =
+                                                                MaterialTheme
+                                                                    .colorScheme
+                                                                    .onSurfaceVariant,
+                                                            style =
+                                                                KmiTypography.body.copy(
+                                                                    textAlign =
+                                                                        screenTextAlign
+                                                                ),
+                                                            modifier = Modifier.fillMaxWidth()
+                                                        )
+                                                    },
+                                                    textStyle =
+                                                        KmiTypography.body.copy(
+                                                            color =
+                                                                MaterialTheme
+                                                                    .colorScheme
+                                                                    .onSurface,
+                                                            textAlign =
+                                                                screenTextAlign
+                                                        ),
+                                                    modifier =
+                                                        Modifier.fillMaxWidth(),
+                                                    minLines = 4,
+                                                    shape = RoundedCornerShape(16.dp),
+                                                    colors = OutlinedTextFieldDefaults.colors(
+                                                        focusedTextColor =
+                                                            MaterialTheme.colorScheme.onSurface,
+                                                        unfocusedTextColor =
+                                                            MaterialTheme.colorScheme.onSurface,
+                                                        disabledTextColor =
+                                                            MaterialTheme.colorScheme.onSurfaceVariant,
+                                                        cursorColor =
+                                                            MaterialTheme.colorScheme.primary,
+                                                        focusedBorderColor =
+                                                            MaterialTheme.colorScheme.primary,
+                                                        unfocusedBorderColor =
+                                                            coachNotesBorderColor,
+                                                        focusedContainerColor =
+                                                            MaterialTheme
+                                                                .colorScheme
+                                                                .surface,
+                                                        unfocusedContainerColor =
+                                                            MaterialTheme
+                                                                .colorScheme
+                                                                .surface,
+                                                        disabledContainerColor =
+                                                            MaterialTheme
+                                                                .colorScheme
+                                                                .surfaceVariant,
+                                                        focusedPlaceholderColor =
+                                                            MaterialTheme
+                                                                .colorScheme
+                                                                .onSurfaceVariant,
+                                                        unfocusedPlaceholderColor =
+                                                            MaterialTheme
+                                                                .colorScheme
+                                                                .onSurfaceVariant
+                                                    )
+                                                )
+                                            }
+                                        }
+
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            horizontalArrangement = if (isEnglish) {
+                                                Arrangement.Start
+                                            } else {
+                                                Arrangement.End
+                                            }
+                                        ) {
+                                            Surface(
+                                                onClick = {
+                                                    if (!isSavingCoachNotes) {
+                                                        val noteToSave =
+                                                            coachNotes[selected.id]
+                                                                .orEmpty()
+
+                                                        screenScope.launch {
+                                                            isSavingCoachNotes = true
+                                                            coachNotesSaveMessage = null
+
+                                                            runCatching {
+                                                                saveCoachNotesForSelected(
+                                                                    selectedProfile = selected,
+                                                                    note = noteToSave
+                                                                )
+                                                            }.onSuccess {
+                                                                coachNotesSaveMessage = coachTr(
+                                                                    isEnglish,
+                                                                    "הערות המאמן נשמרו",
+                                                                    "Coach notes saved"
+                                                                )
+                                                            }.onFailure {
+                                                                coachNotesSaveMessage = coachTr(
+                                                                    isEnglish,
+                                                                    "שמירת הערות המאמן נכשלה",
+                                                                    "Failed to save coach notes"
+                                                                )
+                                                            }
+
+                                                            isSavingCoachNotes = false
+                                                        }
+                                                    }
+                                                },
+                                                shape = RoundedCornerShape(999.dp),
+                                                color =
+                                                    MaterialTheme
+                                                        .colorScheme
+                                                        .primary,
+                                                shadowElevation = 0.dp,
+                                                tonalElevation = 0.dp,
+                                                border = BorderStroke(
+                                                    1.dp,
+                                                    MaterialTheme
+                                                        .colorScheme
+                                                        .primary
+                                                        .copy(alpha = 0.75f)
+                                                ),
+                                                modifier = Modifier.widthIn(min = 118.dp)
+                                            ) {
+                                                Box(
                                                     modifier = Modifier
+                                                        .padding(
+                                                            horizontal = 16.dp,
+                                                            vertical = 7.dp
+                                                        ),
+                                                    contentAlignment = Alignment.Center
+                                                ) {
+                                                    Text(
+                                                        text =
+                                                            if (
+                                                                isSavingCoachNotes
+                                                            ) {
+                                                                coachTr(
+                                                                    isEnglish,
+                                                                    "שומר...",
+                                                                    "Saving..."
+                                                                )
+                                                            } else {
+                                                                coachTr(
+                                                                    isEnglish,
+                                                                    "שמור",
+                                                                    "Save"
+                                                                )
+                                                            },
+                                                        style =
+                                                            KmiTypography.action.copy(
+                                                                fontWeight =
+                                                                    FontWeight.Bold
+                                                            ),
+                                                        color =
+                                                            MaterialTheme
+                                                                .colorScheme
+                                                                .onPrimary,
+                                                        textAlign =
+                                                            TextAlign.Center,
+                                                        maxLines = 1
+                                                    )
+                                                }
+                                            }
+                                        }
+                                    }
+
+                                    coachNotesSaveMessage?.let { msg ->
+                                        val isSuccess =
+                                            msg.contains("נשמרו") ||
+                                                    msg.contains(
+                                                        "saved",
+                                                        ignoreCase = true
+                                                    )
+
+                                        Surface(
+                                            color =
+                                                if (isSuccess) {
+                                                    MaterialTheme
+                                                        .colorScheme
+                                                        .primaryContainer
+                                                } else {
+                                                    MaterialTheme
+                                                        .colorScheme
+                                                        .errorContainer
+                                                },
+                                            shape =
+                                                RoundedCornerShape(
+                                                    14.dp
+                                                ),
+                                            tonalElevation = 0.dp,
+                                            shadowElevation = 0.dp,
+                                            modifier =
+                                                Modifier.fillMaxWidth()
+                                        ) {
+                                            Text(
+                                                text = msg,
+                                                style =
+                                                    KmiTypography.caption.copy(
+                                                        fontWeight =
+                                                            FontWeight.Bold
+                                                    ),
+                                                color =
+                                                    if (isSuccess) {
+                                                        MaterialTheme
+                                                            .colorScheme
+                                                            .onPrimaryContainer
+                                                    } else {
+                                                        MaterialTheme
+                                                            .colorScheme
+                                                            .onErrorContainer
+                                                    },
+                                                textAlign =
+                                                    screenTextAlign,
+                                                modifier =
+                                                    Modifier
                                                         .fillMaxWidth()
                                                         .padding(
                                                             horizontal = 12.dp,
                                                             vertical = 10.dp
                                                         )
-                                                )
-                                            }
+                                            )
                                         }
                                     }
                                 }
@@ -4346,109 +4540,108 @@ fun CoachTraineesScreen(
                     }
                 }
             }
+        }
 
-            if (showStatsSheet) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .background(backgroundBrush)
-                ) {
-                    CoachGroupStatsPremiumScreen(
-                        stats = groupStats,
-                        profiles =
-                            traineeProfiles.mapIndexed {
-                                    index,
-                                    profile ->
+        if (showStatsSheet) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(backgroundBrush)
+            ) {
+                CoachGroupStatsPremiumScreen(
+                    stats = groupStats,
+                    profiles =
+                        traineeProfiles.mapIndexed { index,
+                                                     profile ->
 
-                                profile.copy(
-                                    fullName =
-                                        demoSafeName(
-                                            profile = profile,
-                                            demoIndex = index + 1
-                                        )
+                            profile.copy(
+                                fullName =
+                                    demoSafeName(
+                                        profile = profile,
+                                        demoIndex = index + 1
+                                    )
+                            )
+                        },
+                    isEnglish = isEnglish,
+                    shareTrigger = statisticsShareTrigger,
+
+                    onShareGroupStatistics = {
+
+                        if (
+                            effectiveBranchPrimary
+                                .isNotBlank() &&
+                            effectiveGroupKey
+                                .isNotBlank() &&
+                            traineeProfiles
+                                .isNotEmpty()
+                        ) {
+
+                            val pdfFile =
+                                createCoachGroupStatsPdf(
+                                    context = ctx,
+                                    stats = groupStats,
+                                    profiles = traineeProfiles,
+                                    branch =
+                                        effectiveBranchPrimary,
+                                    groupKey =
+                                        effectiveGroupKey,
+                                    isEnglish =
+                                        isEnglish
                                 )
-                            },
-                        isEnglish = isEnglish,
-                        shareTrigger = statisticsShareTrigger,
 
-                        onShareGroupStatistics = {
+                            val uri =
+                                FileProvider.getUriForFile(
+                                    ctx,
+                                    "${ctx.packageName}.fileprovider",
+                                    pdfFile
+                                )
 
-                            if (
-                                effectiveBranchPrimary
-                                    .isNotBlank() &&
-                                effectiveGroupKey
-                                    .isNotBlank() &&
-                                traineeProfiles
-                                    .isNotEmpty()
-                            ) {
+                            val sendIntent =
+                                Intent(
+                                    Intent.ACTION_SEND
+                                ).apply {
 
-                                val pdfFile =
-                                    createCoachGroupStatsPdf(
-                                        context = ctx,
-                                        stats = groupStats,
-                                        profiles = traineeProfiles,
-                                        branch =
-                                            effectiveBranchPrimary,
-                                        groupKey =
-                                            effectiveGroupKey,
-                                        isEnglish =
-                                            isEnglish
-                                    )
+                                    type =
+                                        "application/pdf"
 
-                                val uri =
-                                    FileProvider.getUriForFile(
-                                        ctx,
-                                        "${ctx.packageName}.fileprovider",
-                                        pdfFile
-                                    )
-
-                                val sendIntent =
-                                    Intent(
-                                        Intent.ACTION_SEND
-                                    ).apply {
-
-                                        type =
-                                            "application/pdf"
-
-                                        putExtra(
-                                            Intent.EXTRA_SUBJECT,
-                                            coachTr(
-                                                isEnglish,
-                                                "דו״ח סטטיסטיקת הקבוצה",
-                                                "Group statistics report"
-                                            )
-                                        )
-
-                                        putExtra(
-                                            Intent.EXTRA_STREAM,
-                                            uri
-                                        )
-
-                                        addFlags(
-                                            Intent.FLAG_GRANT_READ_URI_PERMISSION
-                                        )
-                                    }
-
-                                ctx.startActivity(
-                                    Intent.createChooser(
-                                        sendIntent,
+                                    putExtra(
+                                        Intent.EXTRA_SUBJECT,
                                         coachTr(
                                             isEnglish,
-                                            "שיתוף PDF",
-                                            "Share PDF"
+                                            "דו״ח סטטיסטיקת הקבוצה",
+                                            "Group statistics report"
                                         )
                                     )
-                                )
-                            }
-                        },
 
-                        onClose = {
-                            showStatsSheet = false
-                        },
-                        onOpenDrawer = onOpenDrawer,
-                        onOpenHome = onOpenHome
-                    )
-                }
+                                    putExtra(
+                                        Intent.EXTRA_STREAM,
+                                        uri
+                                    )
+
+                                    addFlags(
+                                        Intent.FLAG_GRANT_READ_URI_PERMISSION
+                                    )
+                                }
+
+                            ctx.startActivity(
+                                Intent.createChooser(
+                                    sendIntent,
+                                    coachTr(
+                                        isEnglish,
+                                        "שיתוף PDF",
+                                        "Share PDF"
+                                    )
+                                )
+                            )
+                        }
+                    },
+
+                    onClose = {
+                        showStatsSheet = false
+                    },
+                    onOpenDrawer = onOpenDrawer,
+                    onOpenHome = onOpenHome
+                )
             }
         }
     }
@@ -4590,14 +4783,18 @@ private fun PremiumCoachCompactSectionHeader(
             Spacer(Modifier.width(5.dp))
 
             Icon(
-                imageVector = if (isExpanded) {
-                    Icons.Default.KeyboardArrowUp
-                } else {
-                    Icons.Default.KeyboardArrowDown
-                },
+                imageVector =
+                    if (isExpanded) {
+                        Icons.Default.KeyboardArrowUp
+                    } else {
+                        Icons.Default.KeyboardArrowDown
+                    },
                 contentDescription = null,
                 tint = accent,
-                modifier = Modifier.size(18.dp)
+                modifier =
+                    Modifier.size(
+                        KmiIconSize.small
+                    )
             )
         }
     }
@@ -4684,17 +4881,26 @@ private fun CoachDateSectionCard(
                 val accent = Color(0xFF6366F1)
 
                 Surface(
-                    color = Color.White,
+                    color =
+                        MaterialTheme
+                            .colorScheme
+                            .surface,
                     shape = RoundedCornerShape(16.dp),
-                    shadowElevation = 1.dp,
+                    shadowElevation = 0.dp,
+                    tonalElevation = 0.dp,
                     border = BorderStroke(
                         1.dp,
-                        accent.copy(alpha = 0.16f)
+                        accent.copy(alpha = 0.24f)
                     ),
                     modifier = Modifier
                         .fillMaxWidth()
                         .clickable {
-                            expandedItem = if (isItemExpanded) null else itemName
+                            expandedItem =
+                                if (isItemExpanded) {
+                                    null
+                                } else {
+                                    itemName
+                                }
                         }
                 ) {
                     Column(
@@ -4721,59 +4927,119 @@ private fun CoachDateSectionCard(
                                 verticalArrangement = Arrangement.spacedBy(2.dp)
                             ) {
                                 Text(
-                                    text = coachDateItemNameForUi(itemName, isEnglish),
-                                    style = MaterialTheme.typography.titleSmall,
-                                    fontWeight = FontWeight.Bold,
-                                    color = Color(0xFF1F2937),
-                                    textAlign = coachTextAlign(isEnglish),
-                                    modifier = Modifier.fillMaxWidth()
+                                    text =
+                                        coachDateItemNameForUi(
+                                            itemName,
+                                            isEnglish
+                                        ),
+                                    style =
+                                        KmiTypography.secondary.copy(
+                                            fontWeight =
+                                                FontWeight.Bold
+                                        ),
+                                    color =
+                                        MaterialTheme
+                                            .colorScheme
+                                            .onSurface,
+                                    textAlign =
+                                        coachTextAlign(
+                                            isEnglish
+                                        ),
+                                    modifier =
+                                        Modifier.fillMaxWidth()
                                 )
 
                                 Text(
-                                    text = when {
-                                        currentEntry.date.isNotBlank() &&
-                                                currentEntry.description.isNotBlank() ->
-                                            coachTr(
-                                                isEnglish,
-                                                "תאריך: ${currentEntry.date} • ${currentEntry.description}",
-                                                "Date: ${currentEntry.date} • ${currentEntry.description}"
-                                            )
+                                    text =
+                                        when {
+                                            currentEntry.date.isNotBlank() &&
+                                                    currentEntry.description.isNotBlank() ->
+                                                coachTr(
+                                                    isEnglish,
+                                                    "תאריך: ${currentEntry.date} • ${currentEntry.description}",
+                                                    "Date: ${currentEntry.date} • ${currentEntry.description}"
+                                                )
 
-                                        currentEntry.date.isNotBlank() ->
-                                            coachTr(
-                                                isEnglish,
-                                                "תאריך: ${currentEntry.date}",
-                                                "Date: ${currentEntry.date}"
-                                            )
+                                            currentEntry.date.isNotBlank() ->
+                                                coachTr(
+                                                    isEnglish,
+                                                    "תאריך: ${currentEntry.date}",
+                                                    "Date: ${currentEntry.date}"
+                                                )
 
-                                        currentEntry.description.isNotBlank() ->
-                                            currentEntry.description
+                                            currentEntry.description.isNotBlank() ->
+                                                currentEntry.description
 
-                                        else -> coachTr(isEnglish, "אין מידע", "No information")
-                                    },
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = if (hasContent) Color(0xFF0F766E) else Color(0xFF94A3B8),
-                                    textAlign = coachTextAlign(isEnglish),
-                                    modifier = Modifier.fillMaxWidth()
+                                            else ->
+                                                coachTr(
+                                                    isEnglish,
+                                                    "אין מידע",
+                                                    "No information"
+                                                )
+                                        },
+                                    style =
+                                        KmiTypography.caption,
+                                    color =
+                                        if (hasContent) {
+                                            MaterialTheme
+                                                .colorScheme
+                                                .primary
+                                        } else {
+                                            MaterialTheme
+                                                .colorScheme
+                                                .onSurfaceVariant
+                                        },
+                                    textAlign =
+                                        coachTextAlign(
+                                            isEnglish
+                                        ),
+                                    modifier =
+                                        Modifier.fillMaxWidth()
                                 )
                             }
 
                             Icon(
-                                imageVector = if (hasContent) Icons.Default.CheckCircle else Icons.Default.Cancel,
+                                imageVector =
+                                    if (hasContent) {
+                                        Icons.Default.CheckCircle
+                                    } else {
+                                        Icons.Default.Cancel
+                                    },
                                 contentDescription = null,
-                                tint = if (hasContent) Color(0xFF16A34A) else Color(0xFFDC2626)
+                                tint =
+                                    if (hasContent) {
+                                        MaterialTheme
+                                            .colorScheme
+                                            .primary
+                                    } else {
+                                        MaterialTheme
+                                            .colorScheme
+                                            .error
+                                    },
+                                modifier =
+                                    Modifier.size(
+                                        KmiIconSize.small
+                                    )
                             )
 
                             Spacer(Modifier.width(6.dp))
 
                             Icon(
-                                imageVector = if (isItemExpanded) {
-                                    Icons.Default.KeyboardArrowUp
-                                } else {
-                                    Icons.Default.KeyboardArrowDown
-                                },
+                                imageVector =
+                                    if (isItemExpanded) {
+                                        Icons.Default.KeyboardArrowUp
+                                    } else {
+                                        Icons.Default.KeyboardArrowDown
+                                    },
                                 contentDescription = null,
-                                tint = Color(0xFF64748B)
+                                tint =
+                                    MaterialTheme
+                                        .colorScheme
+                                        .onSurfaceVariant,
+                                modifier =
+                                    Modifier.size(
+                                        KmiIconSize.small
+                                    )
                             )
                         }
 
@@ -4829,28 +5095,98 @@ private fun CoachDateSectionCard(
                                         .orEmpty()
                                         .toMutableMap()
 
-                                    val oldEntry = current[itemName] ?: CoachDateEntry()
-                                    current[itemName] = oldEntry.copy(description = newValue)
+                                    val oldEntry =
+                                        current[itemName]
+                                            ?: CoachDateEntry()
+
+                                    current[itemName] =
+                                        oldEntry.copy(
+                                            description = newValue
+                                        )
+
                                     stateMap[selectedId] = current
                                 },
-                                label = { Text(coachTr(isEnglish, "תיאור", "Description")) },
-                                placeholder = {
+                                label = {
                                     Text(
-                                        coachTr(
-                                            isEnglish,
-                                            "לדוגמה: השתלמות מדריכים / מחנה קיץ / הסמכת עוזר מדריך",
-                                            "Example: instructor seminar / summer camp / assistant instructor certification"
-                                        ),
-                                        textAlign = coachTextAlign(isEnglish),
-                                        modifier = Modifier.fillMaxWidth()
+                                        text =
+                                            coachTr(
+                                                isEnglish,
+                                                "תיאור",
+                                                "Description"
+                                            ),
+                                        style =
+                                            KmiTypography.caption
                                     )
                                 },
-                                modifier = Modifier.fillMaxWidth(),
+                                placeholder = {
+                                    Text(
+                                        text =
+                                            coachTr(
+                                                isEnglish,
+                                                "לדוגמה: השתלמות מדריכים / מחנה קיץ / הסמכת עוזר מדריך",
+                                                "Example: instructor seminar / summer camp / assistant instructor certification"
+                                            ),
+                                        style =
+                                            KmiTypography.caption,
+                                        color =
+                                            MaterialTheme
+                                                .colorScheme
+                                                .onSurfaceVariant,
+                                        textAlign =
+                                            coachTextAlign(
+                                                isEnglish
+                                            ),
+                                        modifier =
+                                            Modifier.fillMaxWidth()
+                                    )
+                                },
+                                modifier =
+                                    Modifier.fillMaxWidth(),
                                 minLines = 2,
-                                textStyle = MaterialTheme.typography.bodyLarge.copy(
-                                    textAlign = coachTextAlign(isEnglish)
-                                ),
-                                shape = RoundedCornerShape(16.dp)
+                                textStyle =
+                                    KmiTypography.body.copy(
+                                        color =
+                                            MaterialTheme
+                                                .colorScheme
+                                                .onSurface,
+                                        textAlign =
+                                            coachTextAlign(
+                                                isEnglish
+                                            )
+                                    ),
+                                shape =
+                                    RoundedCornerShape(16.dp),
+                                colors =
+                                    OutlinedTextFieldDefaults.colors(
+                                        focusedTextColor =
+                                            MaterialTheme
+                                                .colorScheme
+                                                .onSurface,
+                                        unfocusedTextColor =
+                                            MaterialTheme
+                                                .colorScheme
+                                                .onSurface,
+                                        cursorColor =
+                                            MaterialTheme
+                                                .colorScheme
+                                                .primary,
+                                        focusedBorderColor =
+                                            MaterialTheme
+                                                .colorScheme
+                                                .primary,
+                                        unfocusedBorderColor =
+                                            MaterialTheme
+                                                .colorScheme
+                                                .outline,
+                                        focusedContainerColor =
+                                            MaterialTheme
+                                                .colorScheme
+                                                .surface,
+                                        unfocusedContainerColor =
+                                            MaterialTheme
+                                                .colorScheme
+                                                .surface
+                                    )
                             )
                         }
                     }
@@ -4900,7 +5236,8 @@ private fun CoachDateSectionCard(
                 },
                 shape = RoundedCornerShape(18.dp),
                 color = Color.Transparent,
-                shadowElevation = 6.dp,
+                shadowElevation = 0.dp,
+                tonalElevation = 0.dp,
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Box(
@@ -4920,41 +5257,82 @@ private fun CoachDateSectionCard(
                     contentAlignment = Alignment.Center
                 ) {
                     Text(
-                        text = if (isSaving) {
-                            coachTr(isEnglish, "שומר...", "Saving...")
-                        } else {
-                            coachTr(
-                                isEnglish,
-                                "שמור ${coachSectionTitleForUi(title, false)}",
-                                "Save ${coachSectionTitleForUi(title, true)}"
-                            )
-                        },
-                        style = MaterialTheme.typography.titleSmall,
-                        fontWeight = FontWeight.ExtraBold,
-                        color = Color.White
+                        text =
+                            if (isSaving) {
+                                coachTr(
+                                    isEnglish,
+                                    "שומר...",
+                                    "Saving..."
+                                )
+                            } else {
+                                coachTr(
+                                    isEnglish,
+                                    "שמור ${coachSectionTitleForUi(title, false)}",
+                                    "Save ${coachSectionTitleForUi(title, true)}"
+                                )
+                            },
+                        style =
+                            KmiTypography.action.copy(
+                                fontWeight =
+                                    FontWeight.ExtraBold
+                            ),
+                        color = Color.White,
+                        textAlign = TextAlign.Center
                     )
                 }
             }
 
             saveMessage?.let { msg ->
+                val isSuccess =
+                    msg.contains("נשמרו") ||
+                            msg.contains(
+                                "saved",
+                                ignoreCase = true
+                            )
+
                 Surface(
-                    color = if (msg.contains("נשמרו") || msg.contains("saved", ignoreCase = true)) {
-                        Color(0xFFDCFCE7)
-                    } else {
-                        Color(0xFFFEE2E2)
-                    },
+                    color =
+                        if (isSuccess) {
+                            MaterialTheme
+                                .colorScheme
+                                .primaryContainer
+                        } else {
+                            MaterialTheme
+                                .colorScheme
+                                .errorContainer
+                        },
                     shape = RoundedCornerShape(14.dp),
+                    tonalElevation = 0.dp,
+                    shadowElevation = 0.dp,
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Text(
                         text = msg,
-                        style = MaterialTheme.typography.bodySmall,
-                        fontWeight = FontWeight.Bold,
-                        color = if (msg.contains("נשמרו") || msg.contains("saved", ignoreCase = true)) Color(0xFF166534) else Color(0xFF991B1B),
-                        textAlign = coachTextAlign(isEnglish),
+                        style =
+                            KmiTypography.caption.copy(
+                                fontWeight =
+                                    FontWeight.Bold
+                            ),
+                        color =
+                            if (isSuccess) {
+                                MaterialTheme
+                                    .colorScheme
+                                    .onPrimaryContainer
+                            } else {
+                                MaterialTheme
+                                    .colorScheme
+                                    .onErrorContainer
+                            },
+                        textAlign =
+                            coachTextAlign(
+                                isEnglish
+                            ),
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(horizontal = 12.dp, vertical = 10.dp)
+                            .padding(
+                                horizontal = 12.dp,
+                                vertical = 10.dp
+                            )
                     )
                 }
             }
@@ -4977,39 +5355,26 @@ private fun LabeledField(
     val cleanValue =
         value.ifBlank { "—" }
 
-    val isDarkMode =
-        MaterialTheme.colorScheme.background
-            .luminance() < 0.5f
-
     val fieldContainerColor =
-        if (isDarkMode) {
-            Color(0xFF172036)
-        } else {
-            Color.White
-        }
+        MaterialTheme
+            .colorScheme
+            .surface
 
     val fieldBorderColor =
-        if (isDarkMode) {
-            Color(0xFF475569).copy(alpha = 0.62f)
-        } else {
-            Color(0xFFD6E0EE)
-        }
+        MaterialTheme
+            .colorScheme
+            .outline
+            .copy(alpha = 0.55f)
 
     val iconContainerColor =
-        if (isDarkMode) {
-            MaterialTheme.colorScheme.primary.copy(
-                alpha = 0.22f
-            )
-        } else {
-            MaterialTheme.colorScheme.primaryContainer
-        }
+        MaterialTheme
+            .colorScheme
+            .primaryContainer
 
     val iconContentColor =
-        if (isDarkMode) {
-            Color(0xFFC7D2FE)
-        } else {
-            MaterialTheme.colorScheme.onPrimaryContainer
-        }
+        MaterialTheme
+            .colorScheme
+            .onPrimaryContainer
 
     val iconText = when {
         label.contains("גיל") || label.contains("Age") -> "🎂"
@@ -5036,24 +5401,25 @@ private fun LabeledField(
             modifier = Modifier
                 .fillMaxWidth()
                 .background(
-                    brush = Brush.horizontalGradient(
-                        colors =
-                            if (isDarkMode) {
-                                listOf(
-                                    Color(0xFF172036),
-                                    Color(0xFF1E293B),
-                                    Color(0xFF172036)
-                                )
-                            } else {
-                                listOf(
-                                    Color.White,
-                                    Color(0xFFFAFCFF),
-                                    Color(0xFFF3F7FD)
-                                )
-                            }
-                    )
+                    brush =
+                        Brush.horizontalGradient(
+                            colors = listOf(
+                                MaterialTheme
+                                    .colorScheme
+                                    .surface,
+                                MaterialTheme
+                                    .colorScheme
+                                    .surfaceVariant,
+                                MaterialTheme
+                                    .colorScheme
+                                    .surface
+                            )
+                        )
                 )
-                .padding(horizontal = 10.dp, vertical = 10.dp),
+                .padding(
+                    horizontal = 10.dp,
+                    vertical = 10.dp
+                ),
             verticalAlignment = Alignment.CenterVertically
         ) {
             if (!isEnglish) {
@@ -5154,8 +5520,8 @@ private fun extractMemberId(record: Any): Long? {
         try {
             if (!f.name.contains("member", ignoreCase = true)) return@forEach
             f.isAccessible = true
-            val v = f.get(record)
-            when (v) {
+
+            when (val v = f.get(record)) {
                 is Long -> return v
                 is Int -> return v.toLong()
                 is String -> return v.toLongOrNull()

@@ -2,7 +2,6 @@ package il.kmi.app.screens.BeltQuestions.ByBelt
 
 import android.content.SharedPreferences
 import androidx.compose.animation.core.Animatable
-import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
@@ -11,7 +10,6 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
-import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -61,13 +59,7 @@ import androidx.compose.foundation.Image
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
 import il.kmi.app.R
-import androidx.compose.ui.composed
-import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.graphics.drawscope.Stroke
-import androidx.compose.ui.text.AnnotatedString
-import androidx.compose.ui.text.SpanStyle
-import androidx.compose.ui.text.buildAnnotatedString
-import androidx.compose.ui.unit.Dp
 import il.kmi.shared.domain.TopicsEngine
 import il.kmi.shared.questions.model.util.ExerciseTitleFormatter
 import il.kmi.shared.domain.content.ExerciseTitlesEn
@@ -103,6 +95,7 @@ import androidx.compose.ui.window.DialogProperties
 import androidx.core.content.FileProvider
 import il.kmi.app.screens.BeltQuestions.ByTopic.TopicDetails
 import il.kmi.app.ui.KmiTopBar
+import il.kmi.app.ui.LocalAppIconScale
 import java.io.File
 import java.io.FileOutputStream
 import java.text.SimpleDateFormat
@@ -191,83 +184,6 @@ internal fun findExplanationForHit(
         "There is currently no explanation for this exercise."
     } else {
         "אין כרגע הסבר לתרגיל הזה."
-    }
-}
-
-private fun saveBeltQuestionByBeltNote(
-    prefs: SharedPreferences,
-    noteKey: String,
-    text: String
-) {
-    val clean = text.trim()
-
-    prefs.edit().apply {
-        if (clean.isBlank()) {
-            remove(noteKey)
-        } else {
-            putString(noteKey, clean)
-        }
-    }.apply()
-}
-
-internal fun Modifier.circleGlow(
-    color: Color,
-    radius: Dp,
-    intensity: Float = 0.55f
-) = this.drawBehind {
-    val rPx = radius.toPx()
-    drawCircle(
-        brush = Brush.radialGradient(
-            colors = listOf(color.copy(alpha = intensity), Color.Transparent),
-            center = this.center,
-            radius = rPx
-        ),
-        radius = rPx,
-        center = this.center
-    )
-}
-
-internal fun Modifier.noRippleClickable(onClick: () -> Unit): Modifier = composed {
-    val interaction = remember { MutableInteractionSource() }
-    clickable(
-        interactionSource = interaction,
-        indication = null
-    ) { onClick() }
-}
-
-internal fun buildExplanationWithStanceHighlight(
-    source: String,
-    stanceColor: Color
-): AnnotatedString {
-    val marker = "עמידת מוצא"
-    val idx = source.indexOf(marker)
-    if (idx < 0) return AnnotatedString(source)
-
-    val sentenceEndExclusive = run {
-        val endIdx = source.indexOfAny(charArrayOf('.', ','), startIndex = idx)
-        if (endIdx == -1) source.length else endIdx + 1
-    }
-
-    val before = source.substring(0, idx)
-    val stanceSentence = source.substring(idx, sentenceEndExclusive)
-    val after = source.substring(sentenceEndExclusive)
-
-    return buildAnnotatedString {
-        append(before)
-        val stanceStart = length
-        append(stanceSentence)
-        val stanceEnd = length
-
-        addStyle(
-            style = SpanStyle(
-                fontWeight = FontWeight.Bold,
-                color = stanceColor
-            ),
-            start = stanceStart,
-            end = stanceEnd
-        )
-
-        append(after)
     }
 }
 
@@ -847,13 +763,17 @@ private fun createBeltTopicsPdf(
          */
         val headerAlignment =
             if (isEnglish) {
-                Paint.Align.RIGHT
+                Paint.Align.LEFT
             } else {
                 Paint.Align.RIGHT
             }
 
         val headerX =
-            pageWidth - 34f
+            if (isEnglish) {
+                34f
+            } else {
+                pageWidth - 34f
+            }
 
         currentCanvas.drawText(
             translated(
@@ -1702,8 +1622,6 @@ internal fun BeltPangoLayout(
         }
     }
 
-    val requestedBelt by vm.selectedBelt.collectAsState()
-
     /*
      * חגורת הפתיחה של הקרוסלה נקבעת לפי חגורת המשתמש:
      *
@@ -1735,19 +1653,19 @@ internal fun BeltPangoLayout(
                 ?.let { Belt.fromAny(it) }
 
         val nextBelt =
-            when {
+            when (registeredBelt) {
                 // אין למשתמש חגורה בכלל -> כתומה
-                registeredBelt == null ->
+                null ->
                     Belt.ORANGE
 
                 // חגורה שחורה, כולל דרגות הדאן שממופות לשחורה,
                 // תמיד מתחילה בחגורה שחורה
-                registeredBelt == Belt.BLACK ->
+                Belt.BLACK ->
                     Belt.BLACK
 
                 // לבנה אינה מוצגת בקרוסלה,
                 // ולכן החגורה הבאה שלה היא צהובה
-                registeredBelt == Belt.WHITE ->
+                Belt.WHITE ->
                     Belt.YELLOW
 
                 else -> {
@@ -1803,17 +1721,15 @@ internal fun BeltPangoLayout(
         }
     }
 
-    val backgroundBrush = remember {
+    val backgroundBrush =
         Brush.verticalGradient(
             colors = listOf(
-                Color(0xFFF8FBFF),
-                Color(0xFFEAF4FF),
-                Color(0xFFB7DDF7),
-                Color(0xFF1F78B4),
-                Color(0xFF062B4A)
+                MaterialTheme.colorScheme.background,
+                MaterialTheme.colorScheme.surfaceVariant,
+                MaterialTheme.colorScheme.primaryContainer,
+                MaterialTheme.colorScheme.background
             )
         )
-    }
 
     if (showPracticeMenu) {
         PracticeMenuDialog(
@@ -1914,7 +1830,6 @@ internal fun BeltPangoLayout(
                     Alignment.CenterHorizontally
             ) {
                 BeltQuestionsModeSwitcher(
-                    selectedMode = BeltQuestionsDisplayMode.BY_BELT,
                     onOpenByBelt = {},
                     onOpenByTopic = {
                         clickSound()
@@ -2017,7 +1932,6 @@ private enum class BeltQuestionsDisplayMode {
 
 @Composable
 private fun BeltQuestionsModeSwitcher(
-    selectedMode: BeltQuestionsDisplayMode,
     onOpenByBelt: () -> Unit,
     onOpenByTopic: () -> Unit
 ) {
@@ -2046,7 +1960,7 @@ private fun BeltQuestionsModeSwitcher(
 
     val selectedIndex = tabs
         .indexOfFirst { (mode, _) ->
-            mode == selectedMode
+            mode == BeltQuestionsDisplayMode.BY_BELT
         }
         .coerceAtLeast(0)
 
@@ -2055,7 +1969,7 @@ private fun BeltQuestionsModeSwitcher(
             .fillMaxWidth(0.88f)
             .padding(bottom = 6.dp),
         color = Color(0xFF062B4A).copy(alpha = 0.78f),
-        shadowElevation = 8.dp,
+        shadowElevation = 0.dp,
         tonalElevation = 0.dp,
         border = BorderStroke(
             width = 1.dp,
@@ -2089,7 +2003,7 @@ private fun BeltQuestionsModeSwitcher(
                     contentColor = Color.White,
                     divider = {},
                     indicator = { positions ->
-                        TabRowDefaults.Indicator(
+                        TabRowDefaults.SecondaryIndicator(
                             modifier = Modifier.tabIndicatorOffset(
                                 positions[selectedIndex]
                             ),
@@ -2101,7 +2015,7 @@ private fun BeltQuestionsModeSwitcher(
                 ) {
                     tabs.forEach { (mode, label) ->
                         Tab(
-                            selected = mode == selectedMode,
+                            selected = mode == BeltQuestionsDisplayMode.BY_BELT,
                             onClick = {
                                 when (mode) {
                                     BeltQuestionsDisplayMode.BY_BELT ->
@@ -2135,8 +2049,7 @@ private fun BeltQuestionsModeSwitcher(
 
 @Composable
 private fun PremiumPulsingLockBadge(
-    modifier: Modifier = Modifier,
-    isDarkTheme: Boolean = false
+    modifier: Modifier = Modifier
 ) {
     val pulse = rememberInfiniteTransition(label = "topicLockPulse")
 
@@ -2155,7 +2068,9 @@ private fun PremiumPulsingLockBadge(
         contentDescription = null,
         tint = Color(0xFFF59E0B),
         modifier = modifier
-            .size(20.dp)
+            .size(
+                20.dp * LocalAppIconScale.current
+            )
             .graphicsLayer {
                 scaleX = scale
                 scaleY = scale
@@ -2188,13 +2103,12 @@ private fun TopicsCardForBelt(
         if (isEnglish) LayoutDirection.Ltr
         else LayoutDirection.Rtl
 
-    val cardBg = if (isDarkTheme) Color(0xFF101827) else Color.White
-
-    val cardBorder = if (isDarkTheme) {
-        Color.White.copy(alpha = 0.10f)
-    } else {
-        Color.Transparent
-    }
+    val cardBg =
+        if (isDarkTheme) {
+            Color(0xFF101827)
+        } else {
+            Color.White
+        }
 
     val titleColor =
         if (isDarkTheme) {
@@ -2242,16 +2156,6 @@ private fun TopicsCardForBelt(
 
     val rowSubColor =
         readableBeltAccent.copy(alpha = 0.88f)
-
-    // ✅ שורת הנושא עצמה נשארת נקייה, בלי ריבועים
-    val rowBg = Color.Transparent
-
-    val rowGradient = Brush.verticalGradient(
-        colors = listOf(
-            Color.Transparent,
-            Color.Transparent
-        )
-    )
 
     // ✅ כרטיס תתי־הנושאים מקבל גוון קריא של החגורה
     val subTopicsCardBg =
@@ -2375,8 +2279,7 @@ private fun TopicsCardForBelt(
 
     // ✅ במקום להשאיר חצי עיגול רווח,
     // משאירים רק בערך שליש גובה כדי שהכרטיס יירד יותר למטה.
-    val desiredOverlap = fabSize * 0.34f
-    val fabClearance = desiredOverlap
+    val fabClearance = fabSize * 0.34f
 
     val visibleGeneralNote = generalNoteText
         ?.trim()
@@ -2537,7 +2440,10 @@ private fun TopicsCardForBelt(
                                             } else {
                                                 noteAccent
                                             },
-                                        modifier = Modifier.size(19.dp)
+                                        modifier =
+                                            Modifier.size(
+                                                19.dp * LocalAppIconScale.current
+                                            )
                                     )
                                 }
                             }
@@ -2702,8 +2608,8 @@ private fun TopicsCardForBelt(
     }
 
     Surface(
-        tonalElevation = if (isDarkTheme) 0.dp else 1.dp,
-        shadowElevation = if (isDarkTheme) 0.dp else 6.dp,
+        tonalElevation = 0.dp,
+        shadowElevation = 0.dp,
         shape = RoundedCornerShape(24.dp),
         color = cardBg,
         border = BorderStroke(
@@ -2815,14 +2721,9 @@ private fun TopicsCardForBelt(
                         }
 
                         val isExpanded = expandedTopic == title
-                        val isDefenseTopic = title.trim().contains("הגנות")
+                        val isDefenseTopic =
+                            title.trim().contains("הגנות")
 
-                        // ✅ שחרורים נשאר תוכן פרימיום גם אם בחגורה חומה
-                        // הוא מופיע כנושא רגיל עם תרגיל אחד וללא תתי־נושאים.
-                        val isBrownSingleReleaseTopic = false
-
-                        val floatingTitleColor = rowTitleColor
-                        val floatingSubColor = rowSubColor
                         val floatingAccent =
                             Brush.verticalGradient(
                                 colors = listOf(
@@ -2921,7 +2822,7 @@ private fun TopicsCardForBelt(
                                             Text(
                                                 text = displayTitle,
                                                 style = KmiTypography.cardTitle,
-                                                color = floatingTitleColor,
+                                                color = rowTitleColor,
                                                 textAlign = titleTextAlignByLang,
                                                 maxLines = 2,
                                                 overflow = TextOverflow.Ellipsis,
@@ -2935,7 +2836,7 @@ private fun TopicsCardForBelt(
                                                 style = KmiTypography.caption.copy(
                                                     fontWeight = FontWeight.ExtraBold
                                                 ),
-                                                color = floatingSubColor,
+                                                color = rowSubColor,
                                                 textAlign = titleTextAlignByLang,
                                                 maxLines = 2,
                                                 overflow = TextOverflow.Ellipsis,
@@ -3021,7 +2922,9 @@ private fun TopicsCardForBelt(
                                                                     Color(0xFF2563EB)
                                                                 },
                                                             modifier =
-                                                                Modifier.size(17.dp)
+                                                                Modifier.size(
+                                                                    17.dp * LocalAppIconScale.current
+                                                                )
                                                         )
                                                     }
                                                 }
@@ -3037,9 +2940,9 @@ private fun TopicsCardForBelt(
                                             if (parentLocked) {
                                                 PremiumPulsingLockBadge(
                                                     modifier =
-                                                        Modifier.size(16.dp),
-                                                    isDarkTheme =
-                                                        isDarkTheme
+                                                        Modifier.size(
+                                                            16.dp * LocalAppIconScale.current
+                                                        )
                                                 )
                                             }
                                         }
@@ -3067,7 +2970,9 @@ private fun TopicsCardForBelt(
                                                         tint =
                                                             readableBeltAccent,
                                                         modifier =
-                                                            Modifier.size(20.dp)
+                                                            Modifier.size(
+                                                                20.dp * LocalAppIconScale.current
+                                                            )
                                                     )
                                                 }
                                             }
@@ -3179,7 +3084,10 @@ private fun TopicsCardForBelt(
                                                             Icons.Filled.ChevronLeft,
                                                         contentDescription = null,
                                                         tint = readableBeltAccent,
-                                                        modifier = Modifier.size(15.dp)
+                                                        modifier =
+                                                            Modifier.size(
+                                                                15.dp * LocalAppIconScale.current
+                                                            )
                                                     )
 
                                                     Spacer(Modifier.width(6.dp))
@@ -3317,9 +3225,9 @@ private fun TopicsCardForBelt(
 
                                                         PremiumPulsingLockBadge(
                                                             modifier =
-                                                                Modifier.size(16.dp),
-                                                            isDarkTheme =
-                                                                isDarkTheme
+                                                                Modifier.size(
+                                                                    16.dp * LocalAppIconScale.current
+                                                                )
                                                         )
                                                     }
                                                 }
@@ -3428,6 +3336,7 @@ private fun TopicsCardForBelt(
 /* ------------------------------- קרוסלת חגורות ------------------------------- */
 
 @Composable
+@Suppress("UNUSED_PARAMETER")
 private fun BeltArcPicker(
     belts: List<Belt>,
     currentIndex: Int,
@@ -3499,9 +3408,8 @@ private fun BeltArcPicker(
 
             val circleColor = belt.color.copy(alpha = 0.96f)
 
-            val sideBoost = small
             val boostFactor = min(1f, dist)
-            val yDrop = drop + sideBoost * boostFactor
+            val yDrop = drop + small * boostFactor
 
             val isCenter = dist < 0.25f
 
@@ -3537,7 +3445,6 @@ private fun BeltArcPicker(
                                     dragUpdateJob?.cancel()
                                     dragUpdateJob = null
 
-                                    val previousIndex = currentIndex
                                     val selectedIndex =
                                         center.value
                                             .roundToInt()
@@ -3545,6 +3452,9 @@ private fun BeltArcPicker(
                                                 0,
                                                 belts.lastIndex
                                             )
+
+                                    val selectionChanged =
+                                        selectedIndex != currentIndex
 
                                     scope.launch {
                                         /*
@@ -3558,10 +3468,7 @@ private fun BeltArcPicker(
 
                                         onIndexChange(selectedIndex)
 
-                                        if (
-                                            selectedIndex !=
-                                            previousIndex
-                                        ) {
+                                        if (selectionChanged) {
                                             clickSound()
                                             haptic(true)
                                         }

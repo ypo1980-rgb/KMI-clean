@@ -13,9 +13,6 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.ExposedDropdownMenuBox
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
@@ -50,20 +47,31 @@ import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
 import java.util.Date
 import kotlinx.coroutines.launch
+import java.io.File
+import java.io.FileOutputStream
+import java.text.SimpleDateFormat
+import java.util.Locale
 import androidx.compose.runtime.LaunchedEffect
 import kotlinx.coroutines.tasks.await
 import androidx.compose.material3.Surface
 import androidx.compose.foundation.BorderStroke
 import android.app.Activity
+import android.content.Context
+import android.content.Intent
 import android.content.SharedPreferences
+import android.graphics.Paint
+import android.graphics.Typeface
+import android.graphics.pdf.PdfDocument
 import androidx.compose.foundation.clickable
 import androidx.compose.ui.platform.LocalContext
+import androidx.core.content.FileProvider
 import com.google.firebase.firestore.SetOptions
 import il.kmi.shared.localization.AppLanguage
 import il.kmi.shared.localization.AppLanguageManager
 import il.kmi.app.privacy.DemoPrivacy
 import il.kmi.app.privacy.TraineeDisplayNameMapper
 import il.kmi.app.screens.registration.CoachBranchAssignmentsCodec
+import il.kmi.app.ui.KmiPremiumDropdown
 import il.kmi.app.ui.KmiTypography
 
 //======================================================================
@@ -359,6 +367,780 @@ private data class CoachRecipient(
     val canReceiveSms: Boolean = phone.isNotBlank()
 )
 
+//======================================================================
+// Coach Broadcast PDF
+//======================================================================
+
+private fun shareCoachBroadcastPdf(
+    context: Context,
+    region: String,
+    branch: String,
+    groups: List<String>,
+    message: String,
+    recipients: List<CoachRecipient>,
+    totalRecipients: Int,
+    isEnglish: Boolean,
+    demoPrivacyEnabled: Boolean
+) {
+    val file =
+        createCoachBroadcastPdf(
+            context = context,
+            region = region,
+            branch = branch,
+            groups = groups,
+            message = message,
+            recipients = recipients,
+            totalRecipients =
+                totalRecipients,
+            isEnglish = isEnglish,
+            demoPrivacyEnabled =
+                demoPrivacyEnabled
+        )
+
+    val uri =
+        FileProvider.getUriForFile(
+            context,
+            "${context.packageName}.fileprovider",
+            file
+        )
+
+    val intent =
+        Intent(
+            Intent.ACTION_SEND
+        ).apply {
+            type = "application/pdf"
+
+            putExtra(
+                Intent.EXTRA_SUBJECT,
+                if (isEnglish) {
+                    "KAMI Broadcast Message"
+                } else {
+                    "שידור הודעה לקבוצה"
+                }
+            )
+
+            putExtra(
+                Intent.EXTRA_STREAM,
+                uri
+            )
+
+            addFlags(
+                Intent.FLAG_GRANT_READ_URI_PERMISSION
+            )
+        }
+
+    context.startActivity(
+        Intent.createChooser(
+            intent,
+            if (isEnglish) {
+                "Share PDF"
+            } else {
+                "שיתוף PDF"
+            }
+        )
+    )
+}
+
+private fun createCoachBroadcastPdf(
+    context: Context,
+    region: String,
+    branch: String,
+    groups: List<String>,
+    message: String,
+    recipients: List<CoachRecipient>,
+    totalRecipients: Int,
+    isEnglish: Boolean,
+    demoPrivacyEnabled: Boolean
+): File {
+
+    val pageWidth = 595
+    val pageHeight = 842
+    val margin = 32f
+
+    val document =
+        PdfDocument()
+
+    val navy =
+        android.graphics.Color.rgb(
+            2,
+            43,
+            74
+        )
+
+    val mediumBlue =
+        android.graphics.Color.rgb(
+            36,
+            103,
+            158
+        )
+
+    val lightBlue =
+        android.graphics.Color.rgb(
+            128,
+            183,
+            220
+        )
+
+    val textDark =
+        android.graphics.Color.rgb(
+            15,
+            23,
+            42
+        )
+
+    val textMuted =
+        android.graphics.Color.rgb(
+            80,
+            100,
+            120
+        )
+
+    val boxBackground =
+        android.graphics.Color.rgb(
+            248,
+            250,
+            252
+        )
+
+    val boxBorder =
+        android.graphics.Color.rgb(
+            226,
+            232,
+            240
+        )
+
+    val regularTypeface =
+        Typeface.create(
+            Typeface.SANS_SERIF,
+            Typeface.NORMAL
+        )
+
+    val boldTypeface =
+        Typeface.create(
+            Typeface.SANS_SERIF,
+            Typeface.BOLD
+        )
+
+    fun textPaint(
+        size: Float,
+        color: Int = textDark,
+        bold: Boolean = false,
+        align: Paint.Align =
+            if (isEnglish) {
+                Paint.Align.LEFT
+            } else {
+                Paint.Align.RIGHT
+            }
+    ): Paint {
+        return Paint(
+            Paint.ANTI_ALIAS_FLAG
+        ).apply {
+            textSize = size
+            this.color = color
+            typeface =
+                if (bold) {
+                    boldTypeface
+                } else {
+                    regularTypeface
+                }
+
+            textAlign = align
+        }
+    }
+
+    var pageNumber = 0
+    var page: PdfDocument.Page? = null
+    lateinit var canvas: android.graphics.Canvas
+    var y = 0f
+
+    fun startPage() {
+        page?.let {
+            document.finishPage(it)
+        }
+
+        pageNumber++
+
+        val info =
+            PdfDocument.PageInfo
+                .Builder(
+                    pageWidth,
+                    pageHeight,
+                    pageNumber
+                )
+                .create()
+
+        val newPage =
+            document.startPage(info)
+
+        page = newPage
+        canvas = newPage.canvas
+
+        val pageCanvas = newPage.canvas
+
+        pageCanvas.drawColor(
+            android.graphics.Color.WHITE
+        )
+
+        //==============================================================
+        // Header אחיד KAMI
+        //==============================================================
+
+        val headerBottom = 122f
+
+        val navyPaint =
+            Paint(
+                Paint.ANTI_ALIAS_FLAG
+            ).apply {
+                color = navy
+                style = Paint.Style.FILL
+            }
+
+        val mediumStripe =
+            Paint(
+                Paint.ANTI_ALIAS_FLAG
+            ).apply {
+                color = mediumBlue
+                style = Paint.Style.FILL
+            }
+
+        val lightStripe =
+            Paint(
+                Paint.ANTI_ALIAS_FLAG
+            ).apply {
+                color = lightBlue
+                style = Paint.Style.FILL
+            }
+
+        pageCanvas.drawPath(
+            android.graphics.Path().apply {
+                moveTo(
+                    pageWidth.toFloat(),
+                    0f
+                )
+                lineTo(
+                    pageWidth.toFloat(),
+                    headerBottom
+                )
+                lineTo(
+                    178f,
+                    headerBottom
+                )
+                lineTo(
+                    238f,
+                    0f
+                )
+                close()
+            },
+            navyPaint
+        )
+
+        pageCanvas.drawPath(
+            android.graphics.Path().apply {
+                moveTo(
+                    208f,
+                    headerBottom
+                )
+                lineTo(
+                    224f,
+                    headerBottom
+                )
+                lineTo(
+                    284f,
+                    0f
+                )
+                lineTo(
+                    268f,
+                    0f
+                )
+                close()
+            },
+            mediumStripe
+        )
+
+        pageCanvas.drawPath(
+            android.graphics.Path().apply {
+                moveTo(
+                    230f,
+                    headerBottom
+                )
+                lineTo(
+                    238f,
+                    headerBottom
+                )
+                lineTo(
+                    298f,
+                    0f
+                )
+                lineTo(
+                    290f,
+                    0f
+                )
+                close()
+            },
+            lightStripe
+        )
+
+        // Logo
+        val logoX = 78f
+        val logoY = 58f
+        val logoRadius = 42f
+
+        pageCanvas.drawCircle(
+            logoX,
+            logoY,
+            logoRadius,
+            navyPaint
+        )
+
+        pageCanvas.drawCircle(
+            logoX,
+            logoY,
+            logoRadius - 4f,
+            Paint(
+                Paint.ANTI_ALIAS_FLAG
+            ).apply {
+                color =
+                    android.graphics.Color.WHITE
+            }
+        )
+
+        pageCanvas.drawText(
+            "KAMI",
+            logoX,
+            logoY + logoRadius * 0.22f,
+            textPaint(
+                size = logoRadius * 0.62f,
+                color = navy,
+                bold = true,
+                align = Paint.Align.CENTER
+            )
+        )
+
+        val headerX =
+            pageWidth - 34f
+
+        pageCanvas.drawText(
+            if (isEnglish) {
+                "Broadcast Message"
+            } else {
+                "שידור הודעה לקבוצה"
+            },
+            headerX,
+            52f,
+            textPaint(
+                size = 24f,
+                color =
+                    android.graphics.Color.WHITE,
+                bold = true,
+                align = Paint.Align.RIGHT
+            )
+        )
+
+        pageCanvas.drawText(
+            if (isEnglish) {
+                "Coach communication report"
+            } else {
+                "דו״ח תקשורת מאמן"
+            },
+            headerX,
+            78f,
+            textPaint(
+                size = 11f,
+                color =
+                    android.graphics.Color.WHITE,
+                align = Paint.Align.RIGHT
+            )
+        )
+
+        val date =
+            SimpleDateFormat(
+                "dd/MM/yyyy",
+                Locale.getDefault()
+            ).format(
+                Date()
+            )
+
+        pageCanvas.drawText(
+            if (isEnglish) {
+                "Generated: $date"
+            } else {
+                "תאריך הפקה: $date"
+            },
+            headerX,
+            142f,
+            textPaint(
+                size = 9f,
+                color = textMuted,
+                align = Paint.Align.RIGHT
+            )
+        )
+
+        y = 170f
+    }
+
+    fun ensureSpace(
+        required: Float
+    ) {
+        if (
+            y + required >
+            pageHeight - 42f
+        ) {
+            startPage()
+        }
+    }
+
+    fun drawInfoRow(
+        label: String,
+        value: String
+    ) {
+        if (value.isBlank()) {
+            return
+        }
+
+        ensureSpace(46f)
+
+        val right =
+            pageWidth.toFloat() - margin
+
+        val rect =
+            android.graphics.RectF(
+                margin,
+                y,
+                right,
+                y + 38f
+            )
+
+        val backgroundPaint =
+            Paint(
+                Paint.ANTI_ALIAS_FLAG
+            ).apply {
+                color = boxBackground
+                style = Paint.Style.FILL
+            }
+
+        val borderPaint =
+            Paint(
+                Paint.ANTI_ALIAS_FLAG
+            ).apply {
+                color = boxBorder
+                style = Paint.Style.STROKE
+                strokeWidth = 1f
+            }
+
+        canvas.drawRoundRect(
+            rect,
+            8f,
+            8f,
+            backgroundPaint
+        )
+
+        canvas.drawRoundRect(
+            rect,
+            8f,
+            8f,
+            borderPaint
+        )
+
+        val x =
+            if (isEnglish) {
+                margin + 12f
+            } else {
+                right - 12f
+            }
+
+        canvas.drawText(
+            "$label: $value",
+            x,
+            y + 24f,
+            textPaint(
+                size = 11f
+            )
+        )
+
+        y += 46f
+    }
+
+    fun wrappedLines(
+        text: String,
+        maxChars: Int
+    ): List<String> {
+        val clean =
+            text.trim()
+
+        if (clean.isBlank()) {
+            return emptyList()
+        }
+
+        val result =
+            mutableListOf<String>()
+
+        clean
+            .split(
+                Regex("\\s+")
+            )
+            .forEach { word ->
+
+                val current =
+                    result.lastOrNull()
+                        .orEmpty()
+
+                if (current.isBlank()) {
+                    result += word
+                } else {
+                    val candidate =
+                        "$current $word"
+
+                    if (
+                        candidate.length <=
+                        maxChars
+                    ) {
+                        result[
+                            result.lastIndex
+                        ] = candidate
+                    } else {
+                        result += word
+                    }
+                }
+            }
+
+        return result
+    }
+
+    startPage()
+
+    canvas.drawText(
+        if (isEnglish) {
+            "Broadcast details"
+        } else {
+            "פרטי השידור"
+        },
+        if (isEnglish) {
+            margin
+        } else {
+            pageWidth.toFloat() - margin
+        },
+        y,
+        textPaint(
+            size = 16f,
+            color = mediumBlue,
+            bold = true
+        )
+    )
+
+    y += 22f
+
+    drawInfoRow(
+        label =
+            if (isEnglish) {
+                "Region"
+            } else {
+                "אזור"
+            },
+        value = region.trim()
+    )
+
+    drawInfoRow(
+        label =
+            if (isEnglish) {
+                "Branch"
+            } else {
+                "סניף"
+            },
+        value = branch.trim()
+    )
+
+    drawInfoRow(
+        label =
+            if (isEnglish) {
+                "Groups"
+            } else {
+                "קבוצות"
+            },
+        value =
+            groups.joinToString(", ")
+    )
+
+    drawInfoRow(
+        label =
+            if (isEnglish) {
+                "Selected recipients"
+            } else {
+                "נמענים שנבחרו"
+            },
+        value =
+            totalRecipients.toString()
+    )
+
+    ensureSpace(70f)
+
+    canvas.drawText(
+        if (isEnglish) {
+            "Message"
+        } else {
+            "תוכן ההודעה"
+        },
+        if (isEnglish) {
+            margin
+        } else {
+            pageWidth.toFloat() - margin
+        },
+        y,
+        textPaint(
+            size = 14f,
+            color = mediumBlue,
+            bold = true
+        )
+    )
+
+    y += 20f
+
+    wrappedLines(
+        text = message,
+        maxChars =
+            if (isEnglish) {
+                78
+            } else {
+                62
+            }
+    ).forEach { line ->
+        ensureSpace(18f)
+
+        canvas.drawText(
+            line,
+            if (isEnglish) {
+                margin
+            } else {
+                pageWidth.toFloat() - margin
+            },
+            y,
+            textPaint(
+                size = 11f
+            )
+        )
+
+        y += 16f
+    }
+
+    y += 14f
+
+    if (recipients.isNotEmpty()) {
+
+        ensureSpace(42f)
+
+        canvas.drawText(
+            if (isEnglish) {
+                "Recipients"
+            } else {
+                "רשימת נמענים"
+            },
+            if (isEnglish) {
+                margin
+            } else {
+                pageWidth.toFloat() - margin
+            },
+            y,
+            textPaint(
+                size = 14f,
+                color = mediumBlue,
+                bold = true
+            )
+        )
+
+        y += 22f
+
+        recipients.forEachIndexed {
+                index,
+                recipient ->
+
+            ensureSpace(30f)
+
+            val displayLine =
+                buildString {
+                    append(
+                        "${index + 1}. "
+                    )
+
+                    append(
+                        recipient.name
+                            .ifBlank {
+                                if (isEnglish) {
+                                    "Unnamed trainee"
+                                } else {
+                                    "מתאמן ללא שם"
+                                }
+                            }
+                    )
+
+                    if (
+                        !demoPrivacyEnabled &&
+                        recipient.phone.isNotBlank()
+                    ) {
+                        append(
+                            " · ${recipient.phone}"
+                        )
+                    }
+                }
+
+            canvas.drawText(
+                displayLine,
+                if (isEnglish) {
+                    margin + 8f
+                } else {
+                    pageWidth.toFloat() -
+                            margin -
+                            8f
+                },
+                y,
+                textPaint(
+                    size = 10.5f
+                )
+            )
+
+            y += 22f
+        }
+    }
+
+    page?.let {
+        document.finishPage(it)
+    }
+
+    val directory =
+        File(
+            context.cacheDir,
+            "shared_pdfs"
+        ).apply {
+            mkdirs()
+        }
+
+    /*
+     * שם קבוע:
+     * כל יצירה חדשה מחליפה את הקובץ הקודם.
+     */
+    val fileName =
+        if (isEnglish) {
+            "Broadcast Message.pdf"
+        } else {
+            "שידור הודעה.pdf"
+        }
+
+    val file =
+        File(
+            directory,
+            fileName
+        )
+
+    FileOutputStream(
+        file,
+        false
+    ).use { output ->
+        document.writeTo(output)
+    }
+
+    document.close()
+
+    return file
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun CoachBroadcastScreen(
@@ -370,6 +1152,8 @@ fun CoachBroadcastScreen(
 
     // ✅ פעולות פלטפורמה
     onOpenSms: (numbers: List<String>, message: String) -> Unit = { _, _ -> },
+
+    @Suppress("UNUSED_PARAMETER")
     onShareText: (message: String) -> Unit = {}
 ) {
     val contextLang = LocalContext.current
@@ -406,12 +1190,13 @@ fun CoachBroadcastScreen(
     val demoPrivacyEnabled =
         DemoPrivacy.isEnabled()
 
-    val userSp = remember(contextLang) {
-        contextLang.getSharedPreferences(
-            "kmi_user",
-            android.content.Context.MODE_PRIVATE
-        )
-    }
+    val userSp =
+        remember(contextLang) {
+            contextLang.getSharedPreferences(
+                "kmi_user",
+                Context.MODE_PRIVATE
+            )
+        }
 
     /*
      * המבנה החדש:
@@ -555,10 +1340,6 @@ fun CoachBroadcastScreen(
         }
     }
 
-    val effectiveGroupKey = remember(effectiveGroupKeys) {
-        effectiveGroupKeys.joinToString(", ")
-    }
-
     var region by remember {
         mutableStateOf(
             defaultRegion.orEmpty()
@@ -610,11 +1391,10 @@ fun CoachBroadcastScreen(
                 .orEmpty()
         }
 
-    var expandedRegion by remember { mutableStateOf(false) }
-    var expandedBranch by remember { mutableStateOf(false) }
-
     // רשימת הנמענים מהקבוצה (נשלפת מפיירסטור)
-    var recipients by remember { mutableStateOf<List<CoachRecipient>>(emptyList()) }
+    var recipients by remember {
+        mutableStateOf<List<CoachRecipient>>(emptyList())
+    }
 
     var isRecipientsLoading by remember {
         mutableStateOf(false)
@@ -1023,8 +1803,8 @@ fun CoachBroadcastScreen(
                     .orderBy(FieldPath.documentId())
                     .limit(1000)
 
-                if (last != null) {
-                    q = q.startAfter(last!!)
+                last?.let { lastDocument ->
+                    q = q.startAfter(lastDocument)
                 }
 
                 val snap = q.get().await()
@@ -1053,8 +1833,10 @@ fun CoachBroadcastScreen(
 
             val discoveredBranchGroups =
                 branchMatchedDocs
+                    .asSequence()
                     .flatMap {
                         it.groupDisplayTokens()
+                            .asSequence()
                     }
                     .map {
                         it.norm()
@@ -1064,6 +1846,7 @@ fun CoachBroadcastScreen(
                     }
                     .distinct()
                     .sorted()
+                    .toList()
 
             /*
              * המבנה החדש הוא מקור האמת.
@@ -1201,7 +1984,7 @@ fun CoachBroadcastScreen(
                                                     recipient.phone
                                                 }
                                         },
-                                demoIndex = index,
+                                demoIndex = index + 1,
                                 isEnglish =
                                     isEnglish
                             )
@@ -1217,13 +2000,37 @@ fun CoachBroadcastScreen(
         }
 
     // נמענים שנבחרו (גם טלפונים וגם UIDs)
-    val selectedRecipients = recipients.filter { it.selected }
-    val selectedNumbers = selectedRecipients
-        .map { it.phone.trim() }
-        .filter { it.isNotBlank() }
-        .distinct()
+    val selectedRecipients =
+        recipients.filter {
+            it.selected
+        }
 
-    val selectedUids = selectedRecipients
+    /*
+     * רשימת תצוגה בלבד.
+     *
+     * במצב הדגמה היא כוללת:
+     * מתאמן 1, מתאמן 2 וכו'.
+     *
+     * הרשימה האמיתית נשארת ב-selectedRecipients
+     * לצורך SMS / Push / Firestore בלבד.
+     */
+    val selectedUiRecipients =
+        uiRecipients.filter {
+            it.selected
+        }
+
+    val selectedNumbers =
+        selectedRecipients
+            .map {
+                it.phone.trim()
+            }
+            .filter {
+                it.isNotBlank()
+            }
+            .distinct()
+
+    val selectedUids =
+        selectedRecipients
         .map { it.uid.trim() }
         .filter { it.isNotBlank() }
         .distinct()
@@ -1475,8 +2282,11 @@ fun CoachBroadcastScreen(
                         "שידור הודעה לקבוצה",
                         "Broadcast Message"
                     ),
+                    onBack = onBack,
                     onHome = onHome,
-                    onOpenDrawer = { il.kmi.app.ui.DrawerBridge.open() },
+                    onOpenDrawer = {
+                        il.kmi.app.ui.DrawerBridge.open()
+                    },
                     showRoleStatus = false,
                     lockSearch = false,
 
@@ -1486,7 +2296,31 @@ fun CoachBroadcastScreen(
                     showTopHome = false,
 
                     showBottomActions = true,
-                    currentLang = if (isEnglish) "en" else "he",
+
+                    showTopShare = true,
+                    onShare = {
+                        shareCoachBroadcastPdf(
+                            context = contextLang,
+                            region = region,
+                            branch = branch,
+                            groups = effectiveGroupKeys,
+                            message = message,
+                            recipients = selectedUiRecipients,
+                            totalRecipients =
+                                selectedRecipients.size,
+                            isEnglish = isEnglish,
+                            demoPrivacyEnabled =
+                                demoPrivacyEnabled
+                        )
+                    },
+
+                    currentLang =
+                        if (isEnglish) {
+                            "en"
+                        } else {
+                            "he"
+                        },
+
                     onToggleLanguage = {
                     val newLang =
                         if (currentLanguage == AppLanguage.HEBREW) {
@@ -1539,119 +2373,71 @@ fun CoachBroadcastScreen(
                         verticalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
                         // ===== אזור =====
-                        ExposedDropdownMenuBox(
-                            expanded = expandedRegion,
-                            onExpandedChange = { expandedRegion = !expandedRegion }
-                        ) {
-                            OutlinedTextField(
-                                value = region,
-                                onValueChange = {},
-                                readOnly = true,
-                                label = {
-                                    Text(
-                                        coachBroadcastTr(isEnglish, "אזור", "Region"),
-                                        textAlign = screenTextAlign
-                                    )
-                                },
-                                modifier = Modifier
-                                    .menuAnchor()
-                                    .fillMaxWidth(),
-                                textStyle = KmiTypography.body.copy(
-                                    textAlign = screenTextAlign
+                        KmiPremiumDropdown(
+                            title =
+                                coachBroadcastTr(
+                                    isEnglish,
+                                    "אזור",
+                                    "Region"
                                 ),
-                                shape = androidx.compose.foundation.shape.RoundedCornerShape(16.dp),
-                                colors = fieldColors
-                            )
-                            DropdownMenu(
-                                expanded = expandedRegion,
-                                onDismissRequest = { expandedRegion = false }
-                            ) {
-                                visibleBranchesByRegion.keys.forEach { r ->
-                                    DropdownMenuItem(
-                                        text = {
-                                            Text(
-                                                text = r,
-                                                textAlign = screenTextAlign,
-                                                modifier = Modifier.fillMaxWidth()
-                                            )
-                                        },
-                                        onClick = {
-                                            region = r
-                                            branch = ""
-                                            sendScope = "groups"
-                                            availableBranchGroups = emptyList()
-                                            availableBranchGroupCounts = emptyMap()
-                                            selectedTargetGroups = emptySet()
-                                            recipients = emptyList()
-                                            expandedRegion = false
-                                        }
-                                    )
-                                }
-                            }
-                        }
+                            options =
+                                visibleBranchesByRegion
+                                    .keys
+                                    .toList(),
+                            selectedValue = region,
+                            isEnglish = isEnglish,
+                            placeholder =
+                                coachBroadcastTr(
+                                    isEnglish,
+                                    "בחר אזור",
+                                    "Select region"
+                                ),
+                            onSelected = { selectedRegion ->
+                                region = selectedRegion
+
+                                // שינוי אזור מחייב בחירת סניף מחדש.
+                                branch = ""
+                                selectedTargetGroups = emptySet()
+                                availableBranchGroups = emptyList()
+                                availableBranchGroupCounts = emptyMap()
+                                recipients = emptyList()
+                            },
+                            modifier = Modifier.fillMaxWidth()
+                        )
 
                         // ===== סניף =====
                         if (region.isNotBlank()) {
-                            ExposedDropdownMenuBox(
-                                expanded = expandedBranch,
-                                onExpandedChange = { expandedBranch = !expandedBranch }
-                            ) {
-                                OutlinedTextField(
-                                    value = branch,
-                                    onValueChange = {},
-                                    readOnly = true,
-                                    label = {
-                                        Text(
-                                            coachBroadcastTr(isEnglish, "סניף", "Branch"),
-                                            textAlign = screenTextAlign
-                                        )
-                                    },
-                                    modifier = Modifier
-                                        .menuAnchor()
-                                        .fillMaxWidth(),
-                                    textStyle =
-                                        KmiTypography.body.copy(
-                                            textAlign =
-                                                screenTextAlign,
-                                            color =
-                                                fieldTextColor
-                                        ),
-                                    shape = androidx.compose.foundation.shape.RoundedCornerShape(16.dp),
-                                    colors = fieldColors
-                                )
-                                DropdownMenu(
-                                    expanded = expandedBranch,
-                                    onDismissRequest = { expandedBranch = false }
-                                ) {
-                                    (
-                                            visibleBranchesByRegion[region]
-                                                ?: emptyList()
-                                            ).forEach { b ->
-                                        DropdownMenuItem(
-                                            text = {
-                                                Text(
-                                                    text = b,
-                                                    textAlign = screenTextAlign,
-                                                    modifier = Modifier.fillMaxWidth()
-                                                )
-                                            },
-                                            onClick = {
-                                                branch = b
-                                                sendScope = "groups"
+                            KmiPremiumDropdown(
+                                title =
+                                    coachBroadcastTr(
+                                        isEnglish,
+                                        "סניף",
+                                        "Branch"
+                                    ),
+                                options =
+                                    visibleBranchesByRegion[
+                                        region
+                                    ].orEmpty(),
+                                selectedValue = branch,
+                                isEnglish = isEnglish,
+                                placeholder =
+                                    coachBroadcastTr(
+                                        isEnglish,
+                                        "בחר סניף",
+                                        "Select branch"
+                                    ),
+                                onSelected = { selectedBranch ->
+                                    branch = selectedBranch
 
-                                                // ✅ ניקוי מיידי לפני טעינת קבוצות הסניף החדש
-                                                availableBranchGroups = emptyList()
-                                                availableBranchGroupCounts = emptyMap()
-                                                selectedTargetGroups = emptySet()
-                                                recipients = emptyList()
-                                                isRecipientsLoading = true
-
-                                                expandedBranch = false
-                                            }
-                                        )
-                                    }
-                                }
-                            }
+                                    // מעבר לסניף אחר מאפס רק מידע
+                                    // שתלוי בסניף הקודם.
+                                    selectedTargetGroups = emptySet()
+                                    availableBranchGroups = emptyList()
+                                    availableBranchGroupCounts = emptyMap()
+                                    recipients = emptyList()
+                                },
+                                modifier = Modifier.fillMaxWidth()
+                            )
                         }
 
                         // ===== טקסט ההודעה =====
@@ -2530,7 +3316,8 @@ fun CoachBroadcastScreen(
                             fontWeight =
                                 androidx.compose.ui.text.font.FontWeight.Bold,
                             maxLines = 2,
-                            textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                            textAlign =
+                                TextAlign.Center,
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .padding(horizontal = 6.dp, vertical = 2.dp)

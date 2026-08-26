@@ -44,6 +44,7 @@ import il.kmi.app.KmiViewModel
 import il.kmi.app.favorites.FavoritesStore
 import il.kmi.app.ui.color
 import il.kmi.app.ui.KmiTypography
+import il.kmi.app.ui.LocalAppIconScale
 import il.kmi.shared.domain.Belt
 import il.kmi.shared.questions.model.util.ExerciseTitleFormatter
 import java.io.File
@@ -56,6 +57,8 @@ import kotlinx.coroutines.CancellationException
 import android.app.Activity
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.core.content.edit
+import androidx.core.graphics.withTranslation
 import il.kmi.shared.localization.AppLanguage
 import il.kmi.shared.localization.AppLanguageManager
 import il.kmi.shared.domain.content.ExerciseTitlesEn
@@ -127,14 +130,6 @@ private fun norm(s: String) = s
     .trim()
     .lowercase()
 
-// ✅ ADD
-private fun topicKey(s: String): String = s
-    .replace("\u200F","")
-    .replace("\u200E","")
-    .replace("\u00A0"," ")
-    .replace(Regex("\\s+"), " ")
-    .trim()
-
 private fun normalizeStatusPart(s: String): String =
     s.replace("\u200F", "")
         .replace("\u200E", "")
@@ -191,7 +186,6 @@ private fun findCanonicalItem(b: Belt, t: String, displayItem: String): String? 
 
     for (raw: String in direct) {
         val formatted: String = ExerciseTitleFormatter.displayName(raw)
-            .orEmpty()
             .trim()
 
         val disp = formatted.ifBlank { raw }.trim()
@@ -211,7 +205,6 @@ private fun findCanonicalItem(b: Belt, t: String, displayItem: String): String? 
 
         for (raw: String in subItems) {
             val formatted: String = ExerciseTitleFormatter.displayName(raw)
-                .orEmpty()
                 .trim()
 
             val disp = formatted.ifBlank { raw }.trim()
@@ -223,11 +216,6 @@ private fun findCanonicalItem(b: Belt, t: String, displayItem: String): String? 
     }
 
     return null
-}
-
-private fun canonicalFor(belt: Belt, topicTitle: String, displayItem: String): String {
-    val cleaned = cleanItem(topicTitle, displayItem)
-    return findCanonicalItem(belt, topicTitle, cleaned) ?: cleaned
 }
 
 private fun resolveCanonicalIdForExplanation(
@@ -251,16 +239,6 @@ private fun beltContentFor(belt: Belt): SharedContentRepo.BeltContent? {
 
 private fun canonicalFromRepo(topicTitle: String, rawItemFromRepo: String): String {
     return cleanItem(topicTitle, rawItemFromRepo).trim()
-}
-
-private fun uiDisplayName(topicTitle: String, rawItem: String): String {
-    val cleaned = cleanItem(topicTitle, rawItem)
-
-    val formatted: String = ExerciseTitleFormatter.displayName(cleaned)
-        .orEmpty()
-        .trim()
-
-    return formatted.ifBlank { cleaned }.trim()
 }
 
 private fun topicDisplayName(topicTitle: String, isEnglish: Boolean): String {
@@ -291,7 +269,6 @@ private fun topicDisplayName(topicTitle: String, isEnglish: Boolean): String {
 
 private fun subTopicDisplayName(
     subTopicTitle: String?,
-    topicTitle: String,
     isEnglish: Boolean
 ): String {
     val clean =
@@ -352,8 +329,7 @@ private fun exerciseDisplayNameForUi(
         append(s)
     }
 
-    val formatted: String = ExerciseTitleFormatter.displayName(cleaned)
-        .orEmpty()
+    val formatted: String =ExerciseTitleFormatter.displayName(cleaned)
         .trim()
 
     val base = formatted.ifBlank { cleaned }.trim()
@@ -393,21 +369,20 @@ private fun exerciseDisplayNameForUi(
 fun ProgressMeter(
     vm: KmiViewModel,
     belt: Belt,
-    topic: String? = null,
     modifier: Modifier = Modifier,
+    topic: String? = null,
     meterSize: Dp = 180.dp,
     stroke: Dp = 14.dp,
     doneOverride: Int? = null,
     totalOverride: Int? = null,
     knownOverride: Int? = null,
     partiallyKnownOverride: Int? = null,
-    notKnownOverride: Int? = null,
-    unmarkedOverride: Int? = null
+    notKnownOverride: Int? = null
 ) {
-    var knownCount by remember(belt, topic) { mutableStateOf(0) }
-    var notKnownCount by remember(belt, topic) { mutableStateOf(0) }
-    var unmarkedCount by remember(belt, topic) { mutableStateOf(0) }
-    var total by remember(belt, topic) { mutableStateOf(0) }
+    var knownCount by remember(belt, topic) { mutableIntStateOf(0) }
+    var notKnownCount by remember(belt, topic) { mutableIntStateOf(0) }
+    var unmarkedCount by remember(belt, topic) { mutableIntStateOf(0) }
+    var total by remember(belt, topic) { mutableIntStateOf(0) }
 
     val marksVer by vm.marksVersion.collectAsState()
 
@@ -713,7 +688,6 @@ fun ProgressMeter(
                     useCenter = false,
                     style = Stroke(width = strokePx, cap = StrokeCap.Round)
                 )
-                startAngle += animatedNotKnownSweep
             }
 
             val innerWhiteRadius = size.minDimension * 0.34f
@@ -831,15 +805,13 @@ private fun UserProgressComparisonCard(
         "אין עדיין מספיק נתונים להשוואה מול מתאמנים אחרים."
     }
 
-    val c = comparison
-
     /*
-     * המשתמש הנוכחי כבר הוסר מהחישוב ב־Repository.
-     * לכן גם מתאמן אחר אחד הוא נתון השוואה אמיתי ותקין.
-     */
+    * המשתמש הנוכחי כבר הוסר מהחישוב ב־Repository.
+    * לכן גם מתאמן אחר אחד הוא נתון השוואה אמיתי ותקין.
+    */
     val hasValidComparisonData =
-        c != null &&
-                c.usersCount >= 1
+        comparison != null &&
+                comparison.usersCount >= 1
 
     val textAlign = if (isEnglish) TextAlign.Start else TextAlign.Right
     val columnAlignment = if (isEnglish) Alignment.Start else Alignment.End
@@ -848,7 +820,7 @@ private fun UserProgressComparisonCard(
         modifier = modifier.fillMaxWidth(),
         shape = RoundedCornerShape(24.dp),
         colors = CardDefaults.cardColors(
-            containerColor = Color.White.copy(alpha = 0.92f)
+            containerColor = MaterialTheme.colorScheme.surface
         ),
         border = BorderStroke(
             width = 1.dp,
@@ -865,9 +837,11 @@ private fun UserProgressComparisonCard(
                 .background(
                     Brush.verticalGradient(
                         colors = listOf(
-                            Color.White.copy(alpha = 0.98f),
-                            belt.color.copy(alpha = 0.10f),
-                            Color.White.copy(alpha = 0.96f)
+                            MaterialTheme.colorScheme.surface,
+                            belt.color
+                                .copy(alpha = 0.10f)
+                                .compositeOver(MaterialTheme.colorScheme.surface),
+                            MaterialTheme.colorScheme.surface
                         )
                     )
                 )
@@ -975,21 +949,21 @@ private fun UserProgressComparisonCard(
                 ) {
                     SummaryMiniProgressChip(
                         title = if (isEnglish) "You know" else "אתה יודע",
-                        value = "${c.userKnownPercent}%",
+                        value = "${comparison.userKnownPercent}%",
                         color = belt.color,
                         modifier = Modifier.weight(1f)
                     )
 
                     SummaryMiniProgressChip(
                         title = if (isEnglish) "Average" else "ממוצע",
-                        value = "${c.averageKnownPercent}%",
+                        value = "${comparison.averageKnownPercent}%",
                         color = Color(0xFF2563EB),
                         modifier = Modifier.weight(1f)
                     )
 
                     SummaryMiniProgressChip(
                         title = if (isEnglish) "Trainees" else "מתאמנים",
-                        value = c.usersCount.toString(),
+                        value = comparison.usersCount.toString(),
                         color = Color(0xFF475467),
                         modifier = Modifier.weight(1f)
                     )
@@ -998,9 +972,9 @@ private fun UserProgressComparisonCard(
                 Text(
                     text =
                         if (isEnglish) {
-                            "You are above ${c.percentileAbove}% of trainees in your belt."
+                            "You are above ${comparison.percentileAbove}% of trainees in your belt."
                         } else {
-                            "אתה מעל ${c.percentileAbove}% מהמתאמנים בחגורה שלך."
+                            "אתה מעל ${comparison.percentileAbove}% מהמתאמנים בחגורה שלך."
                         },
                     style = KmiTypography.body.copy(
                         fontWeight = FontWeight.Bold
@@ -1066,7 +1040,6 @@ private fun SummaryMiniProgressChip(
 @Composable
 private fun SummaryToggleButton(
     text: String,
-    iconColor: Color,
     selected: Boolean,
     onClick: () -> Unit,
     modifier: Modifier = Modifier
@@ -1657,7 +1630,9 @@ fun SummaryScreen(
     subTopicFilter: String? = null,
     onBack: () -> Unit,
     onBackHome: () -> Unit,
+    @Suppress("UNUSED_PARAMETER")
     onOpenProgress: () -> Unit,
+    @Suppress("UNUSED_PARAMETER")
     onOpenSettings: () -> Unit
 ) {
     val ctx = LocalContext.current
@@ -1674,11 +1649,10 @@ fun SummaryScreen(
 
     // אותו רקע מדורג שבו משתמשים המסכים הראשיים באפליקציה.
     val summaryBackgroundColors = listOf(
-        Color(0xFFF8FBFF),
-        Color(0xFFEAF4FF),
-        Color(0xFFB7DDF7),
-        Color(0xFF1F78B4),
-        Color(0xFF062B4A)
+        summaryColors.background,
+        summaryColors.surfaceVariant,
+        summaryColors.primaryContainer,
+        summaryColors.background
     )
 
     val summaryCardColor =
@@ -1743,8 +1717,6 @@ fun SummaryScreen(
         .favoritesFlow
         .collectAsState(initial = emptySet())
 
-    val marksVer by vm.marksVersion.collectAsState()
-
     var showProgress by rememberSaveable { mutableStateOf(false) }
     var showComparison by rememberSaveable { mutableStateOf(false) }
     var loadError by remember { mutableStateOf<String?>(null) }
@@ -1803,20 +1775,6 @@ fun SummaryScreen(
         }
     }
 
-    fun statusTopicKeyFor(topicTitle: String): String {
-        val cleanTopic = topicTitle.trim().ifBlank { "כללי" }
-
-        return if (
-            topic.isNotBlank() &&
-            !subTopicFilter.isNullOrBlank() &&
-            norm(cleanTopic) == norm(topic)
-        ) {
-            "${topic.trim()}__${subTopicFilter.trim()}"
-        } else {
-            cleanTopic
-        }
-    }
-
     fun noteKeyFor(topicTitle: String, itemId: String): String {
         return "note_${belt.id}_${noteSuffixFor(topicTitle)}_${cleanItem(topicTitle, itemId)}"
     }
@@ -1826,13 +1784,13 @@ fun SummaryScreen(
 
     fun saveNote(topicTitle: String, itemId: String, value: String) {
         val key = noteKeyFor(topicTitle, itemId)
-        with(notesSp.edit()) {
+
+        notesSp.edit {
             if (value.isBlank()) {
                 remove(key)
             } else {
                 putString(key, value.trim())
             }
-            apply()
         }
     }
 
@@ -1848,7 +1806,9 @@ fun SummaryScreen(
 
     // === רשימת פריטים לפי נושא (ישירות מה-shared ContentRepo) ===
     var itemsByTopic by remember(belt, topic, subTopicFilter) {
-        mutableStateOf(LinkedHashMap<String, List<SummaryExerciseRow>>())
+        mutableStateOf<Map<String, List<SummaryExerciseRow>>>(
+            emptyMap()
+        )
     }
 
     LaunchedEffect(belt, topic, subTopicFilter) {
@@ -2621,18 +2581,6 @@ fun SummaryScreen(
                 }
             }
 
-            val beltRes = remember(belt) {
-                when (belt) {
-                    Belt.WHITE  -> il.kmi.app.R.drawable.intro_belt_white
-                    Belt.YELLOW -> il.kmi.app.R.drawable.intro_belt_yellow
-                    Belt.ORANGE -> il.kmi.app.R.drawable.intro_belt_orange
-                    Belt.GREEN  -> il.kmi.app.R.drawable.intro_belt_green
-                    Belt.BLUE   -> il.kmi.app.R.drawable.intro_belt_blue
-                    Belt.BROWN  -> il.kmi.app.R.drawable.intro_belt_brown
-                    Belt.BLACK  -> il.kmi.app.R.drawable.intro_belt_black
-                }
-            }
-
             val contextLang = LocalContext.current
             val langManager = remember { AppLanguageManager(contextLang) }
 
@@ -2655,7 +2603,12 @@ fun SummaryScreen(
                     showBackNavigation = false,
                     alignTitleEnd = true,
 
-                    currentLang = "he",
+                    currentLang =
+                        if (isEnglish) {
+                            "en"
+                        } else {
+                            "he"
+                        },
 
                     onToggleLanguage = {
                         val newLang =
@@ -2974,29 +2927,6 @@ fun SummaryScreen(
                         .padding(top = 0.dp, bottom = 8.dp),
                     verticalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
-                    val beltRes = when (belt) {
-                        Belt.WHITE  -> il.kmi.app.R.drawable.intro_belt_white
-                        Belt.YELLOW -> il.kmi.app.R.drawable.intro_belt_yellow
-                        Belt.ORANGE -> il.kmi.app.R.drawable.intro_belt_orange
-                        Belt.GREEN  -> il.kmi.app.R.drawable.intro_belt_green
-                        Belt.BLUE   -> il.kmi.app.R.drawable.intro_belt_blue
-                        Belt.BROWN  -> il.kmi.app.R.drawable.intro_belt_brown
-                        Belt.BLACK  -> il.kmi.app.R.drawable.intro_belt_black
-                    }
-
-                    val beltLabel = if (isEnglish) {
-                        when (belt) {
-                            Belt.WHITE -> "White Belt"
-                            Belt.YELLOW -> "Yellow Belt"
-                            Belt.ORANGE -> "Orange Belt"
-                            Belt.GREEN -> "Green Belt"
-                            Belt.BLUE -> "Blue Belt"
-                            Belt.BROWN -> "Brown Belt"
-                            Belt.BLACK -> "Black Belt"
-                        }
-                    } else {
-                        belt.heb
-                    }
 
                     Spacer(Modifier.height(0.dp))
 
@@ -3007,7 +2937,6 @@ fun SummaryScreen(
                     ) {
                         SummaryToggleButton(
                             text = tr("התקדמות", "Progress"),
-                            iconColor = belt.color,
                             selected = showProgress,
                             onClick = {
                                 showProgress = !showProgress
@@ -3031,7 +2960,6 @@ fun SummaryScreen(
                                         "Compare"
                                     )
                                 },
-                            iconColor = belt.color,
                             selected = showComparison,
                             onClick = {
                                 showComparison =
@@ -3093,23 +3021,6 @@ fun SummaryScreen(
 
                 if (showProgress) {
                     Spacer(Modifier.height(8.dp))
-
-                    val beltLabel = remember(belt, isEnglish) {
-                        if (isEnglish) {
-                            when (belt) {
-                                Belt.WHITE -> "White Belt"
-                                Belt.YELLOW -> "Yellow Belt"
-                                Belt.ORANGE -> "Orange Belt"
-                                Belt.GREEN -> "Green Belt"
-                                Belt.BLUE -> "Blue Belt"
-                                Belt.BROWN -> "Brown Belt"
-                                Belt.BLACK -> "Black Belt"
-                            }
-                        } else {
-                            val h = belt.heb.trim()
-                            if (h.startsWith("חגורה")) h else "חגורה $h"
-                        }
-                    }
 
                     val partiallyKnownCount =
                         partiallyKnownIds.size
@@ -3303,9 +3214,7 @@ fun SummaryScreen(
                                 partiallyKnownOverride =
                                     effectivePartiallyKnownCount,
                                 notKnownOverride =
-                                    effectiveNotKnownCount,
-                                unmarkedOverride =
-                                    unmarkedCount
+                                    effectiveNotKnownCount
                             )
 
                             Row(
@@ -3610,8 +3519,8 @@ fun SummaryScreen(
                                 .groupBy { row ->
                                     row.subTopicTitle?.trim().orEmpty()
                                 }
-                                .toSortedMap(compareBy<String> { key ->
-                                    if (key.isBlank()) "000" else key
+                                .toSortedMap(compareBy { key ->
+                                    key.ifBlank { "000" }
                                 })
 
                             Card(
@@ -3816,7 +3725,6 @@ fun SummaryScreen(
                                                                     "${
                                                                         subTopicDisplayName(
                                                                             subTopicTitleRaw,
-                                                                            topicTitle,
                                                                             true
                                                                         )
                                                                     } - $subPct%"
@@ -3824,7 +3732,6 @@ fun SummaryScreen(
                                                                     "${
                                                                         subTopicDisplayName(
                                                                             subTopicTitleRaw,
-                                                                            topicTitle,
                                                                             false
                                                                         )
                                                                     } – $subPct%"
@@ -4285,19 +4192,12 @@ fun SummaryScreen(
                                                                                             isPartiallyKnown
                                                                                         ) {
                                                                                             "◐"
+                                                                                        } else if (
+                                                                                            state == MarkState.YES
+                                                                                        ) {
+                                                                                            "✓"
                                                                                         } else {
-                                                                                            when (
-                                                                                                state
-                                                                                            ) {
-                                                                                                MarkState.YES ->
-                                                                                                    "✓"
-
-                                                                                                MarkState.NO ->
-                                                                                                    "✗"
-
-                                                                                                MarkState.NONE ->
-                                                                                                    "○"
-                                                                                            }
+                                                                                            "✗"
                                                                                         },
                                                                                     color =
                                                                                         statusForegroundColor,
@@ -4539,10 +4439,9 @@ private fun createSummaryPdf(
         left: Float,
         top: Float
     ) {
-        canvas.save()
-        canvas.translate(left, top)
-        layout.draw(canvas)
-        canvas.restore()
+        canvas.withTranslation(left, top) {
+            layout.draw(this)
+        }
     }
 
     fun statusIdForPdf(
@@ -4662,7 +4561,11 @@ private fun createSummaryPdf(
     val scopeLabel = when {
         topic.isNotBlank() && !subTopicFilter.isNullOrBlank() -> {
             val topicName = topicDisplayName(topic, isEnglish)
-            val subName = subTopicDisplayName(subTopicFilter, topic, isEnglish)
+            val subName =
+                subTopicDisplayName(
+                    subTopicFilter,
+                    isEnglish
+                )
             "$topicName · $subName"
         }
         topic.isNotBlank() -> topicDisplayName(topic, isEnglish)
@@ -4792,7 +4695,6 @@ private fun createSummaryPdf(
                     type = subTopicHeaderType,
                     title = subTopicDisplayName(
                         subTopicTitle = cleanSub,
-                        topicTitle = block.topicTitle,
                         isEnglish = isEnglish
                     )
                 )
@@ -4821,7 +4723,6 @@ private fun createSummaryPdf(
                         type = subTopicHeaderType,
                         title = subTopicDisplayName(
                             subTopicTitle = cleanSub,
-                            topicTitle = block.topicTitle,
                             isEnglish = isEnglish
                         )
                     )

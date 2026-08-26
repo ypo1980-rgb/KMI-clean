@@ -14,7 +14,6 @@ import java.io.FileOutputStream
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
-import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
@@ -26,7 +25,6 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.KeyboardDoubleArrowDown
 import androidx.compose.material3.*
 import androidx.compose.material3.TabRowDefaults.tabIndicatorOffset
 import androidx.compose.runtime.*
@@ -58,7 +56,6 @@ import il.kmi.app.screens.PracticeByTopicsSelection
 import il.kmi.app.screens.PracticeMenuDialog
 import il.kmi.shared.domain.Belt
 import il.kmi.shared.domain.content.ExerciseTitlesEn
-import il.kmi.shared.questions.model.util.ExerciseTitleFormatter
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -76,7 +73,6 @@ import androidx.compose.material.icons.filled.Lock
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.vector.ImageVector
-import il.kmi.app.domain.color
 import il.kmi.app.subscription.KmiAccess
 import il.kmi.app.subscription.AccessMode
 import il.kmi.app.subscription.AccessModeResolver
@@ -89,6 +85,7 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import il.kmi.app.domain.DefenseKind
 import il.kmi.app.domain.TopicsBySubjectRegistry
 import il.kmi.app.ui.KmiTopBar
+import il.kmi.app.ui.LocalAppIconScale
 import kotlinx.coroutines.yield
 import kotlin.math.ceil
 
@@ -281,7 +278,9 @@ private fun PremiumTopicLockIcon(
         contentDescription = null,
         tint = Color(0xFFF59E0B),
         modifier = modifier
-            .size(20.dp)
+            .size(
+                20.dp * LocalAppIconScale.current
+            )
             .graphicsLayer {
                 scaleX = scale
                 scaleY = scale
@@ -289,14 +288,6 @@ private fun PremiumTopicLockIcon(
             }
     )
 }
-
-private fun normalizeFavoriteId(raw: String): String =
-    raw.substringAfter("::", raw)
-        .substringAfter(":", raw)
-        .trim()
-
-private fun beltTitleForUi(belt: Belt, isEnglish: Boolean): String =
-    if (isEnglish) belt.en else belt.heb
 
 private fun hardSubjectLoadingTitle(
     subjectId: String,
@@ -331,11 +322,10 @@ private fun HardSubjectLoadingScreen(
             .background(
                 Brush.verticalGradient(
                     colors = listOf(
-                        Color(0xFFF8FBFF),
-                        Color(0xFFEAF4FF),
-                        Color(0xFFB7DDF7),
-                        Color(0xFF1F78B4),
-                        Color(0xFF062B4A)
+                        MaterialTheme.colorScheme.background,
+                        MaterialTheme.colorScheme.surfaceVariant,
+                        MaterialTheme.colorScheme.primaryContainer,
+                        MaterialTheme.colorScheme.background
                     )
                 )
             ),
@@ -343,16 +333,20 @@ private fun HardSubjectLoadingScreen(
     ) {
         Surface(
             shape = RoundedCornerShape(24.dp),
-            color = Color.White.copy(alpha = 0.92f),
-            shadowElevation = 8.dp,
-            border = BorderStroke(1.dp, Color(0xFF37B7E8).copy(alpha = 0.55f))
+            color = MaterialTheme.colorScheme.surface,
+            shadowElevation = 0.dp,
+            tonalElevation = 0.dp,
+            border = BorderStroke(
+                1.dp,
+                MaterialTheme.colorScheme.primary.copy(alpha = 0.35f)
+            )
         ) {
             Column(
                 modifier = Modifier.padding(horizontal = 24.dp, vertical = 20.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 CircularProgressIndicator(
-                    color = Color(0xFF1F78B4),
+                    color = MaterialTheme.colorScheme.primary,
                     modifier = Modifier.size(34.dp)
                 )
 
@@ -361,7 +355,7 @@ private fun HardSubjectLoadingScreen(
                 Text(
                     text = title,
                     style = KmiTypography.sectionTitle,
-                    color = Color(0xFF102033),
+                    color = MaterialTheme.colorScheme.onSurface,
                     textAlign = TextAlign.Center,
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis
@@ -379,7 +373,7 @@ private fun HardSubjectLoadingScreen(
                     style = KmiTypography.secondary.copy(
                         fontWeight = FontWeight.SemiBold
                     ),
-                    color = Color(0xFF475569),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                     textAlign = TextAlign.Center
                 )
             }
@@ -388,7 +382,7 @@ private fun HardSubjectLoadingScreen(
 }
 
 @Composable
-private fun rememberEnsureContentRepoInitialized() {
+private fun EnsureContentRepoInitialized() {
     val scope = rememberCoroutineScope()
 
     LaunchedEffect(Unit) {
@@ -672,7 +666,12 @@ private fun createSubjectTopicsPdf(
             subtitlePaint
         )
 
-        smallPaint.textAlign = Paint.Align.RIGHT
+        smallPaint.textAlign =
+            if (isEnglish) {
+                Paint.Align.LEFT
+            } else {
+                Paint.Align.RIGHT
+            }
 
         canvas.drawText(
             tr("תאריך הפקה:", "Generated:") + " " +
@@ -680,7 +679,11 @@ private fun createSubjectTopicsPdf(
                         "dd/MM/yyyy",
                         Locale.getDefault()
                     ).format(Date()),
-            pageWidth - 34f,
+            if (isEnglish) {
+                34f
+            } else {
+                pageWidth - 34f
+            },
             142f,
             smallPaint
         )
@@ -808,13 +811,12 @@ private fun createSubjectTopicsPdf(
         top: Float,
         index: Int
     ): Float {
-        val left = margin
         val right = pageWidth - margin
         val bottom = top + 58f
 
         drawRoundRect(
             canvas,
-            left,
+            margin,
             top,
             right,
             bottom,
@@ -823,7 +825,7 @@ private fun createSubjectTopicsPdf(
 
         drawRoundRect(
             canvas,
-            left,
+            margin,
             top,
             right,
             bottom,
@@ -836,7 +838,7 @@ private fun createSubjectTopicsPdf(
         }
 
         val circleX =
-            if (isEnglish) right - 22f else left + 22f
+            if (isEnglish) right - 22f else margin + 22f
 
         canvas.drawCircle(
             circleX,
@@ -866,7 +868,7 @@ private fun createSubjectTopicsPdf(
             if (isEnglish) Paint.Align.LEFT else Paint.Align.RIGHT
 
         val textX =
-            if (isEnglish) left + 20f else right - 20f
+            if (isEnglish) margin + 20f else right - 20f
 
         canvas.drawText(
             item.title.take(44),
@@ -1009,6 +1011,7 @@ private fun createSubjectTopicsPdf(
 fun BeltQuestionsByTopicScreen(
     onOpenByBelt: () -> Unit,
     onOpenSubject: (Belt, SubjectTopic) -> Unit,
+    @Suppress("UNUSED_PARAMETER")
     onOpenTopic: (Belt, String) -> Unit = { _, _ -> },
     onOpenTopicWithSub: (belt: Belt, topic: String, subTopic: String) -> Unit = { _, _, _ -> },
     onOpenDefenseList: (belt: Belt, kind: String, pick: String) -> Unit = { _, _, _ -> },
@@ -1024,7 +1027,7 @@ fun BeltQuestionsByTopicScreen(
     onOpenVoiceAssistant: (Belt) -> Unit = {},
     onOpenPdfMaterials: (Belt) -> Unit = {}
 ) {
-    rememberEnsureContentRepoInitialized()
+    EnsureContentRepoInitialized()
     val isEnglish = rememberIsEnglish()
     val ctx = LocalContext.current
 
@@ -1069,7 +1072,7 @@ fun BeltQuestionsByTopicScreen(
     // וגם דרך ON_RESUME כשחוזרים ממסך רכישה / מנוי.
 
     DisposableEffect(userSp, subsSp, legacySp) {
-        val listener = SharedPreferences.OnSharedPreferenceChangeListener { changedSp, key ->
+        val listener = SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
             if (
                 key == "has_full_access" ||
                 key == "full_access" ||
@@ -1209,11 +1212,10 @@ fun BeltQuestionsByTopicScreen(
                 .background(
                     Brush.verticalGradient(
                         colors = listOf(
-                            Color(0xFFF8FBFF),
-                            Color(0xFFEAF4FF),
-                            Color(0xFFB7DDF7),
-                            Color(0xFF1F78B4),
-                            Color(0xFF062B4A)
+                            MaterialTheme.colorScheme.background,
+                            MaterialTheme.colorScheme.surfaceVariant,
+                            MaterialTheme.colorScheme.primaryContainer,
+                            MaterialTheme.colorScheme.background
                         )
                     )
                 )
@@ -1247,15 +1249,12 @@ fun BeltQuestionsByTopicScreen(
                         effectiveBelt = belt
                         onOpenSubject(belt, subject)
                     },
-                    onOpenTopic = onOpenTopic,
                     onOpenTopicWithSub = onOpenTopicWithSub,
                     onOpenDefenseList = onOpenDefenseList,
                     onOpenHardSubjectRoute = { belt, subjectId ->
                         effectiveBelt = belt
 
-                        val cleanSubjectId = subjectId.trim()
-
-                        when (cleanSubjectId) {
+                        when (val cleanSubjectId = subjectId.trim()) {
                             "def_internal",
                             "def_external",
                             "releases_hugs",
@@ -1278,9 +1277,6 @@ fun BeltQuestionsByTopicScreen(
                     },
                     onPdfItemsChanged = { items ->
                         subjectTopicsPdfItems = items
-                    },
-                    onQuickViewClick = {
-                        quickMenuExpanded = true
                     }
                 )
 
@@ -1335,7 +1331,7 @@ private fun TopicQuestionsModeSwitcher(
             .fillMaxWidth(0.88f)
             .padding(bottom = 6.dp),
         color = Color(0xFF062B4A).copy(alpha = 0.78f),
-        shadowElevation = 8.dp,
+        shadowElevation = 0.dp,
         tonalElevation = 0.dp,
         border = BorderStroke(
             width = 1.dp,
@@ -1369,7 +1365,7 @@ private fun TopicQuestionsModeSwitcher(
                     contentColor = Color.White,
                     divider = {},
                     indicator = { positions ->
-                        TabRowDefaults.Indicator(
+                        TabRowDefaults.SecondaryIndicator(
                             modifier = Modifier.tabIndicatorOffset(
                                 positions[selectedIndex]
                             ),
@@ -1676,7 +1672,10 @@ private fun InlineSubTopicsExpansionCard(
                         imageVector = Icons.Filled.ChevronLeft,
                         contentDescription = null,
                         tint = itemArrowColor,
-                        modifier = Modifier.size(15.dp)
+                        modifier =
+                            Modifier.size(
+                                15.dp * LocalAppIconScale.current
+                            )
                     )
 
                     Spacer(Modifier.width(6.dp))
@@ -1844,14 +1843,20 @@ private fun SubjectRootCardPremium(
             }
         } else {
             Box(
-                modifier = Modifier.size(24.dp),
+                modifier =
+                    Modifier.size(
+                        24.dp * LocalAppIconScale.current
+                    ),
                 contentAlignment = Alignment.Center
             ) {
                 Icon(
                     imageVector = icon,
                     contentDescription = null,
                     tint = accent,
-                    modifier = Modifier.size(16.dp)
+                    modifier =
+                        Modifier.size(
+                            16.dp * LocalAppIconScale.current
+                        )
                 )
             }
         }
@@ -1923,7 +1928,10 @@ private fun SubjectRootCardPremium(
                                 if (isTitleLocked) {
                                     Spacer(modifier = Modifier.width(5.dp))
                                     PremiumTopicLockIcon(
-                                        modifier = Modifier.size(15.dp)
+                                        modifier =
+                                            Modifier.size(
+                                                15.dp * LocalAppIconScale.current
+                                            )
                                     )
                                 }
 
@@ -2002,7 +2010,10 @@ private fun SubjectRootCardPremium(
                             ) {
                                 if (isTitleLocked) {
                                     PremiumTopicLockIcon(
-                                        modifier = Modifier.size(15.dp)
+                                        modifier =
+                                            Modifier.size(
+                                                15.dp * LocalAppIconScale.current
+                                            )
                                     )
                                 }
                             }
@@ -2088,13 +2099,11 @@ internal fun TopicsBySubjectCard(
     hasAccess: Boolean = true,
     onOpenSubscription: () -> Unit,
     onSubjectClick: (Belt, SubjectTopic) -> Unit = { _, _ -> },
-    onOpenTopic: (Belt, String) -> Unit = { _, _ -> },
     onOpenTopicWithSub: (belt: Belt, topic: String, subTopic: String) -> Unit = { _, _, _ -> },
     onOpenDefenseList: (belt: Belt, kind: String, pick: String) -> Unit = { _, _, _ -> },
     onOpenHardSubjectRoute: (belt: Belt, subjectId: String) -> Unit,
     onOpenKicksHardLocal: () -> Unit,
-    onPdfItemsChanged: (List<SubjectTopicsPdfItem>) -> Unit = {},
-    onQuickViewClick: () -> Unit = {}
+    onPdfItemsChanged: (List<SubjectTopicsPdfItem>) -> Unit = {}
 ) {
 
     val isEnglish = rememberIsEnglish()
@@ -2121,9 +2130,15 @@ internal fun TopicsBySubjectCard(
         subjects.firstOrNull { it.id == "hands_all" }
     }
 
-    var subjectCounts by remember(subjects) { mutableStateOf<Map<String, Int>>(emptyMap()) }
-    var handsRootCount by remember(subjects) { mutableStateOf(0) }
-    var countsReady by remember(subjects) { mutableStateOf(false) }
+    var subjectCounts by remember(subjects) {
+        mutableStateOf<Map<String, Int>>(emptyMap())
+    }
+    var handsRootCount by remember(subjects) {
+        mutableIntStateOf(0)
+    }
+    var countsReady by remember(subjects) {
+        mutableStateOf(false)
+    }
     var handsPickCounts by remember(subjects) { mutableStateOf<Map<String, Int>>(emptyMap()) }
     var uiSectionCounts by remember(subjects) { mutableStateOf<Map<String, Int>>(emptyMap()) }
     var expandedSubTopicsForId by rememberSaveable { mutableStateOf<String?>(null) }
@@ -2232,128 +2247,6 @@ internal fun TopicsBySubjectCard(
         } else {
             formatCount(fallbackExerciseCount)
         }
-    }
-
-    fun normalizeCountPart(value: String): String =
-        value
-            .replace("\u200F", "")
-            .replace("\u200E", "")
-            .replace("\u00A0", " ")
-            .replace("–", "-")
-            .replace("—", "-")
-            .replace("־", "-")
-            .replace(Regex("\\s+"), " ")
-            .trim()
-
-    fun uniqueExerciseCountFromContentRepo(
-        vararg topicTitles: String
-    ): Int {
-        val normalizedTopicTitles: List<String> = topicTitles
-            .map { topicTitle: String ->
-                normalizeCountPart(topicTitle)
-            }
-            .filter { topicTitle: String ->
-                topicTitle.isNotBlank()
-            }
-            .distinct()
-
-        val exerciseNames: List<String> = normalizedTopicTitles
-            .flatMap { topicTitle: String ->
-                val subTopics: List<String> = runCatching {
-                    ContentRepo.listSubTopicTitles(
-                        currentBelt,
-                        topicTitle
-                    )
-                }.getOrDefault(emptyList())
-
-                val directItems: List<String> = runCatching {
-                    ContentRepo.listItemTitles(
-                        belt = currentBelt,
-                        topicTitle = topicTitle,
-                        subTopicTitle = null
-                    )
-                }.getOrDefault(emptyList())
-
-                val subTopicItems: List<String> =
-                    subTopics.flatMap { subTopic: String ->
-                        runCatching {
-                            ContentRepo.listItemTitles(
-                                belt = currentBelt,
-                                topicTitle = topicTitle,
-                                subTopicTitle = subTopic
-                            )
-                        }.getOrDefault(emptyList())
-                    }
-
-                directItems + subTopicItems
-            }
-            .map { rawTitle: String ->
-                ExerciseTitleFormatter
-                    .displayName(rawTitle)
-                    .ifBlank { rawTitle }
-            }
-            .map { title: String ->
-                normalizeCountPart(title)
-            }
-            .filter { title: String ->
-                title.isNotBlank()
-            }
-            .distinct()
-
-        return exerciseNames.size
-    }
-
-    fun subjectTopicCandidatesForCount(
-        subjectId: String,
-        title: String
-    ): List<String> {
-        val cleanTitle = normalizeCountPart(stripLockSuffix(title))
-
-        return when (subjectId.trim().lowercase()) {
-            "rolls_breakfalls",
-            "topic_breakfalls_rolls" -> listOf(
-                "בלימות וגלגולים",
-                "גלגולים ובלימות",
-                "topic_breakfalls_rolls"
-            )
-
-            "topic_ready_stance" -> listOf(
-                "עמידת מוצא",
-                "topic_ready_stance"
-            )
-
-            "topic_ground_prep" -> listOf(
-                "עבודת קרקע",
-                "topic_ground_prep"
-            )
-
-            "topic_kavaler",
-            "kavaler" -> listOf(
-                "קוואלר",
-                "topic_kavaler",
-                "kavaler"
-            )
-
-            "kicks",
-            "topic_kicks" -> listOf(
-                "בעיטות",
-                "topic_kicks",
-                "kicks"
-            )
-
-            else -> listOf(cleanTitle, subjectId)
-        }
-            .map { normalizeCountPart(it) }
-            .filter { it.isNotBlank() }
-            .distinct()
-    }
-
-    fun fallbackLastNumberFromText(text: String): Int {
-        return Regex("""\d+""")
-            .findAll(text)
-            .mapNotNull { it.value.toIntOrNull() }
-            .lastOrNull()
-            ?: 0
     }
 
     fun countTextForSubjectCard(
@@ -2790,20 +2683,14 @@ internal fun TopicsBySubjectCard(
     ) {
         val scrollState = rememberScrollState()
 
-        val showScrollHint by remember {
-            derivedStateOf {
-                scrollState.value < scrollState.maxValue
-            }
-        }
-
         Column(
-            modifier = Modifier.fillMaxWidth(),
+            modifier = modifier.fillMaxWidth(),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             Surface(
                 shape = RoundedCornerShape(20.dp),
-                tonalElevation = 1.dp,
-                shadowElevation = if (isDarkMode) 8.dp else 6.dp,
+                tonalElevation = 0.dp,
+                shadowElevation = 0.dp,
                 color = if (isDarkMode) {
                     Color(0xFF101827).copy(alpha = 0.98f)
                 } else {
@@ -2892,7 +2779,7 @@ internal fun TopicsBySubjectCard(
                                 }
                             }
 
-                            pinnedLockCards.forEachIndexed { index, card ->
+                            pinnedLockCards.forEach { card ->
                                 SubjectRootCardPremium(
                                     title = card.second,
                                     subtitle = "",
@@ -3131,7 +3018,7 @@ internal fun TopicsBySubjectCard(
                             // ✅ שאר הנושאים עם תתי־נושאים (בלי releases ובלי defenses שכבר הוצגו למעלה)
                             otherSubjectsWithSubTopicsCards
                                 .filter { it.id != "defense_root" && it.id != "defenses_root" }
-                                .forEachIndexed { index, card ->
+                                .forEach { card ->
                                     SubjectRootCardPremium(
                                         title = card.title,
                                         subtitle = "",
@@ -3331,9 +3218,7 @@ internal fun TopicsBySubjectCard(
                                                 pickedClean
                                             )) {
                                             is SubjectTopicsUiLogic.DefenseKindPickDecision.OpenLegacyDefenses -> {
-                                                val canOpen = hasAccess
-
-                                                if (!canOpen) {
+                                                if (!hasAccess) {
                                                     onOpenSubscription()
                                                 } else {
                                                     onOpenDefenseList(
@@ -3368,89 +3253,7 @@ internal fun TopicsBySubjectCard(
                         }
                     }
                 }
-
-                // החץ הועבר החוצה למסך האב כדי שיופיע מתחת לכרטיס הנושאים
             }
-        }
-    }
-}
-
-@Composable
-private fun PremiumScrollDownHint(
-    currentBelt: Belt,
-    isDarkMode: Boolean,
-    isEnglish: Boolean,
-    modifier: Modifier = Modifier
-) {
-    val scrollHintPulse = rememberInfiniteTransition(label = "premiumScrollHintPulse")
-
-    val arrowOffsetY by scrollHintPulse.animateFloat(
-        initialValue = -1.5f,
-        targetValue = 3.5f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(
-                durationMillis = 900,
-                easing = FastOutSlowInEasing
-            ),
-            repeatMode = RepeatMode.Reverse
-        ),
-        label = "premiumScrollHintOffset"
-    )
-
-    val arrowAlpha by scrollHintPulse.animateFloat(
-        initialValue = 0.58f,
-        targetValue = 1f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(
-                durationMillis = 900,
-                easing = FastOutSlowInEasing
-            ),
-            repeatMode = RepeatMode.Reverse
-        ),
-        label = "premiumScrollHintAlpha"
-    )
-
-    Surface(
-        modifier = modifier,
-        shape = RoundedCornerShape(999.dp),
-        color = if (isDarkMode) {
-            Color(0xFF162033).copy(alpha = 0.98f)
-        } else {
-            Color.White.copy(alpha = 0.98f)
-        },
-        shadowElevation = 10.dp,
-        tonalElevation = 2.dp,
-        border = BorderStroke(
-            width = 1.dp,
-            color = if (isDarkMode) {
-                Color.White.copy(alpha = 0.14f)
-            } else {
-                currentBelt.color.copy(alpha = 0.28f)
-            }
-        )
-    ) {
-        Box(
-            modifier = Modifier.size(width = 58.dp, height = 32.dp),
-            contentAlignment = Alignment.Center
-        ) {
-            Icon(
-                imageVector = Icons.Filled.KeyboardDoubleArrowDown,
-                contentDescription = if (isEnglish) {
-                    "More items below"
-                } else {
-                    "יש עוד פריטים למטה"
-                },
-                tint = if (isDarkMode) {
-                    Color.White.copy(alpha = arrowAlpha)
-                } else {
-                    currentBelt.color.copy(alpha = arrowAlpha)
-                },
-                modifier = Modifier
-                    .size(22.dp)
-                    .graphicsLayer {
-                        translationY = arrowOffsetY
-                    }
-            )
         }
     }
 }

@@ -1,5 +1,11 @@
 package il.kmi.app.screens
 
+import android.content.Context
+import android.content.Intent
+import android.graphics.Paint
+import android.graphics.Typeface
+import android.graphics.pdf.PdfDocument
+import androidx.core.content.FileProvider
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.slideInVertically
@@ -62,12 +68,19 @@ import il.kmi.app.ui.KmiTopBar
 import il.kmi.app.ui.KmiIconSize
 import il.kmi.app.ui.KmiTypography
 import il.kmi.shared.localization.AppLanguage
+import il.kmi.app.privacy.DemoPrivacy
+import il.kmi.app.privacy.TraineeDisplayNameMapper
 import il.kmi.shared.localization.AppLanguageManager
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
+import java.io.File
+import java.io.FileOutputStream
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 //===================================================================
 
@@ -179,12 +192,56 @@ fun ContactUsScreen(
         message: String
     ) -> Unit = { _, _, _, _, _ -> }
 ) {
-    var fullName by rememberSaveable { mutableStateOf("") }
-    var phone by rememberSaveable { mutableStateOf("") }
-    var email by rememberSaveable { mutableStateOf("") }
-    var subject by rememberSaveable { mutableStateOf("") }
-    var message by rememberSaveable { mutableStateOf("") }
-    var isSubmitting by rememberSaveable { mutableStateOf(false) }
+    val ctx =
+        LocalContext.current
+
+    DemoPrivacy.initialize(
+        ctx
+    )
+
+    val demoPrivacyEnabled =
+        DemoPrivacy.isEnabled()
+
+    val langManager =
+        remember(ctx) {
+            AppLanguageManager(ctx)
+        }
+
+    val effectiveEnglish =
+        isEnglish
+            ?: (
+                    langManager
+                        .getCurrentLanguage() ==
+                            AppLanguage.ENGLISH
+                    )
+
+    var fullName by rememberSaveable {
+        mutableStateOf("")
+    }
+
+    var realFullName by rememberSaveable {
+        mutableStateOf("")
+    }
+
+    var phone by rememberSaveable {
+        mutableStateOf("")
+    }
+
+    var email by rememberSaveable {
+        mutableStateOf("")
+    }
+
+    var subject by rememberSaveable {
+        mutableStateOf("")
+    }
+
+    var message by rememberSaveable {
+        mutableStateOf("")
+    }
+
+    var isSubmitting by rememberSaveable {
+        mutableStateOf(false)
+    }
 
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
@@ -212,8 +269,28 @@ fun ContactUsScreen(
                         ?: doc.getString("full_name")
                         ?: doc.getString("name")
                         ?: doc.getString("displayName")
-                        ?: authUser?.displayName
+                        ?: authUser.displayName
                         ?: ""
+
+                val displayFullName =
+                    TraineeDisplayNameMapper
+                        .displayName(
+                            realName = serverFullName,
+                            stableKey =
+                                uid.ifBlank {
+                                    serverFullName
+                                },
+                            demoIndex = 0,
+                            isEnglish =
+                                effectiveEnglish
+                        )
+                        .ifBlank {
+                            if (effectiveEnglish) {
+                                "Trainee 1"
+                            } else {
+                                "מתאמן 1"
+                            }
+                        }
 
                 val serverPhone =
                     doc.getString("phone")
@@ -224,14 +301,33 @@ fun ContactUsScreen(
 
                 val serverEmail =
                     doc.getString("email")
-                        ?: authUser?.email
+                        ?: authUser.email
                         ?: ""
 
-                if (fullName.isBlank() && serverFullName.isNotBlank()) {
-                    fullName = serverFullName
+                if (
+                    realFullName.isBlank() &&
+                    serverFullName.isNotBlank()
+                ) {
+                    realFullName =
+                        serverFullName
                 }
 
-                if (phone.isBlank() && serverPhone.isNotBlank()) {
+                if (
+                    fullName.isBlank() &&
+                    serverFullName.isNotBlank()
+                ) {
+                    fullName =
+                        if (demoPrivacyEnabled) {
+                            displayFullName
+                        } else {
+                            serverFullName
+                        }
+                }
+
+                if (
+                    phone.isBlank() &&
+                    serverPhone.isNotBlank()
+                ) {
                     phone = serverPhone
                 }
 
@@ -243,11 +339,6 @@ fun ContactUsScreen(
             }
         }
     }
-
-    val ctx = LocalContext.current
-    val langManager = remember { AppLanguageManager(ctx) }
-    val effectiveEnglish = isEnglish
-        ?: (langManager.getCurrentLanguage() == AppLanguage.ENGLISH)
 
     val title = if (effectiveEnglish) "Contact Us" else "צור קשר"
     val subtitle = if (effectiveEnglish) {
@@ -307,9 +398,9 @@ fun ContactUsScreen(
 
                 // מציג את אייקון סרגל הצד מהטופ־בר הגלובלי
                 showMenu = true,
-                onBack = null,
+                onBack = onClose,
 
-                // מפעיל את אייקון הבית בסרגל האייקונים הצדדי
+// מפעיל את אייקון הבית בסרגל האייקונים הצדדי
                 onHome = onHome,
 
                 // מאפשר לחיצה על תוצאת חיפוש, אם המסך שמעל מעביר ניווט לתרגיל
@@ -331,7 +422,19 @@ fun ContactUsScreen(
                 // אלא רק בסרגל האייקונים הצדדי כמו בשאר המסכים
                 showTopHome = false,
                 showTopSearch = false,
-                showTopShare = false
+                showTopShare = true,
+
+                onShare = {
+                    shareContactUsPdf(
+                        context = ctx,
+                        fullName = fullName,
+                        phone = phone,
+                        email = email,
+                        subject = subject,
+                        message = message,
+                        isEnglish = effectiveEnglish
+                    )
+                }
             )
         },
         containerColor = Color.Transparent,
@@ -483,7 +586,7 @@ fun ContactUsScreen(
                                 onValueChange = { fullName = it },
                                 modifier = Modifier.fillMaxWidth(),
                                 singleLine = true,
-                                label = { contactFieldLabel(if (effectiveEnglish) "Full Name" else "שם מלא") },
+                                label = { ContactFieldLabel(if (effectiveEnglish) "Full Name" else "שם מלא") },
                                 leadingIcon = {
                                     Icon(
                                         imageVector = Icons.Default.Person,
@@ -502,7 +605,7 @@ fun ContactUsScreen(
                                 onValueChange = { phone = it },
                                 modifier = Modifier.fillMaxWidth(),
                                 singleLine = true,
-                                label = { contactFieldLabel(if (effectiveEnglish) "Phone Number" else "טלפון") },
+                                label = { ContactFieldLabel(if (effectiveEnglish) "Phone Number" else "טלפון") },
                                 leadingIcon = {
                                     Icon(
                                         imageVector = Icons.Default.Phone,
@@ -526,7 +629,7 @@ fun ContactUsScreen(
                                 onValueChange = { email = it },
                                 modifier = Modifier.fillMaxWidth(),
                                 singleLine = true,
-                                label = { contactFieldLabel(if (effectiveEnglish) "Email" else "אימייל") },
+                                label = { ContactFieldLabel(if (effectiveEnglish) "Email" else "אימייל") },
                                 leadingIcon = {
                                     Icon(
                                         imageVector = Icons.Default.Email,
@@ -551,7 +654,7 @@ fun ContactUsScreen(
                                 modifier = Modifier.fillMaxWidth(),
                                 singleLine = true,
                                 label = {
-                                    contactFieldLabel(
+                                    ContactFieldLabel(
                                         text =
                                             if (effectiveEnglish) {
                                                 "Subject"
@@ -582,7 +685,7 @@ fun ContactUsScreen(
                                 modifier = Modifier.fillMaxWidth(),
                                 minLines = 4,
                                 label = {
-                                    contactFieldLabel(
+                                    ContactFieldLabel(
                                         text =
                                             if (effectiveEnglish) {
                                                 "Message"
@@ -606,9 +709,21 @@ fun ContactUsScreen(
                                     scope.launch {
                                         isSubmitting = true
 
-                                        val cleanFullName = fullName.trim()
-                                        val cleanPhone = phone.trim()
-                                        val cleanEmail = email.trim()
+                                        val cleanFullName =
+                                            if (
+                                                demoPrivacyEnabled &&
+                                                realFullName.isNotBlank()
+                                            ) {
+                                                realFullName.trim()
+                                            } else {
+                                                fullName.trim()
+                                            }
+
+                                        val cleanPhone =
+                                            phone.trim()
+
+                                        val cleanEmail =
+                                            email.trim()
                                         val cleanSubject = subject.trim()
                                         val cleanMessage = message.trim()
 
@@ -701,16 +816,19 @@ fun ContactUsScreen(
 }
 
 @Composable
-private fun contactFieldLabel(
+private fun ContactFieldLabel(
     text: String,
-    color: Color = MaterialTheme.colorScheme.onSurfaceVariant
+    color: Color =
+        MaterialTheme.colorScheme.onSurfaceVariant
 ) {
     Text(
         text = text,
         color = color,
-        style = KmiTypography.caption.copy(
-            fontWeight = FontWeight.ExtraBold
-        )
+        style =
+            KmiTypography.caption.copy(
+                fontWeight =
+                    FontWeight.ExtraBold
+            )
     )
 }
 
@@ -753,3 +871,736 @@ private fun contactFieldColors() = OutlinedTextFieldDefaults.colors(
 
     cursorColor = MaterialTheme.colorScheme.primary
 )
+
+//===================================================================
+// PDF — Contact Us
+//===================================================================
+
+private fun shareContactUsPdf(
+    context: Context,
+    fullName: String,
+    phone: String,
+    email: String,
+    subject: String,
+    message: String,
+    isEnglish: Boolean
+) {
+    val pdfFile =
+        createContactUsPdf(
+            context = context,
+            fullName = fullName,
+            phone = phone,
+            email = email,
+            subject = subject,
+            message = message,
+            isEnglish = isEnglish
+        )
+
+    val uri =
+        FileProvider.getUriForFile(
+            context,
+            "${context.packageName}.fileprovider",
+            pdfFile
+        )
+
+    val sendIntent =
+        Intent(Intent.ACTION_SEND).apply {
+            type = "application/pdf"
+
+            putExtra(
+                Intent.EXTRA_SUBJECT,
+                if (isEnglish) {
+                    "KAMI Contact Request"
+                } else {
+                    "פנייה לק.מ.י"
+                }
+            )
+
+            putExtra(
+                Intent.EXTRA_STREAM,
+                uri
+            )
+
+            addFlags(
+                Intent.FLAG_GRANT_READ_URI_PERMISSION
+            )
+        }
+
+    context.startActivity(
+        Intent.createChooser(
+            sendIntent,
+            if (isEnglish) {
+                "Share PDF"
+            } else {
+                "שיתוף PDF"
+            }
+        )
+    )
+}
+
+private fun createContactUsPdf(
+    context: Context,
+    fullName: String,
+    phone: String,
+    email: String,
+    subject: String,
+    message: String,
+    isEnglish: Boolean
+): File {
+
+    val pageWidth = 595
+    val pageHeight = 842
+
+    val margin = 30f
+
+    val document = PdfDocument()
+
+    val navy =
+        android.graphics.Color.rgb(
+            2,
+            43,
+            74
+        )
+
+    val blue =
+        android.graphics.Color.rgb(
+            36,
+            103,
+            158
+        )
+
+    val lightBlue =
+        android.graphics.Color.rgb(
+            234,
+            246,
+            255
+        )
+
+    val borderBlue =
+        android.graphics.Color.rgb(
+            191,
+            213,
+            232
+        )
+
+    val textDark =
+        android.graphics.Color.rgb(
+            15,
+            23,
+            42
+        )
+
+    val textMuted =
+        android.graphics.Color.rgb(
+            80,
+            100,
+            120
+        )
+
+    val regularTypeface =
+        Typeface.create(
+            Typeface.SANS_SERIF,
+            Typeface.NORMAL
+        )
+
+    val boldTypeface =
+        Typeface.create(
+            Typeface.SANS_SERIF,
+            Typeface.BOLD
+        )
+
+    fun paint(
+        size: Float,
+        color: Int = textDark,
+        typeface: Typeface = regularTypeface,
+        align: Paint.Align =
+            if (isEnglish) {
+                Paint.Align.LEFT
+            } else {
+                Paint.Align.RIGHT
+            }
+    ): Paint {
+        return Paint(
+            Paint.ANTI_ALIAS_FLAG
+        ).apply {
+            textSize = size
+            this.color = color
+            this.typeface = typeface
+            textAlign = align
+        }
+    }
+
+    fun drawRoundedRect(
+        canvas: android.graphics.Canvas,
+        left: Float,
+        top: Float,
+        right: Float,
+        bottom: Float,
+        color: Int,
+        radius: Float = 10f
+    ) {
+        val rectPaint =
+            Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                this.color = color
+                style = Paint.Style.FILL
+            }
+
+        canvas.drawRoundRect(
+            left,
+            top,
+            right,
+            bottom,
+            radius,
+            radius,
+            rectPaint
+        )
+    }
+
+    fun drawRoundedBorder(
+        canvas: android.graphics.Canvas,
+        left: Float,
+        top: Float,
+        right: Float,
+        bottom: Float,
+        color: Int,
+        radius: Float = 10f
+    ) {
+        val rectPaint =
+            Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                this.color = color
+                style = Paint.Style.STROKE
+                strokeWidth = 1f
+            }
+
+        canvas.drawRoundRect(
+            left,
+            top,
+            right,
+            bottom,
+            radius,
+            radius,
+            rectPaint
+        )
+    }
+
+    var pageNumber = 0
+    var page: PdfDocument.Page? = null
+    var canvas: android.graphics.Canvas? = null
+    var y = 0f
+
+    fun newPage() {
+        page?.let {
+            document.finishPage(it)
+        }
+
+        pageNumber++
+
+        val pageInfo =
+            PdfDocument.PageInfo.Builder(
+                pageWidth,
+                pageHeight,
+                pageNumber
+            ).create()
+
+        page =
+            document.startPage(
+                pageInfo
+            )
+
+        canvas =
+            page!!.canvas
+
+        canvas!!.drawColor(
+            android.graphics.Color.WHITE
+        )
+
+        // =========================================================
+        // Header — זהה ל-PDF של הסטטיסטיקה / מסך הבית
+        // =========================================================
+
+        val headerBottom = 122f
+
+        val navyPaint =
+            Paint(
+                Paint.ANTI_ALIAS_FLAG
+            ).apply {
+                color = navy
+                style = Paint.Style.FILL
+            }
+
+        val accent1 =
+            Paint(
+                Paint.ANTI_ALIAS_FLAG
+            ).apply {
+                color =
+                    android.graphics.Color.rgb(
+                        36,
+                        103,
+                        158
+                    )
+                style = Paint.Style.FILL
+            }
+
+        val accent2 =
+            Paint(
+                Paint.ANTI_ALIAS_FLAG
+            ).apply {
+                color =
+                    android.graphics.Color.rgb(
+                        128,
+                        183,
+                        220
+                    )
+                style = Paint.Style.FILL
+            }
+
+        canvas!!.drawPath(
+            android.graphics.Path().apply {
+                moveTo(
+                    pageWidth.toFloat(),
+                    0f
+                )
+                lineTo(
+                    pageWidth.toFloat(),
+                    headerBottom
+                )
+                lineTo(
+                    178f,
+                    headerBottom
+                )
+                lineTo(
+                    238f,
+                    0f
+                )
+                close()
+            },
+            navyPaint
+        )
+
+        canvas!!.drawPath(
+            android.graphics.Path().apply {
+                moveTo(
+                    208f,
+                    headerBottom
+                )
+                lineTo(
+                    224f,
+                    headerBottom
+                )
+                lineTo(
+                    284f,
+                    0f
+                )
+                lineTo(
+                    268f,
+                    0f
+                )
+                close()
+            },
+            accent1
+        )
+
+        canvas!!.drawPath(
+            android.graphics.Path().apply {
+                moveTo(
+                    230f,
+                    headerBottom
+                )
+                lineTo(
+                    238f,
+                    headerBottom
+                )
+                lineTo(
+                    298f,
+                    0f
+                )
+                lineTo(
+                    290f,
+                    0f
+                )
+                close()
+            },
+            accent2
+        )
+
+        // לוגו KAMI
+        val logoX = 78f
+        val logoY = 58f
+        val logoRadius = 42f
+
+        canvas!!.drawCircle(
+            logoX,
+            logoY,
+            logoRadius,
+            navyPaint
+        )
+
+        canvas!!.drawCircle(
+            logoX,
+            logoY,
+            logoRadius - 4f,
+            Paint(
+                Paint.ANTI_ALIAS_FLAG
+            ).apply {
+                color =
+                    android.graphics.Color.WHITE
+            }
+        )
+
+        canvas!!.drawText(
+            "KAMI",
+            logoX,
+            logoY + logoRadius * 0.22f,
+            paint(
+                size = logoRadius * 0.62f,
+                color = navy,
+                typeface = boldTypeface,
+                align = Paint.Align.CENTER
+            )
+        )
+
+        val headerX =
+            pageWidth - 34f
+
+        canvas!!.drawText(
+            if (isEnglish) {
+                "Contact Us"
+            } else {
+                "צור קשר"
+            },
+            headerX,
+            52f,
+            paint(
+                size = 25f,
+                color =
+                    android.graphics.Color.WHITE,
+                typeface = boldTypeface,
+                align = Paint.Align.RIGHT
+            )
+        )
+
+        canvas!!.drawText(
+            if (isEnglish) {
+                "KAMI Contact Request"
+            } else {
+                "פנייה לעמותת ק.מ.י"
+            },
+            headerX,
+            78f,
+            paint(
+                size = 11f,
+                color =
+                    android.graphics.Color.WHITE,
+                typeface = regularTypeface,
+                align = Paint.Align.RIGHT
+            )
+        )
+
+        val generatedDate =
+            SimpleDateFormat(
+                "dd/MM/yyyy",
+                Locale.getDefault()
+            ).format(
+                Date()
+            )
+
+        canvas!!.drawText(
+            if (isEnglish) {
+                "Generated: $generatedDate"
+            } else {
+                "תאריך הפקה: $generatedDate"
+            },
+            headerX,
+            142f,
+            paint(
+                size = 8.5f,
+                color = textMuted,
+                typeface = regularTypeface,
+                align = Paint.Align.RIGHT
+            )
+        )
+
+        y = 170f
+    }
+
+    fun ensureSpace(
+        requiredHeight: Float
+    ) {
+        if (
+            y + requiredHeight >
+            pageHeight - 35f
+        ) {
+            newPage()
+        }
+    }
+
+    fun drawField(
+        label: String,
+        value: String
+    ) {
+        if (value.isBlank()) {
+            return
+        }
+
+        ensureSpace(62f)
+
+        val left = margin
+        val right =
+            pageWidth.toFloat() - margin
+
+        val top = y
+        val bottom = y + 50f
+
+        drawRoundedRect(
+            canvas = canvas!!,
+            left = left,
+            top = top,
+            right = right,
+            bottom = bottom,
+            color = lightBlue
+        )
+
+        drawRoundedBorder(
+            canvas = canvas!!,
+            left = left,
+            top = top,
+            right = right,
+            bottom = bottom,
+            color = borderBlue
+        )
+
+        val textX =
+            if (isEnglish) {
+                left + 12f
+            } else {
+                right - 12f
+            }
+
+        canvas!!.drawText(
+            label,
+            textX,
+            top + 17f,
+            paint(
+                size = 9f,
+                color = textMuted,
+                typeface = boldTypeface
+            )
+        )
+
+        canvas!!.drawText(
+            value,
+            textX,
+            top + 37f,
+            paint(
+                size = 11f,
+                color = textDark,
+                typeface = regularTypeface
+            )
+        )
+
+        y += 60f
+    }
+
+    fun drawWrappedText(
+        text: String,
+        maxCharsPerLine: Int
+    ) {
+        val cleanText =
+            text.trim()
+
+        if (cleanText.isBlank()) {
+            return
+        }
+
+        val words =
+            cleanText.split(
+                Regex("\\s+")
+            )
+
+        val lines =
+            mutableListOf<String>()
+
+        var currentLine = ""
+
+        words.forEach { word ->
+            val candidate =
+                if (currentLine.isBlank()) {
+                    word
+                } else {
+                    "$currentLine $word"
+                }
+
+            if (
+                candidate.length >
+                maxCharsPerLine &&
+                currentLine.isNotBlank()
+            ) {
+                lines += currentLine
+                currentLine = word
+            } else {
+                currentLine = candidate
+            }
+        }
+
+        if (currentLine.isNotBlank()) {
+            lines += currentLine
+        }
+
+        lines.forEach { line ->
+            ensureSpace(18f)
+
+            canvas!!.drawText(
+                line,
+                if (isEnglish) {
+                    margin + 12f
+                } else {
+                    pageWidth.toFloat() -
+                            margin -
+                            12f
+                },
+                y,
+                paint(
+                    size = 10.5f,
+                    color = textDark
+                )
+            )
+
+            y += 16f
+        }
+    }
+
+    newPage()
+
+    canvas!!.drawText(
+        if (isEnglish) {
+            "Request details"
+        } else {
+            "פרטי הפנייה"
+        },
+        if (isEnglish) {
+            margin
+        } else {
+            pageWidth.toFloat() - margin
+        },
+        y,
+        paint(
+            size = 16f,
+            color = blue,
+            typeface = boldTypeface
+        )
+    )
+
+    y += 22f
+
+    drawField(
+        label =
+            if (isEnglish) {
+                "Full Name"
+            } else {
+                "שם מלא"
+            },
+        value = fullName.trim()
+    )
+
+    drawField(
+        label =
+            if (isEnglish) {
+                "Phone"
+            } else {
+                "טלפון"
+            },
+        value = phone.trim()
+    )
+
+    drawField(
+        label =
+            if (isEnglish) {
+                "Email"
+            } else {
+                "אימייל"
+            },
+        value = email.trim()
+    )
+
+    drawField(
+        label =
+            if (isEnglish) {
+                "Subject"
+            } else {
+                "נושא הפנייה"
+            },
+        value = subject.trim()
+    )
+
+    ensureSpace(80f)
+
+    canvas!!.drawText(
+        if (isEnglish) {
+            "Message"
+        } else {
+            "הודעה"
+        },
+        if (isEnglish) {
+            margin
+        } else {
+            pageWidth.toFloat() - margin
+        },
+        y,
+        paint(
+            size = 13f,
+            color = blue,
+            typeface = boldTypeface
+        )
+    )
+
+    y += 22f
+
+    drawWrappedText(
+        text = message,
+        maxCharsPerLine =
+            if (isEnglish) {
+                78
+            } else {
+                62
+            }
+    )
+
+    page?.let {
+        document.finishPage(it)
+    }
+
+    val pdfDirectory =
+        File(
+            context.cacheDir,
+            "shared_pdfs"
+        ).apply {
+            mkdirs()
+        }
+
+    /*
+     * שם קבוע:
+     * הפקה חדשה מחליפה את הקובץ הקודם.
+     */
+    val fileName =
+        if (isEnglish) {
+            "Contact Us.pdf"
+        } else {
+            "צור קשר.pdf"
+        }
+
+    val pdfFile =
+        File(
+            pdfDirectory,
+            fileName
+        )
+
+    FileOutputStream(
+        pdfFile
+    ).use {
+        document.writeTo(it)
+    }
+
+    document.close()
+
+    return pdfFile
+}

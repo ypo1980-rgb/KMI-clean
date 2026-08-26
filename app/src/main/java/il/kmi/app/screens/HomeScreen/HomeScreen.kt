@@ -8,6 +8,8 @@ import android.graphics.Paint
 import android.graphics.Typeface
 import android.graphics.pdf.PdfDocument
 import androidx.core.content.FileProvider
+import androidx.core.content.edit
+import androidx.core.net.toUri
 import androidx.core.graphics.ColorUtils
 import java.io.File
 import java.io.FileOutputStream
@@ -59,9 +61,6 @@ import java.lang.reflect.AccessibleObject
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.text.style.TextOverflow
 import il.kmi.shared.domain.Belt
-import androidx.compose.ui.text.AnnotatedString
-import androidx.compose.ui.text.SpanStyle
-import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.material3.Switch
 import il.kmi.app.ui.rememberHapticsGlobal
 import il.kmi.app.ui.rememberClickSound
@@ -105,7 +104,6 @@ import il.kmi.shared.localization.AppLanguageManager
 import il.kmi.app.database.KmiDatabaseProvider
 import il.kmi.app.domain.ExerciseExplanationResolver
 import il.kmi.app.training.TrainingCatalog
-import il.kmi.app.training.TrainingDirectory
 import il.kmi.app.screens.registration.CoachBranchAssignmentsCodec
 import il.kmi.app.ui.KmiTopBar
 import il.kmi.app.ui.KmiTypography
@@ -115,7 +113,6 @@ import org.json.JSONArray
 import java.text.SimpleDateFormat
 import java.time.DayOfWeek
 import java.time.Duration
-import java.time.LocalDate
 import java.time.LocalTime
 import java.util.Calendar
 import java.util.Date
@@ -125,6 +122,7 @@ import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.zIndex
 import il.kmi.app.ui.LocalAppIconScale
+import kotlin.time.Duration.Companion.seconds
 
 //=================================================================================
 
@@ -132,7 +130,6 @@ private enum class HomeNoticeType {
     COACH_MESSAGE,
     TRAINING_TIME_CHANGED,
     TRAINING_CANCELLED,
-    TRAINING_RESTORED
 }
 
 private data class HomeNotice(
@@ -222,9 +219,10 @@ private fun TrainingsWeekHeader(
                         "אימונים לשבוע הקרוב"
                     },
                 style =
-                    MaterialTheme.typography.titleSmall,
+                    KmiTypography.secondary.copy(
+                        fontWeight = FontWeight.Bold
+                    ),
                 color = Color.White,
-                fontWeight = FontWeight.Bold,
                 textAlign = TextAlign.Center,
                 maxLines = 1
             )
@@ -238,8 +236,7 @@ private fun TrainingsWeekHeader(
                     } else {
                         "(תאריכים: $startLabel–$endLabel)"
                     },
-                style =
-                    MaterialTheme.typography.bodySmall,
+                style = KmiTypography.caption,
                 color =
                     Color.White.copy(alpha = 0.92f),
                 textAlign = TextAlign.Center,
@@ -249,16 +246,8 @@ private fun TrainingsWeekHeader(
     }
 }
 
-@Suppress("NOTHING_TO_INLINE")
-inline fun <T : AccessibleObject> T.makeAccessible(): T {
-    try {
-        isAccessible = true
-    } catch (_: SecurityException) { /* ignore */
-    }
-    return this
-}
-
 @OptIn(ExperimentalMaterial3Api::class)
+@Suppress("UNUSED_PARAMETER")
 @Composable
 fun HomeScreen(
     onContinue: () -> Unit,
@@ -358,12 +347,12 @@ fun HomeScreen(
 
     LaunchedEffect(openArchiveFromVoice) {
         if (openArchiveFromVoice) {
-            voiceHomeActionsPrefs.edit()
-                .putBoolean(
+            voiceHomeActionsPrefs.edit {
+                putBoolean(
                     "open_training_archive",
                     false
                 )
-                .apply()
+            }
 
             openArchiveFromVoice = false
             showTrainingArchive = true
@@ -394,13 +383,13 @@ fun HomeScreen(
     fun saveHomeExerciseNote(noteKey: String, text: String) {
         val clean = text.trim()
 
-        notePrefs.edit().apply {
+        notePrefs.edit {
             if (clean.isBlank()) {
                 remove(noteKey)
             } else {
                 putString(noteKey, clean)
             }
-        }.apply()
+        }
 
         notesRefreshKey++
     }
@@ -429,17 +418,15 @@ fun HomeScreen(
         }
     }
 
-    val backgroundBrush = remember {
+    val backgroundBrush =
         Brush.verticalGradient(
             colors = listOf(
-                Color(0xFFF8FBFF),
-                Color(0xFFEAF4FF),
-                Color(0xFFB7DDF7),
-                Color(0xFF1F78B4),
-                Color(0xFF062B4A)
+                MaterialTheme.colorScheme.background,
+                MaterialTheme.colorScheme.surfaceVariant,
+                MaterialTheme.colorScheme.primaryContainer,
+                MaterialTheme.colorScheme.background
             )
         )
-    }
 
     Scaffold(
         topBar = {
@@ -516,7 +503,7 @@ fun HomeScreen(
 
             DisposableEffect(userSp, subsSp, legacySp) {
                 val listener =
-                    SharedPreferences.OnSharedPreferenceChangeListener { changedSp, key ->
+                    SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
                         if (
                             key == "has_full_access" ||
                             key == "full_access" ||
@@ -556,23 +543,28 @@ fun HomeScreen(
                             getString("sub_product", "").orEmpty().isNotBlank()
 
                 // מנוי רגיל / בדיקות פותח רק אם יש זמן תקף.
-                val active = hasSubscriptionFlags && until > now
+                val active =
+                    hasSubscriptionFlags &&
+                            until > now
 
-                // אם הזמן עבר — מנקים את כל הדגלים הישנים כדי שהמנעולים יחזרו.
-                if (!active && hasSubscriptionFlags && until > 0L && until <= now) {
-                    edit()
-                        .putBoolean("google_subscription_verified", false)
-                        .putBoolean("has_full_access", false)
-                        .putBoolean("full_access", false)
-                        .putBoolean("subscription_active", false)
-                        .putBoolean("is_subscribed", false)
-                        .remove("sub_product")
-                        .remove("sub_token")
-                        .remove("sub_purchase_time")
-                        .remove("sub_access_until")
-                        .putLong("access_changed_at", System.currentTimeMillis())
-                        .apply()
-
+// אם הזמן עבר — מנקים את כל הדגלים הישנים כדי שהמנעולים יחזרו.
+                if (
+                    !active &&
+                    hasSubscriptionFlags &&
+                    until > 0L
+                ) {
+                    edit {
+                        putBoolean("google_subscription_verified", false)
+                        putBoolean("has_full_access", false)
+                        putBoolean("full_access", false)
+                        putBoolean("subscription_active", false)
+                        putBoolean("is_subscribed", false)
+                        remove("sub_product")
+                        remove("sub_token")
+                        remove("sub_purchase_time")
+                        remove("sub_access_until")
+                        putLong("access_changed_at", System.currentTimeMillis())
+                    }
                 }
 
                 return active
@@ -759,12 +751,12 @@ fun HomeScreen(
 
                     showCoachMessagesDialog = true
 
-                    settingsSp.edit()
-                        .putBoolean("coach_broadcast_open_dialog", false)
-                        .putBoolean("coach_broadcast_open_from_push", false)
-                        .remove("coach_broadcast_push_id")
-                        .remove("coach_broadcast_push_received_at")
-                        .apply()
+                    settingsSp.edit {
+                        putBoolean("coach_broadcast_open_dialog", false)
+                        putBoolean("coach_broadcast_open_from_push", false)
+                        remove("coach_broadcast_push_id")
+                        remove("coach_broadcast_push_received_at")
+                    }
 
                     pushBroadcastId = ""
                     openCoachMessagesFromPush = false
@@ -838,72 +830,6 @@ fun HomeScreen(
                 Spacer(Modifier.height(2.dp))
 
                 // === KMI_MULTI_GROUPS (FIX) ===
-                fun readSelectedGroups(sp: SharedPreferences): List<String> {
-                    fun splitGroups(raw: String): List<String> {
-                        return raw
-                            .split(',', ';', '|', '\n')
-                            .map { it.trim() }
-                            .filter { it.isNotBlank() }
-                    }
-
-                    fun readPrefValueAsList(key: String): List<String> {
-                        val value = sp.all[key] ?: return emptyList()
-
-                        return when (value) {
-                            is String -> {
-                                val raw = value.trim()
-                                if (raw.isBlank()) {
-                                    emptyList()
-                                } else if (raw.startsWith("[")) {
-                                    runCatching {
-                                        val arr = JSONArray(raw)
-                                        (0 until arr.length())
-                                            .mapNotNull { index -> arr.optString(index, null) }
-                                            .map { it.trim() }
-                                            .filter { it.isNotBlank() }
-                                    }.getOrDefault(emptyList())
-                                } else {
-                                    splitGroups(raw)
-                                }
-                            }
-
-                            is Set<*> -> {
-                                value
-                                    .mapNotNull { it?.toString()?.trim() }
-                                    .filter { it.isNotBlank() }
-                            }
-
-                            else -> emptyList()
-                        }
-                    }
-
-                    fun readListFromPrefs(vararg keys: String): List<String> {
-                        return keys
-                            .flatMap { key -> readPrefValueAsList(key) }
-                            .map { it.trim() }
-                            .filter { it.isNotBlank() }
-                            .distinct()
-                    }
-
-                    return readListFromPrefs(
-                        "groups_json",
-                        "selected_groups",
-                        "groups",
-                        "age_groups",
-                        "age_group",
-                        "active_group",
-                        "activeGroup",
-                        "group"
-                    )
-                        .map {
-                            TrainingCatalog
-                                .normalizeGroupName(it)
-                                .ifBlank { it }
-                        }
-                        .filter { it.isNotBlank() }
-                        .distinct()
-                }
-
                 var groupsRefreshTick by remember { mutableIntStateOf(0) }
 
                 var coachFromPrefs by remember(userSp) {
@@ -930,22 +856,18 @@ fun HomeScreen(
                     onDispose { userSp.unregisterOnSharedPreferenceChangeListener(l) }
                 }
 
-                val groupsEffective: List<String> = remember(userSp, groupsRefreshTick) {
-                    readSelectedGroups(userSp)
-                }
-
                 // === KMI_MULTI_GROUPS (FIX) ===
 
                 LaunchedEffect(openCoachMessagesFromPush, recentCoachMessages.size) {
                     if (openCoachMessagesFromPush && recentCoachMessages.isNotEmpty()) {
                         showCoachMessagesDialog = true
 
-                        settingsSp.edit()
-                            .putBoolean("coach_broadcast_open_dialog", false)
-                            .putBoolean("coach_broadcast_open_from_push", false)
-                            .remove("coach_broadcast_push_id")
-                            .remove("coach_broadcast_push_received_at")
-                            .apply()
+                        settingsSp.edit {
+                            putBoolean("coach_broadcast_open_dialog", false)
+                            putBoolean("coach_broadcast_open_from_push", false)
+                            remove("coach_broadcast_push_id")
+                            remove("coach_broadcast_push_received_at")
+                        }
 
                         openCoachMessagesFromPush = false
                     }
@@ -1469,7 +1391,7 @@ fun HomeScreen(
 
                         fun publishRecentMessages() {
                             val mergedDocuments =
-                                buildMap<String, DocumentSnapshot> {
+                                buildMap {
                                     putAll(recipientDocuments)
                                     putAll(authoredDocuments)
                                 }
@@ -1478,6 +1400,7 @@ fun HomeScreen(
 
                             recentCoachMessages =
                                 mergedDocuments
+                                    .asSequence()
                                     .filter { doc ->
                                         val docBroadcastId = (
                                                 doc.getString("broadcastId")
@@ -1564,6 +1487,7 @@ fun HomeScreen(
                                         message.sentAt?.time ?: 0L
                                     }
                                     .take(5)
+                                    .toList()
                         }
 
                         val recipientRegistration =
@@ -1621,72 +1545,6 @@ fun HomeScreen(
                             authoredRegistration.remove()
                         }
                     }
-                }
-
-                // =========================
-
-                fun readSelectedBranches(sp: SharedPreferences): List<String> {
-                    fun splitBranches(raw: String): List<String> {
-                        return raw
-                            .split(',', ';', '|', '\n')
-                            .map { it.trim() }
-                            .filter { it.isNotBlank() }
-                    }
-
-                    fun readPrefValueAsList(key: String): List<String> {
-                        val value = sp.all[key] ?: return emptyList()
-
-                        return when (value) {
-                            is String -> {
-                                val raw = value.trim()
-                                if (raw.isBlank()) {
-                                    emptyList()
-                                } else if (raw.startsWith("[")) {
-                                    runCatching {
-                                        val arr = JSONArray(raw)
-                                        (0 until arr.length())
-                                            .mapNotNull { index -> arr.optString(index, null) }
-                                            .map { it.trim() }
-                                            .filter { it.isNotBlank() }
-                                    }.getOrDefault(emptyList())
-                                } else {
-                                    splitBranches(raw)
-                                }
-                            }
-
-                            is Set<*> -> {
-                                value
-                                    .mapNotNull { it?.toString()?.trim() }
-                                    .filter { it.isNotBlank() }
-                            }
-
-                            else -> emptyList()
-                        }
-                    }
-
-                    fun readListFromPrefs(vararg keys: String): List<String> {
-                        return keys
-                            .flatMap { key -> readPrefValueAsList(key) }
-                            .map { it.trim() }
-                            .filter { it.isNotBlank() }
-                            .distinct()
-                    }
-
-                    val fromAllSources = readListFromPrefs(
-                        "branches_json",
-                        "selected_branches",
-                        "branches",
-                        "branch",
-                        "active_branch",
-                        "activeBranch",
-                        "branch2",
-                        "branch3"
-                    )
-
-                    return fromAllSources
-                        .map { it.trim() }
-                        .filter { it.isNotBlank() }
-                        .distinct()
                 }
 
                 var branchesRefreshTick by remember { mutableIntStateOf(0) }
@@ -1762,29 +1620,29 @@ fun HomeScreen(
                             val groupsJson = JSONArray(remoteGroups).toString()
 
                             if (remoteBranches.isNotEmpty() || remoteGroups.isNotEmpty()) {
-                                userSp.edit()
+                                userSp.edit {
                                     // ✅ ניקוי טיפוסים ישנים שאולי נשמרו כ־StringSet
-                                    .remove("branches")
-                                    .remove("selected_branches")
-                                    .remove("groups")
-                                    .remove("selected_groups")
+                                    remove("branches")
+                                    remove("selected_branches")
+                                    remove("groups")
+                                    remove("selected_groups")
 
                                     // ✅ סניפים
-                                    .putString("branch", branchesCsv)
-                                    .putString("branches", branchesCsv)
-                                    .putString("branches_json", branchesJson)
-                                    .putString("selected_branches", branchesCsv)
-                                    .putString("active_branch", remoteActiveBranch)
+                                    putString("branch", branchesCsv)
+                                    putString("branches", branchesCsv)
+                                    putString("branches_json", branchesJson)
+                                    putString("selected_branches", branchesCsv)
+                                    putString("active_branch", remoteActiveBranch)
 
                                     // ✅ קבוצות
-                                    .putString("age_groups", groupsCsv)
-                                    .putString("groups", groupsCsv)
-                                    .putString("groups_json", groupsJson)
-                                    .putString("selected_groups", groupsCsv)
-                                    .putString("age_group", remoteGroups.firstOrNull().orEmpty())
-                                    .putString("group", remoteGroups.firstOrNull().orEmpty())
-                                    .putString("active_group", remoteActiveGroup)
-                                    .apply()
+                                    putString("age_groups", groupsCsv)
+                                    putString("groups", groupsCsv)
+                                    putString("groups_json", groupsJson)
+                                    putString("selected_groups", groupsCsv)
+                                    putString("age_group", remoteGroups.firstOrNull().orEmpty())
+                                    putString("group", remoteGroups.firstOrNull().orEmpty())
+                                    putString("active_group", remoteActiveGroup)
+                                }
 
                                 branchesRefreshTick++
                                 groupsRefreshTick++
@@ -1816,31 +1674,16 @@ fun HomeScreen(
                     }
                 }
 
-                val selectedBranches: List<String> = remember(userSp, branchesRefreshTick) {
-                    readSelectedBranches(userSp)
-                }
-
                 val branchTypeHome = remember(userSp, branchesRefreshTick) {
                     userSp.getString("branch_type", "israel") ?: "israel"
                 }
 
                 val isAbroadBranch = branchTypeHome == "abroad"
 
-                val branchesEffective =
-                    remember(
-                        selectedBranches,
-                        isAbroadBranch
-                    ) {
-                        selectedBranches
-                            .map { it.trim() }
-                            .filter { it.isNotBlank() }
-                            .distinct()
-                    }
-
                 /*
                  * המבנה החדש שבו כל סניף מחזיק רק
-                 * את הקבוצות ששויכו אליו ברישום.
-                 */
+                                 * את הקבוצות ששויכו אליו ברישום.
+                                 */
                 val homeBranchAssignments =
                     remember(
                         userSp,
@@ -1891,7 +1734,7 @@ fun HomeScreen(
                         ?: userSp.getString("name", null)
                         ?: userSp.getString("user_name", null)
                         ?: ""
-                }.orEmpty()
+                }
 
                 LaunchedEffect(
                     branchGroupPairsEffective,
@@ -1927,12 +1770,12 @@ fun HomeScreen(
                     freeNameUi
                 ) {
                     if (openFreeTrainingsFromVoice) {
-                        voiceHomeActionsPrefs.edit()
-                            .putBoolean(
+                        voiceHomeActionsPrefs.edit {
+                            putBoolean(
                                 "open_free_trainings",
                                 false
                             )
-                            .apply()
+                        }
 
                         openFreeTrainingsFromVoice = false
 
@@ -2084,13 +1927,6 @@ fun HomeScreen(
 
                 Spacer(Modifier.height(4.dp))
 
-                fun datesRange(
-                    from: LocalDate,
-                    to: LocalDate
-                ): Sequence<LocalDate> =
-                    generateSequence(from) { it.plusDays(1) }
-                        .takeWhile { !it.isAfter(to) }
-
                 /*
                  * שעון משותף ליצירת האימונים ולחישוב הסטטוס.
                  * הרענון מאפשר לאימון לעבור אוטומטית בין
@@ -2104,7 +1940,7 @@ fun HomeScreen(
 
                 LaunchedEffect(Unit) {
                     while (true) {
-                        delay(5_000L)
+                        delay(5.seconds)
 
                         trainingStatusNowMillis =
                             System.currentTimeMillis()
@@ -2350,21 +2186,9 @@ fun HomeScreen(
                         branchGroupPairsEffective.forEach {
                                 (branchName, grp) ->
 
-                            val parts =
-                                branchName
-                                    .split('–', '-')
-                                    .map { it.trim() }
-
-                            val city =
-                                parts.getOrNull(0)
-                                    ?: branchName
-
-                            val venue =
-                                parts.getOrNull(1)
-                                    .orEmpty()
-
                             // ✅ 1) ניסיון ראשון: branches.json דרך KmiDatabaseProvider
-                                val dbItems = trainingsFromDatabaseForHome(
+                            val dbItems =
+                                trainingsFromDatabaseForHome(
                                     branchName = branchName,
                                     groupName = grp,
                                     coachFallback = coachFromPrefs
@@ -2382,64 +2206,49 @@ fun HomeScreen(
                                     return@forEach
                                 }
 
-                                // ✅ 2) Fallback זמני: TrainingDirectory הישן
-                                val addr =
-                                    TrainingCatalog.addressFor(branchName)
-                                        .ifBlank {
-                                            if (city.isNotBlank() && venue.isNotBlank()) "$venue, $city" else branchName
-                                        }
+                            // ✅ 2) Fallback דרך TrainingCatalog
+                            val branchVariants =
+                                branchScheduleVariants(branchName)
 
-                                val place = TrainingCatalog.placeFor(branchName)
+                            val groupVariants =
+                                groupScheduleVariants(grp)
 
-                                val branchVariants = branchScheduleVariants(branchName)
-                                val groupVariants = groupScheduleVariants(grp)
+                            var matchedBranch = ""
+                            var matchedGroup = ""
 
-                                var matchedBranch = ""
-                                var matchedGroup = ""
-
-                                val sched = branchVariants
+                            val sched =
+                                branchVariants
                                     .asSequence()
                                     .flatMap { branchCandidate ->
-                                        groupVariants.asSequence().map { groupCandidate ->
-                                            branchCandidate to groupCandidate
-                                        }
+                                        groupVariants
+                                            .asSequence()
+                                            .map { groupCandidate ->
+                                                branchCandidate to groupCandidate
+                                            }
                                     }
-                                    .mapNotNull { pair ->
+                                    .firstNotNullOfOrNull {
+                                            (branchCandidate, groupCandidate) ->
+
                                         val found =
-                                            TrainingDirectory.getSchedule(
-                                                pair.first,
-                                                pair.second
+                                            TrainingCatalog.trainingsFor(
+                                                branch = branchCandidate,
+                                                group = groupCandidate,
+                                                isEnglish = isEnglish
                                             )
 
-                                        if (found != null) {
-                                            matchedBranch = pair.first
-                                            matchedGroup = pair.second
-                                            found
-                                        } else {
-                                            null
-                                        }
+                                        found
+                                            .takeIf { it.isNotEmpty() }
+                                            ?.also {
+                                                matchedBranch = branchCandidate
+                                                matchedGroup = groupCandidate
+                                            }
                                     }
-                                    .firstOrNull()
 
-                                val coach =
-                                    sched?.coachName?.takeIf { it.isNotBlank() }
-                                        ?: coachFromPrefs.takeIf { it.isNotBlank() }
-                                        ?: ""
-
-                                val fallbackItems: List<HomeTrainingCandidate> =
-                                    sched?.slots?.map { slotAny ->
-                                        val s = readSlot(slotAny)
-
+                            val fallbackItems: List<HomeTrainingCandidate> =
+                                sched
+                                    ?.map { training ->
                                         HomeTrainingCandidate(
-                                            training = TrainingData.nextWeekly(
-                                                dayOfWeek = s.dayOfWeek,
-                                                startHour = s.startHour,
-                                                startMinute = s.startMinute,
-                                                durationMinutes = s.durationMinutes,
-                                                place = place,
-                                                address = addr,
-                                                coach = coach
-                                            ),
+                                            training = training,
                                             branch =
                                                 matchedBranch
                                                     .ifBlank { branchName }
@@ -2449,14 +2258,15 @@ fun HomeScreen(
                                                     .ifBlank { grp }
                                                     .trim()
                                         )
-                                    } ?: emptyList()
-
-                                val validFallbackItems =
-                                    fallbackItems.filter { candidate ->
-                                        isWithinUpcomingSevenDays(
-                                            candidate.training
-                                        )
                                     }
+                                    .orEmpty()
+
+                            val validFallbackItems =
+                                fallbackItems.filter { candidate ->
+                                    isWithinUpcomingSevenDays(
+                                        candidate.training
+                                    )
+                                }
 
                             all += validFallbackItems
                         }
@@ -2504,13 +2314,12 @@ fun HomeScreen(
 
                             val placeIdentity =
                                 training.place
-                                    .orEmpty()
                                     .ifBlank {
                                         candidate.branch
                                     }
 
                             val addressIdentity =
-                                training.address.orEmpty()
+                                training.address
 
                             return buildString {
                                 append(startMinute)
@@ -2549,7 +2358,7 @@ fun HomeScreen(
                                             candidate.group
                                         )
                                             .count { value ->
-                                                !value.isNullOrBlank()
+                                                value.isNotBlank()
                                             }
                                     } ?: samePhysicalTraining.first()
                                 }
@@ -2589,19 +2398,16 @@ fun HomeScreen(
                 val occurrenceKeys =
                     remember(currentWeekCandidates) {
                         currentWeekCandidates
-                            .associate { candidate ->
-                                val occurrenceKey =
-                                    TrainingOverrideRepository
-                                        .buildOccurrenceKey(
-                                            training =
-                                                candidate.training,
-                                            branch =
-                                                candidate.branch,
-                                            group =
-                                                candidate.group
-                                        )
-
-                                occurrenceKey to candidate
+                            .associateBy { candidate ->
+                                TrainingOverrideRepository
+                                    .buildOccurrenceKey(
+                                        training =
+                                            candidate.training,
+                                        branch =
+                                            candidate.branch,
+                                        group =
+                                            candidate.group
+                                    )
                             }
                     }
 
@@ -2886,9 +2692,9 @@ fun HomeScreen(
                         val training = item.training
 
                         HomePdfTraining(
-                            place = training.place.orEmpty(),
-                            address = training.address.orEmpty(),
-                            coach = training.coach.orEmpty(),
+                            place = training.place,
+                            address = training.address,
+                            coach = training.coach,
                             day = dayFmt.format(training.cal.time),
                             date = dateFmt.format(training.cal.time),
                             time = timeFmt.format(training.cal.time),
@@ -2961,8 +2767,6 @@ fun HomeScreen(
                         ) { item ->
                             TrainingCardCompact(
                                 training = item.training,
-                                branch = item.branch,
-                                group = item.group,
                                 isCoach = isCoach,
                                 isEnglish = isEnglish,
                                 status = item.status,
@@ -3234,25 +3038,36 @@ fun HomeScreen(
 
                                         val branchGroupLine = buildString {
                                             val b =
-                                                latestNotice
-                                                    ?.branch
-                                                    .orEmpty()
+                                                latestNotice.branch
                                                     .trim()
 
                                             val g =
-                                                latestNotice
-                                                    ?.group
-                                                    .orEmpty()
+                                                latestNotice.group
                                                     .trim()
 
                                             if (b.isNotBlank()) {
-                                                append(if (isEnglish) "Branch: " else "סניף: ")
+                                                append(
+                                                    if (isEnglish) {
+                                                        "Branch: "
+                                                    } else {
+                                                        "סניף: "
+                                                    }
+                                                )
                                                 append(b)
                                             }
 
                                             if (g.isNotBlank()) {
-                                                if (isNotBlank()) append(" · ")
-                                                append(if (isEnglish) "Group: " else "קבוצה: ")
+                                                if (isNotBlank()) {
+                                                    append(" · ")
+                                                }
+
+                                                append(
+                                                    if (isEnglish) {
+                                                        "Group: "
+                                                    } else {
+                                                        "קבוצה: "
+                                                    }
+                                                )
                                                 append(g)
                                             }
                                         }
@@ -3695,13 +3510,21 @@ fun HomeScreen(
                                 tonalElevation = 0.dp,
                                 shadowElevation = 0.dp
                             ) {
+                                val iconScale =
+                                    LocalAppIconScale.current
+
                                 Icon(
                                     imageVector = Icons.Filled.Email,
                                     contentDescription = null,
                                     tint = noticeAccent,
-                                    modifier = Modifier
-                                        .size(40.dp)
-                                        .padding(9.dp)
+                                    modifier =
+                                        Modifier
+                                            .size(
+                                                40.dp * iconScale
+                                            )
+                                            .padding(
+                                                9.dp * iconScale
+                                            )
                                 )
                             }
 
@@ -3710,9 +3533,20 @@ fun HomeScreen(
                             Surface(
                                 modifier = Modifier.fillMaxWidth(),
                                 shape = RoundedCornerShape(20.dp),
-                                color = Color.White.copy(alpha = 0.92f),
+                                color =
+                                    noticeColors
+                                        .surface
+                                        .copy(alpha = 0.94f),
                                 tonalElevation = 0.dp,
-                                shadowElevation = 0.dp
+                                shadowElevation = 0.dp,
+                                border =
+                                    BorderStroke(
+                                        width = 1.dp,
+                                        color =
+                                            noticeColors
+                                                .outline
+                                                .copy(alpha = 0.28f)
+                                    )
                             ) {
                                 Text(
                                     text =
@@ -3729,7 +3563,9 @@ fun HomeScreen(
                                     maxLines = 2,
                                     overflow =
                                         TextOverflow.Ellipsis,
-                                    color = Color(0xFF10213A),
+                                    color =
+                                        noticeColors
+                                            .onSurface,
                                     textAlign = TextAlign.Center,
                                     modifier = Modifier.padding(
                                         horizontal = 14.dp,
@@ -4301,7 +4137,7 @@ private fun ModernHomeQuickFab(
                     shape = tabShape
                 )
                 .shadow(
-                    elevation = 7.dp,
+                    elevation = 2.dp,
                     shape = tabShape,
                     clip = false
                 )
@@ -4314,9 +4150,17 @@ private fun ModernHomeQuickFab(
         ) {
             Icon(
                 imageVector = Icons.Filled.Menu,
-                contentDescription = if (isEnglish) "Quick menu" else "תפריט מהיר",
+                contentDescription =
+                    if (isEnglish) {
+                        "Quick menu"
+                    } else {
+                        "תפריט מהיר"
+                    },
                 tint = Color.White,
-                modifier = Modifier.size(21.dp)
+                modifier =
+                    Modifier.size(
+                        21.dp * LocalAppIconScale.current
+                    )
             )
         }
     }
@@ -4335,47 +4179,27 @@ private fun HomePremiumQuickMenuPanel(
     val panelMinHeight = 214.dp
     val panelShape = RoundedCornerShape(20.dp)
 
-    val colorScheme = MaterialTheme.colorScheme
-    val isDarkMode =
-        colorScheme.background.luminance() < 0.5f
+    val colorScheme =
+        MaterialTheme.colorScheme
 
-    /*
-     * במצב בהיר התפריט נשאר לבן לחלוטין,
-     * ללא גוון אפור של surfaceVariant.
-     * במצב כהה משתמשים בצבעי ערכת הנושא.
-     */
     val panelColor =
-        if (isDarkMode) {
-            colorScheme.surface
-        } else {
-            Color.White
-        }
+        colorScheme.surface
 
     val panelSecondaryColor =
-        if (isDarkMode) {
-            colorScheme.surfaceVariant
-        } else {
-            Color.White
-        }
+        colorScheme.surfaceVariant
 
     val menuAccent =
-        if (isDarkMode) {
-            Color(0xFF6EE7A0)
-        } else {
-            Color(0xFF16A34A)
-        }
+        colorScheme.primary
 
     val borderColor =
-        menuAccent.copy(
-            alpha = if (isDarkMode) 0.52f else 0.34f
+        colorScheme.outline.copy(
+            alpha = 0.45f
         )
 
     val dividerColor =
-        if (isDarkMode) {
-            colorScheme.outline.copy(alpha = 0.40f)
-        } else {
-            Color(0xFF0F8A3D).copy(alpha = 0.62f)
-        }
+        colorScheme.outline.copy(
+            alpha = 0.40f
+        )
 
     Surface(
         shape = panelShape,
@@ -4407,15 +4231,13 @@ private fun HomePremiumQuickMenuPanel(
                         colors = listOf(
                             panelColor,
                             panelSecondaryColor.copy(
-                                alpha = if (isDarkMode) 0.94f else 0.72f
+                                alpha = 0.90f
                             ),
-                            if (isDarkMode) {
-                                menuAccent.copy(alpha = 0.14f)
-                            } else {
-                                Color.White
-                            },
+                            menuAccent.copy(
+                                alpha = 0.10f
+                            ),
                             panelSecondaryColor.copy(
-                                alpha = if (isDarkMode) 0.88f else 0.64f
+                                alpha = 0.82f
                             ),
                             panelColor
                         )
@@ -4450,7 +4272,9 @@ private fun HomePremiumQuickMenuPanel(
                             contentDescription = "Close",
                             tint = menuAccent,
                             modifier = Modifier
-                                .size(18.dp)
+                                .size(
+                                    18.dp * LocalAppIconScale.current
+                                )
                                 .clickable { onClose() }
                         )
                     } else {
@@ -4475,7 +4299,9 @@ private fun HomePremiumQuickMenuPanel(
                             contentDescription = "סגור",
                             tint = menuAccent,
                             modifier = Modifier
-                                .size(18.dp)
+                                .size(
+                                    18.dp * LocalAppIconScale.current
+                                )
                                 .clickable { onClose() }
                         )
                     }
@@ -4571,7 +4397,9 @@ private fun HomePremiumQuickMenuRow(
                     contentDescription = null,
                     tint = Color(0xFFF59E0B),
                     modifier = Modifier
-                        .size(13.dp)
+                        .size(
+                            13.dp * LocalAppIconScale.current
+                        )
                         .graphicsLayer {
                             scaleX = lockScale
                             scaleY = lockScale
@@ -4613,7 +4441,9 @@ private fun HomePremiumQuickMenuRow(
                     contentDescription = null,
                     tint = Color(0xFFF59E0B),
                     modifier = Modifier
-                        .size(13.dp)
+                        .size(
+                            13.dp * LocalAppIconScale.current
+                        )
                         .graphicsLayer {
                             scaleX = lockScale
                             scaleY = lockScale
@@ -4629,39 +4459,46 @@ private fun HomePremiumQuickMenuRow(
 private fun HomePremiumQuickMenuIcon(
     icon: ImageVector
 ) {
-    val isDarkMode =
-        MaterialTheme.colorScheme.background.luminance() < 0.5f
+    val iconScale =
+        LocalAppIconScale.current
 
     val menuAccent =
-        if (isDarkMode) {
-            Color(0xFF6EE7A0)
-        } else {
-            Color(0xFF16A34A)
-        }
+        MaterialTheme
+            .colorScheme
+            .primary
 
     Box(
-        modifier = Modifier
-            .size(20.dp)
-            .background(
-                menuAccent.copy(
-                    alpha = if (isDarkMode) 0.16f else 0.10f
+        modifier =
+            Modifier
+                .size(
+                    20.dp * iconScale
+                )
+                .background(
+                    color =
+                        menuAccent.copy(
+                            alpha = 0.12f
+                        ),
+                    shape = CircleShape
+                )
+                .border(
+                    width = 1.dp,
+                    color =
+                        menuAccent.copy(
+                            alpha = 0.30f
+                        ),
+                    shape = CircleShape
                 ),
-                CircleShape
-            )
-            .border(
-                width = 1.dp,
-                color = menuAccent.copy(
-                    alpha = if (isDarkMode) 0.38f else 0.24f
-                ),
-                shape = CircleShape
-            ),
-        contentAlignment = Alignment.Center
+        contentAlignment =
+            Alignment.Center
     ) {
         Icon(
             imageVector = icon,
             contentDescription = null,
             tint = menuAccent,
-            modifier = Modifier.size(10.5.dp)
+            modifier =
+                Modifier.size(
+                    10.5.dp * iconScale
+                )
         )
     }
 }
@@ -4715,51 +4552,10 @@ private fun findExplanationForHit(
     }
 }
 
-// ========= עזר: הדגשת "עמידת מוצא ..." עד פסיק/נקודה =========
-private fun buildExplanationWithStanceHighlight(
-    source: String,
-    stanceColor: Color
-): AnnotatedString {
-    val marker = "עמידת מוצא"
-
-    val idx = source.indexOf(marker)
-    if (idx < 0) return AnnotatedString(source)
-
-    val sentenceEndExclusive = run {
-        val endIdx = source.indexOfAny(charArrayOf('.', ','), startIndex = idx)
-        if (endIdx == -1) source.length else endIdx + 1
-    }
-
-    val before = source.substring(0, idx)
-    val stanceSentence = source.substring(idx, sentenceEndExclusive)
-    val after = source.substring(sentenceEndExclusive)
-
-    return buildAnnotatedString {
-        append(before)
-
-        val stanceStart = length
-        append(stanceSentence)
-        val stanceEnd = length
-
-        addStyle(
-            style = SpanStyle(
-                fontWeight = FontWeight.Bold,
-                color = stanceColor
-            ),
-            start = stanceStart,
-            end = stanceEnd
-        )
-
-        append(after)
-    }
-}
-
 /** כרטיס אימון קומפקטי – כמו לפני השינוי, עם סדר אייקונים ישן */
 @Composable
 private fun TrainingCardCompact(
     training: TrainingData,
-    branch: String,
-    group: String,
     isCoach: Boolean,
     isEnglish: Boolean,
     status: TrainingStatusEngine.Status,
@@ -4771,24 +4567,10 @@ private fun TrainingCardCompact(
     val haptic = rememberHapticsGlobal()
     val clickSound = rememberClickSound()
 
-    var showNavPicker by rememberSaveable(training.cal.timeInMillis) { mutableStateOf(false) }
-
-    val navPref: NavAppPref = remember(training.cal.timeInMillis) {
-        readNavPref(ctx)
-    }
-
-    fun onNavigateClick() {
-        clickSound()
-        haptic(true)
-
-        val safeAddress = training.address?.trim().orEmpty()
-        if (safeAddress.isBlank()) return
-
-        when (navPref) {
-            NavAppPref.ASK -> showNavPicker = true
-            NavAppPref.GOOGLE_MAPS -> openGoogleMaps(ctx, safeAddress)
-            NavAppPref.WAZE -> openWaze(ctx, safeAddress)
-        }
+    var showNavPicker by rememberSaveable(
+        training.cal.timeInMillis
+    ) {
+        mutableStateOf(false)
     }
 
     if (showNavPicker) {
@@ -4836,7 +4618,7 @@ private fun TrainingCardCompact(
                     ) {
                         Button(
                             onClick = {
-                                val safeAddress = training.address?.trim().orEmpty()
+                                val safeAddress = training.address.trim()
                                 if (safeAddress.isNotBlank()) {
                                     if (rememberChoice) writeNavPref(ctx, NavAppPref.WAZE)
                                     openWaze(ctx, safeAddress)
@@ -4851,7 +4633,7 @@ private fun TrainingCardCompact(
 
                         Button(
                             onClick = {
-                                val safeAddress = training.address?.trim().orEmpty()
+                                val safeAddress = training.address.trim()
                                 if (safeAddress.isNotBlank()) {
                                     if (rememberChoice) writeNavPref(ctx, NavAppPref.GOOGLE_MAPS)
                                     openGoogleMaps(ctx, safeAddress)
@@ -5015,46 +4797,6 @@ private fun TrainingCardCompact(
         }
     }
 
-    @Composable
-    fun MapChip(
-        label: String,
-        icon: @Composable () -> Unit,
-        onClick: () -> Unit,
-        modifier: Modifier = Modifier
-    ) {
-        Surface(
-            onClick = { onClick() },
-            shape = RoundedCornerShape(20.dp),
-            color =
-                MaterialTheme
-                    .colorScheme
-                    .surfaceVariant
-                    .copy(alpha = 0.55f),
-            tonalElevation = 0.dp,
-            shadowElevation = 0.dp,
-            modifier =
-                modifier.heightIn(
-                    min = 40.dp
-                )
-        ) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(6.dp),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 10.dp)
-            ) {
-                icon()
-                Text(
-                    text = label,
-                    style = MaterialTheme.typography.labelSmall,
-                    maxLines = 1
-                )
-                Spacer(Modifier.weight(1f))
-            }
-        }
-    }
-
     val trainingCardBorderColor =
         when (visualStatusState) {
             TrainingStatusEngine.State.ONGOING ->
@@ -5105,17 +4847,17 @@ private fun TrainingCardCompact(
                 .fillMaxWidth()
                 .padding(horizontal = 10.dp, vertical = 8.dp)
         ) {
-            val branchLine = remember(training.place, training.address, isEnglish) {
-                val displaySource = training.place
-                    ?.trim()
-                    ?.takeIf { it.isNotBlank() }
-                    ?: training.address.orEmpty()
+                val branchLine = remember(training.place, training.address, isEnglish) {
+                    val displaySource = training.place
+                        .trim()
+                        .takeIf { it.isNotBlank() }
+                        ?: training.address
 
-                TrainingCatalog.placeDisplayName(
-                    displaySource,
-                    isEnglish
-                )
-            }
+                    TrainingCatalog.placeDisplayName(
+                        displaySource,
+                        isEnglish
+                    )
+                }
 
             Column(
                 modifier = Modifier.fillMaxWidth(),
@@ -5215,9 +4957,9 @@ private fun TrainingCardCompact(
                     1f
                 }
 
-            if (!statusMessage.isNullOrBlank()) {
-                val isDarkMode =
-                    MaterialTheme.colorScheme.surface.luminance() < 0.5f
+                if (statusMessage.isNotBlank()) {
+                    val isDarkMode =
+                        MaterialTheme.colorScheme.surface.luminance() < 0.5f
 
                 val statusContentColor =
                     when (visualStatusState) {
@@ -5327,7 +5069,7 @@ private fun TrainingCardCompact(
                 NavigationChip(
                     address =
                         TrainingCatalog.addressDisplayName(
-                            training.address.orEmpty(),
+                            training.address,
                             isEnglish
                         ),
                     isEnglish = isEnglish,
@@ -5344,7 +5086,7 @@ private fun TrainingCardCompact(
                     NavigationChip(
                         address =
                             TrainingCatalog.addressDisplayName(
-                                training.address.orEmpty(),
+                                training.address,
                                 isEnglish
                             ),
                         isEnglish = isEnglish,
@@ -5571,10 +5313,8 @@ private fun NavigationChip(
                 )
 
                 Text(
-                    text = if (safeAddress.isBlank()) {
+                    text = safeAddress.ifBlank {
                         if (isEnglish) "No address" else "אין כתובת"
-                    } else {
-                        safeAddress
                     },
                     style = KmiTypography.secondary,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -5970,23 +5710,18 @@ private enum class NavAppPref { ASK, GOOGLE_MAPS, WAZE }
 private const val NAV_PREFS_FILE = "kmi_user"
 private const val NAV_PREF_KEY = "nav_app_pref"
 
-private fun readNavPref(ctx: Context): NavAppPref {
-    val sp = ctx.getSharedPreferences(NAV_PREFS_FILE, Context.MODE_PRIVATE)
-    return when (sp.getString(NAV_PREF_KEY, "ask")?.lowercase()) {
-        "gmaps", "google", "google_maps" -> NavAppPref.GOOGLE_MAPS
-        "waze" -> NavAppPref.WAZE
-        else -> NavAppPref.ASK
-    }
-}
-
 private fun writeNavPref(ctx: Context, pref: NavAppPref) {
     val sp = ctx.getSharedPreferences(NAV_PREFS_FILE, Context.MODE_PRIVATE)
+
     val v = when (pref) {
         NavAppPref.ASK -> "ask"
         NavAppPref.GOOGLE_MAPS -> "gmaps"
         NavAppPref.WAZE -> "waze"
     }
-    sp.edit().putString(NAV_PREF_KEY, v).apply()
+
+    sp.edit {
+        putString(NAV_PREF_KEY, v)
+    }
 }
 
 private data class HomePdfTraining(
@@ -6327,13 +6062,12 @@ private fun createHomePdf(
         index: Int
     ): Float {
         val cardHeight = if (training.cancelledByHoliday) 116f else 100f
-        val left = margin
         val right = pageWidth - margin
         val bottom = top + cardHeight
         val mid = pageWidth / 2f
 
         drawRoundRect(
-            left,
+            margin,
             top,
             right,
             bottom,
@@ -6341,7 +6075,7 @@ private fun createHomePdf(
             12f
         )
         drawRoundRect(
-            left,
+            margin,
             top,
             right,
             bottom,
@@ -6397,7 +6131,7 @@ private fun createHomePdf(
 
         if (training.cancelledByHoliday) {
             drawRoundRect(
-                left + 22f,
+                margin + 22f,
                 bottom - 28f,
                 right - 22f,
                 bottom - 9f,
@@ -6405,7 +6139,7 @@ private fun createHomePdf(
                 999f
             )
             drawRoundRect(
-                left + 22f,
+                margin + 22f,
                 bottom - 28f,
                 right - 22f,
                 bottom - 9f,
@@ -6604,8 +6338,9 @@ private fun openGoogleMaps(ctx: Context, address: String?) {
     val mapsPkg = "com.google.android.apps.maps"
 
     // ✅ אם Maps מותקן – לפתוח ישר
-    if (isPackageInstalled(ctx, mapsPkg)) {
-        val navUri = Uri.parse("google.navigation:q=" + Uri.encode(safeAddress))
+    if (isGoogleMapsInstalled(ctx)) {
+        val navUri =
+            ("google.navigation:q=" + Uri.encode(safeAddress)).toUri()
         val i = Intent(Intent.ACTION_VIEW, navUri).apply {
             setPackage(mapsPkg)
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
@@ -6615,21 +6350,25 @@ private fun openGoogleMaps(ctx: Context, address: String?) {
     }
 
     // ❗ Maps לא מותקן → לפתוח Play Store בלי chooser של חנויות
-    openPlayStoreDirect(ctx, mapsPkg)
+    openPlayStoreDirect(ctx)
 }
 
-private fun isPackageInstalled(ctx: Context, pkg: String): Boolean {
+private fun isGoogleMapsInstalled(ctx: Context): Boolean {
     return runCatching {
-        ctx.packageManager.getPackageInfo(pkg, 0)
+        ctx.packageManager.getPackageInfo(
+            "com.google.android.apps.maps",
+            0
+        )
         true
     }.getOrElse { false }
 }
 
-private fun openPlayStoreDirect(ctx: Context, pkg: String) {
+private fun openPlayStoreDirect(ctx: Context) {
     val playPkg = "com.android.vending" // Google Play
+    val mapsPkg = "com.google.android.apps.maps"
 
     // ניסיון 1: לפתוח Play Store ישירות (בלי לשאול Galaxy Store)
-    val marketUri = Uri.parse("market://details?id=$pkg")
+    val marketUri = "market://details?id=$mapsPkg".toUri()
     val playIntent = Intent(Intent.ACTION_VIEW, marketUri).apply {
         setPackage(playPkg)
         addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
@@ -6640,22 +6379,21 @@ private fun openPlayStoreDirect(ctx: Context, pkg: String) {
     }
 
     // ניסיון 2: fallback לדפדפן (אם אין Play Store)
-    val webUri = Uri.parse("https://play.google.com/store/apps/details?id=$pkg")
-    ctx.startActivity(Intent(Intent.ACTION_VIEW, webUri).apply {
-        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-    })
-}
+    val webUri =
+        "https://play.google.com/store/apps/details?id=$mapsPkg".toUri()
 
-private fun clearNavPref(ctx: Context) {
-    val sp = ctx.getSharedPreferences(NAV_PREFS_FILE, Context.MODE_PRIVATE)
-    sp.edit().remove(NAV_PREF_KEY).apply()   // או putString(NAV_PREF_KEY, "ask")
+    ctx.startActivity(
+        Intent(Intent.ACTION_VIEW, webUri).apply {
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        }
+    )
 }
 
 private fun openWaze(ctx: Context, address: String?) {
     val safeAddress = address?.trim().orEmpty()
     if (safeAddress.isEmpty()) return
 
-    val wazeUri = Uri.parse("https://waze.com/ul?q=" + Uri.encode(safeAddress))
+    val wazeUri = ("https://waze.com/ul?q=" + Uri.encode(safeAddress)).toUri()
     val intent = Intent(Intent.ACTION_VIEW, wazeUri).apply {
         setPackage("com.waze")
     }
