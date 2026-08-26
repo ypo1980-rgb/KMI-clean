@@ -73,8 +73,6 @@ internal fun createCoachTraineesPdf(
     fun xStart(): Float = margin
     fun xEnd(): Float = pageWidth - margin
     fun textXStart(): Float = if (isEnglish) xStart() else xEnd()
-    fun textXEnd(): Float = if (isEnglish) xEnd() else xStart()
-
     fun beltPdfColor(belt: String): Int {
         val normalized = belt.trim()
         return when {
@@ -288,21 +286,110 @@ internal fun createCoachTraineesPdf(
         )
     }
 
-    fun newPage() {
-        drawFooter()
-        document.finishPage(page)
-        pageNumber++
-        page = document.startPage(
-            PdfDocument.PageInfo.Builder(pageWidth, pageHeight, pageNumber).create()
+    fun drawTableHeader() {
+        val bg = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = android.graphics.Color.rgb(2, 43, 74)
+        }
+
+        canvas.drawRoundRect(
+            margin,
+            y,
+            pageWidth - margin,
+            y + 30f,
+            10f,
+            10f,
+            bg
         )
-        canvas = page.canvas
-        y = margin
-        drawHeader()
+
+        headerPaint.textAlign = if (isEnglish) Paint.Align.LEFT else Paint.Align.RIGHT
+
+        val cols = if (isEnglish) {
+            listOf(
+                margin + 14f,
+                margin + 190f,
+                margin + 270f,
+                margin + 330f,
+                margin + 395f,
+                margin + 455f
+            )
+        } else {
+            listOf(
+                pageWidth - margin - 14f,
+                pageWidth - margin - 190f,
+                pageWidth - margin - 270f,
+                pageWidth - margin - 330f,
+                pageWidth - margin - 395f,
+                pageWidth - margin - 455f
+            )
+        }
+
+        listOf(
+            tr("שם", "Name"),
+            tr("דרגה", "Rank"),
+            tr("גיל", "Age"),
+            tr("ותק", "Seniority"),
+            tr("נוכחות", "Attendance"),
+            tr("טלפון", "Phone")
+        ).forEachIndexed { index, title ->
+            canvas.drawText(title, cols[index], y + 20f, headerPaint)
+        }
+
+        y += 42f
     }
 
-    fun ensureSpace(height: Float) {
+    fun newPage(
+        repeatTableHeader: Boolean = false
+    ) {
+        drawFooter()
+        document.finishPage(page)
+
+        pageNumber++
+
+        page = document.startPage(
+            PdfDocument.PageInfo.Builder(
+                pageWidth,
+                pageHeight,
+                pageNumber
+            ).create()
+        )
+
+        canvas = page.canvas
+        y = margin
+
+        drawHeader()
+
+        if (repeatTableHeader) {
+            sectionPaint.textAlign =
+                if (isEnglish) {
+                    Paint.Align.LEFT
+                } else {
+                    Paint.Align.RIGHT
+                }
+
+            canvas.drawText(
+                tr(
+                    "המשך רשימת מתאמנים",
+                    "Trainees continued"
+                ),
+                textXStart(),
+                y,
+                sectionPaint
+            )
+
+            y += 16f
+
+            drawTableHeader()
+        }
+    }
+
+    fun ensureSpace(
+        height: Float,
+        repeatTableHeader: Boolean = false
+    ) {
         if (y + height > pageHeight - 58f) {
-            newPage()
+            newPage(
+                repeatTableHeader = repeatTableHeader
+            )
         }
     }
 
@@ -366,59 +453,14 @@ internal fun createCoachTraineesPdf(
         canvas.drawText(label, left + tileWidth / 2f, y + 44f, labelPaint)
     }
 
-    fun drawTableHeader() {
-        val bg = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = android.graphics.Color.rgb(2, 43, 74)
-        }
-
-        canvas.drawRoundRect(
-            margin,
-            y,
-            pageWidth - margin,
-            y + 30f,
-            10f,
-            10f,
-            bg
+    fun drawTraineeRow(
+        index: Int,
+        trainee: TraineeProfile
+    ) {
+        ensureSpace(
+            height = 38f,
+            repeatTableHeader = true
         )
-
-        headerPaint.textAlign = if (isEnglish) Paint.Align.LEFT else Paint.Align.RIGHT
-
-        val cols = if (isEnglish) {
-            listOf(
-                margin + 14f,
-                margin + 190f,
-                margin + 270f,
-                margin + 330f,
-                margin + 395f,
-                margin + 455f
-            )
-        } else {
-            listOf(
-                pageWidth - margin - 14f,
-                pageWidth - margin - 190f,
-                pageWidth - margin - 270f,
-                pageWidth - margin - 330f,
-                pageWidth - margin - 395f,
-                pageWidth - margin - 455f
-            )
-        }
-
-        listOf(
-            tr("שם", "Name"),
-            tr("דרגה", "Rank"),
-            tr("גיל", "Age"),
-            tr("ותק", "Seniority"),
-            tr("נוכחות", "Attendance"),
-            tr("טלפון", "Phone")
-        ).forEachIndexed { index, title ->
-            canvas.drawText(title, cols[index], y + 20f, headerPaint)
-        }
-
-        y += 42f
-    }
-
-    fun drawTraineeRow(index: Int, trainee: TraineeProfile) {
-        ensureSpace(38f)
 
         val rowBg = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             color = if (index % 2 == 0) {
@@ -475,7 +517,7 @@ internal fun createCoachTraineesPdf(
             coachBeltNameForPdf(trainee.belt.ifBlank { "—" }, isEnglish).take(12),
             trainee.age.takeIf { it > 0 }?.toString() ?: "—",
             trainee.seniority.ifBlank { "—" }.take(10),
-            trainee.attendancePct.takeIf { it > 0 }?.let { "$it%" } ?: "—",
+            "${trainee.attendancePct.coerceIn(0, 100)}%",
             trainee.phone.ifBlank { "—" }.take(14)
         )
 
@@ -561,8 +603,26 @@ internal fun createCoachTraineesPdf(
     drawFooter()
     document.finishPage(page)
 
-    val dir = File(context.cacheDir, "pdfs").apply { mkdirs() }
-    val file = File(dir, "coach_trainees_${System.currentTimeMillis()}.pdf")
+    val dir =
+        File(
+            context.cacheDir,
+            "pdfs"
+        ).apply {
+            mkdirs()
+        }
+
+    val fileName =
+        if (isEnglish) {
+            "Trainees List.pdf"
+        } else {
+            "רשימת מתאמנים.pdf"
+        }
+
+    val file =
+        File(
+            dir,
+            fileName
+        )
 
     FileOutputStream(file).use { output ->
         document.writeTo(output)

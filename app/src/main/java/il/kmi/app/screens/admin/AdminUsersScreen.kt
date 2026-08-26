@@ -2383,9 +2383,29 @@ private fun createAdminUsersPdf(
         mkdirs()
     }
 
+    /*
+     * שם קריא לקובץ המשותף.
+     * התאריך והשעה נשמרים כדי שניתן יהיה
+     * להבדיל בין דוחות ניהול שהופקו בזמנים שונים.
+     */
+    val fileDate =
+        java.text.SimpleDateFormat(
+            "dd-MM-yyyy_HH-mm",
+            java.util.Locale.getDefault()
+        ).format(
+            java.util.Date()
+        )
+
+    val outputFileName =
+        if (isEnglish) {
+            "KAMI User Management - $fileDate.pdf"
+        } else {
+            "דוח ניהול משתמשים קמי - $fileDate.pdf"
+        }
+
     val outputFile = java.io.File(
         outputDirectory,
-        "admin_users_${System.currentTimeMillis()}.pdf"
+        outputFileName
     )
 
     try {

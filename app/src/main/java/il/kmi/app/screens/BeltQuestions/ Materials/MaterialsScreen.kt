@@ -1929,14 +1929,87 @@ fun MaterialsScreen(
                         belt = belt,
                         topicTitle = headerTitle,
                         items = itemList.mapIndexed { index, item ->
-                            val statusId = statusIdFor(index, item)
-                            val canonicalId = canonicalFor(item)
-                            val state = itemStates[statusId]
 
-                            MaterialPdfItem(
-                                number = index + 1,
-                                title = itemTitleForUi(topicUi, item, currentLang),
-                                status =
+                            val statusId =
+                                statusIdFor(
+                                    index,
+                                    item
+                                )
+
+                            val canonicalId =
+                                canonicalFor(item)
+
+                            val pdfStatus =
+                                if (effectiveIsCoach) {
+
+                                    val coachProgress =
+                                        coachProgressStates[statusId]
+                                            ?: loadCoachProgress(statusId)
+
+                                    val selectedStatuses =
+                                        coachProgress.selectedStatuses
+
+                                    if (selectedStatuses.isEmpty()) {
+
+                                        if (isEnglish) {
+                                            "Not taught"
+                                        } else {
+                                            "לא נלמד"
+                                        }
+
+                                    } else {
+
+                                        buildList {
+
+                                            if (
+                                                selectedStatuses.contains(
+                                                    CoachMaterialStatus.TAUGHT
+                                                )
+                                            ) {
+                                                add(
+                                                    if (isEnglish) {
+                                                        "Taught"
+                                                    } else {
+                                                        "נלמד"
+                                                    }
+                                                )
+                                            }
+
+                                            if (
+                                                selectedStatuses.contains(
+                                                    CoachMaterialStatus.PRACTICED
+                                                )
+                                            ) {
+                                                add(
+                                                    if (isEnglish) {
+                                                        "Practiced"
+                                                    } else {
+                                                        "תורגל"
+                                                    }
+                                                )
+                                            }
+
+                                            if (
+                                                selectedStatuses.contains(
+                                                    CoachMaterialStatus.NEEDS_REINFORCEMENT
+                                                )
+                                            ) {
+                                                add(
+                                                    if (isEnglish) {
+                                                        "Needs reinforcement"
+                                                    } else {
+                                                        "טעון שיפור"
+                                                    }
+                                                )
+                                            }
+                                        }.joinToString(" · ")
+                                    }
+
+                                } else {
+
+                                    val state =
+                                        itemStates[statusId]
+
                                     if (
                                         partiallyKnownSet.contains(
                                             statusId
@@ -1970,13 +2043,35 @@ fun MaterialsScreen(
                                                     "לא סומן"
                                                 }
                                         }
-                                    },
-                                isFavorite = isFavoriteByAliases(materialRootTopic, item),
-                                isExcluded = excludedItems.contains(canonicalId),
-                                hasNote = loadNote(canonicalId).isNotBlank()
+                                    }
+                                }
+
+                            MaterialPdfItem(
+                                number = index + 1,
+                                title =
+                                    itemTitleForUi(
+                                        topicUi,
+                                        item,
+                                        currentLang
+                                    ),
+                                status = pdfStatus,
+                                isFavorite =
+                                    isFavoriteByAliases(
+                                        materialRootTopic,
+                                        item
+                                    ),
+                                isExcluded =
+                                    excludedItems.contains(
+                                        canonicalId
+                                    ),
+                                hasNote =
+                                    loadNote(
+                                        canonicalId
+                                    ).isNotBlank()
                             )
                         },
-                        isEnglish = isEnglish
+                        isEnglish = isEnglish,
+                        isCoach = effectiveIsCoach
                     )
                 },
                 onPickSearchResult = { key -> handlePickFromTopBar(key) },
@@ -3892,14 +3987,16 @@ private fun shareMaterialsPdf(
     belt: Belt,
     topicTitle: String,
     items: List<MaterialPdfItem>,
-    isEnglish: Boolean
+    isEnglish: Boolean,
+    isCoach: Boolean
 ) {
     val pdfFile = createMaterialsPdf(
         context = context,
         belt = belt,
         topicTitle = topicTitle,
         items = items,
-        isEnglish = isEnglish
+        isEnglish = isEnglish,
+        isCoach = isCoach
     )
 
     val uri = FileProvider.getUriForFile(
@@ -3912,7 +4009,11 @@ private fun shareMaterialsPdf(
         type = "application/pdf"
         putExtra(
             Intent.EXTRA_SUBJECT,
-            if (isEnglish) "KAMI exercises report" else "תרגילים לפי חגורה - KAMI"
+            if (isEnglish) {
+                "Exercises - $topicTitle"
+            } else {
+                "תרגילים - $topicTitle"
+            }
         )
         putExtra(Intent.EXTRA_STREAM, uri)
         addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
@@ -3931,7 +4032,8 @@ private fun createMaterialsPdf(
     belt: Belt,
     topicTitle: String,
     items: List<MaterialPdfItem>,
-    isEnglish: Boolean
+    isEnglish: Boolean,
+    isCoach: Boolean
 ): File {
     val pageWidth = 595
     val pageHeight = 842
@@ -4149,39 +4251,119 @@ private fun createMaterialsPdf(
             items.size
 
         val known =
-            items.count {
-                it.status ==
-                        tr(
-                            "יודע",
-                            "Known"
-                        )
+            if (!isCoach) {
+                items.count {
+                    it.status ==
+                            tr(
+                                "יודע",
+                                "Known"
+                            )
+                }
+            } else {
+                0
             }
 
         val partiallyKnown =
-            items.count {
-                it.status ==
-                        tr(
-                            "יודע חלקית",
-                            "Partially known"
-                        )
+            if (!isCoach) {
+                items.count {
+                    it.status ==
+                            tr(
+                                "יודע חלקית",
+                                "Partially known"
+                            )
+                }
+            } else {
+                0
             }
 
         val unknown =
-            items.count {
-                it.status ==
-                        tr(
-                            "לא יודע",
-                            "Unknown"
-                        )
+            if (!isCoach) {
+                items.count {
+                    it.status ==
+                            tr(
+                                "לא יודע",
+                                "Unknown"
+                            )
+                }
+            } else {
+                0
             }
 
         val unmarked =
-            items.count {
-                it.status ==
-                        tr(
-                            "לא סומן",
-                            "Not marked"
+            if (!isCoach) {
+                items.count {
+                    it.status ==
+                            tr(
+                                "לא סומן",
+                                "Not marked"
+                            )
+                }
+            } else {
+                0
+            }
+
+        val coachNotTaught =
+            if (isCoach) {
+                items.count {
+                    it.status ==
+                            tr(
+                                "לא נלמד",
+                                "Not taught"
+                            )
+                }
+            } else {
+                0
+            }
+
+        val coachTaught =
+            if (isCoach) {
+                items.count {
+                    it.status
+                        .split("·")
+                        .map { part -> part.trim() }
+                        .contains(
+                            tr(
+                                "נלמד",
+                                "Taught"
+                            )
                         )
+                }
+            } else {
+                0
+            }
+
+        val coachPracticed =
+            if (isCoach) {
+                items.count {
+                    it.status
+                        .split("·")
+                        .map { part -> part.trim() }
+                        .contains(
+                            tr(
+                                "תורגל",
+                                "Practiced"
+                            )
+                        )
+                }
+            } else {
+                0
+            }
+
+        val coachNeedsReinforcement =
+            if (isCoach) {
+                items.count {
+                    it.status
+                        .split("·")
+                        .map { part -> part.trim() }
+                        .contains(
+                            tr(
+                                "טעון שיפור",
+                                "Needs reinforcement"
+                            )
+                        )
+                }
+            } else {
+                0
             }
 
         val excluded =
@@ -4221,31 +4403,108 @@ private fun createMaterialsPdf(
             sectionPaint
         )
 
-        val stats = listOf(
-            total.toString() to
-                    tr("תרגילים", "Exercises"),
+        val stats =
+            if (isCoach) {
+                listOf(
+                    total.toString() to
+                            tr(
+                                "תרגילים",
+                                "Exercises"
+                            ),
 
-            known.toString() to
-                    tr("יודע", "Known"),
+                    coachNotTaught.toString() to
+                            tr(
+                                "לא נלמד",
+                                "Not taught"
+                            ),
 
-            partiallyKnown.toString() to
-                    tr("חלקית", "Partial"),
+                    coachTaught.toString() to
+                            tr(
+                                "נלמד",
+                                "Taught"
+                            ),
 
-            unknown.toString() to
-                    tr("לא יודע", "Unknown"),
+                    coachPracticed.toString() to
+                            tr(
+                                "תורגל",
+                                "Practiced"
+                            ),
 
-            unmarked.toString() to
-                    tr("לא סומן", "Unmarked"),
+                    coachNeedsReinforcement.toString() to
+                            tr(
+                                "טעון שיפור",
+                                "Needs reinforcement"
+                            ),
 
-            excluded.toString() to
-                    tr("מוחרגים", "Excluded"),
+                    excluded.toString() to
+                            tr(
+                                "מוחרגים",
+                                "Excluded"
+                            ),
 
-            favorites.toString() to
-                    tr("מועדפים", "Favorites"),
+                    favorites.toString() to
+                            tr(
+                                "מועדפים",
+                                "Favorites"
+                            ),
 
-            notes.toString() to
-                    tr("הערות", "Notes")
-        )
+                    notes.toString() to
+                            tr(
+                                "הערות",
+                                "Notes"
+                            )
+                )
+            } else {
+                listOf(
+                    total.toString() to
+                            tr(
+                                "תרגילים",
+                                "Exercises"
+                            ),
+
+                    known.toString() to
+                            tr(
+                                "יודע",
+                                "Known"
+                            ),
+
+                    partiallyKnown.toString() to
+                            tr(
+                                "חלקית",
+                                "Partial"
+                            ),
+
+                    unknown.toString() to
+                            tr(
+                                "לא יודע",
+                                "Unknown"
+                            ),
+
+                    unmarked.toString() to
+                            tr(
+                                "לא סומן",
+                                "Unmarked"
+                            ),
+
+                    excluded.toString() to
+                            tr(
+                                "מוחרגים",
+                                "Excluded"
+                            ),
+
+                    favorites.toString() to
+                            tr(
+                                "מועדפים",
+                                "Favorites"
+                            ),
+
+                    notes.toString() to
+                            tr(
+                                "הערות",
+                                "Notes"
+                            )
+                )
+            }
 
         val boxTop =
             top + 48f
@@ -4337,27 +4596,61 @@ private fun createMaterialsPdf(
         drawRoundRect(canvas, left, top, right, bottom, borderBlue, 12f, stroke = true)
 
         val statusColor =
-            when (item.status) {
-                tr(
-                    "יודע",
-                    "Known"
-                ) ->
-                    green
+            if (isCoach) {
 
-                tr(
-                    "יודע חלקית",
-                    "Partially known"
-                ) ->
-                    orange
+                when {
+                    item.status.contains(
+                        tr(
+                            "טעון שיפור",
+                            "Needs reinforcement"
+                        )
+                    ) ->
+                        red
 
-                tr(
-                    "לא יודע",
-                    "Unknown"
-                ) ->
-                    red
+                    item.status.contains(
+                        tr(
+                            "תורגל",
+                            "Practiced"
+                        )
+                    ) ->
+                        blue
 
-                else ->
-                    textMuted
+                    item.status.contains(
+                        tr(
+                            "נלמד",
+                            "Taught"
+                        )
+                    ) ->
+                        green
+
+                    else ->
+                        textMuted
+                }
+
+            } else {
+
+                when (item.status) {
+                    tr(
+                        "יודע",
+                        "Known"
+                    ) ->
+                        green
+
+                    tr(
+                        "יודע חלקית",
+                        "Partially known"
+                    ) ->
+                        orange
+
+                    tr(
+                        "לא יודע",
+                        "Unknown"
+                    ) ->
+                        red
+
+                    else ->
+                        textMuted
+                }
             }
 
         val numberRect = RectF(right - 54f, top + 18f, right - 22f, top + 50f)
@@ -4485,8 +4778,56 @@ private fun createMaterialsPdf(
         pageNumber++
     }
 
-    val dir = File(context.cacheDir, "pdfs").apply { mkdirs() }
-    val file = File(dir, "materials_${System.currentTimeMillis()}.pdf")
+    val dir =
+        File(
+            context.cacheDir,
+            "pdfs"
+        ).apply {
+            mkdirs()
+        }
+
+    /*
+     * שם הקובץ מבוסס על הנושא / תת־הנושא
+     * שמוצג כרגע במסך.
+     *
+     * מסירים תווים שאינם חוקיים בשם קובץ,
+     * אך משאירים עברית ואנגלית ללא שינוי.
+     */
+    val safeTopicTitle =
+        topicTitle
+            .trim()
+            .replace(
+                Regex("""[\\/:*?"<>|]"""),
+                "-"
+            )
+            .ifBlank {
+                if (isEnglish) {
+                    "Topic"
+                } else {
+                    "נושא"
+                }
+            }
+
+    val fileName =
+        if (isEnglish) {
+            "Exercises - $safeTopicTitle.pdf"
+        } else {
+            "תרגילים - $safeTopicTitle.pdf"
+        }
+
+    val file =
+        File(
+            dir,
+            fileName
+        )
+
+    /*
+     * כל יצירה חדשה של אותו דוח
+     * מחליפה את הקובץ הקודם.
+     */
+    if (file.exists()) {
+        file.delete()
+    }
 
     FileOutputStream(file).use { output ->
         document.writeTo(output)

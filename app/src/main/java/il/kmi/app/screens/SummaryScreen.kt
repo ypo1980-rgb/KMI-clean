@@ -5423,9 +5423,16 @@ private fun createSummaryPdf(
         document.finishPage(page)
     }
 
+    val fileName =
+        if (isEnglish) {
+            "Belt Summary Report.pdf"
+        } else {
+            "דוח סיכום חגורה.pdf"
+        }
+
     val file = File(
         dir,
-        "summary_${belt.id}_${System.currentTimeMillis()}.pdf"
+        fileName
     )
 
     try {

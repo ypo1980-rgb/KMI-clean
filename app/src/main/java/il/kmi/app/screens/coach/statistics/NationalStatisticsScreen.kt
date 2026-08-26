@@ -1,6 +1,12 @@
 package il.kmi.app.screens.coach.statistics
 
 import android.app.Activity
+import android.content.Context
+import android.content.Intent
+import android.graphics.Paint
+import android.graphics.Typeface
+import android.graphics.pdf.PdfDocument
+import androidx.core.content.FileProvider
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -63,6 +69,10 @@ import androidx.compose.ui.unit.sp
 import il.kmi.app.ui.KmiTopBar
 import il.kmi.shared.localization.AppLanguage
 import il.kmi.shared.localization.AppLanguageManager
+import java.io.File
+import java.io.FileOutputStream
+import java.text.SimpleDateFormat
+import java.util.Date
 import java.util.Locale
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -72,6 +82,7 @@ fun NationalStatisticsScreen(
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
     embedded: Boolean = false,
+    shareTrigger: Int = 0,
     onOpenDrawer: () -> Unit = {
         il.kmi.app.ui.DrawerBridge.open()
     },
@@ -126,6 +137,23 @@ fun NationalStatisticsScreen(
             allRecords = allRecords,
             filters = filters
         )
+    }
+
+    val context = LocalContext.current
+
+    LaunchedEffect(shareTrigger) {
+        if (
+            shareTrigger > 0 &&
+            !isLoading &&
+            errorMessage == null
+        ) {
+            shareNationalStatisticsPdf(
+                context = context,
+                snapshot = snapshot,
+                filters = filters,
+                isEnglish = isEnglish
+            )
+        }
     }
 
     val availableBranches = remember(allRecords) {
@@ -497,9 +525,9 @@ private fun NationalStatisticsHero(
 ) {
     Surface(
         modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(28.dp),
+        shape = RoundedCornerShape(26.dp),
         color = Color.Transparent,
-        shadowElevation = 9.dp
+        shadowElevation = 7.dp
     ) {
         Column(
             modifier = Modifier
@@ -513,25 +541,34 @@ private fun NationalStatisticsHero(
                         )
                     )
                 )
-                .padding(20.dp),
-            verticalArrangement = Arrangement.spacedBy(9.dp)
-        ) {
-            Text(
-                text = "📊",
-                fontSize = 28.sp
-            )
-
-            Text(
-                text = tr(
-                    isEnglish,
-                    "תמונת מצב ארצית",
-                    "National overview"
+                .padding(
+                    horizontal = 18.dp,
+                    vertical = 14.dp
                 ),
-                fontSize = 27.sp,
-                lineHeight = 30.sp,
-                fontWeight = FontWeight.Black,
-                color = Color.White
-            )
+            verticalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+
+            // כותרת + אייקון באותה שורה
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+
+                Text(
+                    text = tr(
+                        isEnglish,
+                        "תמונת מצב ארצית",
+                        "National overview"
+                    ),
+                    modifier = Modifier.weight(1f),
+                    fontSize = 25.sp,
+                    lineHeight = 28.sp,
+                    fontWeight = FontWeight.Black,
+                    color = Color.White,
+                    textAlign = startTextAlign(isEnglish)
+                )
+            }
 
             Text(
                 text = tr(
@@ -539,15 +576,19 @@ private fun NationalStatisticsHero(
                     "נתונים מאוחדים מכל הסניפים והקבוצות",
                     "Unified data from all branches and groups"
                 ),
-                fontSize = 14.sp,
-                color = Color.White.copy(alpha = 0.84f)
+                modifier = Modifier.fillMaxWidth(),
+                fontSize = 13.sp,
+                lineHeight = 17.sp,
+                color = Color.White.copy(alpha = 0.84f),
+                textAlign = startTextAlign(isEnglish)
             )
 
-            Spacer(Modifier.height(5.dp))
+            Spacer(Modifier.height(2.dp))
 
             Row(
+                modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement =
-                    Arrangement.spacedBy(10.dp)
+                    Arrangement.spacedBy(8.dp)
             ) {
                 HeroPill(
                     value =
@@ -601,21 +642,23 @@ private fun HeroPill(
     ) {
         Column(
             modifier = Modifier.padding(
-                horizontal = 8.dp,
-                vertical = 10.dp
+                horizontal = 7.dp,
+                vertical = 7.dp
             ),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             Text(
                 text = value,
-                fontSize = 23.sp,
+                fontSize = 21.sp,
+                lineHeight = 23.sp,
                 fontWeight = FontWeight.Black,
                 color = Color.White
             )
 
             Text(
                 text = label,
-                fontSize = 11.sp,
+                fontSize = 10.sp,
+                lineHeight = 13.sp,
                 color = Color.White.copy(alpha = 0.82f),
                 maxLines = 1
             )
@@ -1911,6 +1954,1180 @@ private fun beltLabel(
         "ללא דרגה" -> "No rank"
         else -> belt
     }
+}
+
+/*
+ * ============================================================
+ * PDF — סטטיסטיקה ארצית
+ * ============================================================
+ */
+
+private fun shareNationalStatisticsPdf(
+    context: Context,
+    snapshot: NationalStatisticsSnapshot,
+    filters: NationalStatisticsFilters,
+    isEnglish: Boolean
+) {
+    val pdfFile = createNationalStatisticsPdf(
+        context = context,
+        snapshot = snapshot,
+        filters = filters,
+        isEnglish = isEnglish
+    )
+
+    val uri = FileProvider.getUriForFile(
+        context,
+        "${context.packageName}.fileprovider",
+        pdfFile
+    )
+
+    val sendIntent = Intent(Intent.ACTION_SEND).apply {
+        type = "application/pdf"
+
+        putExtra(
+            Intent.EXTRA_SUBJECT,
+            if (isEnglish) {
+                "KAMI National Statistics"
+            } else {
+                "סטטיסטיקה ארצית - KAMI"
+            }
+        )
+
+        putExtra(
+            Intent.EXTRA_STREAM,
+            uri
+        )
+
+        addFlags(
+            Intent.FLAG_GRANT_READ_URI_PERMISSION
+        )
+    }
+
+    context.startActivity(
+        Intent.createChooser(
+            sendIntent,
+            if (isEnglish) {
+                "Share PDF"
+            } else {
+                "שיתוף PDF"
+            }
+        )
+    )
+}
+
+private fun createNationalStatisticsPdf(
+    context: Context,
+    snapshot: NationalStatisticsSnapshot,
+    filters: NationalStatisticsFilters,
+    isEnglish: Boolean
+): File {
+
+    val pageWidth = 595
+    val pageHeight = 842
+
+    val margin = 30f
+    val contentWidth =
+        pageWidth.toFloat() - margin * 2f
+
+    val document = PdfDocument()
+
+    val navy =
+        android.graphics.Color.rgb(
+            2,
+            43,
+            74
+        )
+
+    val blue =
+        android.graphics.Color.rgb(
+            36,
+            103,
+            158
+        )
+
+    val lightBlue =
+        android.graphics.Color.rgb(
+            234,
+            246,
+            255
+        )
+
+    val borderBlue =
+        android.graphics.Color.rgb(
+            191,
+            213,
+            232
+        )
+
+    val textDark =
+        android.graphics.Color.rgb(
+            15,
+            23,
+            42
+        )
+
+    val textMuted =
+        android.graphics.Color.rgb(
+            80,
+            100,
+            120
+        )
+
+    val regularTypeface =
+        Typeface.create(
+            Typeface.SANS_SERIF,
+            Typeface.NORMAL
+        )
+
+    val boldTypeface =
+        Typeface.create(
+            Typeface.SANS_SERIF,
+            Typeface.BOLD
+        )
+
+    fun paint(
+        size: Float,
+        color: Int = textDark,
+        typeface: Typeface = regularTypeface,
+        align: Paint.Align =
+            if (isEnglish) {
+                Paint.Align.LEFT
+            } else {
+                Paint.Align.RIGHT
+            }
+    ): Paint {
+        return Paint(
+            Paint.ANTI_ALIAS_FLAG
+        ).apply {
+            textSize = size
+            this.color = color
+            this.typeface = typeface
+            textAlign = align
+        }
+    }
+
+    val titlePaint = paint(
+        size = 25f,
+        color = android.graphics.Color.WHITE,
+        typeface = boldTypeface
+    )
+
+    val subtitlePaint = paint(
+        size = 11f,
+        color = android.graphics.Color.WHITE
+    )
+
+    val sectionPaint = paint(
+        size = 16f,
+        color = blue,
+        typeface = boldTypeface
+    )
+
+    val labelPaint = paint(
+        size = 10f,
+        color = textMuted,
+        typeface = boldTypeface
+    )
+
+    val valuePaint = paint(
+        size = 18f,
+        color = navy,
+        typeface = boldTypeface
+    )
+
+    val bodyPaint = paint(
+        size = 10f,
+        color = textDark
+    )
+
+    val bodyBoldPaint = paint(
+        size = 10f,
+        color = textDark,
+        typeface = boldTypeface
+    )
+
+    val smallPaint = paint(
+        size = 8.5f,
+        color = textMuted
+    )
+
+    fun textXStart(): Float {
+        return if (isEnglish) {
+            margin
+        } else {
+            pageWidth.toFloat() - margin
+        }
+    }
+
+    fun drawRoundedRect(
+        canvas: android.graphics.Canvas,
+        left: Float,
+        top: Float,
+        right: Float,
+        bottom: Float,
+        color: Int,
+        radius: Float = 10f
+    ) {
+        val rectPaint =
+            Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                this.color = color
+                style = Paint.Style.FILL
+            }
+
+        canvas.drawRoundRect(
+            left,
+            top,
+            right,
+            bottom,
+            radius,
+            radius,
+            rectPaint
+        )
+    }
+
+    fun drawRoundedBorder(
+        canvas: android.graphics.Canvas,
+        left: Float,
+        top: Float,
+        right: Float,
+        bottom: Float,
+        color: Int,
+        radius: Float = 10f
+    ) {
+        val rectPaint =
+            Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                this.color = color
+                style = Paint.Style.STROKE
+                strokeWidth = 1f
+            }
+
+        canvas.drawRoundRect(
+            left,
+            top,
+            right,
+            bottom,
+            radius,
+            radius,
+            rectPaint
+        )
+    }
+
+    var pageNumber = 0
+    var page: PdfDocument.Page? = null
+    var canvas: android.graphics.Canvas? = null
+    var y = 0f
+
+    fun newPage() {
+        page?.let {
+            document.finishPage(it)
+        }
+
+        pageNumber++
+
+        val pageInfo =
+            PdfDocument.PageInfo.Builder(
+                pageWidth,
+                pageHeight,
+                pageNumber
+            ).create()
+
+        page = document.startPage(pageInfo)
+        canvas = page!!.canvas
+
+        /*
+ * ============================================================
+ * Header — זהה ל-PDF של מסך הבית
+ * ============================================================
+ */
+
+canvas!!.drawColor(
+    android.graphics.Color.WHITE
+)
+
+val headerBottom = 122f
+
+val navyPaint =
+    Paint(
+        Paint.ANTI_ALIAS_FLAG
+    ).apply {
+        color = navy
+        style = Paint.Style.FILL
+    }
+
+val accent1 =
+    Paint(
+        Paint.ANTI_ALIAS_FLAG
+    ).apply {
+        color =
+            android.graphics.Color.rgb(
+                36,
+                103,
+                158
+            )
+        style = Paint.Style.FILL
+    }
+
+val accent2 =
+    Paint(
+        Paint.ANTI_ALIAS_FLAG
+    ).apply {
+        color =
+            android.graphics.Color.rgb(
+                128,
+                183,
+                220
+            )
+        style = Paint.Style.FILL
+    }
+
+/*
+ * האלכסון הראשי.
+ */
+canvas!!.drawPath(
+    android.graphics.Path().apply {
+        moveTo(
+            pageWidth.toFloat(),
+            0f
+        )
+        lineTo(
+            pageWidth.toFloat(),
+            headerBottom
+        )
+        lineTo(
+            178f,
+            headerBottom
+        )
+        lineTo(
+            238f,
+            0f
+        )
+        close()
+    },
+    navyPaint
+)
+
+/*
+ * פס אקסנט ראשון.
+ */
+canvas!!.drawPath(
+    android.graphics.Path().apply {
+        moveTo(
+            208f,
+            headerBottom
+        )
+        lineTo(
+            224f,
+            headerBottom
+        )
+        lineTo(
+            284f,
+            0f
+        )
+        lineTo(
+            268f,
+            0f
+        )
+        close()
+    },
+    accent1
+)
+
+/*
+ * פס אקסנט שני.
+ */
+canvas!!.drawPath(
+    android.graphics.Path().apply {
+        moveTo(
+            230f,
+            headerBottom
+        )
+        lineTo(
+            238f,
+            headerBottom
+        )
+        lineTo(
+            298f,
+            0f
+        )
+        lineTo(
+            290f,
+            0f
+        )
+        close()
+    },
+    accent2
+)
+
+/*
+ * לוגו KAMI.
+ */
+val logoX = 78f
+val logoY = 58f
+val logoRadius = 42f
+
+canvas!!.drawCircle(
+    logoX,
+    logoY,
+    logoRadius,
+    navyPaint
+)
+
+canvas!!.drawCircle(
+    logoX,
+    logoY,
+    logoRadius - 4f,
+    Paint(
+        Paint.ANTI_ALIAS_FLAG
+    ).apply {
+        color =
+            android.graphics.Color.WHITE
+    }
+)
+
+canvas!!.drawText(
+    "KAMI",
+    logoX,
+    logoY + logoRadius * 0.22f,
+    paint(
+        size = logoRadius * 0.62f,
+        color = navy,
+        typeface = boldTypeface,
+        align = Paint.Align.CENTER
+    )
+)
+
+val headerX =
+    pageWidth - 34f
+
+/*
+ * כותרת.
+ */
+canvas!!.drawText(
+    if (isEnglish) {
+        "National Statistics"
+    } else {
+        "סטטיסטיקה ארצית"
+    },
+    headerX,
+    52f,
+    paint(
+        size = 25f,
+        color =
+            android.graphics.Color.WHITE,
+        typeface = boldTypeface,
+        align = Paint.Align.RIGHT
+    )
+)
+
+/*
+ * תת־כותרת.
+ */
+canvas!!.drawText(
+    if (isEnglish) {
+        "KAMI national overview"
+    } else {
+        "תמונת מצב ארצית"
+    },
+    headerX,
+    78f,
+    paint(
+        size = 11f,
+        color =
+            android.graphics.Color.WHITE,
+        typeface = regularTypeface,
+        align = Paint.Align.RIGHT
+    )
+)
+
+/*
+ * תאריך ההפקה מתחת לכותרת,
+ * כמו בדוח מסך הבית.
+ */
+val generatedDate =
+    SimpleDateFormat(
+        "dd/MM/yyyy",
+        Locale.getDefault()
+    ).format(
+        Date()
+    )
+
+canvas!!.drawText(
+    if (isEnglish) {
+        "Generated: $generatedDate"
+    } else {
+        "תאריך הפקה: $generatedDate"
+    },
+    headerX,
+    142f,
+    paint(
+        size = 8.5f,
+        color = textMuted,
+        typeface = regularTypeface,
+        align = Paint.Align.RIGHT
+    )
+)
+
+/*
+ * מתחילים את תוכן הדוח מתחת לתאריך.
+ */
+y = 164f
+}
+
+fun ensureSpace(
+    requiredHeight: Float
+) {
+        if (
+            y + requiredHeight >
+            pageHeight - 35f
+        ) {
+            newPage()
+        }
+    }
+
+    fun drawSectionTitle(
+        title: String
+    ) {
+        ensureSpace(35f)
+
+        canvas!!.drawText(
+            title,
+            textXStart(),
+            y,
+            sectionPaint
+        )
+
+        y += 20f
+    }
+
+    fun drawMetricCard(
+        label: String,
+        value: String,
+        left: Float,
+        top: Float,
+        width: Float
+    ) {
+        val right = left + width
+        val bottom = top + 62f
+
+        drawRoundedRect(
+            canvas = canvas!!,
+            left = left,
+            top = top,
+            right = right,
+            bottom = bottom,
+            color = lightBlue
+        )
+
+        drawRoundedBorder(
+            canvas = canvas!!,
+            left = left,
+            top = top,
+            right = right,
+            bottom = bottom,
+            color = borderBlue
+        )
+
+        val centerX =
+            left + width / 2f
+
+        val centeredValuePaint =
+            Paint(valuePaint).apply {
+                textAlign =
+                    Paint.Align.CENTER
+            }
+
+        val centeredLabelPaint =
+            Paint(labelPaint).apply {
+                textAlign =
+                    Paint.Align.CENTER
+            }
+
+        canvas!!.drawText(
+            value,
+            centerX,
+            top + 28f,
+            centeredValuePaint
+        )
+
+        canvas!!.drawText(
+            label,
+            centerX,
+            top + 47f,
+            centeredLabelPaint
+        )
+    }
+
+    fun drawBreakdown(
+        title: String,
+        values: List<Pair<String, Int>>
+    ) {
+        drawSectionTitle(title)
+
+        if (values.isEmpty()) {
+            canvas!!.drawText(
+                "—",
+                textXStart(),
+                y,
+                bodyPaint
+            )
+
+            y += 20f
+            return
+        }
+
+        values.forEach { (label, count) ->
+            ensureSpace(22f)
+
+            val line =
+                if (isEnglish) {
+                    "$label: $count"
+                } else {
+                    "$label : $count"
+                }
+
+            canvas!!.drawText(
+                line,
+                textXStart(),
+                y,
+                bodyPaint
+            )
+
+            y += 17f
+        }
+
+        y += 8f
+    }
+
+    /*
+     * ========================================================
+     * עמוד ראשון
+     * ========================================================
+     */
+
+    newPage()
+
+    drawSectionTitle(
+        if (isEnglish) {
+            "National overview"
+        } else {
+            "תמונת מצב ארצית"
+        }
+    )
+
+    val cardGap = 8f
+    val cardWidth =
+        (contentWidth - cardGap * 2f) / 3f
+
+    val firstCardLeft = margin
+    val secondCardLeft =
+        margin + cardWidth + cardGap
+    val thirdCardLeft =
+        margin + (cardWidth + cardGap) * 2f
+
+    drawMetricCard(
+        label =
+            if (isEnglish) {
+                "Trainees"
+            } else {
+                "מתאמנים"
+            },
+        value =
+            snapshot.filteredUniqueTrainees
+                .toString(),
+        left = firstCardLeft,
+        top = y,
+        width = cardWidth
+    )
+
+    drawMetricCard(
+        label =
+            if (isEnglish) {
+                "Branches"
+            } else {
+                "סניפים"
+            },
+        value =
+            snapshot.branchCount
+                .toString(),
+        left = secondCardLeft,
+        top = y,
+        width = cardWidth
+    )
+
+    drawMetricCard(
+        label =
+            if (isEnglish) {
+                "Groups"
+            } else {
+                "קבוצות"
+            },
+        value =
+            snapshot.groupCount
+                .toString(),
+        left = thirdCardLeft,
+        top = y,
+        width = cardWidth
+    )
+
+    y += 78f
+
+    /*
+     * ארבעת הנתונים שמופיעים בכרטיסי
+     * הסיכום במסך.
+     */
+
+    val twoCardWidth =
+        (contentWidth - cardGap) / 2f
+
+    drawMetricCard(
+        label =
+            if (isEnglish) {
+                "Average age"
+            } else {
+                "גיל ממוצע"
+            },
+        value =
+            snapshot.averageAge
+                ?.toString()
+                ?: "—",
+        left = margin,
+        top = y,
+        width = twoCardWidth
+    )
+
+    drawMetricCard(
+        label =
+            if (isEnglish) {
+                "Belt types"
+            } else {
+                "סוגי חגורות"
+            },
+        value =
+            snapshot.beltCounts.size
+                .toString(),
+        left =
+            margin +
+                    twoCardWidth +
+                    cardGap,
+        top = y,
+        width = twoCardWidth
+    )
+
+    y += 72f
+
+    drawMetricCard(
+        label =
+            if (isEnglish) {
+                "Avg seniority"
+            } else {
+                "ותק ממוצע"
+            },
+        value =
+            snapshot.averageSeniorityYears
+                ?.let {
+                    String.format(
+                        Locale.US,
+                        "%.1f",
+                        it
+                    )
+                }
+                ?: "—",
+        left = margin,
+        top = y,
+        width = twoCardWidth
+    )
+
+    drawMetricCard(
+        label =
+            if (isEnglish) {
+                "Avg attendance"
+            } else {
+                "נוכחות ממוצעת"
+            },
+        value =
+            snapshot.averageAttendance
+                ?.let { "$it%" }
+                ?: "—",
+        left =
+            margin +
+                    twoCardWidth +
+                    cardGap,
+        top = y,
+        width = twoCardWidth
+    )
+
+    y += 82f
+
+    /*
+     * ========================================================
+     * מסננים פעילים
+     * ========================================================
+     */
+
+    drawSectionTitle(
+        if (isEnglish) {
+            "Active filters"
+        } else {
+            "מסננים פעילים"
+        }
+    )
+
+    val filterLines =
+        mutableListOf<String>()
+
+    if (filters.searchQuery.isNotBlank()) {
+        filterLines +=
+            if (isEnglish) {
+                "Search: ${filters.searchQuery}"
+            } else {
+                "חיפוש: ${filters.searchQuery}"
+            }
+    }
+
+    if (filters.selectedBranches.isNotEmpty()) {
+        filterLines +=
+            if (isEnglish) {
+                "Branches: " +
+                        filters.selectedBranches
+                            .joinToString(", ")
+            } else {
+                "סניפים: " +
+                        filters.selectedBranches
+                            .joinToString(", ")
+            }
+    }
+
+    if (filters.selectedGroups.isNotEmpty()) {
+        filterLines +=
+            if (isEnglish) {
+                "Groups: " +
+                        filters.selectedGroups
+                            .joinToString(", ")
+            } else {
+                "קבוצות: " +
+                        filters.selectedGroups
+                            .joinToString(", ")
+            }
+    }
+
+    if (filters.selectedBelts.isNotEmpty()) {
+        filterLines +=
+            if (isEnglish) {
+                "Belts: " +
+                        filters.selectedBelts
+                            .joinToString(", ") {
+                                beltLabel(
+                                    belt = it,
+                                    isEnglish = true
+                                )
+                            }
+            } else {
+                "חגורות: " +
+                        filters.selectedBelts
+                            .joinToString(", ")
+            }
+    }
+
+    if (filters.selectedGenders.isNotEmpty()) {
+        filterLines +=
+            if (isEnglish) {
+                "Gender: " +
+                        filters.selectedGenders
+                            .joinToString(", ") {
+                                genderLabel(
+                                    gender = it,
+                                    isEnglish = true
+                                )
+                            }
+            } else {
+                "מין: " +
+                        filters.selectedGenders
+                            .joinToString(", ") {
+                                genderLabel(
+                                    gender = it,
+                                    isEnglish = false
+                                )
+                            }
+            }
+    }
+
+    if (filters.selectedAgeGroups.isNotEmpty()) {
+        filterLines +=
+            if (isEnglish) {
+                "Age: " +
+                        filters.selectedAgeGroups
+                            .joinToString(", ") {
+                                ageGroupLabel(
+                                    group = it,
+                                    isEnglish = true
+                                )
+                            }
+            } else {
+                "גיל: " +
+                        filters.selectedAgeGroups
+                            .joinToString(", ") {
+                                ageGroupLabel(
+                                    group = it,
+                                    isEnglish = false
+                                )
+                            }
+            }
+    }
+
+    if (filters.activeOnly) {
+        filterLines +=
+            if (isEnglish) {
+                "Active trainees only"
+            } else {
+                "מתאמנים פעילים בלבד"
+            }
+    }
+
+    if (filterLines.isEmpty()) {
+        canvas!!.drawText(
+            if (isEnglish) {
+                "No filters"
+            } else {
+                "ללא סינון"
+            },
+            textXStart(),
+            y,
+            bodyPaint
+        )
+
+        y += 22f
+    } else {
+        filterLines.forEach { line ->
+            ensureSpace(20f)
+
+            canvas!!.drawText(
+                line,
+                textXStart(),
+                y,
+                smallPaint
+            )
+
+            y += 15f
+        }
+
+        y += 10f
+    }
+
+    /*
+     * ========================================================
+     * התפלגויות
+     * ========================================================
+     */
+
+    drawBreakdown(
+        title =
+            if (isEnglish) {
+                "Age distribution"
+            } else {
+                "התפלגות גילאים"
+            },
+        values =
+            snapshot.ageGroupCounts
+                .map { (group, count) ->
+                    ageGroupLabel(
+                        group = group,
+                        isEnglish = isEnglish
+                    ) to count
+                }
+    )
+
+    drawBreakdown(
+        title =
+            if (isEnglish) {
+                "Gender distribution"
+            } else {
+                "התפלגות לפי מין"
+            },
+        values =
+            snapshot.genderCounts
+                .map { (gender, count) ->
+                    genderLabel(
+                        gender = gender,
+                        isEnglish = isEnglish
+                    ) to count
+                }
+    )
+
+    drawBreakdown(
+        title =
+            if (isEnglish) {
+                "Belt distribution"
+            } else {
+                "התפלגות חגורות"
+            },
+        values =
+            snapshot.beltCounts
+                .toList()
+                .sortedBy {
+                    beltOrder(it.first)
+                }
+                .map { (belt, count) ->
+                    beltLabel(
+                        belt = belt,
+                        isEnglish = isEnglish
+                    ) to count
+                }
+    )
+
+    /*
+     * ========================================================
+     * השוואת סניפים
+     * ========================================================
+     */
+
+    drawSectionTitle(
+        if (isEnglish) {
+            "Branch comparison"
+        } else {
+            "השוואה בין סניפים"
+        }
+    )
+
+    if (snapshot.branchStatistics.isEmpty()) {
+        canvas!!.drawText(
+            if (isEnglish) {
+                "No branch data"
+            } else {
+                "אין נתוני סניפים"
+            },
+            textXStart(),
+            y,
+            bodyPaint
+        )
+
+        y += 20f
+    } else {
+        snapshot.branchStatistics
+            .forEach { branch ->
+
+                ensureSpace(58f)
+
+                val cardTop = y - 12f
+                val cardBottom =
+                    cardTop + 50f
+
+                drawRoundedRect(
+                    canvas = canvas!!,
+                    left = margin,
+                    top = cardTop,
+                    right =
+                        pageWidth.toFloat() -
+                                margin,
+                    bottom = cardBottom,
+                    color =
+                        android.graphics.Color.rgb(
+                            247,
+                            250,
+                            253
+                        )
+                )
+
+                drawRoundedBorder(
+                    canvas = canvas!!,
+                    left = margin,
+                    top = cardTop,
+                    right =
+                        pageWidth.toFloat() -
+                                margin,
+                    bottom = cardBottom,
+                    color = borderBlue
+                )
+
+                canvas!!.drawText(
+                    branch.branchName,
+                    textXStart(),
+                    y + 3f,
+                    bodyBoldPaint
+                )
+
+                y += 17f
+
+                val details =
+                    if (isEnglish) {
+                        "${branch.traineeCount} trainees" +
+                                "  |  Avg age: " +
+                                (
+                                        branch.averageAge
+                                            ?.toString()
+                                            ?: "—"
+                                        ) +
+                                "  |  Attendance: " +
+                                (
+                                        branch.averageAttendance
+                                            ?.let { "$it%" }
+                                            ?: "—"
+                                        ) +
+                                "  |  Belts: " +
+                                branch.beltCounts.size
+                    } else {
+                        "${branch.traineeCount} מתאמנים" +
+                                "  |  גיל ממוצע: " +
+                                (
+                                        branch.averageAge
+                                            ?.toString()
+                                            ?: "—"
+                                        ) +
+                                "  |  נוכחות: " +
+                                (
+                                        branch.averageAttendance
+                                            ?.let { "$it%" }
+                                            ?: "—"
+                                        ) +
+                                "  |  חגורות: " +
+                                branch.beltCounts.size
+                    }
+
+                canvas!!.drawText(
+                    details,
+                    textXStart(),
+                    y + 3f,
+                    smallPaint
+                )
+
+                y += 34f
+            }
+    }
+
+    /*
+     * סוגרים את העמוד האחרון.
+     */
+    page?.let {
+        document.finishPage(it)
+    }
+
+    val pdfDirectory =
+        File(
+            context.cacheDir,
+            "shared_pdfs"
+        ).apply {
+            mkdirs()
+        }
+
+    val fileName =
+        if (isEnglish) {
+            "National Statistics.pdf"
+        } else {
+            "סטטיסטיקה ארצית.pdf"
+        }
+
+    val pdfFile =
+        File(
+            pdfDirectory,
+            fileName
+        )
+
+    FileOutputStream(pdfFile).use {
+        document.writeTo(it)
+    }
+
+    document.close()
+
+    return pdfFile
 }
 
 private fun beltOrder(belt: String): Int {

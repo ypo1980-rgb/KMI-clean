@@ -2,6 +2,10 @@
 
 package il.kmi.app.screens.coach
 
+import android.content.Context
+import android.graphics.Paint
+import android.graphics.Typeface
+import android.graphics.pdf.PdfDocument
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
@@ -38,6 +42,8 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import il.kmi.app.screens.coach.statistics.NationalStatisticsScreen
 import il.kmi.app.ui.KmiTypography
+import java.io.File
+import java.io.FileOutputStream
 
 @Composable
 internal fun CoachGroupStatsPremiumScreen(
@@ -46,10 +52,34 @@ internal fun CoachGroupStatsPremiumScreen(
     isEnglish: Boolean,
     onClose: () -> Unit,
     onOpenDrawer: () -> Unit,
-    onOpenHome: () -> Unit
+    onOpenHome: () -> Unit,
+    shareTrigger: Int = 0,
+    onShareGroupStatistics: () -> Unit = {}
 ) {
     var showNationalStatistics by rememberSaveable {
         mutableStateOf(false)
+    }
+
+    var nationalShareTrigger by rememberSaveable {
+        mutableIntStateOf(0)
+    }
+
+    /*
+     * השיתוף מנותב לפי הטאב הפעיל:
+     *
+     * קבוצתי -> PDF סטטיסטיקת הקבוצה.
+     * ארצי   -> NationalStatisticsScreen מטפל בשיתוף.
+     */
+    LaunchedEffect(
+        shareTrigger,
+        showNationalStatistics
+    ) {
+        if (
+            shareTrigger > 0 &&
+            !showNationalStatistics
+        ) {
+            onShareGroupStatistics()
+        }
     }
 
     /*
@@ -96,6 +126,18 @@ internal fun CoachGroupStatsPremiumScreen(
                 Modifier.height(10.dp)
             )
 
+            LaunchedEffect(
+                shareTrigger,
+                showNationalStatistics
+            ) {
+                if (
+                    shareTrigger > 0 &&
+                    showNationalStatistics
+                ) {
+                    nationalShareTrigger++
+                }
+            }
+
             NationalStatisticsScreen(
                 isEnglish = isEnglish,
                 embedded = true,
@@ -104,7 +146,8 @@ internal fun CoachGroupStatsPremiumScreen(
                     showNationalStatistics = false
                 },
                 onOpenDrawer = onOpenDrawer,
-                onOpenHome = onOpenHome
+                onOpenHome = onOpenHome,
+                shareTrigger = nationalShareTrigger
             )
         }
 
@@ -1423,5 +1466,684 @@ private fun AttendanceRing(
             ),
             color = MaterialTheme.colorScheme.onSurface
         )
+    }
+}
+
+internal fun createCoachGroupStatsPdf(
+    context: Context,
+    stats: GroupStatsUi,
+    profiles: List<TraineeProfile>,
+    branch: String,
+    groupKey: String,
+    isEnglish: Boolean
+): File {
+
+    val pageWidth = 595
+    val pageHeight = 842
+    val margin = 36f
+
+    fun tr(
+        he: String,
+        en: String
+    ): String =
+        if (isEnglish) {
+            en
+        } else {
+            he
+        }
+
+    val document = PdfDocument()
+
+    val page =
+        document.startPage(
+            PdfDocument.PageInfo.Builder(
+                pageWidth,
+                pageHeight,
+                1
+            ).create()
+        )
+
+    val canvas = page.canvas
+
+    val navy =
+        android.graphics.Color.rgb(
+            2,
+            43,
+            74
+        )
+
+    val mediumBlue =
+        android.graphics.Color.rgb(
+            36,
+            103,
+            158
+        )
+
+    val lightBlue =
+        android.graphics.Color.rgb(
+            128,
+            183,
+            220
+        )
+
+    val textDark =
+        android.graphics.Color.rgb(
+            15,
+            23,
+            42
+        )
+
+    val muted =
+        android.graphics.Color.rgb(
+            100,
+            116,
+            139
+        )
+
+    val cardBg =
+        android.graphics.Color.rgb(
+            239,
+            247,
+            255
+        )
+
+    val border =
+        android.graphics.Color.rgb(
+            191,
+            219,
+            254
+        )
+
+    val regularTypeface =
+        Typeface.create(
+            Typeface.SANS_SERIF,
+            Typeface.NORMAL
+        )
+
+    val boldTypeface =
+        Typeface.create(
+            Typeface.SANS_SERIF,
+            Typeface.BOLD
+        )
+
+    fun textPaint(
+        size: Float,
+        color: Int = textDark,
+        bold: Boolean = false,
+        align: Paint.Align =
+            if (isEnglish) {
+                Paint.Align.LEFT
+            } else {
+                Paint.Align.RIGHT
+            }
+    ): Paint {
+        return Paint(
+            Paint.ANTI_ALIAS_FLAG
+        ).apply {
+            textSize = size
+            this.color = color
+            typeface =
+                if (bold) {
+                    boldTypeface
+                } else {
+                    regularTypeface
+                }
+            textAlign = align
+        }
+    }
+
+    /*
+     * Header – זהה לשפה הגרפית
+     * של קבצי ה-PDF האחרים באפליקציה.
+     */
+    canvas.drawColor(
+        android.graphics.Color.WHITE
+    )
+
+    val headerBottom = 122f
+
+    val navyPaint =
+        Paint(
+            Paint.ANTI_ALIAS_FLAG
+        ).apply {
+            color = navy
+            style = Paint.Style.FILL
+        }
+
+    val mediumPaint =
+        Paint(
+            Paint.ANTI_ALIAS_FLAG
+        ).apply {
+            color = mediumBlue
+            style = Paint.Style.FILL
+        }
+
+    val lightPaint =
+        Paint(
+            Paint.ANTI_ALIAS_FLAG
+        ).apply {
+            color = lightBlue
+            style = Paint.Style.FILL
+        }
+
+    canvas.drawPath(
+        android.graphics.Path().apply {
+            moveTo(
+                pageWidth.toFloat(),
+                0f
+            )
+            lineTo(
+                pageWidth.toFloat(),
+                headerBottom
+            )
+            lineTo(
+                178f,
+                headerBottom
+            )
+            lineTo(
+                238f,
+                0f
+            )
+            close()
+        },
+        navyPaint
+    )
+
+    canvas.drawPath(
+        android.graphics.Path().apply {
+            moveTo(208f, headerBottom)
+            lineTo(224f, headerBottom)
+            lineTo(284f, 0f)
+            lineTo(268f, 0f)
+            close()
+        },
+        mediumPaint
+    )
+
+    canvas.drawPath(
+        android.graphics.Path().apply {
+            moveTo(230f, headerBottom)
+            lineTo(238f, headerBottom)
+            lineTo(298f, 0f)
+            lineTo(290f, 0f)
+            close()
+        },
+        lightPaint
+    )
+
+    /*
+     * Logo KAMI.
+     */
+    val logoX = 78f
+    val logoY = 58f
+    val logoRadius = 42f
+
+    canvas.drawCircle(
+        logoX,
+        logoY,
+        logoRadius,
+        navyPaint
+    )
+
+    canvas.drawCircle(
+        logoX,
+        logoY,
+        logoRadius - 4f,
+        Paint(
+            Paint.ANTI_ALIAS_FLAG
+        ).apply {
+            color =
+                android.graphics.Color.WHITE
+        }
+    )
+
+    canvas.drawText(
+        "KAMI",
+        logoX,
+        logoY + 9f,
+        textPaint(
+            size = 26f,
+            color = navy,
+            bold = true,
+            align = Paint.Align.CENTER
+        )
+    )
+
+    val headerX =
+        pageWidth - 34f
+
+    /*
+     * כותרת — בדיוק בהתאם ל-PDF מסך הבית.
+     */
+    canvas.drawText(
+        tr(
+            "סטטיסטיקת הקבוצה",
+            "Group Statistics"
+        ),
+        headerX,
+        52f,
+        textPaint(
+            size = 24f,
+            color =
+                android.graphics.Color.WHITE,
+            bold = true,
+            align = Paint.Align.RIGHT
+        )
+    )
+
+    /*
+     * תת־כותרת.
+     */
+    canvas.drawText(
+        "${tr("סניף", "Branch")}: " +
+                "${branch.ifBlank { "—" }}  ·  " +
+                "${tr("קבוצה", "Group")}: " +
+                groupKey.ifBlank { "—" },
+        headerX,
+        78f,
+        textPaint(
+            size = 11f,
+            color =
+                android.graphics.Color.WHITE,
+            align = Paint.Align.RIGHT
+        )
+    )
+
+    /*
+     * התאריך עובר מתחת לאזור הכחול,
+     * כמו ב-PDF של מסך הבית.
+     */
+    val generatedDate =
+        java.text.SimpleDateFormat(
+            "dd/MM/yyyy",
+            java.util.Locale.getDefault()
+        ).format(
+            java.util.Date()
+        )
+
+    canvas.drawText(
+        tr(
+            "תאריך הפקה:",
+            "Generated:"
+        ) + " " + generatedDate,
+        headerX,
+        142f,
+        textPaint(
+            size = 8.5f,
+            color = muted,
+            align = Paint.Align.RIGHT
+        )
+    )
+
+    /*
+     * נתוני קצה מתוך אותה קבוצה.
+     */
+    val validAges =
+        profiles
+            .map { it.age }
+            .filter { it > 0 }
+
+    val minAge =
+        validAges.minOrNull()
+            ?.toString()
+            ?: "—"
+
+    val maxAge =
+        validAges.maxOrNull()
+            ?.toString()
+            ?: "—"
+
+    val seniorities =
+        profiles
+            .mapNotNull {
+                parseYearsFromSeniority(
+                    it.seniority
+                )
+            }
+
+    val minSeniority =
+        seniorities.minOrNull()
+            ?.toString()
+            ?: "—"
+
+    val maxSeniority =
+        seniorities.maxOrNull()
+            ?.toString()
+            ?: "—"
+
+    /*
+     * כרטיס ראשי.
+     */
+    var y = 148f
+
+    fun drawStatCard(
+        left: Float,
+        top: Float,
+        width: Float,
+        label: String,
+        value: String
+    ) {
+        val bg =
+            Paint(
+                Paint.ANTI_ALIAS_FLAG
+            ).apply {
+                color = cardBg
+            }
+
+        val stroke =
+            Paint(
+                Paint.ANTI_ALIAS_FLAG
+            ).apply {
+                color = border
+                style = Paint.Style.STROKE
+                strokeWidth = 1f
+            }
+
+        canvas.drawRoundRect(
+            left,
+            top,
+            left + width,
+            top + 70f,
+            14f,
+            14f,
+            bg
+        )
+
+        canvas.drawRoundRect(
+            left,
+            top,
+            left + width,
+            top + 70f,
+            14f,
+            14f,
+            stroke
+        )
+
+        canvas.drawText(
+            value,
+            left + width / 2f,
+            top + 30f,
+            textPaint(
+                size = 21f,
+                color = navy,
+                bold = true,
+                align = Paint.Align.CENTER
+            )
+        )
+
+        canvas.drawText(
+            label,
+            left + width / 2f,
+            top + 52f,
+            textPaint(
+                size = 9.5f,
+                color = muted,
+                bold = true,
+                align = Paint.Align.CENTER
+            )
+        )
+    }
+
+    val gap = 10f
+
+    val cardWidth =
+        (
+                pageWidth -
+                        margin * 2f -
+                        gap * 2f
+                ) / 3f
+
+    drawStatCard(
+        margin,
+        y,
+        cardWidth,
+        tr(
+            "מתאמנים",
+            "Trainees"
+        ),
+        stats.totalTrainees.toString()
+    )
+
+    drawStatCard(
+        margin + cardWidth + gap,
+        y,
+        cardWidth,
+        tr(
+            "נוכחות ממוצעת",
+            "Avg attendance"
+        ),
+        if (stats.avgAttendance > 0) {
+            "${stats.avgAttendance}%"
+        } else {
+            "—"
+        }
+    )
+
+    drawStatCard(
+        margin + (cardWidth + gap) * 2f,
+        y,
+        cardWidth,
+        tr(
+            "מעל 80% נוכחות",
+            "Above 80%"
+        ),
+        stats.highAttendanceCount.toString()
+    )
+
+    y += 92f
+
+    drawStatCard(
+        margin,
+        y,
+        cardWidth,
+        tr(
+            "גיל מינ׳",
+            "Min age"
+        ),
+        minAge
+    )
+
+    drawStatCard(
+        margin + cardWidth + gap,
+        y,
+        cardWidth,
+        tr(
+            "גיל מקס׳",
+            "Max age"
+        ),
+        maxAge
+    )
+
+    drawStatCard(
+        margin + (cardWidth + gap) * 2f,
+        y,
+        cardWidth,
+        tr(
+            "וותק ממוצע",
+            "Avg seniority"
+        ),
+        formatAvgSeniority(
+            stats.avgSeniority,
+            isEnglish
+        )
+    )
+
+    y += 92f
+
+    drawStatCard(
+        margin,
+        y,
+        cardWidth,
+        tr(
+            "וותק מינ׳",
+            "Min seniority"
+        ),
+        minSeniority
+    )
+
+    drawStatCard(
+        margin + cardWidth + gap,
+        y,
+        cardWidth,
+        tr(
+            "וותק מקס׳",
+            "Max seniority"
+        ),
+        maxSeniority
+    )
+
+    drawStatCard(
+        margin + (cardWidth + gap) * 2f,
+        y,
+        cardWidth,
+        tr(
+            "חגורות שונות",
+            "Belt types"
+        ),
+        stats.beltCounts.size.toString()
+    )
+
+    /*
+     * התפלגות חגורות.
+     */
+    y += 104f
+
+    canvas.drawText(
+        tr(
+            "התפלגות חגורות",
+            "Belt Distribution"
+        ),
+        if (isEnglish) {
+            margin
+        } else {
+            pageWidth - margin
+        },
+        y,
+        textPaint(
+            size = 16f,
+            color = textDark,
+            bold = true
+        )
+    )
+
+    y += 28f
+
+    stats.beltCounts.forEach {
+            (belt, count) ->
+
+        if (y > pageHeight - 70f) {
+            return@forEach
+        }
+
+        canvas.drawText(
+            "${coachBeltNameForStatsPdf(
+                belt = belt,
+                isEnglish = isEnglish
+            )}: $count",
+            if (isEnglish) {
+                margin + 10f
+            } else {
+                pageWidth - margin - 10f
+            },
+            y,
+            textPaint(
+                size = 11f,
+                color = textDark,
+                bold = true
+            )
+        )
+
+        y += 23f
+    }
+
+    /*
+     * Footer.
+     */
+    canvas.drawLine(
+        margin,
+        pageHeight - 42f,
+        pageWidth - margin,
+        pageHeight - 42f,
+        Paint(
+            Paint.ANTI_ALIAS_FLAG
+        ).apply {
+            color =
+                android.graphics.Color.rgb(
+                    226,
+                    232,
+                    240
+                )
+            strokeWidth = 1f
+        }
+    )
+
+    canvas.drawText(
+        tr(
+            "עמוד 1 · KAMI",
+            "Page 1 · KAMI"
+        ),
+        pageWidth / 2f,
+        pageHeight - 24f,
+        textPaint(
+            size = 9f,
+            color = muted,
+            align = Paint.Align.CENTER
+        )
+    )
+
+    document.finishPage(page)
+
+    val dir =
+        File(
+            context.cacheDir,
+            "pdfs"
+        ).apply {
+            mkdirs()
+        }
+
+    val fileName =
+        if (isEnglish) {
+            "Group Statistics.pdf"
+        } else {
+            "סטטיסטיקת הקבוצה.pdf"
+        }
+
+    val file =
+        File(
+            dir,
+            fileName
+        )
+
+    FileOutputStream(file).use {
+            output ->
+        document.writeTo(output)
+    }
+
+    document.close()
+
+    return file
+}
+
+private fun coachBeltNameForStatsPdf(
+    belt: String,
+    isEnglish: Boolean
+): String {
+
+    if (!isEnglish) {
+        return belt
+    }
+
+    return when (
+        belt.trim()
+    ) {
+        "לבנה" -> "White"
+        "צהובה" -> "Yellow"
+        "כתומה" -> "Orange"
+        "ירוקה" -> "Green"
+        "כחולה" -> "Blue"
+        "חומה" -> "Brown"
+        "שחורה" -> "Black"
+        "ללא דרגה" -> "No rank"
+        else -> belt
     }
 }

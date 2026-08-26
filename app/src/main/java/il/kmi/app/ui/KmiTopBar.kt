@@ -2389,13 +2389,25 @@ private fun VerticalQuickActionItem(
         Text(
             text = label,
             color = MaterialTheme.colorScheme.onSurface.copy(alpha = itemAlpha),
-            style = KmiTypography.caption.copy(
-                fontWeight = FontWeight.ExtraBold
-            ),
+            style =
+                if (label == "סטטיסטיקה") {
+                    KmiTypography.caption.copy(
+                        fontSize = KmiTypography.caption.fontSize * 0.82f,
+                        lineHeight = KmiTypography.caption.lineHeight * 0.82f,
+                        fontWeight = FontWeight.ExtraBold
+                    )
+                } else {
+                    KmiTypography.caption.copy(
+                        fontWeight = FontWeight.ExtraBold
+                    )
+                },
             textAlign = TextAlign.Center,
             maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.fillMaxWidth()
+            softWrap = false,
+            overflow = TextOverflow.Clip,
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 1.dp)
         )
     }
 }

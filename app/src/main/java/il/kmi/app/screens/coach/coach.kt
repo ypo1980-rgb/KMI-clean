@@ -250,6 +250,12 @@ fun CoachTraineesScreen(
 
     // הסטטיסטיקה הארצית נפתחת כעת מתוך מסך סטטיסטיקת הקבוצה.
 
+    // Trigger לשיתוף מהסרגל העליון.
+    // המסך הפנימי יחליט אם לשתף סטטיסטיקת קבוצה או סטטיסטיקה ארצית.
+    var statisticsShareTrigger by remember {
+        mutableIntStateOf(0)
+    }
+
     // --- סניף / קבוצה שנעשה בהם שימוש בפועל ---
     var effectiveBranch by remember {
         mutableStateOf(branch.trim())
@@ -804,7 +810,12 @@ fun CoachTraineesScreen(
                 }
 
             if (!selectedGroupStillExists) {
-                effectiveGroupKey = ""
+                effectiveGroupKey =
+                    if (assignedGroups.size == 1) {
+                        assignedGroups.first()
+                    } else {
+                        ""
+                    }
             }
 
             return@LaunchedEffect
@@ -890,7 +901,12 @@ fun CoachTraineesScreen(
             }
 
         if (!selectedGroupStillExists) {
-            effectiveGroupKey = ""
+            effectiveGroupKey =
+                if (availableGroups.size == 1) {
+                    availableGroups.first()
+                } else {
+                    ""
+                }
         }
     }
 
@@ -2195,12 +2211,15 @@ fun CoachTraineesScreen(
     val certificationsSectionKey = "certifications"
     val notesSectionKey = "coach_notes"
 
-    val groupStats = remember(traineeProfiles, uiProfiles) {
-        buildGroupStats(
-            profiles = traineeProfiles,
-            filtered = uiProfiles
-        )
-    }
+    val groupStats =
+        remember(
+            traineeProfiles
+        ) {
+            buildGroupStats(
+                profiles = traineeProfiles,
+                filtered = traineeProfiles
+            )
+        }
 
     val screenScope = rememberCoroutineScope()
 
@@ -2411,50 +2430,131 @@ fun CoachTraineesScreen(
                 },
                 onOpenDrawer = onOpenDrawer,
                 onHome = onOpenHome,
-                showTopShare = false,
+
+                showTopShare =
+                    showStatsSheet,
+
                 onShare = {
-                    if (uiProfiles.isNotEmpty()) {
-                        val pdfFile = createCoachTraineesPdf(
-                            context = ctx,
-                            profiles = uiProfiles.map { profile ->
-                                profile.copy(
-                                    fullName = demoSafeName(profile)
+
+                    if (showStatsSheet) {
+
+                        /*
+                         * אנחנו במסך הסטטיסטיקה.
+                         *
+                         * CoachGroupStatsPremiumScreen יחליט
+                         * לפי הטאב הפעיל אם ליצור:
+                         *
+                         * 1. PDF סטטיסטיקת הקבוצה
+                         * 2. PDF סטטיסטיקה ארצית
+                         */
+                        statisticsShareTrigger++
+
+                    } else {
+
+                        /*
+                         * אנחנו במסך רשימת המתאמנים.
+                         *
+                         * השיתוף כאן הוא PDF של כל הקבוצה,
+                         * ולא רק של תוצאות החיפוש המוצגות כרגע.
+                         */
+                        if (
+                            effectiveBranchPrimary
+                                .isNotBlank() &&
+                            effectiveGroupKey
+                                .isNotBlank() &&
+                            traineeProfiles
+                                .isNotEmpty()
+                        ) {
+
+                            val pdfProfiles =
+                                traineeProfiles
+                                    .distinctBy { profile ->
+                                        profile.userDocId.ifBlank {
+                                            profile.id.ifBlank {
+                                                profile.fullName
+                                            }
+                                        }
+                                    }
+                                    .sortedBy { profile ->
+                                        demoSafeName(profile)
+                                            .trim()
+                                    }
+
+                            val pdfStats =
+                                buildGroupStats(
+                                    profiles = pdfProfiles,
+                                    filtered = pdfProfiles
                                 )
-                            },
-                            stats = groupStats,
-                            branch = effectiveBranchPrimary,
-                            groupKey = effectiveGroupKey,
-                            isEnglish = isEnglish
-                        )
 
-                        val uri = FileProvider.getUriForFile(
-                            ctx,
-                            "${ctx.packageName}.fileprovider",
-                            pdfFile
-                        )
+                            val pdfFile =
+                                createCoachTraineesPdf(
+                                    context = ctx,
+                                    profiles =
+                                        pdfProfiles.map { profile ->
+                                            profile.copy(
+                                                fullName =
+                                                    demoSafeName(
+                                                        profile
+                                                    )
+                                            )
+                                        },
+                                    stats = pdfStats,
+                                    branch =
+                                        effectiveBranchPrimary,
+                                    groupKey =
+                                        effectiveGroupKey,
+                                    isEnglish =
+                                        isEnglish
+                                )
 
-                        val sendIntent = Intent(Intent.ACTION_SEND).apply {
-                            type = "application/pdf"
-                            putExtra(
-                                Intent.EXTRA_SUBJECT,
-                                coachTr(
-                                    isEnglish,
-                                    "דו״ח רשימת מתאמנים",
-                                    "Trainees list report"
+                            val uri =
+                                FileProvider.getUriForFile(
+                                    ctx,
+                                    "${ctx.packageName}.fileprovider",
+                                    pdfFile
+                                )
+
+                            val sendIntent =
+                                Intent(
+                                    Intent.ACTION_SEND
+                                ).apply {
+
+                                    type =
+                                        "application/pdf"
+
+                                    putExtra(
+                                        Intent.EXTRA_SUBJECT,
+                                        coachTr(
+                                            isEnglish,
+                                            "דו״ח רשימת מתאמנים",
+                                            "Trainees list report"
+                                        )
+                                    )
+
+                                    putExtra(
+                                        Intent.EXTRA_STREAM,
+                                        uri
+                                    )
+
+                                    addFlags(
+                                        Intent.FLAG_GRANT_READ_URI_PERMISSION
+                                    )
+                                }
+
+                            ctx.startActivity(
+                                Intent.createChooser(
+                                    sendIntent,
+                                    coachTr(
+                                        isEnglish,
+                                        "שיתוף PDF",
+                                        "Share PDF"
+                                    )
                                 )
                             )
-                            putExtra(Intent.EXTRA_STREAM, uri)
-                            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
                         }
-
-                        ctx.startActivity(
-                            Intent.createChooser(
-                                sendIntent,
-                                coachTr(isEnglish, "שיתוף PDF", "Share PDF")
-                            )
-                        )
                     }
                 },
+
                 showTopHome = false,
                 showRoleStatus = false,
                 lockSearch = false,
@@ -4255,12 +4355,93 @@ fun CoachTraineesScreen(
                 ) {
                     CoachGroupStatsPremiumScreen(
                         stats = groupStats,
-                        profiles = uiProfiles.map { profile ->
-                            profile.copy(
-                                fullName = demoSafeName(profile)
-                            )
-                        },
+                        profiles =
+                            traineeProfiles.mapIndexed {
+                                    index,
+                                    profile ->
+
+                                profile.copy(
+                                    fullName =
+                                        demoSafeName(
+                                            profile = profile,
+                                            demoIndex = index + 1
+                                        )
+                                )
+                            },
                         isEnglish = isEnglish,
+                        shareTrigger = statisticsShareTrigger,
+
+                        onShareGroupStatistics = {
+
+                            if (
+                                effectiveBranchPrimary
+                                    .isNotBlank() &&
+                                effectiveGroupKey
+                                    .isNotBlank() &&
+                                traineeProfiles
+                                    .isNotEmpty()
+                            ) {
+
+                                val pdfFile =
+                                    createCoachGroupStatsPdf(
+                                        context = ctx,
+                                        stats = groupStats,
+                                        profiles = traineeProfiles,
+                                        branch =
+                                            effectiveBranchPrimary,
+                                        groupKey =
+                                            effectiveGroupKey,
+                                        isEnglish =
+                                            isEnglish
+                                    )
+
+                                val uri =
+                                    FileProvider.getUriForFile(
+                                        ctx,
+                                        "${ctx.packageName}.fileprovider",
+                                        pdfFile
+                                    )
+
+                                val sendIntent =
+                                    Intent(
+                                        Intent.ACTION_SEND
+                                    ).apply {
+
+                                        type =
+                                            "application/pdf"
+
+                                        putExtra(
+                                            Intent.EXTRA_SUBJECT,
+                                            coachTr(
+                                                isEnglish,
+                                                "דו״ח סטטיסטיקת הקבוצה",
+                                                "Group statistics report"
+                                            )
+                                        )
+
+                                        putExtra(
+                                            Intent.EXTRA_STREAM,
+                                            uri
+                                        )
+
+                                        addFlags(
+                                            Intent.FLAG_GRANT_READ_URI_PERMISSION
+                                        )
+                                    }
+
+                                ctx.startActivity(
+                                    Intent.createChooser(
+                                        sendIntent,
+                                        coachTr(
+                                            isEnglish,
+                                            "שיתוף PDF",
+                                            "Share PDF"
+                                        )
+                                    )
+                                )
+                            }
+                        },
+
                         onClose = {
                             showStatsSheet = false
                         },

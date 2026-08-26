@@ -1025,9 +1025,29 @@ private fun createAdminDiagnosticsPdf(
         mkdirs()
     }
 
+    /*
+     * שם קריא לקובץ המשותף.
+     * התאריך והשעה נשמרים כדי שניתן יהיה
+     * להבדיל בין דוחות אבחון מתקופות שונות.
+     */
+    val fileDate =
+        SimpleDateFormat(
+            "dd-MM-yyyy_HH-mm",
+            Locale.getDefault()
+        ).format(
+            System.currentTimeMillis()
+        )
+
+    val outputFileName =
+        if (isEnglish) {
+            "KAMI Diagnostics - $fileDate.pdf"
+        } else {
+            "דוח בקרה ולוגים קמי - $fileDate.pdf"
+        }
+
     val outputFile = java.io.File(
         outputDirectory,
-        "admin_diagnostics_${System.currentTimeMillis()}.pdf"
+        outputFileName
     )
 
     try {

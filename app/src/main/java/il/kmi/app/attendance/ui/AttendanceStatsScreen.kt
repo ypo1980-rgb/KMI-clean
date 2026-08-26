@@ -2577,13 +2577,64 @@ private fun createAttendanceStatsPdf(
             mkdirs()
         }
 
+    /*
+     * מנקה רק תווים שאינם חוקיים בשם קובץ.
+     * עברית ואנגלית נשמרות ללא שינוי.
+     */
+    fun safeFilePart(value: String): String =
+        value
+            .trim()
+            .replace(
+                Regex("""[\\/:*?"<>|]"""),
+                "-"
+            )
+            .replace(
+                Regex("""\s+"""),
+                " "
+            )
+            .ifBlank {
+                if (isEnglish) {
+                    "Unknown"
+                } else {
+                    "לא ידוע"
+                }
+            }
+
+    val safeMemberName =
+        safeFilePart(
+            data.memberName
+        )
+
+    val safeBranch =
+        safeFilePart(
+            data.branch
+        )
+
+    val safeGroup =
+        safeFilePart(
+            data.groupKey
+        )
+
+    val fileName =
+        if (isEnglish) {
+            "Attendance statistics - $safeMemberName - $safeBranch - $safeGroup.pdf"
+        } else {
+            "סטטיסטיקת נוכחות - $safeMemberName - $safeBranch - $safeGroup.pdf"
+        }
+
     val file =
         File(
             directory,
-            "attendance_report_" +
-                    System.currentTimeMillis() +
-                    ".pdf"
+            fileName
         )
+
+    /*
+     * מונע הצטברות של עותקים לאותו דוח
+     * בתיקיית המטמון.
+     */
+    if (file.exists()) {
+        file.delete()
+    }
 
     FileOutputStream(file).use { output ->
         document.writeTo(output)

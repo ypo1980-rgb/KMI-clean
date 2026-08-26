@@ -1865,45 +1865,24 @@ fun HomeScreen(
                 val branchGroupPairsEffective:
                         List<Pair<String, String>> =
                     remember(
-                        homeBranchAssignments,
-                        branchesEffective,
-                        groupsEffective
+                        homeBranchAssignments
                     ) {
-                        if (
-                            homeBranchAssignments
-                                .isNotEmpty()
-                        ) {
-                            homeBranchAssignments
-                                .flatMap { assignment ->
-                                    assignment.groups.map {
-                                            groupName ->
-
-                                        assignment.branch.trim() to
-                                                groupName.trim()
-                                    }
-                                }
-                                .filter {
-                                        (branchName, groupName) ->
-
-                                    branchName.isNotBlank() &&
-                                            groupName.isNotBlank()
-                                }
-                                .distinct()
-                        } else {
-                            /*
-                             * תאימות זמנית למשתמשים שנשמרו
-                             * לפני יצירת המבנה החדש.
-                             */
-                            branchesEffective.flatMap {
-                                    branchName ->
-
-                                groupsEffective.map {
+                        homeBranchAssignments
+                            .flatMap { assignment ->
+                                assignment.groups.map {
                                         groupName ->
 
-                                    branchName to groupName
+                                    assignment.branch.trim() to
+                                            groupName.trim()
                                 }
                             }
-                        }
+                            .filter {
+                                    (branchName, groupName) ->
+
+                                branchName.isNotBlank() &&
+                                        groupName.isNotBlank()
+                            }
+                            .distinct()
                     }
 
                 // ✅ name להצגה + פרמטרים לניווט אימונים חופשיים (נעדכן state כדי שה-FAB יוכל להשתמש גם מחוץ ל-Column)
@@ -2890,7 +2869,6 @@ fun HomeScreen(
                                         item.status.isCancelled ||
                                         item.activeOverride != null
                             }
-                            .take(10)
                     }
 
                 LaunchedEffect(upcoming, isEnglish) {
@@ -6071,10 +6049,18 @@ private fun createHomePdf(
     fun tr(he: String, en: String): String = if (isEnglish) en else he
 
     val document = PdfDocument()
-    val page = document.startPage(
-        PdfDocument.PageInfo.Builder(pageWidth, pageHeight, 1).create()
+
+    var pageNumber = 1
+
+    var page = document.startPage(
+        PdfDocument.PageInfo.Builder(
+            pageWidth,
+            pageHeight,
+            pageNumber
+        ).create()
     )
-    val canvas = page.canvas
+
+    var canvas = page.canvas
 
     val navy = android.graphics.Color.rgb(2, 43, 74)
     val blue = android.graphics.Color.rgb(12, 78, 130)
@@ -6206,7 +6192,10 @@ private fun createHomePdf(
         )
     }
 
-    fun drawFooter() {
+    fun drawFooter(
+        currentPage: Int,
+        totalPages: Int
+    ) {
         val footerY = 804f
 
         val line = Paint(Paint.ANTI_ALIAS_FLAG).apply {
@@ -6222,7 +6211,16 @@ private fun createHomePdf(
         canvas.drawText("Together We Protect", 62f, footerY + 25f, smallPaint)
 
         smallPaint.textAlign = Paint.Align.CENTER
-        canvas.drawText(tr("עמוד 1 מתוך 1", "Page 1 of 1"), pageWidth / 2f, footerY + 25f, smallPaint)
+        canvas.drawText(
+            if (isEnglish) {
+                "Page $currentPage of $totalPages"
+            } else {
+                "עמוד $currentPage מתוך $totalPages"
+            },
+            pageWidth / 2f,
+            footerY + 25f,
+            smallPaint
+        )
 
         smallPaint.textAlign = Paint.Align.RIGHT
         canvas.drawText("Krav Maga Israel", pageWidth - 66f, footerY + 18f, smallPaint)
@@ -6438,6 +6436,51 @@ private fun createHomePdf(
         return bottom + 8f
     }
 
+    /*
+   * כמה כרטיסים יכולים להיכנס בעמוד.
+   *
+   * העמוד הראשון מכיל גם Header + Summary,
+   * ולכן נכנסים בו פחות אימונים.
+   * בעמודי ההמשך יש יותר מקום.
+   */
+    val firstPageTrainingCapacity = 4
+    val continuationPageTrainingCapacity = 6
+
+    val totalPages =
+        if (trainings.isEmpty()) {
+            1
+        } else {
+            val remainingAfterFirst =
+                (trainings.size - firstPageTrainingCapacity)
+                    .coerceAtLeast(0)
+
+            1 +
+                    if (remainingAfterFirst == 0) {
+                        0
+                    } else {
+                        (
+                                remainingAfterFirst +
+                                        continuationPageTrainingCapacity - 1
+                                ) / continuationPageTrainingCapacity
+                    }
+        }
+
+    fun startNewPage() {
+        pageNumber++
+
+        page = document.startPage(
+            PdfDocument.PageInfo.Builder(
+                pageWidth,
+                pageHeight,
+                pageNumber
+            ).create()
+        )
+
+        canvas = page.canvas
+
+        drawHeader()
+    }
+
     drawHeader()
 
     var y = 136f
@@ -6455,24 +6498,94 @@ private fun createHomePdf(
 
     if (trainings.isEmpty()) {
         drawEmptyState(y)
+
+        drawFooter(
+            currentPage = pageNumber,
+            totalPages = totalPages
+        )
+
+        document.finishPage(page)
     } else {
-        trainings.take(5).forEachIndexed { index, training ->
-            if (y + 122f < 792f) {
-                y = drawTrainingCard(
-                    training = training,
-                    top = y,
-                    index = index
+        trainings.forEachIndexed { index, training ->
+
+            val requiredHeight =
+                if (training.cancelledByHoliday) {
+                    124f
+                } else {
+                    108f
+                }
+
+            /*
+             * אין מספיק מקום לכרטיס הבא:
+             * סוגרים את העמוד ומתחילים עמוד חדש.
+             */
+            if (y + requiredHeight >= 792f) {
+                drawFooter(
+                    currentPage = pageNumber,
+                    totalPages = totalPages
                 )
+
+                document.finishPage(page)
+
+                startNewPage()
+
+                y = 168f
+
+                sectionPaint.textAlign =
+                    Paint.Align.CENTER
+
+                canvas.drawText(
+                    tr(
+                        "המשך פירוט אימונים",
+                        "Training details continued"
+                    ),
+                    pageWidth / 2f,
+                    y,
+                    sectionPaint
+                )
+
+                y += 28f
             }
+
+            y = drawTrainingCard(
+                training = training,
+                top = y,
+                index = index
+            )
         }
+
+        drawFooter(
+            currentPage = pageNumber,
+            totalPages = totalPages
+        )
+
+        document.finishPage(page)
     }
 
-    drawFooter()
+    val dir =
+        File(
+            context.cacheDir,
+            "pdfs"
+        ).apply {
+            mkdirs()
+        }
 
-    document.finishPage(page)
+    val fileName =
+        if (isEnglish) {
+            "Upcoming Trainings.pdf"
+        } else {
+            "אימונים קרובים.pdf"
+        }
 
-    val dir = File(context.cacheDir, "pdfs").apply { mkdirs() }
-    val file = File(dir, "home_report_${System.currentTimeMillis()}.pdf")
+    val file =
+        File(
+            dir,
+            fileName
+        )
+
+    if (file.exists()) {
+        file.delete()
+    }
 
     FileOutputStream(file).use { output ->
         document.writeTo(output)

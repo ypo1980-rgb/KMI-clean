@@ -4,6 +4,7 @@ import android.content.Context
 import android.content.SharedPreferences
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.platform.LocalContext
+import androidx.core.content.edit
 import androidx.navigation.NavGraphBuilder
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.composable
@@ -12,9 +13,9 @@ import il.kmi.app.Route
 import il.kmi.app.screens.AboutMethodScreen
 import il.kmi.app.screens.AboutNetworkScreen
 import il.kmi.app.screens.ForumScreen
-import il.kmi.app.screens.legal.LegalScreen
 import il.kmi.app.screens.AboutAviAbisidonScreen
 import il.kmi.app.screens.AboutItzikScreen
+import il.kmi.app.screens.legal.LegalScreen
 
 @Suppress("UNUSED_PARAMETER")
 fun NavGraphBuilder.aboutNavGraph(
@@ -53,22 +54,22 @@ fun NavGraphBuilder.aboutNavGraph(
                         groupKey.isNotBlank()
 
             if (hasForumTarget) {
-                sp.edit()
-                    .putBoolean("forum_open_from_push", true)
-                    .putString("forum_push_room_id", roomId)
-                    .putString("forum_push_room_name", roomName)
-                    .putString("forum_push_message_id", messageId)
-                    .putString("forum_push_branch_id", branchId)
-                    .putString("forum_push_group_key", groupKey)
-                    .putString("forum_push_sender_id", senderId)
-                    .putLong("forum_push_received_at", receivedAt)
-                    .apply()
+                sp.edit {
+                    putBoolean("forum_open_from_push", true)
+                    putString("forum_push_room_id", roomId)
+                    putString("forum_push_room_name", roomName)
+                    putString("forum_push_message_id", messageId)
+                    putString("forum_push_branch_id", branchId)
+                    putString("forum_push_group_key", groupKey)
+                    putString("forum_push_sender_id", senderId)
+                    putLong("forum_push_received_at", receivedAt)
+                }
 
                 // משאירים את פרטי היעד לזמן קצר ב-sp הראשי,
                 // אבל מנקים את דגל ההמתנה כדי שלא יפתח שוב בלולאה.
-                forumPushSp.edit()
-                    .putBoolean("has_pending_forum_push", false)
-                    .apply()
+                forumPushSp.edit {
+                    putBoolean("has_pending_forum_push", false)
+                }
             }
         }
 

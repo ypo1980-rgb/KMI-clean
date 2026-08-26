@@ -2931,8 +2931,69 @@ private fun createAttendancePdf(
     drawFooter()
     document.finishPage(page)
 
-    val dir = File(context.cacheDir, "pdfs").apply { mkdirs() }
-    val file = File(dir, "attendance_${date}_${System.currentTimeMillis()}.pdf")
+    val dir =
+        File(
+            context.cacheDir,
+            "pdfs"
+        ).apply {
+            mkdirs()
+        }
+
+    /*
+     * מנקים רק תווים שאינם חוקיים בשם קובץ.
+     * שם הסניף והקבוצה נשארים בעברית / אנגלית
+     * כפי שהם מופיעים בדוח.
+     */
+    fun safeFilePart(value: String): String =
+        value
+            .trim()
+            .replace(
+                Regex("""[\\/:*?"<>|]"""),
+                "-"
+            )
+            .replace(
+                Regex("""\s+"""),
+                " "
+            )
+            .ifBlank {
+                if (isEnglish) {
+                    "Unknown"
+                } else {
+                    "לא ידוע"
+                }
+            }
+
+    val safeBranch =
+        safeFilePart(
+            state.branch
+        )
+
+    val safeGroup =
+        safeFilePart(
+            state.groupKey
+        )
+
+    val fileName =
+        if (isEnglish) {
+            "Attendance report - $safeBranch - $safeGroup - $date.pdf"
+        } else {
+            "דוח נוכחות - $safeBranch - $safeGroup - $date.pdf"
+        }
+
+    val file =
+        File(
+            dir,
+            fileName
+        )
+
+    /*
+     * אם אותו דוח כבר הופק בעבר,
+     * הקובץ החדש מחליף אותו במקום
+     * ליצור עותק נוסף עם timestamp.
+     */
+    if (file.exists()) {
+        file.delete()
+    }
 
     FileOutputStream(file).use { out ->
         document.writeTo(out)

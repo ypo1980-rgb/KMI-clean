@@ -33,7 +33,15 @@ import androidx.compose.material.icons.outlined.Person
 import androidx.compose.material.icons.outlined.Phone
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.ExperimentalMaterial3Api
+import android.content.Context
+import android.graphics.Paint
+import android.graphics.Typeface
+import android.graphics.pdf.PdfDocument
+import java.io.File
+import java.io.FileOutputStream
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.OutlinedTextField
@@ -819,4 +827,447 @@ private fun formatExpiry(input: String): String {
         digits.length <= 2 -> digits
         else -> digits.substring(0, 2) + "/" + digits.substring(2)
     }
+}
+
+private fun createPaymentDetailsPdf(
+    context: Context,
+    isEnglish: Boolean,
+    amountToPay: String,
+    cardHolderName: String,
+    idNumber: String,
+    phone: String,
+    email: String,
+    paymentMethod: String,
+    installments: Int
+): File {
+
+    val document = PdfDocument()
+
+    val pageWidth = 595
+    val pageHeight = 842
+
+    val pageInfo =
+        PdfDocument.PageInfo.Builder(
+            pageWidth,
+            pageHeight,
+            1
+        ).create()
+
+    val page =
+        document.startPage(pageInfo)
+
+    val canvas = page.canvas
+
+    val navy =
+        android.graphics.Color.rgb(
+            2,
+            43,
+            74
+        )
+
+    val accent1 =
+        android.graphics.Color.rgb(
+            36,
+            103,
+            158
+        )
+
+    val accent2 =
+        android.graphics.Color.rgb(
+            128,
+            183,
+            220
+        )
+
+    val textDark =
+        android.graphics.Color.rgb(
+            15,
+            23,
+            42
+        )
+
+    val textMuted =
+        android.graphics.Color.rgb(
+            80,
+            100,
+            120
+        )
+
+    fun textPaint(
+        size: Float,
+        color: Int = textDark,
+        bold: Boolean = false,
+        align: Paint.Align =
+            if (isEnglish) {
+                Paint.Align.LEFT
+            } else {
+                Paint.Align.RIGHT
+            }
+    ): Paint {
+        return Paint(
+            Paint.ANTI_ALIAS_FLAG
+        ).apply {
+            textSize = size
+            this.color = color
+            textAlign = align
+            typeface =
+                Typeface.create(
+                    Typeface.SANS_SERIF,
+                    if (bold) {
+                        Typeface.BOLD
+                    } else {
+                        Typeface.NORMAL
+                    }
+                )
+        }
+    }
+
+    /*
+     * ========================================================
+     * Header — זהה לשפת ה-PDF של מסך הבית
+     * ========================================================
+     */
+
+    canvas.drawColor(
+        android.graphics.Color.WHITE
+    )
+
+    val headerBottom = 122f
+
+    val navyPaint =
+        Paint(
+            Paint.ANTI_ALIAS_FLAG
+        ).apply {
+            color = navy
+            style = Paint.Style.FILL
+        }
+
+    val accentPaint1 =
+        Paint(
+            Paint.ANTI_ALIAS_FLAG
+        ).apply {
+            color = accent1
+            style = Paint.Style.FILL
+        }
+
+    val accentPaint2 =
+        Paint(
+            Paint.ANTI_ALIAS_FLAG
+        ).apply {
+            color = accent2
+            style = Paint.Style.FILL
+        }
+
+    canvas.drawPath(
+        android.graphics.Path().apply {
+            moveTo(
+                pageWidth.toFloat(),
+                0f
+            )
+            lineTo(
+                pageWidth.toFloat(),
+                headerBottom
+            )
+            lineTo(
+                178f,
+                headerBottom
+            )
+            lineTo(
+                238f,
+                0f
+            )
+            close()
+        },
+        navyPaint
+    )
+
+    canvas.drawPath(
+        android.graphics.Path().apply {
+            moveTo(208f, headerBottom)
+            lineTo(224f, headerBottom)
+            lineTo(284f, 0f)
+            lineTo(268f, 0f)
+            close()
+        },
+        accentPaint1
+    )
+
+    canvas.drawPath(
+        android.graphics.Path().apply {
+            moveTo(230f, headerBottom)
+            lineTo(238f, headerBottom)
+            lineTo(298f, 0f)
+            lineTo(290f, 0f)
+            close()
+        },
+        accentPaint2
+    )
+
+    /*
+     * לוגו KAMI
+     */
+    val logoX = 78f
+    val logoY = 58f
+    val logoRadius = 42f
+
+    canvas.drawCircle(
+        logoX,
+        logoY,
+        logoRadius,
+        navyPaint
+    )
+
+    canvas.drawCircle(
+        logoX,
+        logoY,
+        logoRadius - 4f,
+        Paint(
+            Paint.ANTI_ALIAS_FLAG
+        ).apply {
+            color =
+                android.graphics.Color.WHITE
+        }
+    )
+
+    canvas.drawText(
+        "KAMI",
+        logoX,
+        logoY + logoRadius * 0.22f,
+        textPaint(
+            size = logoRadius * 0.62f,
+            color = navy,
+            bold = true,
+            align = Paint.Align.CENTER
+        )
+    )
+
+    val headerX =
+        pageWidth - 34f
+
+    canvas.drawText(
+        if (isEnglish) {
+            "Payment Details"
+        } else {
+            "פרטי תשלום"
+        },
+        headerX,
+        52f,
+        textPaint(
+            size = 24f,
+            color =
+                android.graphics.Color.WHITE,
+            bold = true,
+            align = Paint.Align.RIGHT
+        )
+    )
+
+    canvas.drawText(
+        if (isEnglish) {
+            "KAMI membership payment"
+        } else {
+            "תשלום דמי חבר - ק.מ.י"
+        },
+        headerX,
+        78f,
+        textPaint(
+            size = 11f,
+            color =
+                android.graphics.Color.WHITE,
+            align = Paint.Align.RIGHT
+        )
+    )
+
+    val generatedDate =
+        SimpleDateFormat(
+            "dd/MM/yyyy",
+            Locale.getDefault()
+        ).format(Date())
+
+    canvas.drawText(
+        if (isEnglish) {
+            "Generated: $generatedDate"
+        } else {
+            "תאריך הפקה: $generatedDate"
+        },
+        headerX,
+        142f,
+        textPaint(
+            size = 8.5f,
+            color = textMuted,
+            align = Paint.Align.RIGHT
+        )
+    )
+
+    /*
+     * ========================================================
+     * תוכן
+     * ========================================================
+     */
+
+    val contentX =
+        if (isEnglish) {
+            42f
+        } else {
+            pageWidth - 42f
+        }
+
+    var y = 190f
+
+    fun drawRow(
+        labelHe: String,
+        labelEn: String,
+        value: String
+    ) {
+        canvas.drawText(
+            if (isEnglish) {
+                labelEn
+            } else {
+                labelHe
+            },
+            contentX,
+            y,
+            textPaint(
+                size = 10f,
+                color = textMuted,
+                bold = true
+            )
+        )
+
+        y += 20f
+
+        canvas.drawText(
+            value.ifBlank { "—" },
+            contentX,
+            y,
+            textPaint(
+                size = 14f,
+                color = textDark,
+                bold = true
+            )
+        )
+
+        y += 34f
+    }
+
+    canvas.drawText(
+        if (isEnglish) {
+            "Payment summary"
+        } else {
+            "סיכום פרטי התשלום"
+        },
+        contentX,
+        y,
+        textPaint(
+            size = 18f,
+            color = navy,
+            bold = true
+        )
+    )
+
+    y += 38f
+
+    drawRow(
+        labelHe = "שם",
+        labelEn = "Name",
+        value = cardHolderName
+    )
+
+    drawRow(
+        labelHe = "תעודת זהות",
+        labelEn = "ID number",
+        value = idNumber
+    )
+
+    drawRow(
+        labelHe = "טלפון",
+        labelEn = "Phone",
+        value = phone
+    )
+
+    drawRow(
+        labelHe = "אימייל",
+        labelEn = "Email",
+        value = email
+    )
+
+    drawRow(
+        labelHe = "סכום לתשלום",
+        labelEn = "Amount to pay",
+        value = amountToPay
+    )
+
+    drawRow(
+        labelHe = "אמצעי תשלום",
+        labelEn = "Payment method",
+        value = paymentMethod
+    )
+
+    if (
+        paymentMethod.equals(
+            "Credit card",
+            ignoreCase = true
+        ) ||
+        paymentMethod == "אשראי"
+    ) {
+        drawRow(
+            labelHe = "מספר תשלומים",
+            labelEn = "Installments",
+            value = installments.toString()
+        )
+    }
+
+    /*
+     * הבהרה — זה אינו אישור שהתשלום בוצע.
+     */
+    y += 10f
+
+    canvas.drawText(
+        if (isEnglish) {
+            "This document summarizes the entered payment details and is not a payment receipt."
+        } else {
+            "מסמך זה מסכם את פרטי התשלום שהוזנו ואינו מהווה קבלה או אישור על ביצוע התשלום."
+        },
+        contentX,
+        y,
+        textPaint(
+            size = 9f,
+            color = textMuted
+        )
+    )
+
+    document.finishPage(page)
+
+    /*
+     * שם קבוע — יצירה חדשה מחליפה את הקודמת.
+     */
+    val dir =
+        File(
+            context.cacheDir,
+            "pdfs"
+        ).apply {
+            mkdirs()
+        }
+
+    val fileName =
+        if (isEnglish) {
+            "Payment Details.pdf"
+        } else {
+            "פרטי תשלום.pdf"
+        }
+
+    val file =
+        File(
+            dir,
+            fileName
+        )
+
+    try {
+        FileOutputStream(file).use { output ->
+            document.writeTo(output)
+        }
+    } finally {
+        document.close()
+    }
+
+    return file
 }

@@ -336,23 +336,58 @@ private fun subTopicStatsLineForUi(
 private data class BeltTopicsPdfSubTopic(
     val title: String,
     val exercisesCount: Int,
-    val depth: Int
+    val depth: Int,
+    val exercises: List<String>
 )
 
 private data class BeltTopicsPdfTopic(
     val title: String,
     val exercisesCount: Int,
+    val exercises: List<String>,
     val subTopics: List<BeltTopicsPdfSubTopic>
 )
+
+private fun exerciseTitleForPdf(
+    rawItem: String,
+    lang: AppLanguage
+): String {
+    val displayName =
+        ExerciseTitleFormatter
+            .displayName(rawItem)
+            .ifBlank { rawItem }
+            .trim()
+
+    return if (lang == AppLanguage.ENGLISH) {
+        ExerciseTitlesEn.getOrSame(displayName)
+    } else {
+        displayName
+    }
+}
 
 private fun SharedContentRepo.SubTopic.toPdfSubTopicRows(
     lang: AppLanguage,
     depth: Int = 0
 ): List<BeltTopicsPdfSubTopic> {
     val currentRow = BeltTopicsPdfSubTopic(
-        title = topicTitleForUi(title.trim(), lang),
+        title = topicTitleForUi(
+            title.trim(),
+            lang
+        ),
         exercisesCount = totalExercisesCountDeep(),
-        depth = depth
+        depth = depth,
+        exercises =
+            items
+                .asSequence()
+                .map { rawItem ->
+                    exerciseTitleForPdf(
+                        rawItem = rawItem,
+                        lang = lang
+                    )
+                }
+                .map { it.trim() }
+                .filter { it.isNotBlank() }
+                .distinct()
+                .toList()
     )
 
     return buildList {
@@ -379,31 +414,82 @@ private fun buildBeltTopicsPdfData(
         .filter { it.isNotBlank() }
         .distinct()
         .map { topicTitle ->
+
+            val cleanTopicTitle =
+                topicTitle.trim()
+
             val repositorySubTopics =
                 SharedContentRepo.getSubTopicsFor(
                     belt = belt,
-                    topicTitle = topicTitle
+                    topicTitle = cleanTopicTitle
                 )
 
-            val subTopicRows = repositorySubTopics
-                .asSequence()
-                .filter { it.title.trim().isNotBlank() }
-                .filter { it.title.trim() != topicTitle }
-                .flatMap { subTopic ->
-                    subTopic
-                        .toPdfSubTopicRows(lang)
-                        .asSequence()
-                }
-                .distinctBy { row ->
-                    "${row.depth}:${row.title.trim()}"
-                }
-                .toList()
+            /*
+             * תרגילים ששייכים ישירות לנושא הראשי.
+             *
+             * בחלק מהנושאים ContentRepo מחזיק node
+             * ששמו זהה לשם הנושא עצמו.
+             *
+             * בעבר node כזה סונן מה־PDF ולכן שמות
+             * התרגילים נעלמו למרות שהספירה נשארה נכונה.
+             */
+            val directTopicExercises =
+                repositorySubTopics
+                    .asSequence()
+                    .filter { subTopic ->
+                        subTopic.title.trim() == cleanTopicTitle
+                    }
+                    .flatMap { subTopic ->
+                        subTopic.items.asSequence()
+                    }
+                    .map { rawItem ->
+                        exerciseTitleForPdf(
+                            rawItem = rawItem,
+                            lang = lang
+                        )
+                    }
+                    .map { it.trim() }
+                    .filter { it.isNotBlank() }
+                    .distinct()
+                    .toList()
+
+            /*
+             * תתי־נושאים אמיתיים בלבד.
+             *
+             * ה־node ששמו זהה לנושא הראשי לא מוצג
+             * כתת־נושא נוסף, משום שהתרגילים הישירים
+             * שלו כבר נמצאים ב־directTopicExercises.
+             */
+            val subTopicRows =
+                repositorySubTopics
+                    .asSequence()
+                    .filter { subTopic ->
+                        subTopic.title.trim().isNotBlank()
+                    }
+                    .filter { subTopic ->
+                        subTopic.title.trim() != cleanTopicTitle
+                    }
+                    .flatMap { subTopic ->
+                        subTopic
+                            .toPdfSubTopicRows(lang)
+                            .asSequence()
+                    }
+                    .distinctBy { row ->
+                        "${row.depth}:${row.title.trim()}"
+                    }
+                    .toList()
 
             BeltTopicsPdfTopic(
-                title = topicTitleForUi(topicTitle, lang),
-                exercisesCount = repositorySubTopics.sumOf {
-                    it.totalExercisesCountDeep()
-                },
+                title =
+                    topicTitleForUi(
+                        cleanTopicTitle,
+                        lang
+                    ),
+                exercisesCount =
+                    repositorySubTopics.sumOf {
+                        it.totalExercisesCountDeep()
+                    },
+                exercises = directTopicExercises,
                 subTopics = subTopicRows
             )
         }
@@ -522,6 +608,54 @@ private fun createBeltTopicsPdf(
         }
     }
 
+    fun drawKmiLogo(
+        targetCanvas: Canvas,
+        cx: Float,
+        cy: Float,
+        radius: Float
+    ) {
+        val outer =
+            Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                color = navy
+                style = Paint.Style.FILL
+            }
+
+        val inner =
+            Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                color = white
+                style = Paint.Style.FILL
+            }
+
+        val logoText =
+            Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                color = navy
+                typeface = boldTypeface
+                textSize = radius * 0.62f
+                textAlign = Paint.Align.CENTER
+            }
+
+        targetCanvas.drawCircle(
+            cx,
+            cy,
+            radius,
+            outer
+        )
+
+        targetCanvas.drawCircle(
+            cx,
+            cy,
+            radius - 4f,
+            inner
+        )
+
+        targetCanvas.drawText(
+            "KAMI",
+            cx,
+            cy + radius * 0.22f,
+            logoText
+        )
+    }
+
     val document = PdfDocument()
 
     var currentPage: PdfDocument.Page? = null
@@ -611,88 +745,162 @@ private fun createBeltTopicsPdf(
         val currentCanvas = page.canvas
         currentCanvas.drawColor(white)
 
-        val headerPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = navy
-            style = Paint.Style.FILL
-        }
+        /*
+      * כותרת PDF בסגנון האחיד של דוח מסך הבית:
+      * לוגו KAMI + אזור כחול אלכסוני + פסי אקסנט.
+      */
+        val diagonal =
+            Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                color = navy
+                style = Paint.Style.FILL
+            }
 
-        currentCanvas.drawRoundRect(
-            0f,
-            0f,
-            pageWidth.toFloat(),
-            116f,
-            0f,
-            0f,
-            headerPaint
+        val accent1 =
+            Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                color = android.graphics.Color.rgb(
+                    36,
+                    103,
+                    158
+                )
+                style = Paint.Style.FILL
+            }
+
+        val accent2 =
+            Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                color = android.graphics.Color.rgb(
+                    128,
+                    183,
+                    220
+                )
+                style = Paint.Style.FILL
+            }
+
+        /*
+         * השטח הכחול העליון.
+         */
+        val diagonalPath =
+            android.graphics.Path().apply {
+                moveTo(
+                    pageWidth.toFloat(),
+                    0f
+                )
+                lineTo(
+                    pageWidth.toFloat(),
+                    122f
+                )
+                lineTo(
+                    178f,
+                    122f
+                )
+                lineTo(
+                    238f,
+                    0f
+                )
+                close()
+            }
+
+        currentCanvas.drawPath(
+            diagonalPath,
+            diagonal
         )
 
-        val accentPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = beltAccent
-            style = Paint.Style.FILL
-        }
-
-        currentCanvas.drawRoundRect(
-            horizontalMargin,
-            101f,
-            pageWidth - horizontalMargin,
-            111f,
-            5f,
-            5f,
-            accentPaint
+        /*
+         * פס כחול בינוני.
+         */
+        currentCanvas.drawPath(
+            android.graphics.Path().apply {
+                moveTo(208f, 122f)
+                lineTo(224f, 122f)
+                lineTo(284f, 0f)
+                lineTo(268f, 0f)
+                close()
+            },
+            accent1
         )
 
-        val titleAlignment =
+        /*
+         * פס כחול בהיר.
+         */
+        currentCanvas.drawPath(
+            android.graphics.Path().apply {
+                moveTo(230f, 122f)
+                lineTo(238f, 122f)
+                lineTo(298f, 0f)
+                lineTo(290f, 0f)
+                close()
+            },
+            accent2
+        )
+
+        /*
+         * לוגו KAMI משמאל.
+         */
+        drawKmiLogo(
+            targetCanvas = currentCanvas,
+            cx = 78f,
+            cy = 58f,
+            radius = 42f
+        )
+
+        /*
+         * כותרות מימין בעברית ומשמאל באנגלית.
+         */
+        val headerAlignment =
             if (isEnglish) {
-                Paint.Align.LEFT
+                Paint.Align.RIGHT
             } else {
                 Paint.Align.RIGHT
             }
 
-        val titleX =
-            if (isEnglish) {
-                horizontalMargin
-            } else {
-                pageWidth - horizontalMargin
-            }
+        val headerX =
+            pageWidth - 34f
 
         currentCanvas.drawText(
             translated(
-                "נושאים בחגורה",
-                "Belt Topics"
+                "תרגילים לפי חגורה",
+                "Exercises by Belt"
             ),
-            titleX,
-            43f,
+            headerX,
+            50f,
             textPaint(
-                size = 27f,
+                size = 24f,
                 color = white,
                 bold = true,
-                alignment = titleAlignment
+                alignment = headerAlignment
             )
         )
 
         currentCanvas.drawText(
-            beltTitleForUi(belt, lang),
-            titleX,
+            beltTitleForUi(
+                belt,
+                lang
+            ),
+            headerX,
             76f,
             textPaint(
-                size = 18f,
-                color = white,
+                size = 13f,
+                color = android.graphics.Color.rgb(
+                    220,
+                    235,
+                    247
+                ),
                 bold = true,
-                alignment = titleAlignment
+                alignment = headerAlignment
             )
         )
 
-        val generatedDate = SimpleDateFormat(
-            "dd/MM/yyyy",
-            Locale.getDefault()
-        ).format(Date())
+        val generatedDate =
+            SimpleDateFormat(
+                "dd/MM/yyyy",
+                Locale.getDefault()
+            ).format(Date())
 
         currentCanvas.drawText(
             translated(
                 "הופק בתאריך $generatedDate",
                 "Generated on $generatedDate"
             ),
-            titleX,
+            headerX,
             96f,
             textPaint(
                 size = 9f,
@@ -701,11 +909,112 @@ private fun createBeltTopicsPdf(
                     230,
                     245
                 ),
-                alignment = titleAlignment
+                alignment = headerAlignment
             )
         )
 
-        currentY = 138f
+        /*
+         * בעמוד הראשון מציגים גם כרטיס סיכום,
+         * בדומה לכרטיס "אימונים לשבוע הקרוב"
+         * בדוח מסך הבית.
+         */
+        if (pageNumber == 1) {
+
+            val summaryTop = 138f
+            val summaryBottom = 198f
+
+            val summaryBackground =
+                Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                    color = lightBlue
+                    style = Paint.Style.FILL
+                }
+
+            val summaryBorder =
+                Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                    color = borderBlue
+                    style = Paint.Style.STROKE
+                    strokeWidth = 1.2f
+                }
+
+            currentCanvas.drawRoundRect(
+                horizontalMargin,
+                summaryTop,
+                pageWidth - horizontalMargin,
+                summaryBottom,
+                12f,
+                12f,
+                summaryBackground
+            )
+
+            currentCanvas.drawRoundRect(
+                horizontalMargin,
+                summaryTop,
+                pageWidth - horizontalMargin,
+                summaryBottom,
+                12f,
+                12f,
+                summaryBorder
+            )
+
+            val totalExercises =
+                topics.sumOf {
+                    it.exercisesCount
+                }
+
+            val summaryX =
+                if (isEnglish) {
+                    horizontalMargin + 20f
+                } else {
+                    pageWidth - horizontalMargin - 20f
+                }
+
+            val summaryAlignment =
+                if (isEnglish) {
+                    Paint.Align.LEFT
+                } else {
+                    Paint.Align.RIGHT
+                }
+
+            currentCanvas.drawText(
+                translated(
+                    "תוכן החגורה",
+                    "Belt content"
+                ),
+                summaryX,
+                summaryTop + 24f,
+                textPaint(
+                    size = 13f,
+                    color = blue,
+                    bold = true,
+                    alignment = summaryAlignment
+                )
+            )
+
+            currentCanvas.drawText(
+                translated(
+                    "${topics.size} נושאים · $totalExercises תרגילים",
+                    "${topics.size} topics · $totalExercises exercises"
+                ),
+                summaryX,
+                summaryTop + 45f,
+                textPaint(
+                    size = 11f,
+                    color = textDark,
+                    bold = true,
+                    alignment = summaryAlignment
+                )
+            )
+
+            currentY = summaryBottom + 18f
+
+        } else {
+
+            /*
+             * בעמודי ההמשך אין צורך לחזור על כרטיס הסיכום,
+             * וכך נשאר יותר מקום לרשימת התרגילים.
+             */
+            currentY = 142f
+        }
     }
 
     fun ensureSpace(requiredHeight: Float) {
@@ -911,6 +1220,85 @@ private fun createBeltTopicsPdf(
         currentY = rowBottom
     }
 
+    fun drawExerciseRow(
+        exerciseTitle: String,
+        depth: Int,
+        exerciseIndex: Int
+    ) {
+        val currentCanvas = canvas ?: return
+
+        val rowHeight = 22f
+        val rowTop = currentY
+        val rowBottom = currentY + rowHeight
+
+        if (exerciseIndex % 2 == 0) {
+            currentCanvas.drawRoundRect(
+                horizontalMargin + 20f,
+                rowTop,
+                pageWidth - horizontalMargin - 20f,
+                rowBottom,
+                5f,
+                5f,
+                Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                    color = android.graphics.Color.rgb(
+                        250,
+                        252,
+                        255
+                    )
+                }
+            )
+        }
+
+        val depthOffset =
+            depth * 13f
+
+        val bulletX =
+            if (isEnglish) {
+                horizontalMargin + 32f + depthOffset
+            } else {
+                pageWidth - horizontalMargin - 32f - depthOffset
+            }
+
+        val textX =
+            if (isEnglish) {
+                bulletX + 12f
+            } else {
+                bulletX - 12f
+            }
+
+        val bulletPaint =
+            Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                color = beltAccent
+                style = Paint.Style.FILL
+            }
+
+        currentCanvas.drawCircle(
+            bulletX,
+            rowTop + 11f,
+            2.2f,
+            bulletPaint
+        )
+
+        currentCanvas.drawText(
+            exerciseTitle,
+            textX,
+            rowTop + 15f,
+            textPaint(
+                size = 10.2f,
+                color = textDark,
+                bold = false,
+                alignment =
+                    if (isEnglish) {
+                        Paint.Align.LEFT
+                    } else {
+                        Paint.Align.RIGHT
+                    }
+            )
+        )
+
+        currentY = rowBottom
+    }
+
     startPage()
 
     if (topics.isEmpty()) {
@@ -932,16 +1320,62 @@ private fun createBeltTopicsPdf(
         )
     } else {
         topics.forEachIndexed { topicIndex, topic ->
+
             ensureSpace(65f)
+
             drawTopicHeader(
                 topic = topic,
                 continued = false
             )
 
+            /*
+             * תרגילים ששייכים ישירות לנושא הראשי.
+             */
+            topic.exercises.forEachIndexed {
+                    exerciseIndex,
+                    exerciseTitle ->
+
+                if (currentY + 25f > contentBottom) {
+                    startPage()
+
+                    drawTopicHeader(
+                        topic = topic,
+                        continued = true
+                    )
+                }
+
+                drawExerciseRow(
+                    exerciseTitle = exerciseTitle,
+                    depth = 0,
+                    exerciseIndex = exerciseIndex
+                )
+            }
+
+            /*
+             * רווח קטן בין התרגילים הישירים
+             * לבין תתי־הנושאים.
+             */
+            if (
+                topic.exercises.isNotEmpty() &&
+                topic.subTopics.isNotEmpty()
+            ) {
+                currentY += 5f
+            }
+
             if (topic.subTopics.isEmpty()) {
-                currentY += 8f
+
+                if (topic.exercises.isEmpty()) {
+                    currentY += 8f
+                }
+
             } else {
-                topic.subTopics.forEachIndexed { subIndex, subTopic ->
+                topic.subTopics.forEachIndexed {
+                        subIndex,
+                        subTopic ->
+
+                    /*
+                     * מקום לשורת תת־הנושא.
+                     */
                     if (currentY + 31f > contentBottom) {
                         startPage()
 
@@ -955,6 +1389,45 @@ private fun createBeltTopicsPdf(
                         subTopic = subTopic,
                         rowIndex = subIndex
                     )
+
+                    /*
+                     * מדפיסים עכשיו את כל התרגילים
+                     * הישירים של תת־הנושא.
+                     */
+                    subTopic.exercises.forEachIndexed {
+                            exerciseIndex,
+                            exerciseTitle ->
+
+                        /*
+                         * אם התרגיל הבא לא נכנס בעמוד,
+                         * ממשיכים לעמוד חדש ומחזירים
+                         * את כותרת הנושא ותת־הנושא.
+                         */
+                        if (currentY + 25f > contentBottom) {
+                            startPage()
+
+                            drawTopicHeader(
+                                topic = topic,
+                                continued = true
+                            )
+
+                            drawSubTopicRow(
+                                subTopic = subTopic,
+                                rowIndex = subIndex
+                            )
+                        }
+
+                        drawExerciseRow(
+                            exerciseTitle = exerciseTitle,
+                            depth = subTopic.depth,
+                            exerciseIndex = exerciseIndex
+                        )
+                    }
+
+                    /*
+                     * רווח קטן בין תתי־נושאים.
+                     */
+                    currentY += 3f
                 }
             }
 
@@ -970,19 +1443,35 @@ private fun createBeltTopicsPdf(
     finishCurrentPage()
 
     val outputDirectory =
-        File(context.cacheDir, "shared_pdfs").apply {
+        File(
+            context.cacheDir,
+            "shared_pdfs"
+        ).apply {
             mkdirs()
         }
 
-    val safeBeltId = belt.id.replace(
-        Regex("[^a-zA-Z0-9_-]"),
-        "_"
-    )
+    val beltName =
+        beltShortNameForUi(
+            belt = belt,
+            lang = lang
+        ).trim()
 
-    val outputFile = File(
-        outputDirectory,
-        "kmi_${safeBeltId}_topics.pdf"
-    )
+    val fileName =
+        if (isEnglish) {
+            "Exercises by Belt - $beltName.pdf"
+        } else {
+            "תרגילים לפי חגורה - $beltName.pdf"
+        }
+
+    val outputFile =
+        File(
+            outputDirectory,
+            fileName
+        )
+
+    if (outputFile.exists()) {
+        outputFile.delete()
+    }
 
     FileOutputStream(outputFile).use { output ->
         document.writeTo(output)

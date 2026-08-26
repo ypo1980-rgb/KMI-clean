@@ -966,17 +966,34 @@ private fun createSubjectTopicsPdf(
         pageNumber++
     }
 
-    val directory = File(
-        context.cacheDir,
-        "pdfs"
-    ).apply {
-        mkdirs()
-    }
+    val directory =
+        File(
+            context.cacheDir,
+            "pdfs"
+        ).apply {
+            mkdirs()
+        }
 
-    val file = File(
-        directory,
-        "exercises_by_topic_${System.currentTimeMillis()}.pdf"
-    )
+    val fileName =
+        if (isEnglish) {
+            "Exercises by Topic.pdf"
+        } else {
+            "תרגילים לפי נושא.pdf"
+        }
+
+    val file =
+        File(
+            directory,
+            fileName
+        )
+
+    /*
+     * שם הקובץ קבוע.
+     * כל יצירה חדשה מחליפה את הקובץ הקודם.
+     */
+    if (file.exists()) {
+        file.delete()
+    }
 
     FileOutputStream(file).use { output ->
         document.writeTo(output)

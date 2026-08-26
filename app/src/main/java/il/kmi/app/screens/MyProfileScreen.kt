@@ -2775,13 +2775,45 @@ private fun createProfilePdf(
     drawFooter()
     document.finishPage(page)
 
-    val dir = File(context.cacheDir, "pdfs").apply { mkdirs() }
-    val file = File(dir, "my_profile_${System.currentTimeMillis()}.pdf")
+    /*
+     * שם קבוע לפי שפת האפליקציה.
+     * יצירת PDF חדש מחליפה את הקובץ הקודם
+     * במקום לצבור קבצים עם timestamp.
+     */
+    val dir =
+        File(
+            context.cacheDir,
+            "pdfs"
+        ).apply {
+            mkdirs()
+        }
+
+    val fileName =
+        if (isEnglish) {
+            "My Profile.pdf"
+        } else {
+            "הפרופיל שלי.pdf"
+        }
+
+    val file =
+        File(
+            dir,
+            fileName
+        )
+
+    /*
+     * אם נשאר קובץ קודם מאותו דוח,
+     * מוחקים אותו לפני יצירת הקובץ החדש.
+     */
+    if (file.exists()) {
+        file.delete()
+    }
 
     FileOutputStream(file).use { output ->
         document.writeTo(output)
     }
 
     document.close()
+
     return file
 }
