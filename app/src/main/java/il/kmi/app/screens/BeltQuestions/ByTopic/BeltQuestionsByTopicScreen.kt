@@ -2407,7 +2407,6 @@ internal fun TopicsBySubjectCard(
             subjects = visibleSubjectsSplit.withSubTopics,
             sectionCounts = uiSectionCounts,
             subjectCounts = subjectCounts,
-            subTopicsPickCountsBySubjectId = subTopicsPickCountsBySubjectId,
             formatCount = ::formatCount
         ).map { card ->
 
@@ -2457,7 +2456,6 @@ internal fun TopicsBySubjectCard(
             subjects = visibleSubjectsSplit.withoutSubTopics,
             sectionCounts = uiSectionCounts,
             subjectCounts = subjectCounts,
-            subTopicsPickCountsBySubjectId = subTopicsPickCountsBySubjectId,
             formatCount = ::formatCount
         ).map { card ->
 

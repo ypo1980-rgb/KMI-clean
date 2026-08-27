@@ -29,6 +29,34 @@ fun NavGraphBuilder.trainingSummaryNavGraph(
             ?.trim()
             .orEmpty()
 
+        val calendarStateHandle =
+            nav.previousBackStackEntry
+                ?.savedStateHandle
+
+        val pickedBranch =
+            calendarStateHandle
+                ?.get<String>(
+                    "training_summary_branch"
+                )
+                ?.trim()
+                .orEmpty()
+
+        val pickedGroup =
+            calendarStateHandle
+                ?.get<String>(
+                    "training_summary_group"
+                )
+                ?.trim()
+                .orEmpty()
+
+        val pickedTime =
+            calendarStateHandle
+                ?.get<String>(
+                    "training_summary_time"
+                )
+                ?.trim()
+                .orEmpty()
+
         // ✅ ב-Vm החגורה בדרך כלל מגיעה כ-il.kmi.shared.domain.Belt (או nullable)
         // לכן אוספים אותה ואז ממירים ל-il.kmi.app.domain.Belt לפי id.
         val sharedBelt = kmiVm.selectedBelt.collectAsState(initial = null).value
@@ -49,10 +77,14 @@ fun NavGraphBuilder.trainingSummaryNavGraph(
 
         TrainingSummaryScreen(
             vm = summaryVm,
-            sp = summarySp,
+            sp = sp,
+            summarySp = summarySp,
             kmiPrefs = kmiPrefs,
             belt = belt,
             pickedDateIso = pickedDateIso.ifBlank { null },
+            pickedBranch = pickedBranch.ifBlank { null },
+            pickedGroup = pickedGroup.ifBlank { null },
+            pickedTime = pickedTime.ifBlank { null },
             onBack = onBack,
             onHome = {
                 nav.navigate(Route.Home.route) {

@@ -1,6 +1,6 @@
 @file:OptIn(
-    androidx.compose.material3.ExperimentalMaterial3Api::class,
-    androidx.compose.foundation.ExperimentalFoundationApi::class
+    ExperimentalMaterial3Api::class,
+    ExperimentalFoundationApi::class
 )
 
 package il.kmi.app.screens
@@ -9,6 +9,7 @@ import android.app.Activity
 import android.content.Context
 import android.content.Intent
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -17,7 +18,6 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Chat
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Search
@@ -37,9 +37,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import il.kmi.app.ui.KmiTopBar
 import il.kmi.app.ui.DrawerBridge
+import il.kmi.app.ui.KmiIconSize
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -56,6 +56,7 @@ import androidx.compose.ui.text.input.ImeAction
 import shareCurrentScreen
 import il.kmi.shared.localization.AppLanguage
 import il.kmi.shared.localization.AppLanguageManager
+import kotlin.time.Duration.Companion.milliseconds
 
 //========================================================================
 
@@ -67,6 +68,7 @@ import il.kmi.shared.localization.AppLanguageManager
  * - משאיר את הסרגל התחתון (BottomActionsBarEdgeToEdge)
  * - חיפוש נעול עד רישום (lockSearch=true), בית לא נעול (lockHome=false)
  */
+@Suppress("unused")
 @Composable
 fun SideScreenTopBar(
     title: String,
@@ -120,6 +122,11 @@ fun SideScreenTopBar(
    ☆ סרגל האייקונים התחתון — מופרד מקובץ KmiTopBar הגדול ☆
    ========================================================= */
 
+@Suppress(
+    "unused",
+    "UNUSED_PARAMETER",
+    "UNUSED_VARIABLE"
+)
 @Composable
 fun BottomActionsBarEdgeToEdge(
     onHome: (() -> Unit)?,
@@ -151,9 +158,19 @@ fun BottomActionsBarEdgeToEdge(
     val tSettings = if (isEnglish) "Settings" else "הגדרות"
 
     // ✅ כיתובים קצרים כדי שלא ייחתכו מתחת לאייקונים
-    val tAssistant = if (isEnglish) "AI" else "עוזר"
-    val tShare = if (isEnglish) "Share" else "שתף"
-    val tBroadcast = if (isEnglish) "Cast" else "שידור"
+    val tAssistant =
+        if (isEnglish) {
+            "AI"
+        } else {
+            "עוזר"
+        }
+
+    val tShare =
+        if (isEnglish) {
+            "Share"
+        } else {
+            "שתף"
+        }
 
     val tSearchLocked = if (isEnglish) {
         "Search is available after login/registration"
@@ -167,12 +184,6 @@ fun BottomActionsBarEdgeToEdge(
         "מסך הבית יהיה זמין לאחר כניסה/רישום"
     }
 
-    val tBroadcastLocked = if (isEnglish) {
-        "Broadcast will be available after login/registration"
-    } else {
-        "שידור יהיה זמין לאחר כניסה/רישום"
-    }
-
     val tSearchExercise = if (isEnglish) {
         "Search exercise (e.g. kick, defense)"
     } else {
@@ -181,29 +192,39 @@ fun BottomActionsBarEdgeToEdge(
 
     val tClearSearch = if (isEnglish) "Clear search" else "נקה חיפוש"
 
-    val tSearchErrorPrefix = if (isEnglish) {
-        "Search error:"
-    } else {
-        "שגיאה בעת חיפוש:"
-    }
-
     val tSearchHint = if (isEnglish) {
         "Type a word or phrase to see matching exercises."
     } else {
         "הקלד מילה או ביטוי כדי לראות תרגילים תואמים."
     }
 
-    val tNoExercisesFound = if (isEnglish) {
-        "No exercises found for"
-    } else {
-        "לא נמצאו תרגילים עבור"
-    }
+    val tNoExercisesFound =
+        if (isEnglish) {
+            "No exercises found for"
+        } else {
+            "לא נמצאו תרגילים עבור"
+        }
 
-    val tShareSubject = if (isEnglish) {
-        "K.A.M.I – Krav Magen Israeli"
-    } else {
-        "ק.מ.י – קרב מגן ישראלי"
-    }
+    val tSearchError =
+        if (isEnglish) {
+            "Search error"
+        } else {
+            "שגיאה בעת חיפוש"
+        }
+
+    val tUnknownSearchError =
+        if (isEnglish) {
+            "An error occurred"
+        } else {
+            "אירעה שגיאה"
+        }
+
+    val tShareSubject =
+        if (isEnglish) {
+            "K.A.M.I – Krav Magen Israeli"
+        } else {
+            "ק.מ.י – קרב מגן ישראלי"
+        }
 
     val tShareChooser = if (isEnglish) "Share via" else "שתף באמצעות"
     /* --- state לחיפוש (כולל שכבה מודאלית) --- */
@@ -220,46 +241,87 @@ fun BottomActionsBarEdgeToEdge(
         val results: List<il.kmi.app.domain.ContentRepo.SearchHit> = emptyList(),
         val error: String? = null
     )
-    val uiState: SearchUiState = remember(query, searchProvider) {
-        val q = query.trim()
-        if (q.isEmpty()) SearchUiState()
-        else runCatching { searchProvider?.invoke(q) ?: emptyList() }
-            .fold(
-                onSuccess = { SearchUiState(results = it) },
-                onFailure = { SearchUiState(error = it.message ?: "אירעה שגיאה") }
-            )
-    }
+    val uiState: SearchUiState =
+        remember(
+            query,
+            searchProvider,
+            tUnknownSearchError
+        ) {
+            val q =
+                query.trim()
+
+            if (q.isEmpty()) {
+                SearchUiState()
+            } else {
+                runCatching {
+                    searchProvider?.invoke(q)
+                        ?: emptyList()
+                }.fold(
+                    onSuccess = {
+                        SearchUiState(
+                            results = it
+                        )
+                    },
+                    onFailure = {
+                        SearchUiState(
+                            error =
+                                it.message
+                                    ?: tUnknownSearchError
+                        )
+                    }
+                )
+            }
+        }
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 
-    val barColor = Color.White
-    val contentColor = MaterialTheme.colorScheme.onSurfaceVariant
-    val disabledContentColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.45f)
+    val disabledContentColor =
+        MaterialTheme.colorScheme
+            .onSurfaceVariant
+            .copy(
+                alpha = 0.45f
+            )
 
     Surface(
-        modifier = Modifier
-            .fillMaxWidth()
-            .heightIn(min = 82.dp),
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .heightIn(min = 82.dp),
         shape = RectangleShape,
         color = Color.Transparent,
         tonalElevation = 0.dp,
         shadowElevation = 0.dp
     ) {
-        val canSearch = isRegistered
-
         Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 8.dp, vertical = 6.dp)
-                .clip(RoundedCornerShape(26.dp))
-                .background(Color.White.copy(alpha = 0.96f))
+            modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .padding(
+                        horizontal = 8.dp,
+                        vertical = 6.dp
+                    )
+                    .clip(
+                        RoundedCornerShape(26.dp)
+                    )
+                    .background(
+                        MaterialTheme
+                            .colorScheme
+                            .surface
+                            .copy(alpha = 0.96f)
+                    )
         ) {
             Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 4.dp, vertical = 6.dp)
-                    .height(68.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceEvenly
+                modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .padding(
+                            horizontal = 4.dp,
+                            vertical = 6.dp
+                        )
+                        .height(68.dp),
+                verticalAlignment =
+                    Alignment.CenterVertically,
+                horizontalArrangement =
+                    Arrangement.SpaceEvenly
             ) {
 
                 // 1) חיפוש
@@ -271,10 +333,20 @@ fun BottomActionsBarEdgeToEdge(
                 ) {
                     PremiumBarIcon(
                         icon = Icons.Filled.Search,
-                        tint = if (canSearch) Color(0xFF10B981) else disabledContentColor,
-                        background = if (canSearch) Color(0x1A10B981) else Color(0x14000000),
+                        tint =
+                            if (isRegistered) {
+                                Color(0xFF10B981)
+                            } else {
+                                disabledContentColor
+                            },
+                        background =
+                            if (isRegistered) {
+                                Color(0x1A10B981)
+                            } else {
+                                Color(0x14000000)
+                            },
                         onClick = {
-                            if (!canSearch) {
+                            if (!isRegistered) {
                                 android.widget.Toast
                                     .makeText(ctx, tSearchLocked, android.widget.Toast.LENGTH_SHORT)
                                     .show()
@@ -403,7 +475,7 @@ fun BottomActionsBarEdgeToEdge(
         }
         LaunchedEffect(showSearch) {
             if (showSearch) {
-                delay(100)
+                delay(100.milliseconds)
                 focusRequester.requestFocus()
             }
         }
@@ -426,7 +498,7 @@ fun BottomActionsBarEdgeToEdge(
                         isSearching = true
                         debounceJob?.cancel()
                         debounceJob = scope.launch {
-                            delay(180)
+                            delay(180.milliseconds)
                             query = newText
                             isSearching = false
                         }
@@ -463,7 +535,7 @@ fun BottomActionsBarEdgeToEdge(
                                         query = ""
                                         isSearching = false
                                         scope.launch {
-                                            delay(10)
+                                            delay(10.milliseconds)
                                             focusRequester.requestFocus()
                                         }
                                     }) {
@@ -492,9 +564,12 @@ fun BottomActionsBarEdgeToEdge(
                 when {
                     uiState.error != null -> {
                         Text(
-                            "שגיאה בעת חיפוש: ${uiState.error}",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.error
+                            text =
+                                "$tSearchError: ${uiState.error}",
+                            style =
+                                MaterialTheme.typography.bodyMedium,
+                            color =
+                                MaterialTheme.colorScheme.error
                         )
                     }
                     query.isBlank() -> {
@@ -559,15 +634,22 @@ fun BottomActionsBarEdgeToEdge(
                                         style = MaterialTheme.typography.bodyLarge,
                                         fontWeight = FontWeight.SemiBold
                                     )
-                                    if (!hit.subtitle.isNullOrBlank()) {
-                                        Text(
-                                            text = hit.subtitle!!,
-                                            style = MaterialTheme.typography.bodySmall,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                                        )
-                                    }
+                                    hit.subtitle
+                                        ?.takeIf { subtitle ->
+                                            subtitle.isNotBlank()
+                                        }
+                                        ?.let { subtitle ->
+                                            Text(
+                                                text = subtitle,
+                                                style =
+                                                    MaterialTheme.typography.bodySmall,
+                                                color =
+                                                    MaterialTheme.colorScheme
+                                                        .onSurfaceVariant
+                                            )
+                                        }
                                 }
-                                Divider()
+                                HorizontalDivider()
                             }
                         }
                     }
@@ -592,7 +674,7 @@ fun PremiumBarIcon(
 
     LaunchedEffect(pressed) {
         if (pressed) {
-            kotlinx.coroutines.delay(120)
+            delay(120.milliseconds)
             pressed = false
         }
     }
@@ -628,12 +710,18 @@ fun PremiumBarIcon(
             tonalElevation = 0.dp,
             shadowElevation = 0.dp
         ) {
-            Box(contentAlignment = Alignment.Center) {
+            Box(
+                contentAlignment =
+                    Alignment.Center
+            ) {
                 Icon(
                     imageVector = icon,
                     contentDescription = null,
                     tint = tint,
-                    modifier = Modifier.size(23.dp)
+                    modifier =
+                        Modifier.size(
+                            KmiIconSize.medium
+                        )
                 )
             }
         }
@@ -644,8 +732,8 @@ fun PremiumBarIcon(
 fun BarAction(
     label: String,
     onClick: () -> Unit,
-    enabled: Boolean = true,
     modifier: Modifier = Modifier,
+    enabled: Boolean = true,
     content: @Composable () -> Unit
 ) {
     Column(
@@ -668,32 +756,46 @@ fun BarAction(
 
             Text(
                 text = label,
-                style = MaterialTheme.typography.labelSmall,
-                fontSize = 9.5.sp,
-                lineHeight = 10.sp,
-                fontWeight = FontWeight.SemiBold,
+                style =
+                    il.kmi.app.ui.KmiTypography.caption.copy(
+                        fontWeight = FontWeight.SemiBold
+                    ),
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
                 textAlign = TextAlign.Center,
-                color = MaterialTheme.colorScheme.onSurface.copy(
-                    alpha = if (enabled) 0.78f else 0.40f
-                ),
+                color =
+                    MaterialTheme.colorScheme.onSurface.copy(
+                        alpha =
+                            if (enabled) {
+                                0.78f
+                            } else {
+                                0.40f
+                            }
+                    ),
                 modifier = Modifier.fillMaxWidth()
             )
         }
     }
 }
 
+@Suppress("unused")
 @Composable
 fun BarAction(
     icon: ImageVector,
-    contentDescription: String? = null,
     onClick: () -> Unit,
-    enabled: Boolean = true,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    contentDescription: String? = null,
+    enabled: Boolean = true
 ) {
-    IconButton(onClick = onClick, enabled = enabled, modifier = modifier) {
-        Icon(imageVector = icon, contentDescription = contentDescription)
+    IconButton(
+        onClick = onClick,
+        enabled = enabled,
+        modifier = modifier
+    ) {
+        Icon(
+            imageVector = icon,
+            contentDescription = contentDescription
+        )
     }
 }
 

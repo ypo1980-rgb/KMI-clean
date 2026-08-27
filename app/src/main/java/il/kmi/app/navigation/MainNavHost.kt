@@ -1639,7 +1639,31 @@ fun MainNavHost(
                         }
                     },
 
-                    onDateClick = { pickedDate ->
+                    onDateClick = {
+                            pickedDate,
+                            branch,
+                            group,
+                            timeText ->
+
+                        nav.currentBackStackEntry
+                            ?.savedStateHandle
+                            ?.apply {
+                                set(
+                                    "training_summary_branch",
+                                    branch
+                                )
+
+                                set(
+                                    "training_summary_group",
+                                    group
+                                )
+
+                                set(
+                                    "training_summary_time",
+                                    timeText
+                                )
+                            }
+
                         nav.navigate(
                             Route.TrainingSummary.make(
                                 pickedDate.toString()

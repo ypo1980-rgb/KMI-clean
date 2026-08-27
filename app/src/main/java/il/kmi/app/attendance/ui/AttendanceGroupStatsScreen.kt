@@ -66,7 +66,6 @@ import java.util.Locale
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.material3.Checkbox
-import androidx.compose.foundation.lazy.items
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.foundation.clickable
 import androidx.compose.material.icons.filled.ExpandLess
@@ -82,9 +81,13 @@ import androidx.compose.material3.LocalContentColor
 import androidx.core.content.FileProvider
 import java.io.File
 import java.io.FileOutputStream
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.time.LocalDate
 
 //=========================================================================
 
+@Suppress("UNUSED_PARAMETER")
 @Composable
 fun AttendanceGroupStatsScreen(
     repo: AttendanceRepository,
@@ -98,13 +101,24 @@ fun AttendanceGroupStatsScreen(
 
     fun tr(he: String, en: String): String = if (isEnglish) en else he
 
-    val screenTextAlign = if (isEnglish) TextAlign.Start else TextAlign.Right
-    val screenHorizontalAlignment = if (isEnglish) Alignment.Start else Alignment.End
+    val screenTextAlign =
+        if (isEnglish) {
+            TextAlign.Start
+        } else {
+            TextAlign.Right
+        }
+
     val screenTextDirection =
-        if (isEnglish) TextDirection.Ltr else TextDirection.Rtl
+        if (isEnglish) {
+            TextDirection.Ltr
+        } else {
+            TextDirection.Rtl
+        }
 
     val screenTextStyle =
-        TextStyle(textDirection = screenTextDirection)
+        TextStyle(
+            textDirection = screenTextDirection
+        )
 
     val isDarkMode =
         MaterialTheme.colorScheme.background.luminance() < 0.5f
@@ -856,7 +870,6 @@ fun AttendanceGroupStatsScreen(
                     ),
                     confirmText = tr("אפס הכל", "Reset all"),
                     dismissText = tr("ביטול", "Cancel"),
-                    danger = true,
                     onConfirm = {
                         confirmResetAll = false
                         busy = true
@@ -883,7 +896,6 @@ fun AttendanceGroupStatsScreen(
                     ),
                     confirmText = tr("מחק", "Delete"),
                     dismissText = tr("ביטול", "Cancel"),
-                    danger = true,
                     onConfirm = {
                         confirmDeleteSelected = false
                         busy = true
@@ -1051,7 +1063,15 @@ private fun createAttendanceStatsPdf(
         canvas.drawColor(android.graphics.Color.WHITE)
 
         val headerBottom = 122f
-        val headerTextRight = 435f
+
+        /*
+         * הכותרת מיושרת לצד הימני של האזור הכחול.
+         *
+         * כך הטקסט נשאר כולו בתוך הרקע הכחול
+         * ולא מתקרב לאלכסון ולאזור הלבן.
+         */
+        val headerTextRight =
+            pageWidth.toFloat() - 34f
 
         canvas.drawPath(android.graphics.Path().apply {
             moveTo(pageWidth.toFloat(), 0f)
@@ -1070,7 +1090,11 @@ private fun createAttendanceStatsPdf(
             lineTo(268f, 0f)
             close()
         }, Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = android.graphics.Color.rgb(36, 103, 158)
+            color = android.graphics.Color.rgb(
+                36,
+                103,
+                158
+            )
         })
 
         canvas.drawPath(android.graphics.Path().apply {
@@ -1080,7 +1104,11 @@ private fun createAttendanceStatsPdf(
             lineTo(290f, 0f)
             close()
         }, Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = android.graphics.Color.rgb(128, 183, 220)
+            color = android.graphics.Color.rgb(
+                128,
+                183,
+                220
+            )
         })
 
         drawKmiLogo(
@@ -1090,8 +1118,11 @@ private fun createAttendanceStatsPdf(
             radius = 42f
         )
 
-        titlePaint.textAlign = Paint.Align.RIGHT
-        subTitlePaint.textAlign = Paint.Align.RIGHT
+        titlePaint.textAlign =
+            Paint.Align.RIGHT
+
+        subTitlePaint.textAlign =
+            Paint.Align.RIGHT
 
         canvas.drawText(
             tr(
@@ -1113,13 +1144,20 @@ private fun createAttendanceStatsPdf(
             subTitlePaint
         )
 
-        smallPaint.textAlign = Paint.Align.RIGHT
+        smallPaint.textAlign =
+            Paint.Align.RIGHT
+
         canvas.drawText(
-            tr("תאריך הפקה:", "Generated:") + " " +
-                    java.text.SimpleDateFormat(
+            tr(
+                "תאריך הפקה:",
+                "Generated:"
+            ) + " " +
+                    SimpleDateFormat(
                         "dd/MM/yyyy",
-                        java.util.Locale.getDefault()
-                    ).format(java.util.Date()),
+                        Locale.getDefault()
+                    ).format(
+                        Date()
+                    ),
             pageWidth - 34f,
             142f,
             smallPaint
@@ -1204,21 +1242,39 @@ private fun createAttendanceStatsPdf(
         top: Float,
         index: Int
     ): Float {
-        val left = margin
-        val right = pageWidth - margin
-        val bottom = top + 82f
-        val mid = pageWidth / 2f
+        val right =
+            pageWidth - margin
+
+        val bottom =
+            top + 82f
+
+        val mid =
+            pageWidth / 2f
 
         drawRoundRect(
             canvas,
-            left,
+            margin,
             top,
             right,
             bottom,
-            if (index % 2 == 0) lightBlue else softBlue,
+            if (index % 2 == 0) {
+                lightBlue
+            } else {
+                softBlue
+            },
             12f
         )
-        drawRoundRect(canvas, left, top, right, bottom, borderBlue, 12f, stroke = true)
+
+        drawRoundRect(
+            canvas,
+            margin,
+            top,
+            right,
+            bottom,
+            borderBlue,
+            12f,
+            stroke = true
+        )
 
         canvas.drawLine(mid, top + 20f, mid, bottom - 18f, Paint(Paint.ANTI_ALIAS_FLAG).apply {
             color = borderBlue
@@ -1317,8 +1373,34 @@ private fun createAttendanceStatsPdf(
         pageNumber++
     }
 
-    val dir = File(context.cacheDir, "pdfs").apply { mkdirs() }
-    val file = File(dir, "attendance_stats_${System.currentTimeMillis()}.pdf")
+    val dir =
+        File(
+            context.cacheDir,
+            "pdfs"
+        ).apply {
+            mkdirs()
+        }
+
+    val reportDate =
+        SimpleDateFormat(
+            "dd-MM-yyyy",
+            Locale.getDefault()
+        ).format(
+            Date()
+        )
+
+    val reportFileName =
+        if (isEnglish) {
+            "Attendance_Report_$reportDate.pdf"
+        } else {
+            "דוח_נוכחות_$reportDate.pdf"
+        }
+
+    val file =
+        File(
+            dir,
+            reportFileName
+        )
 
     FileOutputStream(file).use { output ->
         document.writeTo(output)
@@ -1836,7 +1918,8 @@ private fun ReportRowCard(
     ) {
         val datePretty = remember(dateText, isEnglish) {
             runCatching {
-                val d = java.time.LocalDate.parse(dateText)
+                val d =
+                    LocalDate.parse(dateText)
                 val fmt = DateTimeFormatter.ofPattern(
                     "dd.MM.yyyy",
                     if (isEnglish) Locale.ENGLISH else Locale("he", "IL")
@@ -1983,7 +2066,7 @@ private fun ReportAttendanceDetailsCard(
     repo: AttendanceRepository,
     branch: String,
     groupKey: String,
-    date: java.time.LocalDate,
+    date: LocalDate,
     isEnglish: Boolean
 ) {
     fun tr(he: String, en: String): String = if (isEnglish) en else he
@@ -2407,7 +2490,6 @@ private fun ConfirmDialog(
     text: String,
     confirmText: String,
     dismissText: String,
-    danger: Boolean,
     onConfirm: () -> Unit,
     onDismiss: () -> Unit
 ) {
@@ -2440,11 +2522,7 @@ private fun ConfirmDialog(
                     text = confirmText,
                     style = KmiTypography.action,
                     color =
-                        if (danger) {
-                            MaterialTheme.colorScheme.error
-                        } else {
-                            MaterialTheme.colorScheme.primary
-                        },
+                        MaterialTheme.colorScheme.error,
                     textAlign = TextAlign.Center,
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis

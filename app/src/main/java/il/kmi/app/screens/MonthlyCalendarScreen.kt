@@ -69,7 +69,12 @@ fun MonthlyCalendarScreen(
     kmiPrefs: KmiPrefs,
     onBack: () -> Unit,
     onHome: () -> Unit,
-    onDateClick: (LocalDate) -> Unit
+    onDateClick: (
+        date: LocalDate,
+        branch: String,
+        group: String,
+        timeText: String
+    ) -> Unit
 ) {
     val ctx = LocalContext.current
     val langManager = remember(ctx) { AppLanguageManager(ctx) }
@@ -156,6 +161,16 @@ fun MonthlyCalendarScreen(
         val today = remember { LocalDate.now() }
         var ym by rememberSaveable { mutableStateOf(YearMonth.from(today)) }
         var selectedDate by rememberSaveable { mutableStateOf<LocalDate?>(today) }
+
+        var trainingChoiceDate by remember {
+            mutableStateOf<LocalDate?>(null)
+        }
+
+        var trainingChoices by remember {
+            mutableStateOf<List<CalendarTrainingItem>>(
+                emptyList()
+            )
+        }
 
         // קלטים מהעדפות המשתמש
         val region   = kmiPrefs.region.orEmpty()
@@ -579,6 +594,43 @@ fun MonthlyCalendarScreen(
                                 },
                                 onDateSelected = { date ->
                                     selectedDate = date
+
+                                    val dayTrainings =
+                                        trainingsByDate[date]
+                                            .orEmpty()
+                                            .sortedBy {
+                                                it.timeText
+                                            }
+
+                                    when {
+                                        dayTrainings.size == 1 -> {
+                                            val training =
+                                                dayTrainings.first()
+
+                                            onDateClick(
+                                                date,
+                                                training.branch,
+                                                training.group,
+                                                training.timeText
+                                            )
+                                        }
+
+                                        dayTrainings.size > 1 -> {
+                                            trainingChoiceDate =
+                                                date
+
+                                            trainingChoices =
+                                                dayTrainings
+                                        }
+
+                                        else -> {
+                                            trainingChoiceDate =
+                                                null
+
+                                            trainingChoices =
+                                                emptyList()
+                                        }
+                                    }
                                 },
                                 markers = calendarMarkers
                             )
@@ -714,7 +766,35 @@ fun MonthlyCalendarScreen(
                                             val hasSummaryForSelectedDate = sel in summaryDatesThisMonth
 
                                             Button(
-                                                onClick = { onDateClick(sel) },
+                                                onClick = {
+                                                    val dayTrainings =
+                                                        selectedTrainingItems
+                                                            .sortedBy {
+                                                                it.timeText
+                                                            }
+
+                                                    when {
+                                                        dayTrainings.size == 1 -> {
+                                                            val training =
+                                                                dayTrainings.first()
+
+                                                            onDateClick(
+                                                                sel,
+                                                                training.branch,
+                                                                training.group,
+                                                                training.timeText
+                                                            )
+                                                        }
+
+                                                        dayTrainings.size > 1 -> {
+                                                            trainingChoiceDate =
+                                                                sel
+
+                                                            trainingChoices =
+                                                                dayTrainings
+                                                        }
+                                                    }
+                                                },
                                                 shape = RoundedCornerShape(16.dp),
                                                 contentPadding = PaddingValues(horizontal = 18.dp, vertical = 10.dp),
                                                 colors =
@@ -747,6 +827,163 @@ fun MonthlyCalendarScreen(
                         }
                     }
                 }
+            }
+
+            val choiceDate =
+                trainingChoiceDate
+
+            if (
+                choiceDate != null &&
+                trainingChoices.size > 1
+            ) {
+                AlertDialog(
+                    onDismissRequest = {
+                        trainingChoiceDate = null
+                        trainingChoices = emptyList()
+                    },
+                    title = {
+                        Text(
+                            text =
+                                tr(
+                                    "בחר אימון לסיכום",
+                                    "Choose training for summary"
+                                ),
+                            fontWeight =
+                                FontWeight.ExtraBold,
+                            textAlign =
+                                if (isEnglish) {
+                                    TextAlign.Left
+                                } else {
+                                    TextAlign.Right
+                                },
+                            modifier =
+                                Modifier.fillMaxWidth()
+                        )
+                    },
+                    text = {
+                        Column(
+                            modifier =
+                                Modifier.fillMaxWidth(),
+                            verticalArrangement =
+                                Arrangement.spacedBy(8.dp)
+                        ) {
+                            trainingChoices
+                                .sortedBy {
+                                    it.timeText
+                                }
+                                .forEach { training ->
+
+                                    val branchLabel =
+                                        training.displayBranch(
+                                            isEnglish
+                                        )
+
+                                    val groupLabel =
+                                        training.displayGroup(
+                                            isEnglish
+                                        )
+
+                                    Surface(
+                                        modifier =
+                                            Modifier
+                                                .fillMaxWidth()
+                                                .clickable {
+                                                    onDateClick(
+                                                        choiceDate,
+                                                        training.branch,
+                                                        training.group,
+                                                        training.timeText
+                                                    )
+
+                                                    trainingChoiceDate =
+                                                        null
+
+                                                    trainingChoices =
+                                                        emptyList()
+                                                },
+                                        shape =
+                                            RoundedCornerShape(16.dp),
+                                        color =
+                                            MaterialTheme
+                                                .colorScheme
+                                                .surfaceVariant,
+                                        border =
+                                            BorderStroke(
+                                                1.dp,
+                                                MaterialTheme
+                                                    .colorScheme
+                                                    .outlineVariant
+                                            )
+                                    ) {
+                                        Column(
+                                            modifier =
+                                                Modifier
+                                                    .fillMaxWidth()
+                                                    .padding(
+                                                        horizontal = 14.dp,
+                                                        vertical = 12.dp
+                                                    )
+                                        ) {
+                                            Text(
+                                                text =
+                                                    "${training.timeText} · $branchLabel",
+                                                style =
+                                                    MaterialTheme
+                                                        .typography
+                                                        .titleSmall,
+                                                fontWeight =
+                                                    FontWeight.ExtraBold,
+                                                textAlign =
+                                                    if (isEnglish) {
+                                                        TextAlign.Left
+                                                    } else {
+                                                        TextAlign.Right
+                                                    },
+                                                modifier =
+                                                    Modifier.fillMaxWidth()
+                                            )
+
+                                            Spacer(
+                                                Modifier.height(3.dp)
+                                            )
+
+                                            Text(
+                                                text = groupLabel,
+                                                style =
+                                                    MaterialTheme
+                                                        .typography
+                                                        .bodyMedium,
+                                                textAlign =
+                                                    if (isEnglish) {
+                                                        TextAlign.Left
+                                                    } else {
+                                                        TextAlign.Right
+                                                    },
+                                                modifier =
+                                                    Modifier.fillMaxWidth()
+                                            )
+                                        }
+                                    }
+                                }
+                        }
+                    },
+                    confirmButton = {},
+                    dismissButton = {
+                        TextButton(
+                            onClick = {
+                                trainingChoiceDate = null
+                                trainingChoices = emptyList()
+                            }
+                        ) {
+                            Text(
+                                tr(
+                                    "ביטול",
+                                    "Cancel"
+                                )
+                            )
+                        }
+                    }
+                )
             }
         }
     }

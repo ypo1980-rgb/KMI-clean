@@ -12,6 +12,7 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
@@ -65,20 +66,22 @@ internal fun CoachGroupStatsPremiumScreen(
     }
 
     /*
-     * השיתוף מנותב לפי הטאב הפעיל:
+     * השיתוף מופעל רק כאשר מתקבל shareTrigger חדש.
+     *
+     * שינוי בין הטאבים אינו מפעיל שיתוף.
      *
      * קבוצתי -> PDF סטטיסטיקת הקבוצה.
-     * ארצי   -> NationalStatisticsScreen מטפל בשיתוף.
+     * ארצי   -> מעבירים Trigger חדש למסך הארצי.
      */
     LaunchedEffect(
-        shareTrigger,
-        showNationalStatistics
+        shareTrigger
     ) {
-        if (
-            shareTrigger > 0 &&
-            !showNationalStatistics
-        ) {
-            onShareGroupStatistics()
+        if (shareTrigger > 0) {
+            if (showNationalStatistics) {
+                nationalShareTrigger++
+            } else {
+                onShareGroupStatistics()
+            }
         }
     }
 
@@ -89,6 +92,7 @@ internal fun CoachGroupStatsPremiumScreen(
     androidx.activity.compose.BackHandler(
         enabled = showNationalStatistics
     ) {
+        nationalShareTrigger = 0
         showNationalStatistics = false
     }
 
@@ -108,15 +112,20 @@ internal fun CoachGroupStatsPremiumScreen(
                         )
                     )
                 )
+                // גם התצוגה הארצית נמצאת מתחת
+                // לאותו KmiTopBar חיצוני.
                 .padding(
-                    horizontal = 14.dp,
-                    vertical = 12.dp
+                    start = 14.dp,
+                    end = 14.dp,
+                    top = 72.dp,
+                    bottom = 12.dp
                 )
         ) {
             StatisticsTabsSelector(
                 isEnglish = isEnglish,
                 nationalSelected = true,
                 onGroupClick = {
+                    nationalShareTrigger = 0
                     showNationalStatistics = false
                 },
                 onNationalClick = {}
@@ -126,23 +135,12 @@ internal fun CoachGroupStatsPremiumScreen(
                 Modifier.height(10.dp)
             )
 
-            LaunchedEffect(
-                shareTrigger,
-                showNationalStatistics
-            ) {
-                if (
-                    shareTrigger > 0 &&
-                    showNationalStatistics
-                ) {
-                    nationalShareTrigger++
-                }
-            }
-
             NationalStatisticsScreen(
                 isEnglish = isEnglish,
                 embedded = true,
                 modifier = Modifier.weight(1f),
                 onBack = {
+                    nationalShareTrigger = 0
                     showNationalStatistics = false
                 },
                 onOpenDrawer = onOpenDrawer,
@@ -239,9 +237,14 @@ internal fun CoachGroupStatsPremiumScreen(
         Column(
             modifier = Modifier
                 .fillMaxSize()
+                // המסך מוצג מתחת ל־KmiTopBar חיצוני.
+                // משאירים מקום לכותרת כדי שהטאבים
+                // לא יצוירו מאחוריה.
                 .padding(
-                    horizontal = 14.dp,
-                    vertical = 12.dp
+                    start = 14.dp,
+                    end = 14.dp,
+                    top = 72.dp,
+                    bottom = 12.dp
                 )
         ) {
             StatisticsTabsSelector(
@@ -654,75 +657,241 @@ internal fun CoachGroupStatsPremiumScreen(
                     } else {
                         stats.beltCounts.forEach { (belt, count) ->
                             val progress =
-                                if (profiles.isNotEmpty()) count.toFloat() / profiles.size.toFloat() else 0f
+                                if (profiles.isNotEmpty()) {
+                                    count.toFloat() / profiles.size.toFloat()
+                                } else {
+                                    0f
+                                }
 
-                            val beltColor = beltColorForStats(belt)
+                            val beltColor =
+                                beltColorForStats(belt)
+
+                            val isBlackBelt =
+                                belt.trim() == "שחורה" ||
+                                        belt.trim().equals(
+                                            "Black",
+                                            ignoreCase = true
+                                        )
+
+                            /*
+                             * חגורה שחורה נבלעת ברקע הכהה.
+                             * משאירים את צבע החגורה עצמו שחור,
+                             * אבל מוסיפים לה מסגרת/הילה לבנה עדינה.
+                             */
                             val labelColor =
-                                if (beltColor == Color(0xFFE5E7EB)) Color(0xFF475569) else beltColor
+                                when {
+                                    isBlackBelt ->
+                                        if (isDarkMode) {
+                                            Color(0xFFF8FAFC)
+                                        } else {
+                                            Color(0xFF111827)
+                                        }
+
+                                    beltColor == Color(0xFFE5E7EB) ->
+                                        Color(0xFF475569)
+
+                                    else ->
+                                        beltColor
+                                }
+
+                            val beltTrackColor =
+                                if (
+                                    isBlackBelt &&
+                                    isDarkMode
+                                ) {
+                                    Color.White.copy(
+                                        alpha = 0.18f
+                                    )
+                                } else {
+                                    beltColor.copy(
+                                        alpha = 0.18f
+                                    )
+                                }
 
                             Column(
                                 modifier = Modifier.fillMaxWidth(),
-                                verticalArrangement = Arrangement.spacedBy(7.dp)
+                                verticalArrangement =
+                                    Arrangement.spacedBy(7.dp)
                             ) {
                                 Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    verticalAlignment = Alignment.CenterVertically
+                                    modifier =
+                                        Modifier.fillMaxWidth(),
+                                    verticalAlignment =
+                                        Alignment.CenterVertically
                                 ) {
                                     Surface(
-                                        color = beltColor.copy(alpha = 0.14f),
+                                        color =
+                                            if (
+                                                isBlackBelt &&
+                                                isDarkMode
+                                            ) {
+                                                Color.White.copy(
+                                                    alpha = 0.08f
+                                                )
+                                            } else {
+                                                beltColor.copy(
+                                                    alpha = 0.14f
+                                                )
+                                            },
                                         shape = CircleShape,
+                                        border =
+                                            if (
+                                                isBlackBelt &&
+                                                isDarkMode
+                                            ) {
+                                                BorderStroke(
+                                                    width = 1.dp,
+                                                    color = Color.White.copy(
+                                                        alpha = 0.45f
+                                                    )
+                                                )
+                                            } else {
+                                                null
+                                            },
                                         modifier = Modifier.size(34.dp)
                                     ) {
                                         Box(
-                                            modifier = Modifier.fillMaxSize(),
-                                            contentAlignment = Alignment.Center
+                                            modifier =
+                                                Modifier.fillMaxSize(),
+                                            contentAlignment =
+                                                Alignment.Center
                                         ) {
                                             Text(
                                                 text = "$count",
-                                                style = KmiTypography.metric.copy(
-                                                    fontWeight = FontWeight.Black
-                                                ),
+                                                style =
+                                                    KmiTypography.metric.copy(
+                                                        fontWeight =
+                                                            FontWeight.Black
+                                                    ),
                                                 color = labelColor,
                                                 maxLines = 1
                                             )
                                         }
                                     }
 
-                                    Spacer(modifier = Modifier.width(10.dp))
+                                    Spacer(
+                                        modifier =
+                                            Modifier.width(10.dp)
+                                    )
 
                                     Text(
-                                        text = coachBeltNameForUi(
-                                            belt,
-                                            isEnglish
-                                        ),
-                                        modifier = Modifier.weight(1f),
-                                        textAlign = statsTextAlign,
+                                        text =
+                                            coachBeltNameForUi(
+                                                belt,
+                                                isEnglish
+                                            ),
+                                        modifier =
+                                            Modifier.weight(1f),
+                                        textAlign =
+                                            statsTextAlign,
                                         maxLines = 2,
-                                        style = KmiTypography.cardTitle.copy(
-                                            fontWeight = FontWeight.ExtraBold,
-                                            color = labelColor
-                                        )
+                                        style =
+                                            KmiTypography.cardTitle.copy(
+                                                fontWeight =
+                                                    FontWeight.ExtraBold,
+                                                color =
+                                                    labelColor
+                                            )
                                     )
 
-                                    Spacer(modifier = Modifier.width(8.dp))
-
-                                    Box(
-                                        modifier = Modifier
-                                            .size(9.dp)
-                                            .clip(CircleShape)
-                                            .background(beltColor)
+                                    Spacer(
+                                        modifier =
+                                            Modifier.width(8.dp)
                                     )
+
+                                    Surface(
+                                        modifier =
+                                            Modifier.size(11.dp),
+                                        shape = CircleShape,
+                                        color = beltColor,
+                                        border =
+                                            if (
+                                                isBlackBelt &&
+                                                isDarkMode
+                                            ) {
+                                                BorderStroke(
+                                                    width = 1.dp,
+                                                    color = Color.White.copy(
+                                                        alpha = 0.65f
+                                                    )
+                                                )
+                                            } else {
+                                                null
+                                            }
+                                    ) {}
                                 }
 
-                                LinearProgressIndicator(
-                                    progress = { progress },
-                                    color = beltColor,
-                                    trackColor = beltColor.copy(alpha = 0.18f),
+                                Box(
                                     modifier = Modifier
                                         .fillMaxWidth()
                                         .height(7.dp)
-                                        .clip(RoundedCornerShape(999.dp))
-                                )
+                                        .clip(
+                                            RoundedCornerShape(
+                                                999.dp
+                                            )
+                                        )
+                                        .background(
+                                            beltTrackColor
+                                        )
+                                ) {
+                                    Box(
+                                        modifier = Modifier
+                                            .fillMaxHeight()
+                                            .fillMaxWidth(
+                                                progress.coerceIn(
+                                                    0f,
+                                                    1f
+                                                )
+                                            )
+                                            .clip(
+                                                RoundedCornerShape(
+                                                    999.dp
+                                                )
+                                            )
+                                            .background(
+                                                if (
+                                                    isBlackBelt &&
+                                                    isDarkMode
+                                                ) {
+                                                    Brush.horizontalGradient(
+                                                        colors = listOf(
+                                                            Color(0xFF111111),
+                                                            Color(0xFF262626),
+                                                            Color(0xFF111111)
+                                                        )
+                                                    )
+                                                } else {
+                                                    Brush.horizontalGradient(
+                                                        colors = listOf(
+                                                            beltColor,
+                                                            beltColor
+                                                        )
+                                                    )
+                                                }
+                                            )
+                                    )
+
+                                    if (
+                                        isBlackBelt &&
+                                        isDarkMode
+                                    ) {
+                                        Box(
+                                            modifier = Modifier
+                                                .matchParentSize()
+                                                .border(
+                                                    width = 1.dp,
+                                                    color =
+                                                        Color.White.copy(
+                                                            alpha = 0.42f
+                                                        ),
+                                                    shape =
+                                                        RoundedCornerShape(
+                                                            999.dp
+                                                        )
+                                                )
+                                        )
+                                    }
+                                }
                             }
                         }
                     }
@@ -1720,14 +1889,17 @@ internal fun createCoachGroupStatsPdf(
             "סטטיסטיקת הקבוצה",
             "Group Statistics"
         ),
-        headerX,
+        if (isEnglish) {
+            34f
+        } else {
+            headerX
+        },
         52f,
         textPaint(
             size = 24f,
             color =
                 android.graphics.Color.WHITE,
-            bold = true,
-            align = Paint.Align.RIGHT
+            bold = true
         )
     )
 
@@ -1739,13 +1911,16 @@ internal fun createCoachGroupStatsPdf(
                 "${branch.ifBlank { "—" }}  ·  " +
                 "${tr("קבוצה", "Group")}: " +
                 groupKey.ifBlank { "—" },
-        headerX,
+        if (isEnglish) {
+            34f
+        } else {
+            headerX
+        },
         78f,
         textPaint(
             size = 11f,
             color =
-                android.graphics.Color.WHITE,
-            align = Paint.Align.RIGHT
+                android.graphics.Color.WHITE
         )
     )
 
@@ -1766,12 +1941,15 @@ internal fun createCoachGroupStatsPdf(
             "תאריך הפקה:",
             "Generated:"
         ) + " " + generatedDate,
-        headerX,
+        if (isEnglish) {
+            34f
+        } else {
+            headerX
+        },
         142f,
         textPaint(
             size = 8.5f,
-            color = muted,
-            align = Paint.Align.RIGHT
+            color = muted
         )
     )
 
@@ -2096,7 +2274,7 @@ internal fun createCoachGroupStatsPdf(
     val dir =
         File(
             context.cacheDir,
-            "pdfs"
+            "shared_pdfs"
         ).apply {
             mkdirs()
         }

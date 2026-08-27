@@ -24,6 +24,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -43,14 +44,15 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
+import il.kmi.app.ui.KmiTypography
+import il.kmi.app.ui.LocalAppIconScale
 import il.kmi.shared.localization.AppLanguage
 import il.kmi.shared.localization.AppLanguageManager
 
+@Suppress("unused")
 @Composable
 fun PushToTalkVoiceDialog(
-    onDismiss: () -> Unit,
     onCommand: (
         command: VoiceAppCommand,
         spokenText: String
@@ -201,7 +203,8 @@ fun PushToTalkVoiceDialog(
                     ),
                 shape = CircleShape,
                 color = Color.Transparent,
-                shadowElevation = 18.dp,
+                shadowElevation = 0.dp,
+                tonalElevation = 0.dp,
                 onClick = {
                     when {
                         listening -> {
@@ -275,8 +278,11 @@ fun PushToTalkVoiceDialog(
                                 Icons.Filled.Mic
                         },
                         contentDescription = null,
-                        tint = Color.White,
-                        modifier = Modifier.size(54.dp)
+                        tint = MaterialTheme.colorScheme.onPrimary,
+                        modifier = Modifier.size(
+                            54.dp *
+                                    LocalAppIconScale.current
+                        )
                     )
                 }
             }
@@ -287,8 +293,9 @@ fun PushToTalkVoiceDialog(
 
             Surface(
                 shape = RoundedCornerShape(18.dp),
-                color = Color(0xEFFFFFFF),
-                shadowElevation = 8.dp
+                color = MaterialTheme.colorScheme.surface,
+                shadowElevation = 0.dp,
+                tonalElevation = 0.dp
             ) {
                 Text(
                     text = statusText,
@@ -296,14 +303,19 @@ fun PushToTalkVoiceDialog(
                         horizontal = 18.dp,
                         vertical = 10.dp
                     ),
+                    style = KmiTypography.action,
                     textAlign = TextAlign.Center,
-                    fontSize = 15.sp,
                     fontWeight = FontWeight.Bold,
-                    color = if (errorMessage == null) {
-                        Color(0xFF172033)
-                    } else {
-                        Color(0xFFDC2626)
-                    }
+                    color =
+                        if (errorMessage == null) {
+                            MaterialTheme
+                                .colorScheme
+                                .onSurface
+                        } else {
+                            MaterialTheme
+                                .colorScheme
+                                .error
+                        }
                 )
             }
         }

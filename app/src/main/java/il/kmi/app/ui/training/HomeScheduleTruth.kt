@@ -38,8 +38,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import il.kmi.app.training.TrainingCatalog
-import il.kmi.app.training.TrainingDirectory
+import il.kmi.app.training.TrainingData
 import il.kmi.app.ui.KmiTopBar
+import il.kmi.app.ui.KmiTypography
 import il.kmi.shared.prefs.KmiPrefs
 import il.kmi.shared.localization.AppLanguage
 import il.kmi.shared.localization.AppLanguageManager
@@ -48,9 +49,6 @@ import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 import java.util.Locale
 import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.material3.ExposedDropdownMenuBox
-import androidx.compose.material3.ExposedDropdownMenuDefaults
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.ui.text.style.TextOverflow
 import il.kmi.shared.domain.Belt
 import androidx.compose.foundation.background
@@ -75,15 +73,13 @@ import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.ColumnScope
-import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.EditNote
 import androidx.compose.material3.FilledTonalIconButton
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.OutlinedIconButton
 import androidx.compose.ui.graphics.Color
-import androidx.compose.material.icons.filled.Notes
-import androidx.compose.material.icons.filled.PlaylistAddCheck
+import androidx.compose.material.icons.automirrored.filled.Notes
+import androidx.compose.material.icons.automirrored.filled.PlaylistAddCheck
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.IconButtonDefaults
@@ -94,32 +90,93 @@ import androidx.compose.ui.text.style.TextDirection
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.unit.LayoutDirection
-import androidx.compose.ui.unit.sp
 import androidx.compose.ui.draw.scale
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalContext
+import androidx.core.content.edit
+import il.kmi.app.domain.ContentRepo
+import il.kmi.app.search.KmiSearchBridge
+import il.kmi.app.ui.KmiPremiumDropdown
+import il.kmi.app.ui.LocalAppIconScale
+import il.kmi.shared.domain.SubTopicRegistry
+import il.kmi.shared.questions.model.util.ExerciseTitleFormatter
 
 
 // ===========================
 // Training Summary Palette
 // ===========================
 
-private val SummaryBgTop = Color(0xFFF8FBFF)
-private val SummaryBgMid1 = Color(0xFFEAF4FF)
-private val SummaryBgMid2 = Color(0xFFB7DDF7)
-private val SummaryBgBottom = Color(0xFF062B4A)
+private val SummaryBgTop: Color
+    @Composable
+    get() =
+        MaterialTheme.colorScheme.background
 
-private val SummaryCard = Color(0xFFEAF2FF)
-private val SummaryCardInner = Color(0xFFDDEAFF)
+private val SummaryBgMid1: Color
+    @Composable
+    get() =
+        MaterialTheme.colorScheme.surface
 
-private val SummaryBorder = Color(0xFFD8E3F5)
-private val SummaryDivider = Color(0xFFC7D7EE)
+private val SummaryBgMid2: Color
+    @Composable
+    get() =
+        MaterialTheme.colorScheme.surfaceVariant
 
-private val SummaryChip = Color(0xFFDDEAFF)
-private val SummaryChipSelected = Color(0xFFB7DDF7)
+private val SummaryBgBottom: Color
+    @Composable
+    get() =
+        MaterialTheme.colorScheme.primary
+            .copy(alpha = 0.42f)
 
-private val SummaryTextDark = Color(0xFF1E2A3D)
-private val SummaryTextMuted = Color(0xFF5E6C80)
-private val SummaryPrimaryButton = Color(0xFF0EA5E9)
-private val SummaryPurpleButton = Color(0xFF7B57D1)
+private val SummaryCard: Color
+    @Composable
+    get() =
+        MaterialTheme.colorScheme.surface
+
+private val SummaryCardInner: Color
+    @Composable
+    get() =
+        MaterialTheme.colorScheme.surfaceVariant
+
+private val SummaryBorder: Color
+    @Composable
+    get() =
+        MaterialTheme.colorScheme.outlineVariant
+
+private val SummaryDivider: Color
+    @Composable
+    get() =
+        MaterialTheme.colorScheme.outlineVariant
+            .copy(alpha = 0.72f)
+
+private val SummaryChip: Color
+    @Composable
+    get() =
+        MaterialTheme.colorScheme.surfaceVariant
+
+private val SummaryChipSelected: Color
+    @Composable
+    get() =
+        MaterialTheme.colorScheme.primaryContainer
+
+private val SummaryTextDark: Color
+    @Composable
+    get() =
+        MaterialTheme.colorScheme.onSurface
+
+private val SummaryTextMuted: Color
+    @Composable
+    get() =
+        MaterialTheme.colorScheme.onSurfaceVariant
+
+private val SummaryPrimaryButton: Color
+    @Composable
+    get() =
+        MaterialTheme.colorScheme.primary
+
+private val SummaryPurpleButton: Color
+    @Composable
+    get() =
+        MaterialTheme.colorScheme.primary
 
 /**
  * פריט תרגיל "לבחירה" שמגיע מהקטלוג (ContentRepo).
@@ -135,60 +192,132 @@ data class ExercisePickItem(
 private fun SummarySectionHeader(
     title: String,
     subtitle: String,
-    icon: androidx.compose.ui.graphics.vector.ImageVector
+    icon: ImageVector,
+    isEnglish: Boolean
 ) {
-    CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
-        val rtlStyle = TextStyle(textDirection = TextDirection.Rtl)
+    val layoutDirection =
+        if (isEnglish) {
+            LayoutDirection.Ltr
+        } else {
+            LayoutDirection.Rtl
+        }
 
+    val textDirectionStyle =
+        if (isEnglish) {
+            TextStyle(
+                textDirection = TextDirection.Ltr
+            )
+        } else {
+            TextStyle(
+                textDirection = TextDirection.Rtl
+            )
+        }
+
+    val textAlign =
+        if (isEnglish) {
+            TextAlign.Left
+        } else {
+            TextAlign.Right
+        }
+
+    val horizontalAlignment =
+        if (isEnglish) {
+            Alignment.Start
+        } else {
+            Alignment.End
+        }
+
+    CompositionLocalProvider(
+        LocalLayoutDirection provides
+                layoutDirection
+    ) {
         Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically
+            modifier =
+                Modifier.fillMaxWidth(),
+            verticalAlignment =
+                Alignment.CenterVertically
         ) {
             Column(
-                modifier = Modifier.weight(1f),
-                horizontalAlignment = Alignment.End
+                modifier =
+                    Modifier.weight(1f),
+                horizontalAlignment =
+                    horizontalAlignment
             ) {
                 Text(
                     text = title,
-                    style = MaterialTheme.typography.titleMedium.merge(rtlStyle),
-                    fontWeight = FontWeight.ExtraBold,
-                    color = SummaryTextDark,
-                    textAlign = TextAlign.Right,
-                    modifier = Modifier.fillMaxWidth()
+                    style =
+                        KmiTypography.cardTitle
+                            .merge(
+                                textDirectionStyle
+                            ),
+                    fontWeight =
+                        FontWeight.ExtraBold,
+                    color =
+                        SummaryTextDark,
+                    textAlign =
+                        textAlign,
+                    modifier =
+                        Modifier.fillMaxWidth()
                 )
 
                 Text(
                     text = subtitle,
-                    style = MaterialTheme.typography.labelLarge.merge(rtlStyle),
-                    color = SummaryTextMuted,
-                    fontWeight = FontWeight.SemiBold,
-                    textAlign = TextAlign.Right,
-                    modifier = Modifier.fillMaxWidth()
+                    style =
+                        KmiTypography.secondary
+                            .merge(
+                                textDirectionStyle
+                            ),
+                    color =
+                        SummaryTextMuted,
+                    fontWeight =
+                        FontWeight.SemiBold,
+                    textAlign =
+                        textAlign,
+                    modifier =
+                        Modifier.fillMaxWidth()
                 )
             }
 
-            Spacer(Modifier.width(10.dp))
+            Spacer(
+                Modifier.width(10.dp)
+            )
 
             Box(
-                modifier = Modifier
-                    .size(42.dp)
-                    .background(
-                        brush = Brush.radialGradient(
-                            listOf(
-                                Color(0xFF22D3EE),
-                                Color(0xFF0EA5E9),
-                                Color(0xFF7B57D1)
-                            )
+                modifier =
+                    Modifier
+                        .size(42.dp)
+                        .background(
+                            brush =
+                                Brush.radialGradient(
+                                    listOf(
+                                        MaterialTheme
+                                            .colorScheme
+                                            .secondary,
+                                        MaterialTheme
+                                            .colorScheme
+                                            .primary,
+                                        MaterialTheme
+                                            .colorScheme
+                                            .tertiary
+                                    )
+                                ),
+                            shape =
+                                CircleShape
                         ),
-                        shape = CircleShape
-                    ),
-                contentAlignment = Alignment.Center
+                contentAlignment =
+                    Alignment.Center
             ) {
                 Icon(
                     imageVector = icon,
                     contentDescription = null,
-                    tint = Color.White,
-                    modifier = Modifier.size(18.dp)
+                    tint =
+                        MaterialTheme
+                            .colorScheme
+                            .onPrimary,
+                    modifier =
+                        Modifier.size(
+                            18.dp * LocalAppIconScale.current
+                        )
                 )
             }
         }
@@ -206,16 +335,17 @@ private fun PremiumSummaryCard(
         shape = shape,
         color = SummaryCard,
         tonalElevation = 0.dp,
-        shadowElevation = 6.dp,
+        shadowElevation = 0.dp,
         border = BorderStroke(
             1.dp,
             SummaryBorder
         )
     ) {
         Column(
-            modifier = Modifier.padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
-            horizontalAlignment = Alignment.End,
+            modifier =
+                Modifier.padding(16.dp),
+            verticalArrangement =
+                Arrangement.spacedBy(12.dp),
             content = content
         )
     }
@@ -224,14 +354,19 @@ private fun PremiumSummaryCard(
 /**
  * ✅ שים לב: השם V2 כדי למנוע Conflicting overloads אם כבר קיים אצלך TrainingSummaryScreen אחר בפרויקט.
  */
+@Suppress("UNUSED_PARAMETER")
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun TrainingSummaryScreen(
     vm: TrainingSummaryViewModel,
     sp: SharedPreferences,
+    summarySp: SharedPreferences,
     kmiPrefs: KmiPrefs,
     belt: Belt,
     pickedDateIso: String? = null,
+    pickedBranch: String? = null,
+    pickedGroup: String? = null,
+    pickedTime: String? = null,
     onBack: (() -> Unit)? = null,
     onHome: (() -> Unit)? = null,
     onOpenCalendar: (() -> Unit)? = null
@@ -240,7 +375,7 @@ fun TrainingSummaryScreen(
     val scrollState = rememberLazyListState()
     var showAddExercisesSheet by rememberSaveable { mutableStateOf(false) }
 
-    val ctx = androidx.compose.ui.platform.LocalContext.current
+    val ctx = LocalContext.current
     val languageManager = remember { AppLanguageManager(ctx) }
     val isEnglish = languageManager.getCurrentLanguage() == AppLanguage.ENGLISH
 
@@ -272,7 +407,12 @@ fun TrainingSummaryScreen(
     val truth = remember(sp) { HomeScheduleTruth(sp) }
     var branchError by remember { mutableStateOf<String?>(null) }
 
-    LaunchedEffect(state.dateIso) {
+    LaunchedEffect(
+        state.dateIso,
+        pickedBranch,
+        pickedGroup,
+        pickedTime
+    ) {
         val cleanIso = normalizedIsoOrNull(state.dateIso)
 
         // אם עדיין לא נבחר תאריך – לא מציגים שגיאה ולא מציגים "לא נמצא סניף"
@@ -284,7 +424,18 @@ fun TrainingSummaryScreen(
             return@LaunchedEffect
         }
 
-        val t = runCatching { truth.trainingForDate(cleanIso) }.getOrNull()
+        val t =
+            runCatching {
+                truth.trainingForDate(
+                    dateIso = cleanIso,
+                    preferredBranch =
+                        pickedBranch.orEmpty(),
+                    preferredGroup =
+                        pickedGroup.orEmpty(),
+                    preferredTime =
+                        pickedTime.orEmpty()
+                )
+            }.getOrNull()
 
         if (t == null) {
             branchError = tr(
@@ -325,9 +476,18 @@ fun TrainingSummaryScreen(
 
     Scaffold(
         topBar = {
-            Surface(color = Color(0xFF0B1020)) {
+            Surface(
+                color =
+                    MaterialTheme
+                        .colorScheme
+                        .background
+            ) {
                 KmiTopBar(
-                    title = tr("סיכום אימון", "Training summary"),
+                    title =
+                        tr(
+                            "סיכום אימון",
+                            "Training summary"
+                        ),
                     showTopHome = false,
                     showTopSearch = false,
                     showBottomActions = true,
@@ -339,19 +499,28 @@ fun TrainingSummaryScreen(
                 )
             }
         },
-        contentWindowInsets = WindowInsets(0),
-        containerColor = Color(0xFF0B1020)
+        contentWindowInsets =
+            WindowInsets(0),
+        containerColor =
+            MaterialTheme
+                .colorScheme
+                .background
     ) { padding ->
 
-        val granite = Brush.verticalGradient(
-            colors = listOf(
-                SummaryBgTop,
-                SummaryBgMid1,
-                SummaryBgMid2,
-                Color(0xFF1F78B4),
-                SummaryBgBottom
+        val granite =
+            Brush.verticalGradient(
+                colors =
+                    listOf(
+                        SummaryBgTop,
+                        SummaryBgMid1,
+                        SummaryBgMid2,
+                        MaterialTheme
+                            .colorScheme
+                            .primary
+                            .copy(alpha = 0.72f),
+                        SummaryBgBottom
+                    )
             )
-        )
 
         val graniteNoise = Brush.linearGradient(
             colors = listOf(
@@ -364,22 +533,42 @@ fun TrainingSummaryScreen(
             end = Offset(1200f, 1200f)
         )
 
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(granite)
-                .background(graniteNoise)
-                .padding(padding)
-                .imePadding()
-                .navigationBarsPadding()
+        val screenLayoutDirection =
+            if (isEnglish) {
+                LayoutDirection.Ltr
+            } else {
+                LayoutDirection.Rtl
+            }
+
+        CompositionLocalProvider(
+            LocalLayoutDirection provides screenLayoutDirection
         ) {
-            LazyColumn(
-                state = scrollState,
-                modifier = Modifier.fillMaxSize(),
-                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 14.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp),
-                horizontalAlignment = Alignment.End
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(granite)
+                    .background(graniteNoise)
+                    .padding(padding)
+                    .imePadding()
+                    .navigationBarsPadding()
             ) {
+                LazyColumn(
+                    state = scrollState,
+                    modifier = Modifier.fillMaxSize(),
+                    contentPadding =
+                        PaddingValues(
+                            horizontal = 16.dp,
+                            vertical = 14.dp
+                        ),
+                    verticalArrangement =
+                        Arrangement.spacedBy(12.dp),
+                    horizontalAlignment =
+                        if (isEnglish) {
+                            Alignment.Start
+                        } else {
+                            Alignment.End
+                        }
+                ) {
 
                 // -----------------------------
                 // ✅ כרטיס אימון קומפקטי (במקום "פרטי אימון" הגדול)
@@ -387,14 +576,11 @@ fun TrainingSummaryScreen(
                 item {
                     TrainingInfoCard(
                         dateIso = state.dateIso,
-                        onDateChange = { vm.setDateIso(it) },
                         branchName = state.branchName,
                         coachName = state.coachName,
                         groupKey = state.groupKey,
                         errorText = branchError,
                         isEnglish = isEnglish,
-                        markedDateIsos = state.summaryDaysInCalendarMonth,
-                        onRequestMonthMarks = { y, m -> vm.loadSummaryDaysForMonth(y, m) },
                         onOpenCalendar = onOpenCalendar
                     )
                 }
@@ -404,9 +590,22 @@ fun TrainingSummaryScreen(
                 item {
                     PremiumSummaryCard {
                         SummarySectionHeader(
-                            title = tr("הוספת תרגילים", "Add exercises"),
-                            subtitle = tr("בחר תרגילים שבוצעו באימון", "Choose exercises performed in training"),
-                            icon = Icons.Filled.PlaylistAddCheck
+                            title =
+                                tr(
+                                    "הוספת תרגילים",
+                                    "Add exercises"
+                                ),
+                            subtitle =
+                                tr(
+                                    "בחר תרגילים שבוצעו באימון",
+                                    "Choose exercises performed in training"
+                                ),
+                            icon =
+                                Icons.AutoMirrored
+                                    .Filled
+                                    .PlaylistAddCheck,
+                            isEnglish =
+                                isEnglish
                         )
 
                         Surface(
@@ -418,142 +617,89 @@ fun TrainingSummaryScreen(
                         }
 
                         Text(
-                            text = if (state.selected.isEmpty()) {
-                                tr("עדיין לא נוספו תרגילים לאימון הזה", "No exercises have been added to this training yet")
-                            } else {
-                                tr(
-                                    "נוספו כבר ${state.selected.size} תרגילים לאימון הזה",
-                                    "${state.selected.size} exercises have already been added to this training"
-                                )
-                            },
-                            style = MaterialTheme.typography.bodyMedium,
+                            text =
+                                if (state.selected.isEmpty()) {
+                                    tr(
+                                        "עדיין לא נוספו תרגילים לאימון הזה",
+                                        "No exercises have been added to this training yet"
+                                    )
+                                } else {
+                                    tr(
+                                        "נוספו כבר ${state.selected.size} תרגילים לאימון הזה",
+                                        "${state.selected.size} exercises have already been added to this training"
+                                    )
+                                },
+                            style =
+                                KmiTypography.body.copy(
+                                    fontWeight = FontWeight.SemiBold
+                                ),
                             color = SummaryTextMuted,
-                            fontWeight = FontWeight.SemiBold,
-                            textAlign = TextAlign.Right,
+                            textAlign =
+                                if (isEnglish) {
+                                    TextAlign.Start
+                                } else {
+                                    TextAlign.End
+                                },
                             modifier = Modifier.fillMaxWidth()
                         )
 
-                    FilledTonalButton(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(54.dp),
-                        onClick = { showAddExercisesSheet = true },
-                        shape = RoundedCornerShape(999.dp),
-                        colors = ButtonDefaults.filledTonalButtonColors(
-                            containerColor = SummaryPurpleButton,
-                            contentColor = Color.White
-                        )
-                    ) {
-                        Icon(
-                            imageVector = Icons.Filled.PlaylistAddCheck,
-                            contentDescription = null,
-                            modifier = Modifier.size(18.dp)
-                        )
-                        Spacer(Modifier.width(8.dp))
-                        Text(
-                            text = tr("הוסף תרגילים", "Add exercises"),
-                            fontWeight = FontWeight.SemiBold,
-                            color = Color.White
-                        )
-                    }
-                }
-            }
-
-            item {
-                Spacer(Modifier.height(6.dp))
-                Surface(
-                    modifier = Modifier.fillMaxWidth(),
-                    color = SummaryDivider,
-                    shape = RoundedCornerShape(999.dp)
-                ) {
-                    Spacer(Modifier.height(2.dp))
-                }
-                Spacer(Modifier.height(6.dp))
-            }
-
-// -----------------------------
-// תרגילים שנבחרו + עריכה (כרטיס מודרני)
-// -----------------------------
-            if (state.selected.isNotEmpty()) {
-                item {
-                    PremiumSummaryCard {
-                        SummarySectionHeader(
-                            title = tr("התרגילים שנוספו לאימון", "Exercises added to training"),
-                            subtitle = tr("ניהול, עריכה והוספת דגשים לכל תרגיל", "Manage, edit, and add notes for each exercise"),
-                            icon = Icons.Filled.FitnessCenter
-                        )
-
-                        Surface(
-                            modifier = Modifier.fillMaxWidth(),
-                            color = SummaryDivider,
-                            shape = RoundedCornerShape(999.dp)
-                        ) {
-                            Spacer(Modifier.height(2.dp))
-                        }
-
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.End,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            AssistChip(
-                                onClick = { },
-                                label = {
-                                    Text(
-                                        tr(
-                                            "סה\"כ ${state.selected.size} תרגילים",
-                                            "Total ${state.selected.size} exercises"
-                                        )
-                                    )
-                                },
-                                leadingIcon = {
-                                    Icon(
-                                        imageVector = Icons.Filled.Check,
-                                        contentDescription = null
-                                    )
-                                },
-                                colors = AssistChipDefaults.assistChipColors(
-                                    containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.65f)
+                        FilledTonalButton(
+                            modifier =
+                                Modifier
+                                    .fillMaxWidth()
+                                    .height(54.dp),
+                            onClick = {
+                                showAddExercisesSheet = true
+                            },
+                            shape = RoundedCornerShape(999.dp),
+                            colors =
+                                ButtonDefaults.filledTonalButtonColors(
+                                    containerColor =
+                                        SummaryPurpleButton,
+                                    contentColor =
+                                        MaterialTheme
+                                            .colorScheme
+                                            .onPrimary
                                 )
+                        ) {
+                            Icon(
+                                imageVector =
+                                    Icons.AutoMirrored
+                                        .Filled
+                                        .PlaylistAddCheck,
+                                contentDescription = null,
+                                modifier =
+                                    Modifier.size(
+                                        18.dp * LocalAppIconScale.current
+                                    )
+                            )
+
+                            Spacer(
+                                Modifier.width(8.dp)
+                            )
+
+                            Text(
+                                text =
+                                    tr(
+                                        "הוסף תרגילים",
+                                        "Add exercises"
+                                    ),
+                                style =
+                                    KmiTypography.action.copy(
+                                        fontWeight =
+                                            FontWeight.SemiBold
+                                    ),
+                                color =
+                                    MaterialTheme
+                                        .colorScheme
+                                        .onPrimary
                             )
                         }
-
-                        val selectedList = state.selected.values.toList()
-                            .sortedBy { it.name.lowercase() }
-
-                        LazyColumn(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .heightIn(min = 120.dp, max = 560.dp),
-                            verticalArrangement = Arrangement.spacedBy(12.dp),
-                            userScrollEnabled = true
-                        ) {
-                            items(selectedList, key = { it.exerciseId }) { ex ->
-                                SelectedExerciseEditor(
-                                    item = ex,
-                                    onRemove = { vm.removeExercise(ex.exerciseId) },
-                                    onHighlight = { vm.setHighlight(ex.exerciseId, it) }
-                                )
-                            }
-                        }
                     }
                 }
-            }
 
-            // -----------------------------
-            // סיכום חופשי (מאמן/מתאמן לפי role)
-            // -----------------------------
-            item {
-                PremiumSummaryCard {
-                    SummarySectionHeader(
-                        title = tr("סיכום כללי", "General summary"),
-                        subtitle = tr(
-                            "סיכום חופשי של האימון, תחושות, דגשים ומה לשפר",
-                            "Free summary of the training, feelings, highlights, and what to improve"
-                        ),
-                        icon = Icons.Filled.Notes
-                    )
-
+                item {
+                    Spacer(Modifier.height(6.dp))
                     Surface(
                         modifier = Modifier.fillMaxWidth(),
                         color = SummaryDivider,
@@ -561,39 +707,205 @@ fun TrainingSummaryScreen(
                     ) {
                         Spacer(Modifier.height(2.dp))
                     }
-
-                    OutlinedTextField(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .heightIn(min = 160.dp),
-                        value = state.notes,
-                        onValueChange = { vm.setNotes(it) },
-                        label = {
-                            Text(
-                                if (state.isCoach)
-                                    tr("דגשים מקצועיים, ביצוע, מה לשפר…", "Professional notes, performance, what to improve…")
-                                else
-                                    tr("איך היה האימון? מה הרגשת? מה לשפר…", "How was the training? What did you feel? What should be improved…")
-                            )
-                        },
-                        minLines = 6,
-                        textStyle = MaterialTheme.typography.bodyLarge.copy(
-                            color = Color(0xFF1E293B)
-                        ),
-                        colors = OutlinedTextFieldDefaults.colors(
-                            focusedTextColor = Color(0xFF1E293B),
-                            unfocusedTextColor = Color(0xFF1E293B),
-                            focusedBorderColor = SummaryBorder,
-                            unfocusedBorderColor = SummaryDivider,
-                            focusedLabelColor = Color(0xFF64748B),
-                            unfocusedLabelColor = Color(0xFF64748B),
-                            cursorColor = Color(0xFF7B57D1),
-                            focusedContainerColor = Color(0xFFF7FAFF),
-                            unfocusedContainerColor = Color(0xFFF7FAFF)
-                        )
-                    )
+                    Spacer(Modifier.height(6.dp))
                 }
-            }
+
+// -----------------------------
+// תרגילים שנבחרו + עריכה (כרטיס מודרני)
+// -----------------------------
+                if (state.selected.isNotEmpty()) {
+                    item {
+                        PremiumSummaryCard {
+                            SummarySectionHeader(
+                                title =
+                                    tr(
+                                        "התרגילים שנוספו לאימון",
+                                        "Exercises added to training"
+                                    ),
+                                subtitle =
+                                    tr(
+                                        "ניהול, עריכה והוספת דגשים לכל תרגיל",
+                                        "Manage, edit, and add notes for each exercise"
+                                    ),
+                                icon =
+                                    Icons.Filled.FitnessCenter,
+                                isEnglish =
+                                    isEnglish
+                            )
+
+                            Surface(
+                                modifier = Modifier.fillMaxWidth(),
+                                color = SummaryDivider,
+                                shape = RoundedCornerShape(999.dp)
+                            ) {
+                                Spacer(Modifier.height(2.dp))
+                            }
+
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement =
+                                    if (isEnglish) {
+                                        Arrangement.Start
+                                    } else {
+                                        Arrangement.End
+                                    },
+                                verticalAlignment =
+                                    Alignment.CenterVertically
+                            ) {
+                                AssistChip(
+                                    onClick = { },
+                                    label = {
+                                        Text(
+                                            tr(
+                                                "סה\"כ ${state.selected.size} תרגילים",
+                                                "Total ${state.selected.size} exercises"
+                                            )
+                                        )
+                                    },
+                                    leadingIcon = {
+                                        Icon(
+                                            imageVector = Icons.Filled.Check,
+                                            contentDescription = null
+                                        )
+                                    },
+                                    colors = AssistChipDefaults.assistChipColors(
+                                        containerColor = MaterialTheme.colorScheme.primaryContainer.copy(
+                                            alpha = 0.65f
+                                        )
+                                    )
+                                )
+                            }
+
+                            val selectedList = state.selected.values.toList()
+                                .sortedBy { it.name.lowercase() }
+
+                            LazyColumn(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .heightIn(min = 120.dp, max = 560.dp),
+                                verticalArrangement = Arrangement.spacedBy(12.dp),
+                                userScrollEnabled = true
+                            ) {
+                                items(selectedList, key = { it.exerciseId }) { ex ->
+                                    SelectedExerciseEditor(
+                                        item = ex,
+                                        onRemove = { vm.removeExercise(ex.exerciseId) },
+                                        onHighlight = { vm.setHighlight(ex.exerciseId, it) }
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // -----------------------------
+                // סיכום חופשי (מאמן/מתאמן לפי role)
+                // -----------------------------
+                item {
+                    PremiumSummaryCard {
+                        SummarySectionHeader(
+                            title =
+                                tr(
+                                    "סיכום כללי",
+                                    "General summary"
+                                ),
+                            subtitle =
+                                tr(
+                                    "סיכום חופשי של האימון, תחושות, דגשים ומה לשפר",
+                                    "Free summary of the training, feelings, highlights, and what to improve"
+                                ),
+                            icon =
+                                Icons.AutoMirrored.Filled.Notes,
+                            isEnglish =
+                                isEnglish
+                        )
+
+                        Surface(
+                            modifier = Modifier.fillMaxWidth(),
+                            color = SummaryDivider,
+                            shape = RoundedCornerShape(999.dp)
+                        ) {
+                            Spacer(Modifier.height(2.dp))
+                        }
+
+                        OutlinedTextField(
+                            modifier =
+                                Modifier
+                                    .fillMaxWidth()
+                                    .heightIn(min = 160.dp),
+                            value =
+                                state.notes,
+                            onValueChange = {
+                                vm.setNotes(it)
+                            },
+                            label = {
+                                Text(
+                                    text =
+                                        if (state.isCoach) {
+                                            tr(
+                                                "דגשים מקצועיים, ביצוע, מה לשפר…",
+                                                "Professional notes, performance, what to improve…"
+                                            )
+                                        } else {
+                                            tr(
+                                                "איך היה האימון? מה הרגשת? מה לשפר…",
+                                                "How was the training? What did you feel? What should be improved…"
+                                            )
+                                        },
+                                    style =
+                                        KmiTypography.caption
+                                )
+                            },
+                            minLines = 6,
+                            textStyle =
+                                KmiTypography.body.copy(
+                                    color =
+                                        MaterialTheme
+                                            .colorScheme
+                                            .onSurface
+                                ),
+                            colors =
+                                OutlinedTextFieldDefaults.colors(
+                                    focusedTextColor =
+                                        MaterialTheme
+                                            .colorScheme
+                                            .onSurface,
+                                    unfocusedTextColor =
+                                        MaterialTheme
+                                            .colorScheme
+                                            .onSurface,
+                                    focusedBorderColor =
+                                        MaterialTheme
+                                            .colorScheme
+                                            .primary,
+                                    unfocusedBorderColor =
+                                        MaterialTheme
+                                            .colorScheme
+                                            .outlineVariant,
+                                    focusedLabelColor =
+                                        MaterialTheme
+                                            .colorScheme
+                                            .onSurfaceVariant,
+                                    unfocusedLabelColor =
+                                        MaterialTheme
+                                            .colorScheme
+                                            .onSurfaceVariant,
+                                    cursorColor =
+                                        MaterialTheme
+                                            .colorScheme
+                                            .primary,
+                                    focusedContainerColor =
+                                        MaterialTheme
+                                            .colorScheme
+                                            .surfaceVariant,
+                                    unfocusedContainerColor =
+                                        MaterialTheme
+                                            .colorScheme
+                                            .surfaceVariant
+                                )
+                        )
+                    }
+                }
 
                 // -----------------------------
                 // שמירה
@@ -601,9 +913,20 @@ fun TrainingSummaryScreen(
                 item {
                     PremiumSummaryCard {
                         SummarySectionHeader(
-                            title = tr("שמירה", "Save"),
-                            subtitle = tr("שמור את הסיכום והתרגילים שנוספו לאימון הזה", "Save the summary and exercises added to this training"),
-                            icon = Icons.Filled.Check
+                            title =
+                                tr(
+                                    "שמירה",
+                                    "Save"
+                                ),
+                            subtitle =
+                                tr(
+                                    "שמור את הסיכום והתרגילים שנוספו לאימון הזה",
+                                    "Save the summary and exercises added to this training"
+                                ),
+                            icon =
+                                Icons.Filled.Check,
+                            isEnglish =
+                                isEnglish
                         )
 
                         FilledTonalButton(
@@ -617,40 +940,28 @@ fun TrainingSummaryScreen(
                                 fun markSummaryDayLocally() {
                                     if (cleanIso.isBlank()) return
 
-                                    // ✅ שמירה ב-SharedPreferences שהמסך קיבל
-                                    val cur = sp.getStringSet(key, emptySet())
-                                        ?.toMutableSet()
-                                        ?: mutableSetOf()
-
-                                    cur.add(cleanIso)
-
-                                    sp.edit()
-                                        .putStringSet(key, cur)
-                                        .putLong(
-                                            "training_summary_days_updated_at",
-                                            System.currentTimeMillis()
-                                        )
-                                        .apply()
-
-                                    // ✅ שמירה גם במקום הקבוע של לוח השנה
-                                    val summarySp = ctx.getSharedPreferences(
-                                        "kmi_training_summary",
-                                        Context.MODE_PRIVATE
-                                    )
-
-                                    val summaryCur = summarySp.getStringSet(key, emptySet())
-                                        ?.toMutableSet()
-                                        ?: mutableSetOf()
+                                    val summaryCur =
+                                        summarySp
+                                            .getStringSet(
+                                                key,
+                                                emptySet()
+                                            )
+                                            ?.toMutableSet()
+                                            ?: mutableSetOf()
 
                                     summaryCur.add(cleanIso)
 
-                                    summarySp.edit()
-                                        .putStringSet(key, summaryCur)
-                                        .putLong(
+                                    summarySp.edit {
+                                        putStringSet(
+                                            key,
+                                            summaryCur
+                                        )
+
+                                        putLong(
                                             "training_summary_days_updated_at",
                                             System.currentTimeMillis()
                                         )
-                                        .apply()
+                                    }
                                 }
 
                                 vm.save(
@@ -667,40 +978,59 @@ fun TrainingSummaryScreen(
                                 )
                             },
                             enabled = !state.isSaving,
-                        shape = RoundedCornerShape(999.dp),
-                            colors = ButtonDefaults.filledTonalButtonColors(
-                                containerColor = SummaryPrimaryButton,
-                                contentColor = Color.White
-                            )
+                            shape = RoundedCornerShape(999.dp),
+                            colors =
+                                ButtonDefaults.filledTonalButtonColors(
+                                    containerColor =
+                                        SummaryPrimaryButton,
+                                    contentColor =
+                                        MaterialTheme
+                                            .colorScheme
+                                            .onPrimary
+                                )
                         ) {
                             Text(
-                                text = if (state.isSaving)
-                                    tr("שומר...", "Saving...")
-                                else
-                                    tr("שמירת סיכום האימון", "Save training summary"),
-                                style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.Bold,
-                                color = Color.White
+                                text =
+                                    if (state.isSaving) {
+                                        tr(
+                                            "שומר...",
+                                            "Saving..."
+                                        )
+                                    } else {
+                                        tr(
+                                            "שמירת סיכום האימון",
+                                            "Save training summary"
+                                        )
+                                    },
+                                style =
+                                    KmiTypography.action.copy(
+                                        fontWeight = FontWeight.Bold
+                                    ),
+                                color =
+                                    MaterialTheme
+                                        .colorScheme
+                                        .onPrimary
                             )
                         }
+                    }
                 }
-            }
 
                 item { Spacer(Modifier.height(10.dp)) }
-        } // LazyColumn
+            } // LazyColumn
 
-            if (showAddExercisesSheet) {
-                AddExercisesBottomSheet(
-                    vm = vm,
-                    state = state,
-                    initialBelt = belt,
-                    beltHebLabel = ::beltHebLabel,
-                    isEnglish = isEnglish,
-                    onDismiss = { showAddExercisesSheet = false }
-                )
-            }
+                if (showAddExercisesSheet) {
+                    AddExercisesBottomSheet(
+                        vm = vm,
+                        state = state,
+                        initialBelt = belt,
+                        beltHebLabel = ::beltHebLabel,
+                        isEnglish = isEnglish,
+                        onDismiss = { showAddExercisesSheet = false }
+                    )
+                }
 
-        } // Box
+            } // Box
+        } // CompositionLocalProvider
     } // Scaffold
 } // TrainingSummaryScreen
 
@@ -717,70 +1047,85 @@ private fun AddExercisesBottomSheet(
     fun tr(he: String, en: String): String = if (isEnglish) en else he
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 
-    var beltOpen by remember { mutableStateOf(false) }
-    var selectedBelt by rememberSaveable { mutableStateOf<Belt?>(null) }
+    var selectedBelt by rememberSaveable(initialBelt) {
+        mutableStateOf<Belt?>(
+            initialBelt
+        )
+    }
     var topic by rememberSaveable { mutableStateOf("") }
     var subTopic by rememberSaveable { mutableStateOf("") }
 
     var pendingPicks by remember {
-        mutableStateOf<LinkedHashMap<String, ExercisePickItem>>(linkedMapOf())
+        mutableStateOf<Map<String, ExercisePickItem>>(
+            emptyMap()
+        )
     }
-
-    val darkFieldColors = OutlinedTextFieldDefaults.colors(
-        focusedTextColor = SummaryTextDark,
-        unfocusedTextColor = SummaryTextDark,
-        focusedBorderColor = SummaryPrimaryButton.copy(alpha = 0.55f),
-        unfocusedBorderColor = SummaryBorder,
-        focusedLabelColor = SummaryTextDark,
-        unfocusedLabelColor = SummaryTextMuted,
-        focusedPlaceholderColor = SummaryTextMuted,
-        unfocusedPlaceholderColor = SummaryTextMuted,
-        focusedTrailingIconColor = SummaryTextDark,
-        unfocusedTrailingIconColor = SummaryTextMuted,
-        focusedLeadingIconColor = SummaryTextDark,
-        unfocusedLeadingIconColor = SummaryTextMuted,
-        cursorColor = SummaryPurpleButton,
-        focusedContainerColor = Color.White,
-        unfocusedContainerColor = Color.White
-    )
 
     val topics: List<String> = remember(selectedBelt) {
         val belt = selectedBelt ?: return@remember emptyList()
 
-        val viaBridge = runCatching {
-            il.kmi.app.search.KmiSearchBridge.topicTitlesFor(belt)
-        }.getOrDefault(emptyList())
-
-        if (viaBridge.isNotEmpty()) {
-            viaBridge
-        } else {
-            runCatching {
-                val sharedBelt =
-                    il.kmi.shared.domain.Belt.fromId(belt.id)
-                        ?: il.kmi.shared.domain.Belt.WHITE
-
-                il.kmi.shared.domain.SubTopicRegistry
-                    .allForBelt(sharedBelt)
-                    .keys
-                    .toList()
-            }.getOrDefault(emptyList())
-        }
-    }
-
-    val subTopics: List<String> = remember(selectedBelt, topic) {
-        val belt = selectedBelt
-        if (belt == null || topic.isBlank()) return@remember emptyList()
-
         runCatching {
-            il.kmi.app.domain.ContentRepo
-                .listSubTopicTitles(belt, topic)
-                .map { it.trim() }
-                .filter { it.isNotBlank() }
-                .filterNot { it == topic.trim() }
-                .filterNot { it == "כל תתי הנושאים" }
-                .distinct()
-        }.getOrDefault(emptyList())
+            KmiSearchBridge
+                .topicTitlesFor(belt)
+        }
+            .getOrDefault(emptyList())
+            .ifEmpty {
+                runCatching {
+                    val sharedBelt =
+                        Belt.fromId(belt.id)
+                            ?: Belt.WHITE
+
+                    SubTopicRegistry
+                        .allForBelt(sharedBelt)
+                        .keys
+                        .toList()
+                }.getOrDefault(emptyList())
+            }
     }
+
+    val subTopics: List<String> =
+        remember(
+            selectedBelt,
+            topic
+        ) {
+            val belt =
+                selectedBelt
+
+            if (
+                belt == null ||
+                topic.isBlank()
+            ) {
+                return@remember emptyList()
+            }
+
+            val normalizedTopic =
+                topic.trim()
+
+            runCatching {
+                ContentRepo
+                    .listSubTopicTitles(
+                        belt,
+                        topic
+                    )
+                    .asSequence()
+                    .map { value ->
+                        value.trim()
+                    }
+                    .filter { value ->
+                        value.isNotBlank()
+                    }
+                    .filterNot { value ->
+                        value == normalizedTopic
+                    }
+                    .filterNot { value ->
+                        value == "כל תתי הנושאים"
+                    }
+                    .distinct()
+                    .toList()
+            }.getOrDefault(
+                emptyList()
+            )
+        }
 
     val rawItems: List<String> = remember(selectedBelt, topic, subTopic, subTopics) {
         val belt = selectedBelt
@@ -788,7 +1133,7 @@ private fun AddExercisesBottomSheet(
         if (subTopics.isNotEmpty() && subTopic.isBlank()) return@remember emptyList()
 
         runCatching {
-            il.kmi.app.domain.ContentRepo.listItemTitles(
+            ContentRepo.listItemTitles(
                 belt = belt,
                 topicTitle = topic,
                 subTopicTitle = subTopic.ifBlank { null }
@@ -799,7 +1144,7 @@ private fun AddExercisesBottomSheet(
     val displayItems: List<String> = remember(rawItems) {
         rawItems
             .map {
-                il.kmi.shared.questions.model.util.ExerciseTitleFormatter
+                ExerciseTitleFormatter
                     .displayName(it)
                     .ifBlank { it }
                     .trim()
@@ -820,18 +1165,18 @@ private fun AddExercisesBottomSheet(
     LaunchedEffect(selectedBelt) {
         topic = ""
         subTopic = ""
-        pendingPicks = linkedMapOf()
+        pendingPicks = emptyMap()
         vm.setSearchQuery("")
     }
 
     LaunchedEffect(topic) {
         subTopic = ""
-        pendingPicks = linkedMapOf()
+        pendingPicks = emptyMap()
         vm.setSearchQuery("")
     }
 
     LaunchedEffect(subTopic) {
-        pendingPicks = linkedMapOf()
+        pendingPicks = emptyMap()
         vm.setSearchQuery("")
     }
 
@@ -865,171 +1210,141 @@ private fun AddExercisesBottomSheet(
                 )
         ) {
             LazyColumn(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .navigationBarsPadding()
-                    .imePadding(),
-                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp),
-                horizontalAlignment = Alignment.End
+                modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .navigationBarsPadding()
+                        .imePadding(),
+                contentPadding =
+                    PaddingValues(
+                        horizontal = 16.dp,
+                        vertical = 12.dp
+                    ),
+                verticalArrangement =
+                    Arrangement.spacedBy(12.dp),
+                horizontalAlignment =
+                    if (isEnglish) {
+                        Alignment.Start
+                    } else {
+                        Alignment.End
+                    }
             ) {
                 item {
                     PremiumSummaryCard(
                         shape = RoundedCornerShape(26.dp)
                     ) {
                         SummarySectionHeader(
-                            title = tr("הוספת תרגילים", "Add exercises"),
-                            subtitle = tr(
-                                "בחר חגורה, נושא ותת־נושא והוסף תרגילים לאימון",
-                                "Choose belt, topic, and sub-topic and add exercises to training"
-                            ),
-                            icon = Icons.Filled.PlaylistAddCheck
+                            title =
+                                tr(
+                                    "הוספת תרגילים",
+                                    "Add exercises"
+                                ),
+                            subtitle =
+                                tr(
+                                    "בחר חגורה, נושא ותת־נושא והוסף תרגילים לאימון",
+                                    "Choose belt, topic, and sub-topic and add exercises to training"
+                                ),
+                            icon =
+                                Icons.AutoMirrored
+                                    .Filled
+                                    .PlaylistAddCheck,
+                            isEnglish =
+                                isEnglish
                         )
                     }
                 }
 
                 item {
-                    ExposedDropdownMenuBox(
-                        expanded = beltOpen,
-                        onExpandedChange = { beltOpen = !beltOpen }
-                    ) {
-                        OutlinedTextField(
-                            value = selectedBelt?.let(beltHebLabel).orEmpty(),
-                            onValueChange = {},
-                            readOnly = true,
-                            placeholder = { Text(tr("בחר חגורה", "Choose belt")) },
-                            label = { Text(tr("חגורה", "Belt")) },
-                            trailingIcon = {
-                                ExposedDropdownMenuDefaults.TrailingIcon(expanded = beltOpen)
-                            },
-                            colors = darkFieldColors,
-                            modifier = Modifier
-                                .menuAnchor()
-                                .fillMaxWidth()
-                        )
+                    val beltOptions =
+                        Belt.entries
+                            .filterNot { it == Belt.WHITE }
+                            .map(beltHebLabel)
 
-                        ExposedDropdownMenu(
-                            expanded = beltOpen,
-                            onDismissRequest = { beltOpen = false },
-                            containerColor = Color(0xFFF7FAFF)
-                        ) {
-                            Belt.values()
-                                .filterNot { it == Belt.WHITE }
-                                .forEach { b ->
-                                    DropdownMenuItem(
-                                        text = {
-                                            Text(
-                                                text = beltHebLabel(b),
-                                                maxLines = 1,
-                                                overflow = TextOverflow.Ellipsis,
-                                                color = SummaryTextDark
-                                            )
-                                        },
-                                        onClick = {
-                                            selectedBelt = b
-                                            beltOpen = false
-                                        }
-                                    )
+                    KmiPremiumDropdown(
+                        title =
+                            tr(
+                                "חגורה",
+                                "Belt"
+                            ),
+                        options = beltOptions,
+                        selectedValue =
+                            selectedBelt
+                                ?.let(beltHebLabel)
+                                .orEmpty(),
+                        isEnglish = isEnglish,
+                        placeholder =
+                            tr(
+                                "בחר חגורה",
+                                "Choose belt"
+                            ),
+                        enabled =
+                            beltOptions.size > 1,
+                        onSelected = { selectedLabel ->
+                            Belt.entries
+                                .filterNot {
+                                    it == Belt.WHITE
+                                }
+                                .firstOrNull { beltItem ->
+                                    beltHebLabel(beltItem) ==
+                                            selectedLabel
+                                }
+                                ?.let { selectedItem ->
+                                    selectedBelt =
+                                        selectedItem
                                 }
                         }
-                    }
+                    )
                 }
 
                 if (showTopicField) {
                     item {
-                        var topicOpen by remember { mutableStateOf(false) }
-
-                        ExposedDropdownMenuBox(
-                            expanded = topicOpen,
-                            onExpandedChange = { topicOpen = !topicOpen }
-                        ) {
-                            OutlinedTextField(
-                                value = topic,
-                                onValueChange = {},
-                                readOnly = true,
-                                placeholder = { Text(tr("בחר נושא", "Choose topic")) },
-                                label = { Text(tr("נושא", "Topic")) },
-                                trailingIcon = {
-                                    ExposedDropdownMenuDefaults.TrailingIcon(expanded = topicOpen)
-                                },
-                                colors = darkFieldColors,
-                                modifier = Modifier
-                                    .menuAnchor()
-                                    .fillMaxWidth()
-                            )
-
-                            ExposedDropdownMenu(
-                                expanded = topicOpen,
-                                onDismissRequest = { topicOpen = false },
-                                containerColor = Color(0xFFF7FAFF)
-                            ) {
-                                topics.forEach { t ->
-                                    DropdownMenuItem(
-                                        text = {
-                                            Text(
-                                                text = t,
-                                                maxLines = 1,
-                                                overflow = TextOverflow.Ellipsis,
-                                                color = SummaryTextDark
-                                            )
-                                        },
-                                        onClick = {
-                                            topic = t
-                                            topicOpen = false
-                                        }
-                                    )
-                                }
+                        KmiPremiumDropdown(
+                            title =
+                                tr(
+                                    "נושא",
+                                    "Topic"
+                                ),
+                            options = topics,
+                            selectedValue = topic,
+                            isEnglish = isEnglish,
+                            placeholder =
+                                tr(
+                                    "בחר נושא",
+                                    "Choose topic"
+                                ),
+                            enabled =
+                                topics.size > 1,
+                            onSelected = { selectedTopic ->
+                                topic =
+                                    selectedTopic
                             }
-                        }
+                        )
                     }
                 }
 
                 if (showSubTopicField) {
                     item {
-                        var subOpen by remember { mutableStateOf(false) }
-
-                        ExposedDropdownMenuBox(
-                            expanded = subOpen,
-                            onExpandedChange = { subOpen = !subOpen }
-                        ) {
-                            OutlinedTextField(
-                                value = subTopic,
-                                onValueChange = {},
-                                readOnly = true,
-                                placeholder = { Text(tr("בחר תת-נושא", "Choose sub-topic")) },
-                                label = { Text(tr("תת-נושא", "Sub-topic")) },
-                                trailingIcon = {
-                                    ExposedDropdownMenuDefaults.TrailingIcon(expanded = subOpen)
-                                },
-                                colors = darkFieldColors,
-                                modifier = Modifier
-                                    .menuAnchor()
-                                    .fillMaxWidth()
-                            )
-
-                            ExposedDropdownMenu(
-                                expanded = subOpen,
-                                onDismissRequest = { subOpen = false },
-                                containerColor = Color(0xFFF7FAFF)
-                            ) {
-                                subTopics.forEach { st ->
-                                    DropdownMenuItem(
-                                        text = {
-                                            Text(
-                                                text = st,
-                                                maxLines = 1,
-                                                overflow = TextOverflow.Ellipsis,
-                                                color = SummaryTextDark
-                                            )
-                                        },
-                                        onClick = {
-                                            subTopic = st
-                                            subOpen = false
-                                        }
-                                    )
-                                }
+                        KmiPremiumDropdown(
+                            title =
+                                tr(
+                                    "תת-נושא",
+                                    "Sub-topic"
+                                ),
+                            options = subTopics,
+                            selectedValue = subTopic,
+                            isEnglish = isEnglish,
+                            placeholder =
+                                tr(
+                                    "בחר תת-נושא",
+                                    "Choose sub-topic"
+                                ),
+                            enabled =
+                                subTopics.size > 1,
+                            onSelected = { selectedSubTopic ->
+                                subTopic =
+                                    selectedSubTopic
                             }
-                        }
+                        )
                     }
                 }
 
@@ -1047,17 +1362,29 @@ private fun AddExercisesBottomSheet(
                             border = BorderStroke(1.dp, SummaryBorder)
                         ) {
                             Text(
-                                text = tr(
-                                    "סה״כ ${filteredItems.size} תרגילים · נוספו ${state.selected.size} · ממתינים לאישור ${pendingPicks.size}",
-                                    "Total ${filteredItems.size} exercises · added ${state.selected.size} · waiting for approval ${pendingPicks.size}"
-                                ),
-                                style = MaterialTheme.typography.labelLarge,
+                                text =
+                                    tr(
+                                        "סה״כ ${filteredItems.size} תרגילים · נוספו ${state.selected.size} · ממתינים לאישור ${pendingPicks.size}",
+                                        "Total ${filteredItems.size} exercises · added ${state.selected.size} · waiting for approval ${pendingPicks.size}"
+                                    ),
+                                style =
+                                    KmiTypography.secondary.copy(
+                                        fontWeight = FontWeight.ExtraBold
+                                    ),
                                 color = SummaryTextDark,
-                                fontWeight = FontWeight.ExtraBold,
-                                textAlign = TextAlign.Right,
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(horizontal = 12.dp, vertical = 10.dp)
+                                textAlign =
+                                    if (isEnglish) {
+                                        TextAlign.Start
+                                    } else {
+                                        TextAlign.End
+                                    },
+                                modifier =
+                                    Modifier
+                                        .fillMaxWidth()
+                                        .padding(
+                                            horizontal = 12.dp,
+                                            vertical = 10.dp
+                                        )
                             )
                         }
                     }
@@ -1065,46 +1392,97 @@ private fun AddExercisesBottomSheet(
                     item {
                         Row(
                             modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.End,
-                            verticalAlignment = Alignment.CenterVertically
+                            horizontalArrangement =
+                                if (isEnglish) {
+                                    Arrangement.Start
+                                } else {
+                                    Arrangement.End
+                                },
+                            verticalAlignment =
+                                Alignment.CenterVertically
                         ) {
                             if (pendingPicks.isNotEmpty()) {
-                                TextButton(onClick = { pendingPicks = linkedMapOf() }) {
-                                    Text(tr("נקה בחירה", "Clear selection"), color = SummaryTextDark.copy(alpha = 0.82f))
+                                TextButton(
+                                    onClick = {
+                                        pendingPicks = emptyMap()
+                                    }
+                                ) {
+                                    Text(
+                                        text =
+                                            tr(
+                                                "נקה בחירה",
+                                                "Clear selection"
+                                            ),
+                                        style =
+                                            KmiTypography.action,
+                                        color =
+                                            SummaryTextDark.copy(
+                                                alpha = 0.82f
+                                            )
+                                    )
                                 }
-                                Spacer(Modifier.width(10.dp))
+
+                                Spacer(
+                                    Modifier.width(10.dp)
+                                )
                             }
 
                             FilledTonalButton(
                                 onClick = {
                                     pendingPicks.values.forEach { p ->
-                                        if (!state.selected.containsKey(p.exerciseId)) {
+                                        if (
+                                            !state.selected
+                                                .containsKey(p.exerciseId)
+                                        ) {
                                             vm.toggleExercise(p)
                                         }
                                     }
-                                    pendingPicks = linkedMapOf()
+
+                                    pendingPicks = emptyMap()
                                     onDismiss()
                                 },
-                                enabled = pendingPicks.isNotEmpty(),
-                                shape = RoundedCornerShape(999.dp),
-                                colors = ButtonDefaults.filledTonalButtonColors(
-                                    containerColor = SummaryPurpleButton,
-                                    contentColor = Color.White
-                                )
+                                enabled =
+                                    pendingPicks.isNotEmpty(),
+                                shape =
+                                    RoundedCornerShape(999.dp),
+                                colors =
+                                    ButtonDefaults.filledTonalButtonColors(
+                                        containerColor =
+                                            SummaryPurpleButton,
+                                        contentColor =
+                                            MaterialTheme
+                                                .colorScheme
+                                                .onPrimary
+                                    )
                             ) {
                                 Icon(
-                                    imageVector = Icons.Filled.Check,
+                                    imageVector =
+                                        Icons.Filled.Check,
                                     contentDescription = null,
-                                    modifier = Modifier.size(18.dp)
+                                    modifier =
+                                        Modifier.size(
+                                            18.dp * LocalAppIconScale.current
+                                        )
                                 )
-                                Spacer(Modifier.width(8.dp))
+
+                                Spacer(
+                                    Modifier.width(8.dp)
+                                )
+
                                 Text(
-                                    text = tr("אשר והוסף", "Confirm and add"),
-                                    fontWeight = FontWeight.Bold,
-                                    fontSize = 13.sp,
-                                    lineHeight = 15.sp,
+                                    text =
+                                        tr(
+                                            "אשר והוסף",
+                                            "Confirm and add"
+                                        ),
+                                    style =
+                                        KmiTypography.action.copy(
+                                            fontWeight =
+                                                FontWeight.Bold
+                                        ),
                                     maxLines = 2,
-                                    textAlign = TextAlign.Center
+                                    textAlign =
+                                        TextAlign.Center
                                 )
                             }
                         }
@@ -1112,14 +1490,26 @@ private fun AddExercisesBottomSheet(
 
                     item {
                         Surface(
-                            modifier = Modifier.fillMaxWidth(),
-                            shape = RoundedCornerShape(18.dp),
-                            color = Color.White.copy(alpha = 0.98f),
+                            modifier =
+                                Modifier.fillMaxWidth(),
+                            shape =
+                                RoundedCornerShape(18.dp),
+                            color =
+                                MaterialTheme
+                                    .colorScheme
+                                    .surface,
                             tonalElevation = 0.dp,
-                            shadowElevation = 1.dp,
-                            border = BorderStroke(1.dp, SummaryBorder)
+                            shadowElevation = 0.dp,
+                            border =
+                                BorderStroke(
+                                    1.dp,
+                                    SummaryBorder
+                                )
                         ) {
-                            Column(modifier = Modifier.fillMaxWidth()) {
+                            Column(
+                                modifier =
+                                    Modifier.fillMaxWidth()
+                            ) {
                                 filteredItems.forEachIndexed { index, name ->
                                     val belt = selectedBelt ?: return@forEachIndexed
                                     val id = "${belt.id}|$topic|$subTopic|$name"
@@ -1143,14 +1533,25 @@ private fun AddExercisesBottomSheet(
                                                     )
                                                 )
                                             } else {
-                                                val next = LinkedHashMap(pendingPicks)
-                                                if (next.containsKey(id)) next.remove(id)
-                                                else next[id] = ExercisePickItem(
-                                                    exerciseId = id,
-                                                    name = name,
-                                                    topic = if (subTopic.isBlank()) topic else "$topic · $subTopic"
-                                                )
-                                                pendingPicks = next
+                                                pendingPicks =
+                                                    if (pendingPicks.containsKey(id)) {
+                                                        pendingPicks - id
+                                                    } else {
+                                                        pendingPicks +
+                                                                (
+                                                                        id to
+                                                                                ExercisePickItem(
+                                                                                    exerciseId = id,
+                                                                                    name = name,
+                                                                                    topic =
+                                                                                        if (subTopic.isBlank()) {
+                                                                                            topic
+                                                                                        } else {
+                                                                                            "$topic · $subTopic"
+                                                                                        }
+                                                                                )
+                                                                        )
+                                                    }
                                             }
                                         }
                                     )
@@ -1182,14 +1583,11 @@ private fun AddExercisesBottomSheet(
 @Composable
 private fun TrainingInfoCard(
     dateIso: String,
-    onDateChange: (String) -> Unit,
     branchName: String,
     coachName: String,
     groupKey: String,
     errorText: String?,
     isEnglish: Boolean,
-    markedDateIsos: Set<String>,
-    onRequestMonthMarks: (year: Int, month1to12: Int) -> Unit,
     onOpenCalendar: (() -> Unit)? = null
 ) {
     fun tr(he: String, en: String): String = if (isEnglish) en else he
@@ -1219,22 +1617,62 @@ private fun TrainingInfoCard(
 
     val validDateIso = normalizedIsoOrNull(dateIso)
 
+    val layoutDirection =
+        if (isEnglish) {
+            LayoutDirection.Ltr
+        } else {
+            LayoutDirection.Rtl
+        }
+
+    val textDirectionStyle =
+        if (isEnglish) {
+            TextStyle(
+                textDirection = TextDirection.Ltr
+            )
+        } else {
+            TextStyle(
+                textDirection = TextDirection.Rtl
+            )
+        }
+
+    val textAlignPrimary =
+        if (isEnglish) {
+            TextAlign.Left
+        } else {
+            TextAlign.Right
+        }
+
+    val horizontalAlignment =
+        if (isEnglish) {
+            Alignment.Start
+        } else {
+            Alignment.End
+        }
+
     Surface(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(24.dp),
         color = SummaryCard,
         tonalElevation = 0.dp,
-        shadowElevation = 6.dp,
-        border = BorderStroke(1.dp, SummaryBorder)
+        shadowElevation = 0.dp,
+        border = BorderStroke(
+            1.dp,
+            SummaryBorder
+        )
     ) {
-        CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
-            val rtlStyle = TextStyle(textDirection = TextDirection.Rtl)
-
+        CompositionLocalProvider(
+            LocalLayoutDirection provides layoutDirection
+        ) {
             Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 12.dp, vertical = 10.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
+                modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .padding(
+                            horizontal = 12.dp,
+                            vertical = 10.dp
+                        ),
+                verticalArrangement =
+                    Arrangement.spacedBy(8.dp)
             ) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -1242,29 +1680,43 @@ private fun TrainingInfoCard(
                 ) {
                     Column(
                         modifier = Modifier.weight(1f),
-                        horizontalAlignment = Alignment.End
+                        horizontalAlignment = horizontalAlignment
                     ) {
                         Text(
-                            text = tr("פרטי האימון", "Training details"),
-                            style = MaterialTheme.typography.titleMedium.merge(rtlStyle),
+                            text =
+                                tr(
+                                    "פרטי האימון",
+                                    "Training details"
+                                ),
+                            style =
+                                KmiTypography.cardTitle
+                                    .merge(textDirectionStyle),
                             fontWeight = FontWeight.ExtraBold,
                             color = SummaryTextDark,
-                            textAlign = TextAlign.Right,
+                            textAlign = textAlignPrimary,
                             modifier = Modifier.fillMaxWidth()
                         )
 
-                        Spacer(Modifier.height(2.dp))
+                        Spacer(
+                            Modifier.height(2.dp)
+                        )
 
                         Text(
-                            text = validDateIso?.let { prettyDate(it) }
-                                ?: tr(
-                                    "יש לבחור תאריך לסיכום האימון",
-                                    "Choose a date for the training summary"
-                                ),
-                            style = MaterialTheme.typography.labelLarge.merge(rtlStyle),
+                            text =
+                                validDateIso
+                                    ?.let {
+                                        prettyDate(it)
+                                    }
+                                    ?: tr(
+                                        "יש לבחור תאריך לסיכום האימון",
+                                        "Choose a date for the training summary"
+                                    ),
+                            style =
+                                KmiTypography.secondary
+                                    .merge(textDirectionStyle),
                             color = SummaryTextMuted,
                             fontWeight = FontWeight.SemiBold,
-                            textAlign = TextAlign.Right,
+                            textAlign = textAlignPrimary,
                             modifier = Modifier.fillMaxWidth()
                         )
                     }
@@ -1272,62 +1724,102 @@ private fun TrainingInfoCard(
                     Spacer(Modifier.width(8.dp))
 
                     Box(
-                        modifier = Modifier
-                            .size(38.dp)
-                            .background(
-                                brush = Brush.radialGradient(
-                                    listOf(Color(0xFF8B5CF6), Color(0xFF312E81))
+                        modifier =
+                            Modifier
+                                .size(38.dp)
+                                .background(
+                                    brush =
+                                        Brush.radialGradient(
+                                            listOf(
+                                                MaterialTheme
+                                                    .colorScheme
+                                                    .secondary,
+                                                MaterialTheme
+                                                    .colorScheme
+                                                    .primary
+                                            )
+                                        ),
+                                    shape =
+                                        CircleShape
                                 ),
-                                shape = CircleShape
-                            ),
-                        contentAlignment = Alignment.Center
+                        contentAlignment =
+                            Alignment.Center
                     ) {
                         Icon(
-                            imageVector = Icons.Filled.FitnessCenter,
+                            imageVector =
+                                Icons.Filled.FitnessCenter,
                             contentDescription = null,
-                            tint = Color.White,
-                            modifier = Modifier.size(16.dp)
+                            tint =
+                                MaterialTheme
+                                    .colorScheme
+                                    .onPrimary,
+                            modifier =
+                                Modifier.size(
+                                    16.dp * LocalAppIconScale.current
+                                )
                         )
                     }
                 }
 
                 FilledTonalButton(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(42.dp),
+                    modifier =
+                        Modifier
+                            .fillMaxWidth()
+                            .height(42.dp),
                     onClick = {
                         onOpenCalendar?.invoke()
                     },
-                    shape = RoundedCornerShape(999.dp),
-                    colors = ButtonDefaults.filledTonalButtonColors(
-                        containerColor = SummaryPurpleButton,
-                        contentColor = Color.White
-                    )
+                    shape =
+                        RoundedCornerShape(999.dp),
+                    colors =
+                        ButtonDefaults.filledTonalButtonColors(
+                            containerColor =
+                                SummaryPurpleButton,
+                            contentColor =
+                                MaterialTheme
+                                    .colorScheme
+                                    .onPrimary
+                        )
                 ) {
                     Icon(
-                        imageVector = Icons.Filled.CalendarMonth,
+                        imageVector =
+                            Icons.Filled.CalendarMonth,
                         contentDescription = null,
-                        modifier = Modifier.size(15.dp),
-                        tint = Color.White
+                        modifier =
+                            Modifier.size(
+                                15.dp * LocalAppIconScale.current
+                            ),
+                        tint =
+                            MaterialTheme
+                                .colorScheme
+                                .onPrimary
                     )
 
-                    Spacer(Modifier.width(6.dp))
+                    Spacer(
+                        Modifier.width(6.dp)
+                    )
 
                     Text(
-                        text = if (validDateIso == null) {
-                            tr(
-                                "בחירת תאריך לסיכום האימון",
-                                "Choose training summary date"
-                            )
-                        } else {
-                            tr(
-                                "שינוי תאריך האימון",
-                                "Change training date"
-                            )
-                        },
-                        style = MaterialTheme.typography.labelLarge,
-                        fontWeight = FontWeight.ExtraBold,
-                        color = Color.White
+                        text =
+                            if (validDateIso == null) {
+                                tr(
+                                    "בחירת תאריך לסיכום האימון",
+                                    "Choose training summary date"
+                                )
+                            } else {
+                                tr(
+                                    "שינוי תאריך האימון",
+                                    "Change training date"
+                                )
+                            },
+                        style =
+                            KmiTypography.action.copy(
+                                fontWeight = FontWeight.ExtraBold
+                            ),
+                        color =
+                            MaterialTheme
+                                .colorScheme
+                                .onPrimary
                     )
                 }
 
@@ -1338,17 +1830,24 @@ private fun TrainingInfoCard(
                         color = SummaryCardInner
                     ) {
                         Text(
-                            text = tr(
-                                "בחר תאריך בלוח האימונים החודשי כדי להתחיל למלא את סיכום האימון.",
-                                "Choose a date in the monthly training calendar to start filling out the training summary."
-                            ),
+                            text =
+                                tr(
+                                    "בחר תאריך בלוח האימונים החודשי כדי להתחיל למלא את סיכום האימון.",
+                                    "Choose a date in the monthly training calendar to start filling out the training summary."
+                                ),
                             color = SummaryTextDark,
-                            style = MaterialTheme.typography.bodyMedium,
+                            style =
+                                KmiTypography.body
+                                    .merge(textDirectionStyle),
                             fontWeight = FontWeight.ExtraBold,
-                            textAlign = TextAlign.Right,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = 12.dp, vertical = 12.dp)
+                            textAlign = textAlignPrimary,
+                            modifier =
+                                Modifier
+                                    .fillMaxWidth()
+                                    .padding(
+                                        horizontal = 12.dp,
+                                        vertical = 12.dp
+                                    )
                         )
                     }
                 } else {
@@ -1358,9 +1857,15 @@ private fun TrainingInfoCard(
                         color = SummaryCardInner
                     ) {
                         Column(
-                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
-                            verticalArrangement = Arrangement.spacedBy(6.dp),
-                            horizontalAlignment = Alignment.End
+                            modifier =
+                                Modifier.padding(
+                                    horizontal = 10.dp,
+                                    vertical = 8.dp
+                                ),
+                            verticalArrangement =
+                                Arrangement.spacedBy(6.dp),
+                            horizontalAlignment =
+                                horizontalAlignment
                         ) {
                             PremiumInfoRow(
                                 label = tr("סניף", "Branch"),
@@ -1387,322 +1892,47 @@ private fun TrainingInfoCard(
 
                     if (!errorText.isNullOrBlank()) {
                         Surface(
-                            modifier = Modifier.fillMaxWidth(),
-                            shape = RoundedCornerShape(16.dp),
-                            color = Color(0xFFFFE4E6),
-                            border = BorderStroke(
-                                1.dp,
-                                Color(0xFFFDA4AF)
-                            )
+                            modifier =
+                                Modifier.fillMaxWidth(),
+                            shape =
+                                RoundedCornerShape(16.dp),
+                            color =
+                                MaterialTheme
+                                    .colorScheme
+                                    .errorContainer,
+                            border =
+                                BorderStroke(
+                                    1.dp,
+                                    MaterialTheme
+                                        .colorScheme
+                                        .error
+                                        .copy(alpha = 0.55f)
+                                )
                         ) {
                             Text(
                                 text = errorText,
-                                color = Color(0xFF9F1239),
-                                style = MaterialTheme.typography.bodySmall,
-                                fontWeight = FontWeight.ExtraBold,
-                                textAlign = TextAlign.Right,
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(12.dp)
+                                color =
+                                    MaterialTheme
+                                        .colorScheme
+                                        .onErrorContainer,
+                                style =
+                                    KmiTypography.caption
+                                        .merge(
+                                            textDirectionStyle
+                                        ),
+                                fontWeight =
+                                    FontWeight.ExtraBold,
+                                textAlign =
+                                    textAlignPrimary,
+                                modifier =
+                                    Modifier
+                                        .fillMaxWidth()
+                                        .padding(12.dp)
                             )
                         }
                     }
                 }
             }
-        }
-    }
-}
-
-@Composable
-private fun MonthGridWithMarks(
-    year: Int,
-    month1to12: Int,
-    pickedDay: Int,
-    markedDateIsos: Set<String>,
-    onPickDay: (Int) -> Unit
-) {
-    val first = remember(year, month1to12) { LocalDate.of(year, month1to12, 1) }
-    val daysInMonth = remember(year, month1to12) { first.lengthOfMonth() }
-
-    // אנחנו מציגים שבוע: א ב ג ד ה ו ש (Sunday..Saturday)
-    // LocalDate.dayOfWeek: Monday..Sunday
-    fun dayOfWeekIndexSundayStart(dow: java.time.DayOfWeek): Int {
-        return when (dow) {
-            java.time.DayOfWeek.SUNDAY -> 0
-            java.time.DayOfWeek.MONDAY -> 1
-            java.time.DayOfWeek.TUESDAY -> 2
-            java.time.DayOfWeek.WEDNESDAY -> 3
-            java.time.DayOfWeek.THURSDAY -> 4
-            java.time.DayOfWeek.FRIDAY -> 5
-            java.time.DayOfWeek.SATURDAY -> 6
-        }
-    }
-
-    val offset = remember(first) { dayOfWeekIndexSundayStart(first.dayOfWeek) }
-    val totalCells = ((offset + daysInMonth + 6) / 7) * 7
-    val cells = remember(year, month1to12) { (0 until totalCells).toList() }
-
-    Column(
-        modifier = Modifier.fillMaxWidth(),
-        verticalArrangement = Arrangement.spacedBy(6.dp)
-    ) {
-        cells.chunked(7).forEach { week ->
-            Row(modifier = Modifier.fillMaxWidth()) {
-                week.forEach { idx ->
-                    val dayNum = idx - offset + 1
-                    val enabled = dayNum in 1..daysInMonth
-
-                    val iso = if (enabled) {
-                        LocalDate.of(year, month1to12, dayNum)
-                            .format(DateTimeFormatter.ofPattern("yyyy-MM-dd", Locale.US))
-                    } else ""
-
-                    val isPicked = enabled && dayNum == pickedDay
-                    val isMarked = enabled && iso in markedDateIsos
-
-                    val bg = when {
-                        isPicked -> MaterialTheme.colorScheme.primary.copy(alpha = 0.18f)
-                        isMarked -> MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.55f)
-                        else -> Color.Transparent
-                    }
-
-                    Box(
-                        modifier = Modifier
-                            .weight(1f)
-                            .padding(vertical = 2.dp)
-                            .clip(RoundedCornerShape(12.dp))
-                            .background(bg)
-                            .clickable(enabled = enabled) { onPickDay(dayNum) }
-                            .padding(vertical = 10.dp),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            Text(
-                                text = if (enabled) dayNum.toString() else "",
-                                textAlign = TextAlign.Center,
-                                style = MaterialTheme.typography.bodyMedium,
-                                fontWeight = if (isPicked) FontWeight.ExtraBold else FontWeight.Medium,
-                                color = if (enabled) MaterialTheme.colorScheme.onSurface
-                                else MaterialTheme.colorScheme.onSurface.copy(alpha = 0f)
-                            )
-
-                            // ✅ נקודה קטנה = יש סיכום באותו יום
-                            if (isMarked) {
-                                Spacer(Modifier.height(4.dp))
-                                Box(
-                                    modifier = Modifier
-                                        .size(6.dp)
-                                        .clip(RoundedCornerShape(99.dp))
-                                        .background(MaterialTheme.colorScheme.tertiary)
-                                )
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun CalendarMonthGrid(
-    month: java.time.YearMonth,
-    selected: LocalDate,
-    markedIsoDays: Set<String>,
-    isEnglish: Boolean,
-    onPrev: () -> Unit,
-    onNext: () -> Unit,
-    onPick: (LocalDate) -> Unit
-) {
-    fun tr(he: String, en: String): String = if (isEnglish) en else he
-    val isoFmt = remember { DateTimeFormatter.ofPattern("yyyy-MM-dd", Locale.US) }
-
-    val weekLabels = if (isEnglish)
-        listOf("S", "M", "T", "W", "T", "F", "S")
-    else
-        listOf("א", "ב", "ג", "ד", "ה", "ו", "ש")
-
-    // DayOfWeek: MONDAY=1..SUNDAY=7  → אנחנו רוצים Sunday=0
-    fun sundayIndex(dow: java.time.DayOfWeek): Int = when (dow) {
-        java.time.DayOfWeek.SUNDAY -> 0
-        java.time.DayOfWeek.MONDAY -> 1
-        java.time.DayOfWeek.TUESDAY -> 2
-        java.time.DayOfWeek.WEDNESDAY -> 3
-        java.time.DayOfWeek.THURSDAY -> 4
-        java.time.DayOfWeek.FRIDAY -> 5
-        java.time.DayOfWeek.SATURDAY -> 6
-    }
-
-    val firstDay = remember(month) { month.atDay(1) }
-    val daysInMonth = remember(month) { month.lengthOfMonth() }
-    val startOffset = remember(month) { sundayIndex(firstDay.dayOfWeek) }
-
-    val monthTitle = remember(month, isEnglish) {
-        val mName = month.month.getDisplayName(
-            java.time.format.TextStyle.FULL,
-            if (isEnglish) Locale.US else Locale("he", "IL")
-        )
-        "$mName ${month.year}"
-    }
-
-    Column(modifier = Modifier.padding(12.dp)) {
-
-        // Header עם חצים
-        Surface(
-            modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(22.dp),
-            color = SummaryCard,
-            tonalElevation = 0.dp,
-            border = BorderStroke(1.dp, SummaryBorder)
-        ) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 10.dp, vertical = 8.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
-                Surface(
-                    onClick = onPrev,
-                    shape = CircleShape,
-                    color = SummaryPrimaryButton.copy(alpha = 0.16f),
-                    border = BorderStroke(1.dp, SummaryBorder)
-                ) {
-                    Text(
-                        text = if (isEnglish) "‹" else "›",
-                        color = SummaryTextDark,
-                        fontSize = 28.sp,
-                        fontWeight = FontWeight.Black,
-                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 4.dp)
-                    )
-                }
-
-                Text(
-                    text = monthTitle,
-                    color = SummaryTextDark,
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Black,
-                    textAlign = TextAlign.Center,
-                    modifier = Modifier.weight(1f)
-                )
-
-                Surface(
-                    onClick = onNext,
-                    shape = CircleShape,
-                    color = SummaryPrimaryButton.copy(alpha = 0.16f),
-                    border = BorderStroke(1.dp, SummaryBorder)
-                ) {
-                    Text(
-                        text = if (isEnglish) "›" else "‹",
-                        color = SummaryTextDark,
-                        fontSize = 28.sp,
-                        fontWeight = FontWeight.Black,
-                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 4.dp)
-                    )
-                }
-            }
-        }
-
-        Spacer(Modifier.height(8.dp))
-
-        // שמות ימים
-        Surface(
-            modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(18.dp),
-            color = SummaryCardInner,
-            tonalElevation = 0.dp,
-            border = BorderStroke(1.dp, SummaryBorder)
-        ) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(vertical = 8.dp)
-            ) {
-                weekLabels.forEach { w ->
-                    Text(
-                        text = w,
-                        modifier = Modifier.weight(1f),
-                        textAlign = TextAlign.Center,
-                        style = MaterialTheme.typography.labelSmall,
-                        fontWeight = FontWeight.Black,
-                        color = SummaryTextDark
-                    )
-                }
-            }
-        }
-
-        Spacer(Modifier.height(6.dp))
-
-        // גריד 6 שורות מקסימום
-        val totalCells = 42
-        val cells = (0 until totalCells).map { idx ->
-            val dayNum = idx - startOffset + 1
-            if (dayNum in 1..daysInMonth) month.atDay(dayNum) else null
-        }
-
-        for (row in 0 until 6) {
-            Row(modifier = Modifier.fillMaxWidth()) {
-                for (col in 0 until 7) {
-                    val date = cells[row * 7 + col]
-                    val isSelected = date != null && date == selected
-                    val isMarked = date != null && markedIsoDays.contains(date.format(isoFmt))
-
-                    val bg = when {
-                        isSelected -> SummaryPrimaryButton
-                        isMarked   -> SummaryChipSelected
-                        else       -> SummaryCardInner.copy(alpha = 0.70f)
-                    }
-
-                    val fg = when {
-                        isSelected -> Color.White
-                        else       -> SummaryTextDark
-                    }
-
-                    Box(
-                        modifier = Modifier
-                            .weight(1f)
-                            .aspectRatio(1f)
-                            .padding(3.dp)
-                            .clip(RoundedCornerShape(12.dp))
-                            .background(bg)
-                            .clickable(enabled = date != null) {
-                                date?.let(onPick)
-                            },
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text(
-                            text = date?.dayOfMonth?.toString() ?: "",
-                            textAlign = TextAlign.Center,
-                            color = fg,
-                            fontWeight = if (isSelected) FontWeight.ExtraBold else FontWeight.Medium
-                        )
-                    }
-                }
-            }
-        }
-
-        Spacer(Modifier.height(6.dp))
-
-        // מקרא קטן
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.End,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Surface(
-                color = SummaryChipSelected,
-                shape = RoundedCornerShape(8.dp),
-                border = BorderStroke(1.dp, SummaryBorder)
-            ) { Spacer(Modifier.size(12.dp)) }
-
-            Spacer(Modifier.width(8.dp))
-
-            Text(
-                text = tr("יש סיכום", "Has summary"),
-                style = MaterialTheme.typography.labelSmall,
-                fontWeight = FontWeight.Bold,
-                color = SummaryTextMuted
-            )
         }
     }
 }
@@ -1712,28 +1942,66 @@ private fun PremiumInfoRow(
     label: String,
     value: String
 ) {
-    val context = androidx.compose.ui.platform.LocalContext.current
-    val languageManager = remember { AppLanguageManager(context) }
-    val isEnglish = languageManager.getCurrentLanguage() == AppLanguage.ENGLISH
-    val textAlignPrimary = if (isEnglish) TextAlign.Left else TextAlign.Right
-    val horizontalEnd = if (isEnglish) Alignment.Start else Alignment.End
-    val textDirectionStyle = if (isEnglish) {
-        TextStyle(textDirection = TextDirection.Ltr)
-    } else {
-        TextStyle(textDirection = TextDirection.Rtl)
-    }
+    val context =
+        LocalContext.current
+
+    val languageManager =
+        remember {
+            AppLanguageManager(context)
+        }
+
+    val isEnglish =
+        languageManager.getCurrentLanguage() ==
+                AppLanguage.ENGLISH
+
+    val layoutDirection =
+        if (isEnglish) {
+            LayoutDirection.Ltr
+        } else {
+            LayoutDirection.Rtl
+        }
+
+    val textAlignPrimary =
+        if (isEnglish) {
+            TextAlign.Left
+        } else {
+            TextAlign.Right
+        }
+
+    val horizontalAlignment =
+        if (isEnglish) {
+            Alignment.Start
+        } else {
+            Alignment.End
+        }
+
+    val textDirectionStyle =
+        if (isEnglish) {
+            TextStyle(
+                textDirection = TextDirection.Ltr
+            )
+        } else {
+            TextStyle(
+                textDirection = TextDirection.Rtl
+            )
+        }
 
     CompositionLocalProvider(
-        LocalLayoutDirection provides if (isEnglish) LayoutDirection.Ltr else LayoutDirection.Rtl
+        LocalLayoutDirection provides layoutDirection
     ) {
         Column(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalAlignment = horizontalEnd,
-            verticalArrangement = Arrangement.spacedBy(1.dp)
+            modifier =
+                Modifier.fillMaxWidth(),
+            horizontalAlignment =
+                horizontalAlignment,
+            verticalArrangement =
+                Arrangement.spacedBy(1.dp)
         ) {
             Text(
                 text = label,
-                style = MaterialTheme.typography.labelSmall.merge(textDirectionStyle),
+                style =
+                    KmiTypography.caption
+                        .merge(textDirectionStyle),
                 color = SummaryTextMuted,
                 fontWeight = FontWeight.Bold,
                 textAlign = textAlignPrimary,
@@ -1742,7 +2010,9 @@ private fun PremiumInfoRow(
 
             Text(
                 text = value,
-                style = MaterialTheme.typography.bodySmall.merge(textDirectionStyle),
+                style =
+                    KmiTypography.body
+                        .merge(textDirectionStyle),
                 color = SummaryTextDark,
                 fontWeight = FontWeight.ExtraBold,
                 textAlign = textAlignPrimary,
@@ -1753,55 +2023,45 @@ private fun PremiumInfoRow(
 }
 
 @Composable
-private fun InfoRow(label: String, value: String) {
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.End,
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        // ✅ Label מימין
-        Text(
-            text = label,
-            fontWeight = FontWeight.SemiBold,
-            textAlign = androidx.compose.ui.text.style.TextAlign.Right
-        )
-
-        Spacer(Modifier.width(10.dp))
-
-        // ✅ Value משמאל ל-Label, אבל מיושר לימין בתוך השטח
-        Text(
-            text = value,
-            style = MaterialTheme.typography.bodyMedium,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            textAlign = androidx.compose.ui.text.style.TextAlign.Right,
-            modifier = Modifier.weight(1f)
-        )
-    }
-}
-
-@Composable
 private fun ExercisePickRow(
     item: ExercisePickItem,
     checked: Boolean,
     onToggle: () -> Unit
 ) {
-    val context = androidx.compose.ui.platform.LocalContext.current
+    val context = LocalContext.current
     val languageManager = remember { AppLanguageManager(context) }
     val isEnglish = languageManager.getCurrentLanguage() == AppLanguage.ENGLISH
     val textAlignPrimary = if (isEnglish) TextAlign.Left else TextAlign.Right
     val horizontalEnd = if (isEnglish) Alignment.Start else Alignment.End
 
     Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .background(
-                if (checked) SummaryChipSelected.copy(alpha = 0.38f) else Color.Transparent
-            )
-            .clickable { onToggle() }
-            .padding(horizontal = 12.dp, vertical = 7.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.End
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .background(
+                    if (checked) {
+                        SummaryChipSelected.copy(
+                            alpha = 0.38f
+                        )
+                    } else {
+                        Color.Transparent
+                    }
+                )
+                .clickable {
+                    onToggle()
+                }
+                .padding(
+                    horizontal = 12.dp,
+                    vertical = 7.dp
+                ),
+        verticalAlignment =
+            Alignment.CenterVertically,
+        horizontalArrangement =
+            if (isEnglish) {
+                Arrangement.Start
+            } else {
+                Arrangement.End
+            }
     ) {
         Column(
             modifier = Modifier.weight(1f),
@@ -1809,25 +2069,29 @@ private fun ExercisePickRow(
         ) {
             Text(
                 text = item.name,
-                fontWeight = FontWeight.ExtraBold,
+                style =
+                    KmiTypography.body.copy(
+                        fontWeight = FontWeight.ExtraBold
+                    ),
                 color = SummaryTextDark,
                 textAlign = textAlignPrimary,
-                fontSize = 14.sp,
-                lineHeight = 17.sp,
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.fillMaxWidth()
             )
 
-            Spacer(Modifier.height(2.dp))
+            Spacer(
+                Modifier.height(2.dp)
+            )
 
             Text(
                 text = item.topic,
+                style =
+                    KmiTypography.caption.copy(
+                        fontWeight = FontWeight.SemiBold
+                    ),
                 color = SummaryTextMuted,
-                fontWeight = FontWeight.SemiBold,
                 textAlign = textAlignPrimary,
-                fontSize = 11.sp,
-                lineHeight = 13.sp,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.fillMaxWidth()
@@ -1850,19 +2114,37 @@ private fun SelectedExerciseEditor(
     onRemove: () -> Unit,
     onHighlight: (String) -> Unit
 ) {
-    val context = androidx.compose.ui.platform.LocalContext.current
+    val context = LocalContext.current
     val languageManager = remember { AppLanguageManager(context) }
     val isEnglish = languageManager.getCurrentLanguage() == AppLanguage.ENGLISH
 
-    fun tr(he: String, en: String): String = if (isEnglish) en else he
+    fun tr(
+        he: String,
+        en: String
+    ): String =
+        if (isEnglish) {
+            en
+        } else {
+            he
+        }
 
-    val textAlignPrimary = if (isEnglish) TextAlign.Left else TextAlign.Right
-    val horizontalEnd = if (isEnglish) Alignment.Start else Alignment.End
-    val titleDirectionStyle = if (isEnglish) {
-        TextStyle(textDirection = TextDirection.Ltr)
-    } else {
-        TextStyle(textDirection = TextDirection.Rtl)
-    }
+    val textAlignPrimary =
+        if (isEnglish) {
+            TextAlign.Left
+        } else {
+            TextAlign.Right
+        }
+
+    val titleDirectionStyle =
+        if (isEnglish) {
+            TextStyle(
+                textDirection = TextDirection.Ltr
+            )
+        } else {
+            TextStyle(
+                textDirection = TextDirection.Rtl
+            )
+        }
 
     var notesOpen by rememberSaveable(item.exerciseId) {
         mutableStateOf(item.highlight.isNotBlank())
@@ -1888,7 +2170,9 @@ private fun SelectedExerciseEditor(
         ) {
             Text(
                 text = item.name,
-                style = MaterialTheme.typography.titleLarge.merge(titleDirectionStyle),
+                style =
+                    KmiTypography.cardTitle
+                        .merge(titleDirectionStyle),
                 fontWeight = FontWeight.ExtraBold,
                 color = SummaryTextDark,
                 textAlign = textAlignPrimary,
@@ -1952,12 +2236,16 @@ private fun SelectedExerciseEditor(
                 ) {
                     Text(
                         text = item.highlight,
-                        style = MaterialTheme.typography.bodyMedium,
+                        style = KmiTypography.body,
                         color = SummaryTextDark,
                         textAlign = textAlignPrimary,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 12.dp, vertical = 10.dp),
+                        modifier =
+                            Modifier
+                                .fillMaxWidth()
+                                .padding(
+                                    horizontal = 12.dp,
+                                    vertical = 10.dp
+                                ),
                         maxLines = 3,
                         overflow = TextOverflow.Ellipsis
                     )
@@ -1966,27 +2254,71 @@ private fun SelectedExerciseEditor(
 
             if (notesOpen) {
                 OutlinedTextField(
-                    modifier = Modifier.fillMaxWidth(),
-                    value = item.highlight,
-                    onValueChange = { onHighlight(it) },
+                    modifier =
+                        Modifier.fillMaxWidth(),
+                    value =
+                        item.highlight,
+                    onValueChange = {
+                        onHighlight(it)
+                    },
                     label = {
-                        Text(tr("דגשים והערות לתרגיל", "Exercise notes and highlights"))
+                        Text(
+                            text =
+                                tr(
+                                    "דגשים והערות לתרגיל",
+                                    "Exercise notes and highlights"
+                                ),
+                            style =
+                                KmiTypography.caption
+                        )
                     },
                     minLines = 3,
-                    textStyle = MaterialTheme.typography.bodyMedium.copy(
-                        color = SummaryTextDark
-                    ),
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedTextColor = SummaryTextDark,
-                        unfocusedTextColor = SummaryTextDark,
-                        focusedBorderColor = SummaryBorder,
-                        unfocusedBorderColor = SummaryDivider,
-                        focusedLabelColor = SummaryTextDark,
-                        unfocusedLabelColor = SummaryTextDark.copy(alpha = 0.78f),
-                        cursorColor = SummaryPurpleButton,
-                        focusedContainerColor = Color(0xFFF7FAFF),
-                        unfocusedContainerColor = Color(0xFFF7FAFF)
-                    )
+                    textStyle =
+                        KmiTypography.body.copy(
+                            color =
+                                MaterialTheme
+                                    .colorScheme
+                                    .onSurface
+                        ),
+                    colors =
+                        OutlinedTextFieldDefaults.colors(
+                            focusedTextColor =
+                                MaterialTheme
+                                    .colorScheme
+                                    .onSurface,
+                            unfocusedTextColor =
+                                MaterialTheme
+                                    .colorScheme
+                                    .onSurface,
+                            focusedBorderColor =
+                                MaterialTheme
+                                    .colorScheme
+                                    .primary,
+                            unfocusedBorderColor =
+                                MaterialTheme
+                                    .colorScheme
+                                    .outlineVariant,
+                            focusedLabelColor =
+                                MaterialTheme
+                                    .colorScheme
+                                    .onSurface,
+                            unfocusedLabelColor =
+                                MaterialTheme
+                                    .colorScheme
+                                    .onSurfaceVariant,
+                            cursorColor =
+                                MaterialTheme
+                                    .colorScheme
+                                    .primary,
+                            focusedContainerColor =
+                                MaterialTheme
+                                    .colorScheme
+                                    .surface,
+                            unfocusedContainerColor =
+                                MaterialTheme
+                                    .colorScheme
+                                    .surface
+                        )
                 )
             }
         }
@@ -2045,58 +2377,263 @@ private class HomeScheduleTruth(
     )
 
     // ✅ מקור אמת מלא לפי תאריך: סניף + קבוצה + מאמן
-    fun trainingForDate(dateIso: String): TrainingTruth? {
-        val date = runCatching { LocalDate.parse(dateIso.trim(), isoFmt) }.getOrNull() ?: return null
-        val wantedDow = date.toCalendarDow()
+    fun trainingForDate(
+        dateIso: String,
+        preferredBranch: String = "",
+        preferredGroup: String = "",
+        preferredTime: String = ""
+    ): TrainingTruth? {
+        val date =
+            runCatching {
+                LocalDate.parse(
+                    dateIso.trim(),
+                    isoFmt
+                )
+            }.getOrNull()
+                ?: return null
 
-        val branches = readSelectedBranches()
+        val wantedDow =
+            date.toCalendarDow()
 
-        val groups = groupsEffective()
+        fun timeText(
+            training: TrainingData
+        ): String {
+            val hour =
+                training.cal.get(
+                    java.util.Calendar.HOUR_OF_DAY
+                )
 
-        for (branchName in branches) {
-            for (grp in groups) {
-                val sched = TrainingDirectory.getSchedule(branchName, grp) ?: continue
-                val slots = sched.slots ?: emptyList()
+            val minute =
+                training.cal.get(
+                    java.util.Calendar.MINUTE
+                )
 
-                for (slotAny in slots) {
-                    val s = readSlot(slotAny)
-                    if (s.dayOfWeek == wantedDow) {
-                        val coach = (sched.coachName ?: "").trim()
-                            .ifBlank { defaultCoachName().orEmpty() }
+            return String.format(
+                Locale.US,
+                "%02d:%02d",
+                hour,
+                minute
+            )
+        }
 
-                        return TrainingTruth(
-                            branchName = branchName,
-                            groupKey = grp,
-                            coachName = coach
-                        )
+        fun matchesWantedDay(
+            training: TrainingData
+        ): Boolean {
+            return training.cal.get(
+                java.util.Calendar.DAY_OF_WEEK
+            ) == wantedDow
+        }
+
+        fun matchesWantedTime(
+            training: TrainingData
+        ): Boolean {
+            return preferredTime.isBlank() ||
+                    timeText(training) ==
+                    preferredTime.trim()
+        }
+
+        if (preferredBranch.isNotBlank()) {
+            val normalizedPreferredGroup =
+                TrainingCatalog
+                    .normalizeGroupName(
+                        preferredGroup
+                    )
+                    .ifBlank {
+                        preferredGroup
                     }
-                }
+
+            val preferredTraining =
+                TrainingCatalog
+                    .trainingsFor(
+                        preferredBranch,
+                        normalizedPreferredGroup
+                            .ifBlank {
+                                null
+                            }
+                    )
+                    .firstOrNull { training ->
+                        matchesWantedDay(training) &&
+                                matchesWantedTime(training)
+                    }
+                    ?: TrainingCatalog
+                        .trainingsFor(
+                            preferredBranch,
+                            null
+                        )
+                        .firstOrNull { training ->
+                            matchesWantedDay(training) &&
+                                    matchesWantedTime(training)
+                        }
+
+            if (preferredTraining != null) {
+                val coach =
+                    preferredTraining.coach
+                        .trim()
+                        .ifBlank {
+                            defaultCoachName()
+                                .orEmpty()
+                        }
+
+                return TrainingTruth(
+                    branchName =
+                        preferredBranch,
+                    groupKey =
+                        normalizedPreferredGroup,
+                    coachName =
+                        coach
+                )
             }
         }
+
+        val branches =
+            readSelectedBranches()
+
+        val groups =
+            groupsEffective()
+
+        for (branchName in branches) {
+
+            for (grp in groups) {
+                val matchingTraining =
+                    TrainingCatalog
+                        .trainingsFor(
+                            branchName,
+                            grp
+                        )
+                        .firstOrNull { training ->
+                            matchesWantedDay(training)
+                        }
+
+                if (matchingTraining != null) {
+                    val coach =
+                        matchingTraining.coach
+                            .trim()
+                            .ifBlank {
+                                defaultCoachName()
+                                    .orEmpty()
+                            }
+
+                    return TrainingTruth(
+                        branchName = branchName,
+                        groupKey = grp,
+                        coachName = coach
+                    )
+                }
+            }
+
+            val fallbackTraining =
+                TrainingCatalog
+                    .trainingsFor(
+                        branchName,
+                        null
+                    )
+                    .firstOrNull { training ->
+                        matchesWantedDay(training)
+                    }
+
+            if (fallbackTraining != null) {
+                val coach =
+                    fallbackTraining.coach
+                        .trim()
+                        .ifBlank {
+                            defaultCoachName()
+                                .orEmpty()
+                        }
+
+                return TrainingTruth(
+                    branchName = branchName,
+                    groupKey =
+                        groups
+                            .firstOrNull()
+                            .orEmpty(),
+                    coachName = coach
+                )
+            }
+        }
+
         return null
     }
 
     private fun groupsEffective(): List<String> {
-        val groupsCsv =
-            sp.getString("age_groups", null)?.takeIf { it.isNotBlank() }
-                ?: sp.getString("age_group", null)?.takeIf { it.isNotBlank() }
-                ?: sp.getString("group", null).orEmpty()
 
-        val raw = groupsCsv
-            .split(',', ';', '|', '\n')
-            .map { it.trim() }
-            .filter { it.isNotBlank() }
+        fun splitGroupValue(raw: String?): List<String> {
+            val clean = raw?.trim().orEmpty()
 
-        val normalized = raw.map {
-            TrainingCatalog.normalizeGroupName(it).ifBlank { it }
+            if (clean.isBlank()) {
+                return emptyList()
+            }
+
+            return if (clean.startsWith("[")) {
+                runCatching {
+                    val arr = JSONArray(clean)
+
+                    (0 until arr.length())
+                        .mapNotNull { index ->
+                            arr.optString(index, null)
+                        }
+                        .map { it.trim() }
+                        .filter { it.isNotBlank() }
+                }.getOrDefault(emptyList())
+            } else {
+                clean
+                    .split(',', ';', '|', '\n')
+                    .map { it.trim() }
+                    .filter { it.isNotBlank() }
+            }
         }
-        return (if (normalized.isEmpty()) listOf("בוגרים") else normalized).distinct()
-    }
 
-    // ✅ ברירת מחדל לקבוצה (ללא קשר ליום) – הקבוצה הראשונה מההגדרות
-    fun defaultGroup(): String? {
-        val groups = groupsEffective()
-        return groups.firstOrNull()
+        return buildList {
+            addAll(
+                splitGroupValue(
+                    sp.getString("groups_json", null)
+                )
+            )
+
+            addAll(
+                splitGroupValue(
+                    sp.getString("selected_groups", null)
+                )
+            )
+
+            addAll(
+                splitGroupValue(
+                    sp.getString("groups", null)
+                )
+            )
+
+            addAll(
+                splitGroupValue(
+                    sp.getString("age_groups", null)
+                )
+            )
+
+            addAll(
+                splitGroupValue(
+                    sp.getString("active_group", null)
+                )
+            )
+
+            addAll(
+                splitGroupValue(
+                    sp.getString("age_group", null)
+                )
+            )
+
+            addAll(
+                splitGroupValue(
+                    sp.getString("group", null)
+                )
+            )
+        }
+            .map { group ->
+                TrainingCatalog
+                    .normalizeGroupName(group)
+                    .ifBlank {
+                        group
+                    }
+            }
+            .filter { it.isNotBlank() }
+            .distinct()
     }
 
     // ✅ שם מאמן ברירת מחדל מתוך SharedPreferences (מפתחות נפוצים)
@@ -2116,30 +2653,6 @@ private class HomeScheduleTruth(
         return null
     }
 
-    // ✅ קבוצה לפי תאריך: מחזיר את הקבוצה הראשונה שמתאימה ליום בשבוע שיש לה slot
-    fun groupForDate(dateIso: String): String? {
-        val date = runCatching { LocalDate.parse(dateIso.trim(), isoFmt) }.getOrNull() ?: return null
-        val wantedDow = date.toCalendarDow()
-
-        val branches = readSelectedBranches()
-
-        val groups = groupsEffective()
-
-        for (branchName in branches) {
-            for (grp in groups) {
-                val sched = TrainingDirectory.getSchedule(branchName, grp) ?: continue
-                val slots = sched.slots ?: emptyList()
-                for (slotAny in slots) {
-                    val s = readSlot(slotAny)
-                    if (s.dayOfWeek == wantedDow) {
-                        return grp
-                    }
-                }
-            }
-        }
-        return null
-    }
-
     private fun LocalDate.toCalendarDow(): Int {
         return when (this.dayOfWeek) {
             java.time.DayOfWeek.SUNDAY -> java.util.Calendar.SUNDAY
@@ -2150,95 +2663,5 @@ private class HomeScheduleTruth(
             java.time.DayOfWeek.FRIDAY -> java.util.Calendar.FRIDAY
             java.time.DayOfWeek.SATURDAY -> java.util.Calendar.SATURDAY
         }
-    }
-
-    data class SlotLike(
-        val dayOfWeek: Int,
-        val startHour: Int,
-        val startMinute: Int,
-        val durationMinutes: Int
-    )
-
-    private fun readSlot(slot: Any): SlotLike {
-        val cls = slot::class.java
-
-        fun <T : java.lang.reflect.AccessibleObject> T.acc(): T {
-            runCatching { isAccessible = true }
-            return this
-        }
-
-        val dayField = runCatching { cls.getDeclaredField("day").acc() }.getOrNull()
-        val startField = runCatching { cls.getDeclaredField("start").acc() }.getOrNull()
-        val endField = runCatching { cls.getDeclaredField("end").acc() }.getOrNull()
-
-        if (dayField != null && startField != null && endField != null) {
-            val dayEnum = runCatching { dayField.get(slot) as? java.time.DayOfWeek }.getOrNull()
-            val startLt = runCatching { startField.get(slot) as? java.time.LocalTime }.getOrNull()
-            val endLt = runCatching { endField.get(slot) as? java.time.LocalTime }.getOrNull()
-
-            val calDay = when (dayEnum) {
-                java.time.DayOfWeek.SUNDAY -> java.util.Calendar.SUNDAY
-                java.time.DayOfWeek.MONDAY -> java.util.Calendar.MONDAY
-                java.time.DayOfWeek.TUESDAY -> java.util.Calendar.TUESDAY
-                java.time.DayOfWeek.WEDNESDAY -> java.util.Calendar.WEDNESDAY
-                java.time.DayOfWeek.THURSDAY -> java.util.Calendar.THURSDAY
-                java.time.DayOfWeek.FRIDAY -> java.util.Calendar.FRIDAY
-                java.time.DayOfWeek.SATURDAY -> java.util.Calendar.SATURDAY
-                else -> java.util.Calendar.MONDAY
-            }
-
-            val durMin =
-                if (startLt != null && endLt != null)
-                    java.time.Duration.between(startLt, endLt).toMinutes().toInt()
-                else 90
-
-            return SlotLike(
-                dayOfWeek = calDay,
-                startHour = startLt?.hour ?: 19,
-                startMinute = startLt?.minute ?: 0,
-                durationMinutes = durMin
-            )
-        }
-
-        fun intField(vararg names: String, fallback: Int): Int {
-            for (n in names) {
-                val v = runCatching {
-                    val f = cls.getDeclaredField(n).acc()
-                    (f.get(slot) as? Number)?.toInt()
-                }.getOrNull()
-                if (v != null) return v
-            }
-            return fallback
-        }
-
-        return SlotLike(
-            dayOfWeek = intField("dayOfWeek", "day", "dow", fallback = java.util.Calendar.MONDAY),
-            startHour = intField("startHour", "hour", "h", fallback = 19),
-            startMinute = intField("startMinute", "minute", "min", "startMin", fallback = 0),
-            durationMinutes = intField("durationMinutes", "duration", "dur", "length", fallback = 90)
-        )
-    }
-
-    fun branchForDate(dateIso: String): String? {
-        val date = runCatching { LocalDate.parse(dateIso.trim(), isoFmt) }.getOrNull() ?: return null
-        val wantedDow = date.toCalendarDow()
-
-        val branches = readSelectedBranches()
-
-        val groups = groupsEffective()
-
-        for (branchName in branches) {
-            for (grp in groups) {
-                val sched = TrainingDirectory.getSchedule(branchName, grp) ?: continue
-                val slots = sched.slots ?: emptyList()
-                for (slotAny in slots) {
-                    val s = readSlot(slotAny)
-                    if (s.dayOfWeek == wantedDow) {
-                        return branchName
-                    }
-                }
-            }
-        }
-        return null
     }
 }

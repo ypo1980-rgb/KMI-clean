@@ -2745,7 +2745,7 @@ fun HomeScreen(
                                         }
 
                                     },
-                                    style = MaterialTheme.typography.titleMedium,
+                                    style = KmiTypography.cardTitle,
                                     color = Color.White,
                                     textAlign = TextAlign.Center,
                                     modifier = Modifier
@@ -2950,13 +2950,17 @@ fun HomeScreen(
                                             alpha = 0.35f
                                         )
                                     ),
-                                    modifier = Modifier.size(38.dp)
+                                    modifier = Modifier.size(
+                                        38.dp * LocalAppIconScale.current
+                                    )
                                 ) {
                                     Icon(
                                         imageVector = Icons.Default.Person,
                                         contentDescription = null,
                                         tint = MaterialTheme.colorScheme.primary,
-                                        modifier = Modifier.padding(8.dp)
+                                        modifier = Modifier.padding(
+                                            8.dp * LocalAppIconScale.current
+                                        )
                                     )
                                 }
 
@@ -2994,7 +2998,9 @@ fun HomeScreen(
                                                         alpha = 0.40f
                                                     )
                                                 ),
-                                                modifier = Modifier.size(32.dp)
+                                                modifier = Modifier.size(
+                                                    32.dp * LocalAppIconScale.current
+                                                )
                                             ) {
                                                 Box(
                                                     contentAlignment = Alignment.Center
@@ -3008,7 +3014,9 @@ fun HomeScreen(
                                                                 "הודעות ואירועים"
                                                             },
                                                         tint = MaterialTheme.colorScheme.primary,
-                                                        modifier = Modifier.size(17.dp)
+                                                        modifier = Modifier.size(
+                                                            17.dp * LocalAppIconScale.current
+                                                        )
                                                     )
                                                 }
                                             }
@@ -3204,16 +3212,22 @@ fun HomeScreen(
                                     max = 58.dp
                                 )
                                 .border(
-                                width = 1.dp,
-                                brush = Brush.linearGradient(
-                                    colors = listOf(
-                                        Color.White.copy(alpha = 0.85f),
-                                        Color.White.copy(alpha = 0.25f),
-                                        Color.White.copy(alpha = 0.85f)
-                                    )
-                                ),
-                                shape = RoundedCornerShape(18.dp)
-                            )
+                                    width = 1.dp,
+                                    brush = Brush.linearGradient(
+                                        colors = listOf(
+                                            MaterialTheme.colorScheme.onPrimary.copy(
+                                                alpha = 0.85f
+                                            ),
+                                            MaterialTheme.colorScheme.onPrimary.copy(
+                                                alpha = 0.25f
+                                            ),
+                                            MaterialTheme.colorScheme.onPrimary.copy(
+                                                alpha = 0.85f
+                                            )
+                                        )
+                                    ),
+                                    shape = RoundedCornerShape(18.dp)
+                                )
                     ) {
                         Box(
                             modifier = Modifier
@@ -3257,9 +3271,15 @@ fun HomeScreen(
                                         imageVector =
                                             Icons.Filled.Star,
                                         contentDescription = null,
-                                        tint = Color.White,
+                                        tint =
+                                            MaterialTheme
+                                                .colorScheme
+                                                .onPrimary,
                                         modifier =
-                                            Modifier.size(16.dp)
+                                            Modifier.size(
+                                                16.dp *
+                                                        LocalAppIconScale.current
+                                            )
                                     )
 
                                     Spacer(Modifier.width(6.dp))
@@ -3273,7 +3293,10 @@ fun HomeScreen(
                                             },
                                         fontWeight =
                                             FontWeight.ExtraBold,
-                                        color = Color.White,
+                                        color =
+                                            MaterialTheme
+                                                .colorScheme
+                                                .onPrimary,
                                         style =
                                             KmiTypography.action,
                                         maxLines = 1,
@@ -3632,7 +3655,9 @@ fun HomeScreen(
                                                         alpha = 0.78f
                                                     ),
                                                 modifier =
-                                                    Modifier.size(28.dp)
+                                                    Modifier.size(
+                                                        28.dp * LocalAppIconScale.current
+                                                    )
                                             )
 
                                             Spacer(Modifier.height(8.dp))
@@ -3899,7 +3924,9 @@ fun HomeScreen(
                                                                         contentDescription = null,
                                                                         tint =
                                                                             noticeColors.onSurfaceVariant,
-                                                                        modifier = Modifier.size(12.dp)
+                                                                        modifier = Modifier.size(
+                                                                            12.dp * LocalAppIconScale.current
+                                                                        )
                                                                     )
 
                                                                     Text(
@@ -4024,10 +4051,18 @@ fun HomeScreen(
                     isEnglish = isEnglish,
                     backgroundBrush = Brush.verticalGradient(
                         colors = listOf(
-                            Color.White,
-                            lerp(Color.White, belt.color, 0.12f),
-                            lerp(Color.White, belt.color, 0.06f),
-                            Color.White
+                            MaterialTheme.colorScheme.surface,
+                            lerp(
+                                MaterialTheme.colorScheme.surface,
+                                belt.color,
+                                0.12f
+                            ),
+                            lerp(
+                                MaterialTheme.colorScheme.surface,
+                                belt.color,
+                                0.06f
+                            ),
+                            MaterialTheme.colorScheme.surface
                         )
                     ),
                     onDismiss = {
@@ -4133,13 +4168,10 @@ private fun ModernHomeQuickFab(
                 )
                 .border(
                     width = 1.dp,
-                    color = Color.White.copy(alpha = 0.72f),
+                    color = MaterialTheme.colorScheme
+                        .outlineVariant
+                        .copy(alpha = 0.72f),
                     shape = tabShape
-                )
-                .shadow(
-                    elevation = 2.dp,
-                    shape = tabShape,
-                    clip = false
                 )
                 .clickable(
                     interactionSource = remember { MutableInteractionSource() },
@@ -4578,19 +4610,41 @@ private fun TrainingCardCompact(
             onDismissRequest = { showNavPicker = false },
             title = {
                 Text(
-                    text = "פתיחה באמצעות",
-                    style = MaterialTheme.typography.titleMedium,
+                    text =
+                        if (isEnglish) {
+                            "Open with"
+                        } else {
+                            "פתיחה באמצעות"
+                        },
+                    style = KmiTypography.cardTitle,
                     fontWeight = FontWeight.Bold,
-                    textAlign = TextAlign.Right,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    textAlign =
+                        if (isEnglish) {
+                            TextAlign.Left
+                        } else {
+                            TextAlign.Right
+                        },
                     modifier = Modifier.fillMaxWidth()
                 )
             },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     Text(
-                        text = "בחר אפליקציה לניווט. אפשר גם לשמור כברירת מחדל.",
-                        style = MaterialTheme.typography.bodyMedium,
-                        textAlign = TextAlign.Right,
+                        text =
+                            if (isEnglish) {
+                                "Choose a navigation app. You can also save it as the default."
+                            } else {
+                                "בחר אפליקציה לניווט. אפשר גם לשמור כברירת מחדל."
+                            },
+                        style = KmiTypography.body,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        textAlign =
+                            if (isEnglish) {
+                                TextAlign.Left
+                            } else {
+                                TextAlign.Right
+                            },
                         modifier = Modifier.fillMaxWidth()
                     )
 
@@ -4605,7 +4659,17 @@ private fun TrainingCardCompact(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.End
                     ) {
-                        Text("זכור בחירה", modifier = Modifier.padding(end = 8.dp))
+                        Text(
+                            text =
+                                if (isEnglish) {
+                                    "Remember selection"
+                                } else {
+                                    "זכור בחירה"
+                                },
+                            style = KmiTypography.secondary,
+                            color = MaterialTheme.colorScheme.onSurface,
+                            modifier = Modifier.padding(end = 8.dp)
+                        )
                         Switch(
                             checked = rememberChoice,
                             onCheckedChange = { rememberChoice = it }
@@ -5155,7 +5219,9 @@ private fun TrainingCardCompact(
                             },
                         tint =
                             MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.size(23.dp)
+                        modifier = Modifier.size(
+                            23.dp * LocalAppIconScale.current
+                        )
                     )
                 }
             }
@@ -5225,7 +5291,7 @@ private fun NavigationChip(
         color = graniteCardColor,
 
         tonalElevation = 0.dp,
-        shadowElevation = 1.dp,
+        shadowElevation = 0.dp,
 
         /*
          * קו מתאר עדין באותו סגנון של כרטיס האימון.
@@ -5278,7 +5344,9 @@ private fun NavigationChip(
                 ),
                 tonalElevation = 0.dp,
                 shadowElevation = 0.dp,
-                modifier = Modifier.size(34.dp)
+                modifier = Modifier.size(
+                    34.dp * LocalAppIconScale.current
+                )
             ) {
                 Box(
                     modifier = Modifier.fillMaxSize(),
@@ -5293,7 +5361,9 @@ private fun NavigationChip(
                                 "ניווט"
                             },
                         tint = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.size(19.dp)
+                        modifier = Modifier.size(
+                            19.dp * LocalAppIconScale.current
+                        )
                     )
                 }
             }
@@ -5401,7 +5471,7 @@ private fun NavPickerDialog(
              * ללא הצל העבה שהיה ב־AlertDialog.
              */
             tonalElevation = 0.dp,
-            shadowElevation = 1.dp,
+            shadowElevation = 0.dp,
 
             /*
              * קו מתאר עדין בלבד.

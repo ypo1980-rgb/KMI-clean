@@ -56,11 +56,11 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import il.kmi.app.training.TrainingData
 import il.kmi.app.training.TrainingOverrideRepository
 import il.kmi.app.ui.KmiTopBar
 import il.kmi.app.ui.KmiTypography
+import il.kmi.app.ui.LocalAppIconScale
 import kotlinx.coroutines.launch
 import java.util.Calendar
 import java.util.Locale
@@ -651,15 +651,19 @@ fun TrainingManagementScreen(
                                 },
                             iconTint = Color(0xFF6D4BB6),
                             containerColor =
-                                Color(0xFFF0EBFF),
+                                colorScheme.surfaceVariant,
                             borderColor =
-                                Color(0xFFB69AF5),
+                                Color(0xFF6D4BB6)
+                                    .copy(alpha = 0.38f),
                             icon = {
                                 Icon(
                                     imageVector = Icons.Filled.Schedule,
                                     contentDescription = null,
                                     tint = Color.White,
-                                    modifier = Modifier.size(22.dp)
+                                    modifier = Modifier.size(
+                                        22.dp *
+                                                LocalAppIconScale.current
+                                    )
                                 )
                             },
                             onClick = {
@@ -684,15 +688,20 @@ fun TrainingManagementScreen(
                                 },
                             iconTint = Color(0xFFC81E1E),
                             containerColor =
-                                Color(0xFFFFEEEE),
+                                colorScheme.errorContainer
+                                    .copy(alpha = 0.52f),
                             borderColor =
-                                Color(0xFFFF9A9A),
+                                colorScheme.error
+                                    .copy(alpha = 0.38f),
                             icon = {
                                 Icon(
                                     imageVector = Icons.Filled.Cancel,
                                     contentDescription = null,
                                     tint = Color.White,
-                                    modifier = Modifier.size(22.dp)
+                                    modifier = Modifier.size(
+                                        22.dp *
+                                                LocalAppIconScale.current
+                                    )
                                 )
                             },
                             onClick = {
@@ -751,6 +760,7 @@ fun TrainingManagementScreen(
                     ) {
                         Text(
                             text = it,
+                            style = KmiTypography.body,
                             color = colorScheme.onErrorContainer,
                             fontWeight = FontWeight.Bold,
                             textAlign = TextAlign.Center,
@@ -837,7 +847,8 @@ private fun TrainingDetailsCard(
             1.dp,
             colorScheme.outline.copy(alpha = 0.30f)
         ),
-        shadowElevation = 5.dp
+        tonalElevation = 0.dp,
+        shadowElevation = 0.dp
     ) {
         Column(
             modifier = Modifier.padding(
@@ -1006,7 +1017,8 @@ private fun TrainingManagementActionCard(
         shape = RoundedCornerShape(20.dp),
         color = containerColor,
         border = BorderStroke(1.dp, borderColor),
-        shadowElevation = 4.dp
+        tonalElevation = 0.dp,
+        shadowElevation = 0.dp
     ) {
         Row(
             modifier = Modifier.padding(
@@ -1035,9 +1047,9 @@ private fun TrainingManagementActionCard(
             ) {
                 Text(
                     text = title,
-                    fontSize = 21.sp,
-                    lineHeight = 24.sp,
-                    fontWeight = FontWeight.ExtraBold,
+                    style = KmiTypography.cardTitle.copy(
+                        fontWeight = FontWeight.ExtraBold
+                    ),
                     color = iconTint,
                     textAlign = TextAlign.Center
                 )
@@ -1114,8 +1126,9 @@ private fun TrainingTimeButton(
 
             Text(
                 text = time,
-                fontSize = 21.sp,
-                fontWeight = FontWeight.Black,
+                style = KmiTypography.cardTitle.copy(
+                    fontWeight = FontWeight.Black
+                ),
                 color = accent
             )
         }
@@ -1136,34 +1149,41 @@ private fun TrainingReasonField(
         modifier = Modifier.fillMaxWidth(),
         label = {
             Text(
-                if (isCancellation) {
-                    if (isEnglish) {
-                        "Cancellation reason"
+                text =
+                    if (isCancellation) {
+                        if (isEnglish) {
+                            "Cancellation reason"
+                        } else {
+                            "סיבת הביטול"
+                        }
                     } else {
-                        "סיבת הביטול"
-                    }
-                } else {
-                    if (isEnglish) {
-                        "Reason for the change"
-                    } else {
-                        "סיבת השינוי"
-                    }
-                }
+                        if (isEnglish) {
+                            "Reason for the change"
+                        } else {
+                            "סיבת השינוי"
+                        }
+                    },
+                style = KmiTypography.caption
             )
         },
         placeholder = {
             Text(
-                if (isEnglish) {
-                    "Enter at least 3 characters"
-                } else {
-                    "יש להזין לפחות 3 תווים"
-                }
+                text =
+                    if (isEnglish) {
+                        "Enter at least 3 characters"
+                    } else {
+                        "יש להזין לפחות 3 תווים"
+                    },
+                style = KmiTypography.body
             )
         },
         minLines = 3,
         maxLines = 5,
         supportingText = {
-            Text("${value.length}/250")
+            Text(
+                text = "${value.length}/250",
+                style = KmiTypography.caption
+            )
         },
         shape = RoundedCornerShape(18.dp),
         colors = OutlinedTextFieldDefaults.colors(
@@ -1201,7 +1221,8 @@ private fun TrainingManagementBottomActions(
                 1.dp,
                 Color.White.copy(alpha = 0.30f)
             ),
-            shadowElevation = 7.dp
+            tonalElevation = 0.dp,
+            shadowElevation = 0.dp
         ) {
             Box(
                 contentAlignment = Alignment.Center
@@ -1245,6 +1266,7 @@ private fun TrainingManagementBottomActions(
 
                     Text(
                         text = if (isEnglish) "Back" else "חזרה",
+                        style = KmiTypography.action,
                         color = accent,
                         fontWeight = FontWeight.ExtraBold
                     )
@@ -1271,7 +1293,10 @@ private fun TrainingManagementBottomActions(
         ) {
             if (isSaving) {
                 CircularProgressIndicator(
-                    modifier = Modifier.size(17.dp),
+                    modifier = Modifier.size(
+                        17.dp *
+                                LocalAppIconScale.current
+                    ),
                     strokeWidth = 2.dp,
                     color = Color.White
                 )
@@ -1299,6 +1324,7 @@ private fun TrainingManagementBottomActions(
                         TrainingManagementScreenMode.MENU ->
                             ""
                     },
+                style = KmiTypography.action,
                 color = Color.White,
                 fontWeight = FontWeight.ExtraBold,
                 maxLines = 1,
@@ -1372,6 +1398,7 @@ private fun TrainingManagementTimePickerDialog(
             ) {
                 Text(
                     text = if (isEnglish) "Select" else "בחירה",
+                    style = KmiTypography.action,
                     fontWeight = FontWeight.ExtraBold
                 )
             }
@@ -1379,7 +1406,8 @@ private fun TrainingManagementTimePickerDialog(
         dismissButton = {
             TextButton(onClick = onDismiss) {
                 Text(
-                    text = if (isEnglish) "Cancel" else "ביטול"
+                    text = if (isEnglish) "Cancel" else "ביטול",
+                    style = KmiTypography.action
                 )
             }
         },

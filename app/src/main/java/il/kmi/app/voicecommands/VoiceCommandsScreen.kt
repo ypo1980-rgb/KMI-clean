@@ -41,8 +41,6 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowBack
-import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Mic
@@ -50,15 +48,17 @@ import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Stop
-import androidx.compose.material.icons.filled.TrendingUp
+import androidx.compose.material.icons.automirrored.filled.TrendingUp
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -74,18 +74,23 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
+import il.kmi.app.ui.KmiTypography
+import il.kmi.app.ui.LocalAppIconScale
 import il.kmi.shared.localization.AppLanguage
 import il.kmi.shared.localization.AppLanguageManager
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlin.time.Duration.Companion.milliseconds
 
 //===================================================================
 
+@Suppress("unused")
 @Composable
 fun VoiceCommandsScreen(
     onDismiss: () -> Unit,
@@ -93,14 +98,20 @@ fun VoiceCommandsScreen(
         command: VoiceAppCommand,
         spokenText: String
     ) -> Unit,
-    modifier: Modifier = Modifier,
-    compactOverlay: Boolean = false
+    modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
 
     val isEnglish =
         AppLanguageManager(context).getCurrentLanguage() ==
                 AppLanguage.ENGLISH
+
+    val layoutDirection =
+        if (isEnglish) {
+            LayoutDirection.Ltr
+        } else {
+            LayoutDirection.Rtl
+        }
 
     fun tr(
         hebrew: String,
@@ -165,9 +176,9 @@ fun VoiceCommandsScreen(
                 scope.launch {
                     delay(
                         if (command is VoiceAppCommand.Unknown) {
-                            250L
+                            250.milliseconds
                         } else {
-                            700L
+                            700.milliseconds
                         }
                     )
 
@@ -410,21 +421,24 @@ fun VoiceCommandsScreen(
     val backgroundBrush =
         Brush.verticalGradient(
             colors = listOf(
-                Color(0xFFF8FAFF),
-                Color(0xFFF1EDFF),
-                Color(0xFFE8E2F7),
-                Color(0xFFF3F7FF)
+                MaterialTheme.colorScheme.background,
+                MaterialTheme.colorScheme.surface,
+                MaterialTheme.colorScheme.surfaceVariant,
+                MaterialTheme.colorScheme.background
             )
         )
 
-    Column(
-        modifier = modifier
-            .fillMaxSize()
-            .background(backgroundBrush)
-            .statusBarsPadding()
-            .navigationBarsPadding()
+    CompositionLocalProvider(
+        LocalLayoutDirection provides layoutDirection
     ) {
-        VoiceCommandsHeader(
+        Column(
+            modifier = modifier
+                .fillMaxSize()
+                .background(backgroundBrush)
+                .statusBarsPadding()
+                .navigationBarsPadding()
+        ) {
+            VoiceCommandsHeader(
             isEnglish = isEnglish,
             onDismiss = {
                 controller.cancelListening()
@@ -463,7 +477,7 @@ fun VoiceCommandsScreen(
                         }
 
                         isProcessing -> {
-                            Unit
+                            // בזמן עיבוד אין לבצע פעולה נוספת.
                         }
 
                         else -> {
@@ -485,8 +499,13 @@ fun VoiceCommandsScreen(
                         .fillMaxWidth()
                         .widthIn(max = 620.dp),
                     shape = RoundedCornerShape(22.dp),
-                    color = Color.White,
-                    shadowElevation = 6.dp
+                    color = MaterialTheme.colorScheme.surface,
+                    tonalElevation = 0.dp,
+                    shadowElevation = 0.dp,
+                    border = BorderStroke(
+                        1.dp,
+                        MaterialTheme.colorScheme.outlineVariant
+                    )
                 ) {
                     Column(
                         modifier = Modifier.padding(18.dp)
@@ -496,8 +515,9 @@ fun VoiceCommandsScreen(
                                 "🎤 תמלול בזמן אמת",
                                 "🎤 Live transcript"
                             ),
+                            style = KmiTypography.secondary,
                             fontWeight = FontWeight.Bold,
-                            color = Color(0xFF2563EB)
+                            color = MaterialTheme.colorScheme.primary
                         )
 
                         Spacer(
@@ -506,9 +526,8 @@ fun VoiceCommandsScreen(
 
                         Text(
                             text = partialTranscript,
-                            fontSize = 18.sp,
-                            color = Color(0xFF172033),
-                            lineHeight = 25.sp
+                            style = KmiTypography.body,
+                            color = MaterialTheme.colorScheme.onSurface
                         )
                     }
                 }
@@ -538,7 +557,7 @@ fun VoiceCommandsScreen(
                         }
 
                         isProcessing -> {
-                            Unit
+                            // בזמן עיבוד אין לבצע פעולה נוספת.
                         }
 
                         else -> {
@@ -552,6 +571,7 @@ fun VoiceCommandsScreen(
                 modifier = Modifier.height(20.dp)
             )
         }
+        }
     }
 }
 
@@ -562,11 +582,13 @@ private fun VoiceCommandsHeader(
 ) {
     Surface(
         modifier = Modifier.fillMaxWidth(),
-        color = Color.White.copy(
-            alpha = 0.96f
-        ),
-        shadowElevation = 7.dp,
-        tonalElevation = 0.dp
+        color = MaterialTheme.colorScheme.surface,
+        shadowElevation = 0.dp,
+        tonalElevation = 0.dp,
+        border = BorderStroke(
+            1.dp,
+            MaterialTheme.colorScheme.outlineVariant
+        )
     ) {
         Box(
             modifier = Modifier
@@ -595,7 +617,10 @@ private fun VoiceCommandsHeader(
                         } else {
                             "סגור"
                         },
-                    tint = Color(0xFF475569)
+                    tint =
+                        MaterialTheme
+                            .colorScheme
+                            .onSurfaceVariant
                 )
             }
 
@@ -613,8 +638,11 @@ private fun VoiceCommandsHeader(
                         } else {
                             "פקודות קוליות"
                         },
-                    color = Color(0xFF111827),
-                    fontSize = 20.sp,
+                    style = KmiTypography.cardTitle,
+                    color =
+                        MaterialTheme
+                            .colorScheme
+                            .onSurface,
                     fontWeight =
                         FontWeight.ExtraBold
                 )
@@ -626,8 +654,11 @@ private fun VoiceCommandsHeader(
                         } else {
                             "שליטה באפליקציה באמצעות הקול"
                         },
-                    color = Color(0xFF64748B),
-                    fontSize = 11.5.sp,
+                    style = KmiTypography.caption,
+                    color =
+                        MaterialTheme
+                            .colorScheme
+                            .onSurfaceVariant,
                     fontWeight =
                         FontWeight.SemiBold
                 )
@@ -656,16 +687,14 @@ private fun VoiceCommandsHeroCard(
                 max = 620.dp
             ),
         shape = RoundedCornerShape(30.dp),
-        color = Color.White.copy(
-            alpha = 0.98f
-        ),
-        shadowElevation = 14.dp,
+        color = MaterialTheme.colorScheme.surface,
+        shadowElevation = 0.dp,
         tonalElevation = 0.dp,
         border = BorderStroke(
             width = 1.dp,
-            color = accentColor.copy(
-                alpha = 0.18f
-            )
+            color = MaterialTheme
+                .colorScheme
+                .outlineVariant
         )
     ) {
         Column(
@@ -728,8 +757,8 @@ private fun VoiceCommandsHeroCard(
                         horizontal = 14.dp,
                         vertical = 6.dp
                     ),
+                    style = KmiTypography.caption,
                     color = accentColor,
-                    fontSize = 11.sp,
                     fontWeight =
                         FontWeight.Black
                 )
@@ -785,9 +814,12 @@ private fun VoiceCommandsHeroCard(
                         .border(
                             width = 4.dp,
                             color =
-                                Color.White.copy(
-                                    alpha = 0.80f
-                                ),
+                                MaterialTheme
+                                    .colorScheme
+                                    .onPrimary
+                                    .copy(
+                                        alpha = 0.80f
+                                    ),
                             shape = CircleShape
                         )
                         .clickable(
@@ -818,7 +850,7 @@ private fun VoiceCommandsHeroCard(
                                         Icons.Filled.Stop
 
                                     PushToTalkState.PROCESSING ->
-                                        Icons.Filled.TrendingUp
+                                        Icons.AutoMirrored.Filled.TrendingUp
 
                                     PushToTalkState.IDLE ->
                                         if (
@@ -831,10 +863,14 @@ private fun VoiceCommandsHeroCard(
                                 },
                             contentDescription =
                                 null,
-                            tint = Color.White,
+                            tint =
+                                MaterialTheme
+                                    .colorScheme
+                                    .onPrimary,
                             modifier =
                                 Modifier.size(
-                                    54.dp
+                                    54.dp *
+                                            LocalAppIconScale.current
                                 )
                         )
                     }
@@ -864,9 +900,11 @@ private fun VoiceCommandsHeroCard(
                     text = title,
                     modifier =
                         Modifier.fillMaxWidth(),
-                    color = Color(0xFF172033),
-                    fontSize = 20.sp,
-                    lineHeight = 25.sp,
+                    style = KmiTypography.cardTitle,
+                    color =
+                        MaterialTheme
+                            .colorScheme
+                            .onSurface,
                     fontWeight =
                         FontWeight.ExtraBold,
                     textAlign =
@@ -881,14 +919,17 @@ private fun VoiceCommandsHeroCard(
             Text(
                 text = statusDescription,
                 modifier = Modifier.fillMaxWidth(),
+                style = KmiTypography.body,
                 color =
                     if (errorMessage != null) {
-                        Color(0xFFDC2626)
+                        MaterialTheme
+                            .colorScheme
+                            .error
                     } else {
-                        Color(0xFF526079)
+                        MaterialTheme
+                            .colorScheme
+                            .onSurfaceVariant
                     },
-                fontSize = 14.sp,
-                lineHeight = 20.sp,
                 fontWeight = FontWeight.Medium,
                 textAlign = TextAlign.Center
             )
@@ -976,11 +1017,15 @@ private fun VoiceCommandExamplesCard(
                 max = 620.dp
             ),
         shape = RoundedCornerShape(26.dp),
-        color = Color.White.copy(
-            alpha = 0.97f
-        ),
-        shadowElevation = 9.dp,
-        tonalElevation = 0.dp
+        color = MaterialTheme.colorScheme.surface,
+        shadowElevation = 0.dp,
+        tonalElevation = 0.dp,
+        border = BorderStroke(
+            1.dp,
+            MaterialTheme
+                .colorScheme
+                .outlineVariant
+        )
     ) {
         Column(
             modifier = Modifier
@@ -999,8 +1044,11 @@ private fun VoiceCommandExamplesCard(
                     },
                 modifier =
                     Modifier.fillMaxWidth(),
-                color = Color(0xFF172033),
-                fontSize = 17.sp,
+                style = KmiTypography.cardTitle,
+                color =
+                    MaterialTheme
+                        .colorScheme
+                        .onSurface,
                 fontWeight =
                     FontWeight.ExtraBold,
                 textAlign =
@@ -1082,7 +1130,10 @@ private fun VoiceExampleRow(
                         contentDescription = null,
                         tint = item.accent,
                         modifier =
-                            Modifier.size(21.dp)
+                            Modifier.size(
+                                21.dp *
+                                        LocalAppIconScale.current
+                            )
                     )
                 }
             }
@@ -1094,8 +1145,11 @@ private fun VoiceExampleRow(
                     text = item.title,
                     modifier =
                         Modifier.fillMaxWidth(),
-                    color = Color(0xFF24304D),
-                    fontSize = 14.sp,
+                    style = KmiTypography.secondary,
+                    color =
+                        MaterialTheme
+                            .colorScheme
+                            .onSurface,
                     fontWeight =
                         FontWeight.ExtraBold,
                     textAlign =
@@ -1126,7 +1180,10 @@ private fun VoiceExampleRow(
                                 RoundedCornerShape(
                                     999.dp
                                 ),
-                            color = Color.White,
+                            color =
+                                MaterialTheme
+                                    .colorScheme
+                                    .surface,
                             border =
                                 BorderStroke(
                                     width = 1.dp,
@@ -1146,9 +1203,12 @@ private fun VoiceExampleRow(
                                         vertical =
                                             6.dp
                                     ),
+                                style =
+                                    KmiTypography.caption,
                                 color =
-                                    Color(0xFF475569),
-                                fontSize = 11.5.sp,
+                                    MaterialTheme
+                                        .colorScheme
+                                        .onSurfaceVariant,
                                 fontWeight =
                                     FontWeight.SemiBold
                             )
@@ -1188,23 +1248,32 @@ private fun VoiceCommandBottomAction(
             containerColor =
                 when {
                     isListening ->
-                        Color(0xFFDC2626)
+                        MaterialTheme
+                            .colorScheme
+                            .error
 
                     hasError ->
-                        Color(0xFF7C3AED)
+                        MaterialTheme
+                            .colorScheme
+                            .secondary
 
                     else ->
-                        Color(0xFF4F46E5)
+                        MaterialTheme
+                            .colorScheme
+                            .primary
                 },
-            contentColor = Color.White,
+            contentColor =
+                MaterialTheme
+                    .colorScheme
+                    .onPrimary,
             disabledContainerColor =
-                Color(0xFF7C3AED).copy(
-                    alpha = 0.55f
-                ),
+                MaterialTheme
+                    .colorScheme
+                    .surfaceVariant,
             disabledContentColor =
-                Color.White.copy(
-                    alpha = 0.85f
-                )
+                MaterialTheme
+                    .colorScheme
+                    .onSurfaceVariant
         )
     ) {
         Icon(
@@ -1214,7 +1283,7 @@ private fun VoiceCommandBottomAction(
                         Icons.Filled.Stop
 
                     isProcessing ->
-                        Icons.Filled.TrendingUp
+                        Icons.AutoMirrored.Filled.TrendingUp
 
                     hasError ->
                         Icons.Filled.Refresh
@@ -1259,7 +1328,7 @@ private fun VoiceCommandBottomAction(
             modifier = Modifier.padding(
                 horizontal = 10.dp
             ),
-            fontSize = 15.sp,
+            style = KmiTypography.action,
             fontWeight = FontWeight.Black
         )
     }

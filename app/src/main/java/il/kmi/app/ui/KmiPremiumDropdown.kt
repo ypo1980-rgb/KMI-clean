@@ -4,13 +4,16 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -215,27 +218,59 @@ fun KmiPremiumDropdown(
                     )
                 }
 
-                Spacer(Modifier.width(6.dp))
-
-                Text(
-                    text =
-                        when {
-                            !canExpand -> "•"
-                            expanded -> "▲"
-                            else -> "▼"
-                        },
-                    color =
-                        if (canExpand) {
-                            titleColor
-                        } else {
-                            titleColor.copy(alpha = 0.45f)
-                        },
-                    style =
-                        KmiTypography.caption.copy(
-                            fontWeight =
-                                FontWeight.Black
-                        )
+                Spacer(
+                    Modifier.width(8.dp)
                 )
+
+                /*
+                 * אייקון פתיחה גלובלי אחיד.
+                 * זהה למבנה של שדה התאריך במסך הנוכחות.
+                 */
+                Surface(
+                    modifier = Modifier.size(
+                        KmiIconSize.medium
+                    ),
+                    shape = CircleShape,
+                    color =
+                        if (isDarkMode) {
+                            MaterialTheme.colorScheme.surface
+                        } else {
+                            Color(0xFFEAF2FF)
+                        },
+                    border = BorderStroke(
+                        width = 1.dp,
+                        color =
+                            if (expanded) {
+                                focusedBorderColor
+                            } else {
+                                fieldBorderColor
+                            }
+                    ),
+                    shadowElevation = 0.dp,
+                    tonalElevation = 0.dp
+                ) {
+                    Box(
+                        modifier = Modifier.fillMaxWidth(),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = "▼",
+                            color =
+                                if (canExpand) {
+                                    titleColor
+                                } else {
+                                    titleColor.copy(
+                                        alpha = 0.45f
+                                    )
+                                },
+                            style =
+                                KmiTypography.caption.copy(
+                                    fontWeight =
+                                        FontWeight.Black
+                                )
+                        )
+                    }
+                }
             }
         }
 

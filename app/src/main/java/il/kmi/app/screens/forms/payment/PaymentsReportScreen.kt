@@ -105,28 +105,50 @@ private fun PaymentsPremiumLoading(
             label = "paymentsPremiumLoading"
         )
 
-    val outerRotation by transition.animateFloat(
+    /*
+     * שלוש טבעות עצמאיות:
+     * החיצונית והפנימית מסתובבות בכיוון אחד,
+     * האמצעית בכיוון ההפוך.
+     */
+    val outerRotation by
+    transition.animateFloat(
         initialValue = 0f,
         targetValue = 360f,
         animationSpec =
             infiniteRepeatable(
                 animation =
                     tween(
-                        durationMillis = 1_250,
+                        durationMillis = 1_350,
                         easing = LinearEasing
                     )
             ),
         label = "paymentsOuterRing"
     )
 
-    val innerRotation by transition.animateFloat(
+    val middleRotation by
+    transition.animateFloat(
         initialValue = 360f,
         targetValue = 0f,
         animationSpec =
             infiniteRepeatable(
                 animation =
                     tween(
-                        durationMillis = 1_750,
+                        durationMillis = 1_650,
+                        easing = LinearEasing
+                    )
+            ),
+        label = "paymentsMiddleRing"
+    )
+
+    val innerRotation by
+    transition.animateFloat(
+        initialValue = 0f,
+        targetValue = 360f,
+        animationSpec =
+            infiniteRepeatable(
+                animation =
+                    tween(
+                        durationMillis = 2_050,
                         easing = LinearEasing
                     )
             ),
@@ -137,79 +159,147 @@ private fun PaymentsPremiumLoading(
         modifier =
             modifier
                 .fillMaxWidth()
-                .padding(vertical = 12.dp),
+                .padding(
+                    vertical = 12.dp
+                ),
         horizontalAlignment =
             Alignment.CenterHorizontally,
         verticalArrangement =
-            Arrangement.spacedBy(8.dp)
+            Arrangement.spacedBy(12.dp)
     ) {
         Box(
-            modifier = Modifier.size(58.dp),
-            contentAlignment = Alignment.Center
+            modifier = Modifier.size(82.dp),
+            contentAlignment =
+                Alignment.Center
         ) {
+            /*
+             * טבעת חיצונית
+             */
             Box(
                 modifier =
                     Modifier
-                        .size(58.dp)
+                        .size(76.dp)
                         .graphicsLayer {
-                            rotationZ = outerRotation
+                            rotationZ =
+                                outerRotation
+                        }
+                        .border(
+                            width = 5.dp,
+                            brush =
+                                Brush.sweepGradient(
+                                    colors =
+                                        listOf(
+                                            Color.Transparent,
+                                            Color(0xFFA78BFA),
+                                            Color(0xFF38BDF8),
+                                            Color.Transparent
+                                        )
+                                ),
+                            shape = CircleShape
+                        )
+            )
+
+            /*
+             * טבעת אמצעית
+             */
+            Box(
+                modifier =
+                    Modifier
+                        .size(62.dp)
+                        .graphicsLayer {
+                            rotationZ =
+                                middleRotation
                         }
                         .border(
                             width = 4.dp,
                             brush =
                                 Brush.sweepGradient(
-                                    listOf(
-                                        Color.Transparent,
-                                        Color(0xFFA855F7),
-                                        Color(0xFF38BDF8),
-                                        Color.Transparent
-                                    )
+                                    colors =
+                                        listOf(
+                                            Color.Transparent,
+                                            Color(0xFF38BDF8),
+                                            Color(0xFFA78BFA),
+                                            Color.Transparent
+                                        )
                                 ),
                             shape = CircleShape
                         )
             )
 
+            /*
+             * טבעת פנימית
+             */
             Box(
                 modifier =
                     Modifier
-                        .size(40.dp)
+                        .size(48.dp)
                         .graphicsLayer {
-                            rotationZ = innerRotation
+                            rotationZ =
+                                innerRotation
                         }
                         .border(
                             width = 3.dp,
                             brush =
                                 Brush.sweepGradient(
-                                    listOf(
-                                        Color.Transparent,
-                                        Color(0xFFF59E0B),
-                                        Color(0xFF22C55E),
-                                        Color.Transparent
-                                    )
+                                    colors =
+                                        listOf(
+                                            Color.Transparent,
+                                            Color(0xFFF59E0B),
+                                            Color(0xFF22C55E),
+                                            Color.Transparent
+                                        )
                                 ),
                             shape = CircleShape
                         )
             )
 
-            Box(
+            /*
+             * מרכז נקי המתאים ל-Light / Dark.
+             */
+            Surface(
                 modifier =
-                    Modifier
-                        .size(14.dp)
-                        .background(
+                    Modifier.size(25.dp),
+                shape = CircleShape,
+                color =
+                    MaterialTheme
+                        .colorScheme
+                        .surface,
+                tonalElevation = 0.dp,
+                shadowElevation = 0.dp,
+                border =
+                    androidx.compose.foundation
+                        .BorderStroke(
+                            width = 1.dp,
                             color =
                                 MaterialTheme
                                     .colorScheme
-                                    .surface,
-                            shape = CircleShape
+                                    .primary
+                                    .copy(
+                                        alpha = 0.32f
+                                    )
                         )
-                        .border(
-                            width = 1.dp,
-                            color =
-                                Color(0xFFA78BFA)
-                                    .copy(alpha = 0.55f),
-                            shape = CircleShape
-                        )
-            )
+            ) {
+                Box(
+                    modifier =
+                        Modifier.fillMaxSize(),
+                    contentAlignment =
+                        Alignment.Center
+                ) {
+                    Text(
+                        text = "✓",
+                        style =
+                            KmiTypography.caption,
+                        color =
+                            MaterialTheme
+                                .colorScheme
+                                .primary,
+                        fontWeight =
+                            FontWeight.Black,
+                        textAlign =
+                            TextAlign.Center
+                    )
+                }
+            }
         }
 
         Text(
@@ -223,8 +313,10 @@ private fun PaymentsPremiumLoading(
                     fontWeight =
                         FontWeight.Bold
                 ),
-            textAlign = TextAlign.Center,
-            modifier = Modifier.fillMaxWidth()
+            textAlign =
+                TextAlign.Center,
+            modifier =
+                Modifier.fillMaxWidth()
         )
     }
 }
@@ -1490,41 +1582,63 @@ private fun FilterChipSimple(
         onClick = onClick,
         modifier =
             modifier.heightIn(
-                min = 50.dp
+                min = 44.dp
             ),
-        shape = RoundedCornerShape(20.dp),
-        color = if (selected) {
-            Color(0xFF7B57D1)
-        } else {
-            MaterialTheme.colorScheme.surfaceVariant
-        },
-        tonalElevation = if (selected) 5.dp else 2.dp,
-        border = androidx.compose.foundation.BorderStroke(
-            width = 1.dp,
-            color = if (selected) {
+        shape = RoundedCornerShape(16.dp),
+        color =
+            if (selected) {
                 Color(0xFF7B57D1)
             } else {
-                MaterialTheme.colorScheme.outlineVariant
-            }
-        )
+                MaterialTheme
+                    .colorScheme
+                    .surfaceVariant
+            },
+        tonalElevation = 0.dp,
+        shadowElevation = 0.dp,
+        border =
+            androidx.compose.foundation.BorderStroke(
+                width = 1.dp,
+                color =
+                    if (selected) {
+                        Color(0xFF7B57D1)
+                    } else {
+                        MaterialTheme
+                            .colorScheme
+                            .outlineVariant
+                    }
+            )
     ) {
         Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(horizontal = 4.dp, vertical = 4.dp),
-            contentAlignment = Alignment.Center
+            modifier =
+                Modifier
+                    .fillMaxSize()
+                    .padding(
+                        horizontal = 6.dp,
+                        vertical = 4.dp
+                    ),
+            contentAlignment =
+                Alignment.Center
         ) {
             Text(
                 text = text,
-                color = if (selected) {
-                    Color.White
-                } else {
-                    MaterialTheme.colorScheme.onSurfaceVariant
-                },
+                color =
+                    if (selected) {
+                        Color.White
+                    } else {
+                        MaterialTheme
+                            .colorScheme
+                            .onSurfaceVariant
+                    },
                 style =
                     KmiTypography.caption,
-                fontWeight = if (selected) FontWeight.ExtraBold else FontWeight.Bold,
-                textAlign = TextAlign.Center,
+                fontWeight =
+                    if (selected) {
+                        FontWeight.ExtraBold
+                    } else {
+                        FontWeight.Bold
+                    },
+                textAlign =
+                    TextAlign.Center,
                 maxLines = 2
             )
         }
@@ -1538,13 +1652,26 @@ private fun PaymentReportRow(
     isEnglish: Boolean,
     onManualUpdate: () -> Unit
 ) {
+    val cardBackgroundColor =
+        MaterialTheme.colorScheme.surfaceVariant
+
+    val cardPrimaryTextColor =
+        MaterialTheme.colorScheme.onSurface
+
+    val cardSecondaryTextColor =
+        MaterialTheme.colorScheme.onSurfaceVariant
+
+    val cardDividerColor =
+        MaterialTheme.colorScheme.outlineVariant
+            .copy(alpha = 0.72f)
+
     Card(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(22.dp),
         colors =
             CardDefaults.cardColors(
                 containerColor =
-                    Color(0xFF2A3D66)
+                    cardBackgroundColor
             ),
         elevation =
             CardDefaults.cardElevation(
@@ -1557,35 +1684,42 @@ private fun PaymentReportRow(
                 .padding(horizontal = 12.dp, vertical = 10.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
+            val rowLayoutDirection =
+                if (isEnglish) {
+                    LayoutDirection.Ltr
+                } else {
+                    LayoutDirection.Rtl
+                }
+
+            val rowTextAlign =
+                if (isEnglish) {
+                    TextAlign.Start
+                } else {
+                    TextAlign.End
+                }
+
+            val rowHorizontalAlignment =
+                if (isEnglish) {
+                    Alignment.Start
+                } else {
+                    Alignment.End
+                }
+
             CompositionLocalProvider(
-                LocalLayoutDirection provides LayoutDirection.Ltr
+                LocalLayoutDirection provides
+                        rowLayoutDirection
             ) {
                 Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.Top
+                    modifier =
+                        Modifier.fillMaxWidth(),
+                    verticalAlignment =
+                        Alignment.Top
                 ) {
-                    if (!isEnglish) {
-                        Surface(
-                            shape = RoundedCornerShape(14.dp),
-                            color = statusColor(item.status).copy(alpha = 0.18f)
-                        ) {
-                            Text(
-                                text = statusLabel(item.status, isEnglish),
-                                color = statusColor(item.status),
-                                modifier = Modifier.padding(horizontal = 9.dp, vertical = 5.dp),
-                                style =
-                                    KmiTypography.caption,
-                                fontWeight = FontWeight.Bold,
-                                textAlign = TextAlign.Center
-                            )
-                        }
-
-                        Spacer(Modifier.width(8.dp))
-                    }
-
                     Column(
-                        modifier = Modifier.weight(1f),
-                        horizontalAlignment = if (isEnglish) Alignment.Start else Alignment.End
+                        modifier =
+                            Modifier.weight(1f),
+                        horizontalAlignment =
+                            rowHorizontalAlignment
                     ) {
                         Text(
                             text =
@@ -1593,59 +1727,97 @@ private fun PaymentReportRow(
                                     isEnglish = isEnglish,
                                     demoIndex = demoIndex
                                 ),
-                            color = Color.White,
+                            color = cardPrimaryTextColor,
                             style =
                                 KmiTypography.cardTitle,
-                            fontWeight = FontWeight.ExtraBold,
-                            textAlign = if (isEnglish) TextAlign.Start else TextAlign.End,
-                            modifier = Modifier.fillMaxWidth(),
+                            fontWeight =
+                                FontWeight.ExtraBold,
+                            textAlign =
+                                rowTextAlign,
+                            modifier =
+                                Modifier.fillMaxWidth(),
                             maxLines = 2
                         )
 
-                        Spacer(Modifier.height(3.dp))
+                        Spacer(
+                            Modifier.height(3.dp)
+                        )
 
                         Text(
-                            text = listOf(item.branchName, item.phone)
-                                .filter { it.isNotBlank() }
-                                .joinToString(" • "),
-                            color = Color.White.copy(alpha = 0.72f),
+                            text =
+                                listOf(
+                                    item.branchName,
+                                    item.phone
+                                )
+                                    .filter {
+                                        it.isNotBlank()
+                                    }
+                                    .joinToString(" • "),
+                            color =
+                                cardSecondaryTextColor,
                             style =
                                 KmiTypography.caption,
-                            textAlign = if (isEnglish) TextAlign.Start else TextAlign.End,
-                            modifier = Modifier.fillMaxWidth(),
+                            textAlign =
+                                rowTextAlign,
+                            modifier =
+                                Modifier.fillMaxWidth(),
                             maxLines = 1
                         )
                     }
 
-                    if (isEnglish) {
-                        Spacer(Modifier.width(8.dp))
+                    Spacer(
+                        Modifier.width(8.dp)
+                    )
 
-                        Surface(
-                            shape = RoundedCornerShape(14.dp),
-                            color = statusColor(item.status).copy(alpha = 0.18f)
-                        ) {
-                            Text(
-                                text = statusLabel(item.status, isEnglish),
-                                color = statusColor(item.status),
-                                modifier = Modifier.padding(horizontal = 9.dp, vertical = 5.dp),
-                                style =
-                                    KmiTypography.caption,
-                                fontWeight = FontWeight.Bold,
-                                textAlign = TextAlign.Center
-                            )
-                        }
+                    Surface(
+                        shape =
+                            RoundedCornerShape(14.dp),
+                        color =
+                            statusColor(item.status)
+                                .copy(alpha = 0.18f),
+                        tonalElevation = 0.dp,
+                        shadowElevation = 0.dp
+                    ) {
+                        Text(
+                            text =
+                                statusLabel(
+                                    item.status,
+                                    isEnglish
+                                ),
+                            color =
+                                statusColor(
+                                    item.status
+                                ),
+                            modifier =
+                                Modifier.padding(
+                                    horizontal = 9.dp,
+                                    vertical = 5.dp
+                                ),
+                            style =
+                                KmiTypography.caption,
+                            fontWeight =
+                                FontWeight.Bold,
+                            textAlign =
+                                TextAlign.Center
+                        )
                     }
                 }
             }
 
-            HorizontalDivider(color = Color.White.copy(alpha = 0.10f))
+            HorizontalDivider(
+                color =
+                    cardDividerColor
+            )
 
             Text(
-                text = if (isEnglish)
-                    "Fee: ₪${"%.0f".format(item.paidAmount)} / ₪${"%.0f".format(item.requiredAmount)}"
-                else
-                    "דמי חבר: ₪${"%.0f".format(item.paidAmount)} / ₪${"%.0f".format(item.requiredAmount)}",
-                color = Color.White,
+                text =
+                    if (isEnglish) {
+                        "Fee: ₪${"%.0f".format(item.paidAmount)} / ₪${"%.0f".format(item.requiredAmount)}"
+                    } else {
+                        "דמי חבר: ₪${"%.0f".format(item.paidAmount)} / ₪${"%.0f".format(item.requiredAmount)}"
+                    },
+                color =
+                    cardPrimaryTextColor,
                 style =
                     KmiTypography.secondary,
                 fontWeight = FontWeight.Bold,
@@ -1660,10 +1832,9 @@ private fun PaymentReportRow(
                     else
                         "עדכון אחרון: ${item.paymentDate}",
                     color =
-                        Color.White.copy(
-                            alpha = 0.68f
-                        ),
-                    style = KmiTypography.caption,
+                        cardSecondaryTextColor,
+                    style =
+                        KmiTypography.caption,
                     textAlign =
                         if (isEnglish) {
                             TextAlign.Start
@@ -2427,10 +2598,37 @@ private fun createPaymentsReportPdf(
     drawFooter()
     document.finishPage(page)
 
-    val dir = File(context.cacheDir, "pdfs").apply { mkdirs() }
-    val file = File(dir, "payments_report_${System.currentTimeMillis()}.pdf")
+    val dir =
+        File(
+            context.cacheDir,
+            "shared_pdfs"
+        ).apply {
+            mkdirs()
+        }
 
-    FileOutputStream(file).use { output ->
+    val reportDate =
+        SimpleDateFormat(
+            "dd-MM-yyyy",
+            Locale.getDefault()
+        ).format(Date())
+
+    val reportFileName =
+        if (isEnglish) {
+            "Payments_Report_$reportDate.pdf"
+        } else {
+            "דוח_תשלומים_$reportDate.pdf"
+        }
+
+    val file =
+        File(
+            dir,
+            reportFileName
+        )
+
+    FileOutputStream(
+        file,
+        false
+    ).use { output ->
         document.writeTo(output)
     }
 

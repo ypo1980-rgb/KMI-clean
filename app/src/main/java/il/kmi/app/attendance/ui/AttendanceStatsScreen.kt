@@ -13,8 +13,14 @@ import java.io.FileOutputStream
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
@@ -34,6 +40,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -42,14 +50,15 @@ import androidx.compose.ui.unit.dp
 import il.kmi.app.attendance.data.AttendanceReport
 import il.kmi.app.attendance.data.AttendanceRepository
 import il.kmi.app.attendance.data.AttendanceStatus
-import il.kmi.app.attendance.data.MemberAttendanceSession
 import il.kmi.app.training.TrainingCatalog
+import il.kmi.app.ui.KmiIconSize
 import il.kmi.app.ui.KmiTopBar
 import java.time.DayOfWeek
 import java.time.LocalDate
 import java.util.Calendar
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.text.style.TextDirection
 import androidx.compose.ui.text.TextStyle
@@ -90,11 +99,11 @@ fun AttendanceStatsScreen(
     fun tr(he: String, en: String): String = if (isEnglish) en else he
 
     var monthlyPercent by remember {
-        mutableStateOf(0)
+        mutableIntStateOf(0)
     }
 
     var yearlyPercent by remember {
-        mutableStateOf(0)
+        mutableIntStateOf(0)
     }
 
     /*
@@ -102,19 +111,19 @@ fun AttendanceStatsScreen(
      * הפקת דו״ח ה־PDF.
      */
     var monthlyPresentCount by remember {
-        mutableStateOf(0)
+        mutableIntStateOf(0)
     }
 
     var monthlyScheduledCount by remember {
-        mutableStateOf(0)
+        mutableIntStateOf(0)
     }
 
     var yearlyPresentCount by remember {
-        mutableStateOf(0)
+        mutableIntStateOf(0)
     }
 
     var yearlyScheduledCount by remember {
-        mutableStateOf(0)
+        mutableIntStateOf(0)
     }
 
     /*
@@ -511,8 +520,6 @@ fun AttendanceStatsScreen(
     }
 
     // טעינת 5 הדו"חות האחרונים מה־DB
-
-    // טעינת 5 הדו"חות האחרונים מה־DB
     LaunchedEffect(branch, groupKey) {
         if (branch.isBlank() || groupKey.isBlank()) return@LaunchedEffect
         repo.lastReports(branch, groupKey, limit = 5).collect { reports = it }
@@ -528,18 +535,49 @@ fun AttendanceStatsScreen(
             )
 
     /*
-     * אותו רקע בדיוק שבו משתמש מסך הבית.
+     * מצב התצוגה נגזר מ-MaterialTheme כדי שכל המסך
+     * יתאים אוטומטית ל-Light / Dark.
+     */
+    val backgroundColor =
+        MaterialTheme.colorScheme.background
+
+    val surfaceColor =
+        MaterialTheme.colorScheme.surface
+
+    val isDarkMode =
+        backgroundColor.luminance() < 0.5f
+
+    /*
+     * צבעי MaterialTheme נקראים מחוץ ל-remember,
+     * מכיוון שהם ערכי Composition.
+     *
+     * ה-remember מקבל רק ערכים רגילים שכבר חושבו.
      */
     val backgroundBrush =
-        remember {
+        remember(
+            isDarkMode,
+            backgroundColor,
+            surfaceColor
+        ) {
             Brush.verticalGradient(
-                colors = listOf(
-                    Color(0xFFF8FBFF),
-                    Color(0xFFEAF4FF),
-                    Color(0xFFB7DDF7),
-                    Color(0xFF1F78B4),
-                    Color(0xFF062B4A)
-                )
+                colors =
+                    if (isDarkMode) {
+                        listOf(
+                            backgroundColor,
+                            surfaceColor,
+                            Color(0xFF10243A),
+                            Color(0xFF0A3657),
+                            Color(0xFF041E33)
+                        )
+                    } else {
+                        listOf(
+                            Color(0xFFF8FBFF),
+                            Color(0xFFEAF4FF),
+                            Color(0xFFB7DDF7),
+                            Color(0xFF1F78B4),
+                            Color(0xFF062B4A)
+                        )
+                    }
             )
         }
 
@@ -624,10 +662,15 @@ fun AttendanceStatsScreen(
                     modifier = Modifier
                         .padding(padding)
                         .fillMaxSize()
-                        .verticalScroll(rememberScrollState())
+                        .verticalScroll(
+                            rememberScrollState()
+                        )
+                        .navigationBarsPadding()
                         .padding(
-                            horizontal = 16.dp,
-                            vertical = 12.dp
+                            start = 16.dp,
+                            end = 16.dp,
+                            top = 12.dp,
+                            bottom = 20.dp
                         ),
                     verticalArrangement =
                         Arrangement.spacedBy(18.dp)
@@ -693,7 +736,8 @@ fun AttendanceStatsScreen(
                     ),
                     shape = RoundedCornerShape(24.dp),
                     modifier = Modifier.fillMaxWidth(),
-                    tonalElevation = 6.dp,
+                    tonalElevation = 0.dp,
+                    shadowElevation = 0.dp,
                     border = BorderStroke(
                         width = 1.dp,
                         color = MaterialTheme.colorScheme.outlineVariant.copy(
@@ -710,10 +754,15 @@ fun AttendanceStatsScreen(
                             horizontalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
                             Icon(
-                                imageVector = Icons.Default.CalendarToday,
+                                imageVector =
+                                    Icons.Default.CalendarToday,
                                 contentDescription = null,
-                                tint = Color(0xFFF97316)
+                                tint = Color(0xFFF97316),
+                                modifier = Modifier.size(
+                                    KmiIconSize.medium
+                                )
                             )
+
                             Text(
                                 text =
                                     if (isEnglish) {
@@ -794,7 +843,8 @@ fun AttendanceStatsScreen(
                         ),
                         shape = RoundedCornerShape(24.dp),
                         modifier = Modifier.fillMaxWidth(),
-                        tonalElevation = 6.dp,
+                        tonalElevation = 0.dp,
+                        shadowElevation = 0.dp,
                         border = BorderStroke(
                             width = 1.dp,
                             color =
@@ -822,11 +872,17 @@ fun AttendanceStatsScreen(
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .horizontalScroll(rememberScrollState()),
-                                horizontalArrangement = Arrangement.spacedBy(12.dp)
+                                    .horizontalScroll(
+                                        rememberScrollState()
+                                    ),
+                                horizontalArrangement =
+                                    Arrangement.spacedBy(12.dp)
                             ) {
                                 reports.forEach { report ->
-                                    AttendanceReportChip(report = report)
+                                    AttendanceReportChip(
+                                        report = report,
+                                        isEnglish = isEnglish
+                                    )
                                 }
                             }
                         }
@@ -840,54 +896,187 @@ fun AttendanceStatsScreen(
     }
 }
 
-private fun rtlLine(s: String): String = "\u200F" + s + "\u200F"
+@Composable
+private fun AttendanceLoadingRing(
+    size: Dp,
+    width: Dp,
+    rotation: Float,
+    colors: List<Color>
+) {
+    Box(
+        modifier = Modifier
+            .size(size)
+            .graphicsLayer {
+                rotationZ = rotation
+            }
+            .border(
+                width = width,
+                brush = Brush.sweepGradient(colors),
+                shape = CircleShape
+            )
+    )
+}
 
-
-/**
- * אנימציית טעינה של שלוש טבעות מסתובבות.
- *
- * משתמשת ב־CircularProgressIndicator הגלובלי של
- * Material 3 ולכן ממשיכה להסתובב עד שהנתונים מוכנים.
- */
 @Composable
 private fun AttendanceLoadingRings(
     isEnglish: Boolean,
     modifier: Modifier = Modifier
 ) {
+    val infiniteTransition =
+        rememberInfiniteTransition(
+            label = "attendanceStatsLoading"
+        )
+
+    val outerRotation by
+    infiniteTransition.animateFloat(
+        initialValue = 0f,
+        targetValue = 360f,
+        animationSpec =
+            infiniteRepeatable(
+                animation = tween(
+                    durationMillis = 1350,
+                    easing = LinearEasing
+                )
+            ),
+        label =
+            "attendanceStatsOuterRotation"
+    )
+
+    val middleRotation by
+    infiniteTransition.animateFloat(
+        initialValue = 360f,
+        targetValue = 0f,
+        animationSpec =
+            infiniteRepeatable(
+                animation = tween(
+                    durationMillis = 1650,
+                    easing = LinearEasing
+                )
+            ),
+        label =
+            "attendanceStatsMiddleRotation"
+    )
+
+    val innerRotation by
+    infiniteTransition.animateFloat(
+        initialValue = 0f,
+        targetValue = 360f,
+        animationSpec =
+            infiniteRepeatable(
+                animation = tween(
+                    durationMillis = 2050,
+                    easing = LinearEasing
+                )
+            ),
+        label =
+            "attendanceStatsInnerRotation"
+    )
+
     Column(
         modifier = modifier,
         horizontalAlignment =
             Alignment.CenterHorizontally,
         verticalArrangement =
-            Arrangement.spacedBy(18.dp)
+            Arrangement.spacedBy(14.dp)
     ) {
         Box(
-            modifier = Modifier.size(124.dp),
-            contentAlignment = Alignment.Center
+            modifier = Modifier.size(82.dp),
+            contentAlignment =
+                Alignment.Center
         ) {
-            CircularProgressIndicator(
-                modifier = Modifier.size(124.dp),
-                color = Color(0xFF22D3EE),
-                trackColor =
-                    MaterialTheme.colorScheme.surfaceVariant.copy(
-                        alpha = 0.35f
-                    ),
-                strokeWidth = 6.dp
+            AttendanceLoadingRing(
+                size = 76.dp,
+                width = 5.dp,
+                rotation = outerRotation,
+                colors = listOf(
+                    Color.Transparent,
+                    Color(0xFFA78BFA),
+                    Color(0xFF38BDF8),
+                    Color.Transparent
+                )
             )
 
-            CircularProgressIndicator(
-                modifier = Modifier.size(88.dp),
-                color = Color(0xFFA78BFA),
-                trackColor = Color.Transparent,
-                strokeWidth = 6.dp
+            AttendanceLoadingRing(
+                size = 62.dp,
+                width = 4.dp,
+                rotation = middleRotation,
+                colors = listOf(
+                    Color.Transparent,
+                    Color(0xFF38BDF8),
+                    Color(0xFFA78BFA),
+                    Color.Transparent
+                )
             )
 
-            CircularProgressIndicator(
-                modifier = Modifier.size(52.dp),
-                color = Color(0xFFF472B6),
-                trackColor = Color.Transparent,
-                strokeWidth = 5.dp
+            AttendanceLoadingRing(
+                size = 48.dp,
+                width = 3.5.dp,
+                rotation = innerRotation,
+                colors = listOf(
+                    Color.Transparent,
+                    Color(0xFFF59E0B),
+                    Color(0xFF22C55E),
+                    Color.Transparent
+                )
             )
+
+            Surface(
+                modifier =
+                    Modifier.size(25.dp),
+                shape = CircleShape,
+                color =
+                    MaterialTheme
+                        .colorScheme
+                        .surface,
+                shadowElevation = 0.dp,
+                tonalElevation = 0.dp,
+                border = BorderStroke(
+                    width = 1.dp,
+                    color =
+                        MaterialTheme
+                            .colorScheme
+                            .primary
+                            .copy(alpha = 0.32f)
+                )
+            ) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(
+                            brush =
+                                Brush.radialGradient(
+                                    colors = listOf(
+                                        MaterialTheme
+                                            .colorScheme
+                                            .surface,
+                                        MaterialTheme
+                                            .colorScheme
+                                            .primaryContainer,
+                                        MaterialTheme
+                                            .colorScheme
+                                            .surfaceVariant
+                                    )
+                                ),
+                            shape = CircleShape
+                        ),
+                    contentAlignment =
+                        Alignment.Center
+                ) {
+                    Text(
+                        text = "✓",
+                        style =
+                            KmiTypography.caption,
+                        fontWeight =
+                            FontWeight.Black,
+                        color =
+                            MaterialTheme
+                                .colorScheme
+                                .primary,
+                        textAlign =
+                            TextAlign.Center
+                    )
+                }
+            }
         }
 
         Text(
@@ -898,7 +1087,10 @@ private fun AttendanceLoadingRings(
                     "טוען נתוני נוכחות…"
                 },
             style = KmiTypography.cardTitle,
-            color = MaterialTheme.colorScheme.onBackground,
+            color =
+                MaterialTheme
+                    .colorScheme
+                    .onBackground,
             textAlign = TextAlign.Center
         )
     }
@@ -929,7 +1121,8 @@ private fun EmptyMemberAttendanceStatsCard(
             width = 1.dp,
             color = MaterialTheme.colorScheme.outlineVariant
         ),
-        tonalElevation = 0.dp
+        tonalElevation = 0.dp,
+        shadowElevation = 0.dp
     ) {
         CompositionLocalProvider(LocalLayoutDirection provides layoutDirection) {
             Column(
@@ -1017,167 +1210,343 @@ private fun HeroAttendanceHeader(
     yearlyPercent: Int,
     isEnglish: Boolean
 ) {
-    fun tr(he: String, en: String): String = if (isEnglish) en else he
+    fun tr(
+        he: String,
+        en: String
+    ): String =
+        if (isEnglish) {
+            en
+        } else {
+            he
+        }
+
+    val layoutDirection =
+        if (isEnglish) {
+            LayoutDirection.Ltr
+        } else {
+            LayoutDirection.Rtl
+        }
+
+    val textDirection =
+        if (isEnglish) {
+            TextDirection.Ltr
+        } else {
+            TextDirection.Rtl
+        }
+
+    val textAlign =
+        if (isEnglish) {
+            TextAlign.Left
+        } else {
+            TextAlign.Right
+        }
+
+    val horizontalAlignment =
+        if (isEnglish) {
+            Alignment.Start
+        } else {
+            Alignment.End
+        }
+
+    val textStyle =
+        TextStyle(
+            textDirection = textDirection
+        )
 
     Surface(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(22.dp),
         color = MaterialTheme.colorScheme.surface,
-        tonalElevation = 2.dp,
+        tonalElevation = 0.dp,
+        shadowElevation = 0.dp,
         border = BorderStroke(
             width = 1.dp,
-            color = MaterialTheme.colorScheme.outlineVariant
+            color =
+                MaterialTheme.colorScheme
+                    .outlineVariant
         )
     ) {
-        // ✅ משאירים פריסה LTR כדי ש-End יהיה ימין פיזית
-        CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
-
-            val rtlStyle = TextStyle(textDirection = TextDirection.Rtl)
-
+        CompositionLocalProvider(
+            LocalLayoutDirection provides
+                    layoutDirection
+        ) {
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 14.dp, vertical = 10.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
+                    .padding(
+                        horizontal = 14.dp,
+                        vertical = 10.dp
+                    ),
+                verticalArrangement =
+                    Arrangement.spacedBy(8.dp)
             ) {
 
-                // שורת כותרת: טקסט בימין + אווטאר מימין
+                /*
+                 * שם + תאריך.
+                 * סדר הרכיבים נקבע אוטומטית לפי
+                 * RTL/LTR של CompositionLocalProvider.
+                 */
                 Row(
                     modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically
+                    verticalAlignment =
+                        Alignment.CenterVertically
                 ) {
-                    Column(
-                        modifier = Modifier.weight(1f),
-                        horizontalAlignment = Alignment.End
-                    ) {
-                        Text(
-                            text = name,
-                            style = KmiTypography.cardTitle.merge(rtlStyle),
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.onSurface,
-                            textAlign = TextAlign.Right,     // ✅ ימין פיזית
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                            modifier = Modifier.fillMaxWidth()
-                        )
-
-                        Text(
-                            text = if (isEnglish) {
-                                "${today.dayOfWeek.name.lowercase().replaceFirstChar { it.uppercase() }}, $today"
-                            } else {
-                                "יום ${hebDay(today.dayOfWeek)}, ${formatDateHeb(today)}"
-                            },
-                            style = KmiTypography.caption.merge(rtlStyle),
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            textAlign = TextAlign.Right,     // ✅
-                            maxLines = 1,
-                            modifier = Modifier.fillMaxWidth()
-                        )
-                    }
-
-                    Spacer(Modifier.width(10.dp))
-
                     Box(
                         modifier = Modifier
                             .size(44.dp)
                             .background(
-                                brush = Brush.radialGradient(
-                                    listOf(Color(0xFF38BDF8), Color(0xFF312E81))
-                                ),
+                                brush =
+                                    Brush.radialGradient(
+                                        listOf(
+                                            Color(0xFF38BDF8),
+                                            Color(0xFF312E81)
+                                        )
+                                    ),
                                 shape = CircleShape
                             ),
-                        contentAlignment = Alignment.Center
+                        contentAlignment =
+                            Alignment.Center
                     ) {
                         Icon(
-                            imageVector = Icons.Default.Person,
+                            imageVector =
+                                Icons.Default.Person,
                             contentDescription = null,
                             tint = Color.White,
-                            modifier = Modifier.size(22.dp)
+                            modifier =
+                                Modifier.size(
+                                    KmiIconSize.medium
+                                )
+                        )
+                    }
+
+                    Spacer(
+                        Modifier.width(10.dp)
+                    )
+
+                    Column(
+                        modifier =
+                            Modifier.weight(1f),
+                        horizontalAlignment =
+                            horizontalAlignment
+                    ) {
+                        Text(
+                            text = name,
+                            style =
+                                KmiTypography.cardTitle
+                                    .merge(textStyle),
+                            fontWeight =
+                                FontWeight.Bold,
+                            color =
+                                MaterialTheme
+                                    .colorScheme
+                                    .onSurface,
+                            textAlign = textAlign,
+                            maxLines = 1,
+                            overflow =
+                                TextOverflow.Ellipsis,
+                            modifier =
+                                Modifier.fillMaxWidth()
+                        )
+
+                        Text(
+                            text =
+                                if (isEnglish) {
+                                    "${
+                                        today.dayOfWeek
+                                            .name
+                                            .lowercase()
+                                            .replaceFirstChar {
+                                                it.uppercase()
+                                            }
+                                    }, $today"
+                                } else {
+                                    "יום ${
+                                        hebDay(
+                                            today.dayOfWeek
+                                        )
+                                    }, ${
+                                        formatDateHeb(today)
+                                    }"
+                                },
+                            style =
+                                KmiTypography.caption
+                                    .merge(textStyle),
+                            color =
+                                MaterialTheme
+                                    .colorScheme
+                                    .onSurfaceVariant,
+                            textAlign = textAlign,
+                            maxLines = 1,
+                            overflow =
+                                TextOverflow.Ellipsis,
+                            modifier =
+                                Modifier.fillMaxWidth()
                         )
                     }
                 }
 
-                // אחוזים – מיושר לימין פיזית
+                /*
+                 * אחוזים חודשיים ושנתיים.
+                 */
                 Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.End,
-                    verticalAlignment = Alignment.CenterVertically
+                    modifier =
+                        Modifier.fillMaxWidth(),
+                    horizontalArrangement =
+                        if (isEnglish) {
+                            Arrangement.Start
+                        } else {
+                            Arrangement.End
+                        },
+                    verticalAlignment =
+                        Alignment.CenterVertically
                 ) {
                     Text(
-                        text = tr("חודשי: $monthlyPercent%", "Monthly: $monthlyPercent%"),
-                        style = KmiTypography.secondary.merge(rtlStyle),
-                        fontWeight = FontWeight.Bold,
+                        text = tr(
+                            "חודשי: $monthlyPercent%",
+                            "Monthly: $monthlyPercent%"
+                        ),
+                        style =
+                            KmiTypography.secondary
+                                .merge(textStyle),
+                        fontWeight =
+                            FontWeight.Bold,
                         color = Color(0xFF22D3EE),
-                        textAlign = TextAlign.Right
+                        textAlign = textAlign
                     )
-                    Spacer(Modifier.width(14.dp))
+
+                    Spacer(
+                        Modifier.width(14.dp)
+                    )
+
                     Text(
-                        text = tr("שנתי: $yearlyPercent%", "Yearly: $yearlyPercent%"),
-                        style = KmiTypography.secondary.merge(rtlStyle),
-                        fontWeight = FontWeight.Bold,
-                        color = Color(0xFF9CA3AF),
-                        textAlign = TextAlign.Right
+                        text = tr(
+                            "שנתי: $yearlyPercent%",
+                            "Yearly: $yearlyPercent%"
+                        ),
+                        style =
+                            KmiTypography.secondary
+                                .merge(textStyle),
+                        fontWeight =
+                            FontWeight.Bold,
+                        color =
+                            MaterialTheme
+                                .colorScheme
+                                .onSurfaceVariant,
+                        textAlign = textAlign
                     )
                 }
 
                 @Composable
-                fun InfoRow(label: String, lines: List<String>) {
+                fun InfoRow(
+                    label: String,
+                    lines: List<String>
+                ) {
                     Column(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalAlignment = Alignment.End,
-                        verticalArrangement = Arrangement.spacedBy(2.dp)
+                        modifier =
+                            Modifier.fillMaxWidth(),
+                        horizontalAlignment =
+                            horizontalAlignment,
+                        verticalArrangement =
+                            Arrangement.spacedBy(2.dp)
                     ) {
                         Text(
                             text = label,
-                            color = MaterialTheme.colorScheme.primary,
-                            style = KmiTypography.caption.merge(rtlStyle),
-                            textAlign = TextAlign.Right,
-                            modifier = Modifier.fillMaxWidth(),
+                            color =
+                                MaterialTheme
+                                    .colorScheme
+                                    .primary,
+                            style =
+                                KmiTypography.caption
+                                    .merge(textStyle),
+                            textAlign = textAlign,
+                            modifier =
+                                Modifier.fillMaxWidth(),
                             maxLines = 1
                         )
 
                         lines
-                            .filter { it.isNotBlank() }
+                            .filter {
+                                it.isNotBlank()
+                            }
                             .forEach { line ->
                                 Text(
                                     text = line,
                                     color =
-                                        MaterialTheme.colorScheme.onSurface,
+                                        MaterialTheme
+                                            .colorScheme
+                                            .onSurface,
                                     style =
-                                        KmiTypography.body.merge(
-                                            rtlStyle
-                                        ),
+                                        KmiTypography.body
+                                            .merge(
+                                                textStyle
+                                            ),
                                     fontWeight =
                                         FontWeight.SemiBold,
-                                    textAlign = TextAlign.Right,
+                                    textAlign =
+                                        textAlign,
                                     modifier =
-                                        Modifier.fillMaxWidth(),
+                                        Modifier
+                                            .fillMaxWidth(),
                                     maxLines = 2,
                                     overflow =
-                                        TextOverflow.Ellipsis
+                                        TextOverflow
+                                            .Ellipsis
                                 )
                             }
                     }
                 }
 
-                val branchLines = remember(branch) {
-                    branch
-                        .replace(" • ", "\n")
-                        .split('\n', ',', ';', '；')
-                        .map { it.trim() }
-                        .filter { it.isNotBlank() }
-                }
+                val branchLines =
+                    remember(branch) {
+                        branch
+                            .replace(
+                                " • ",
+                                "\n"
+                            )
+                            .split(
+                                '\n',
+                                ',',
+                                ';',
+                                '；'
+                            )
+                            .map {
+                                it.trim()
+                            }
+                            .filter {
+                                it.isNotBlank()
+                            }
+                    }
 
-                val groupLines = remember(groupKey) {
-                    groupKey
-                        .replace(" • ", "\n")
-                        .split('\n', ',', ';', '；')
-                        .map { it.trim() }
-                        .filter { it.isNotBlank() }
-                }
+                val groupLines =
+                    remember(groupKey) {
+                        groupKey
+                            .replace(
+                                " • ",
+                                "\n"
+                            )
+                            .split(
+                                '\n',
+                                ',',
+                                ';',
+                                '；'
+                            )
+                            .map {
+                                it.trim()
+                            }
+                            .filter {
+                                it.isNotBlank()
+                            }
+                    }
 
-                InfoRow(tr("סניף", "Branch"), branchLines)
-                InfoRow(tr("קבוצה", "Group"), groupLines)
+                InfoRow(
+                    tr("סניף", "Branch"),
+                    branchLines
+                )
+
+                InfoRow(
+                    tr("קבוצה", "Group"),
+                    groupLines
+                )
             }
         }
     }
@@ -1342,7 +1711,8 @@ private fun MonthlyAttendanceChart(
         color = MaterialTheme.colorScheme.surface.copy(
             alpha = 0.96f
         ),
-        tonalElevation = 6.dp,
+        tonalElevation = 0.dp,
+        shadowElevation = 0.dp,
         border = BorderStroke(
             width = 1.dp,
             color = MaterialTheme.colorScheme.primary.copy(
@@ -1646,49 +2016,125 @@ private fun MonthlyAttendanceChart(
 @Composable
 private fun AttendanceReportChip(
     report: AttendanceReport,
+    isEnglish: Boolean,
     modifier: Modifier = Modifier
 ) {
+    fun tr(
+        he: String,
+        en: String
+    ): String =
+        if (isEnglish) {
+            en
+        } else {
+            he
+        }
+
+    val layoutDirection =
+        if (isEnglish) {
+            LayoutDirection.Ltr
+        } else {
+            LayoutDirection.Rtl
+        }
+
+    val textAlign =
+        if (isEnglish) {
+            TextAlign.Left
+        } else {
+            TextAlign.Right
+        }
+
     Surface(
-        modifier = modifier.widthIn(min = 190.dp),
+        modifier =
+            modifier.widthIn(min = 190.dp),
         shape = RoundedCornerShape(20.dp),
-        color = MaterialTheme.colorScheme.surfaceVariant,
+        color =
+            MaterialTheme
+                .colorScheme
+                .surfaceVariant,
         tonalElevation = 0.dp,
+        shadowElevation = 0.dp,
         border = BorderStroke(
             width = 1.dp,
-            color = MaterialTheme.colorScheme.primary.copy(
-                alpha = 0.45f
-            )
+            color =
+                MaterialTheme
+                    .colorScheme
+                    .primary
+                    .copy(alpha = 0.45f)
         )
     ) {
-        Column(
-            modifier = Modifier.padding(
-                horizontal = 12.dp,
-                vertical = 10.dp
-            ),
-            verticalArrangement = Arrangement.spacedBy(4.dp)
+        CompositionLocalProvider(
+            LocalLayoutDirection provides
+                    layoutDirection
         ) {
-            Text(
-                text = formatDateHeb(report.date),
-                color = MaterialTheme.colorScheme.onSurface,
-                fontWeight = FontWeight.SemiBold,
-                style = KmiTypography.body
-            )
+            Column(
+                modifier = Modifier.padding(
+                    horizontal = 12.dp,
+                    vertical = 10.dp
+                ),
+                verticalArrangement =
+                    Arrangement.spacedBy(4.dp)
+            ) {
+                Text(
+                    text =
+                        if (isEnglish) {
+                            report.date.toString()
+                        } else {
+                            formatDateHeb(
+                                report.date
+                            )
+                        },
+                    modifier =
+                        Modifier.fillMaxWidth(),
+                    color =
+                        MaterialTheme
+                            .colorScheme
+                            .onSurface,
+                    fontWeight =
+                        FontWeight.SemiBold,
+                    style = KmiTypography.body,
+                    textAlign = textAlign
+                )
 
-            Text(
-                text = "נוכחות: ${report.percentPresent}%",
-                color = Color(0xFF22C55E),
-                style = KmiTypography.secondary,
-                fontWeight = FontWeight.Bold
-            )
+                Text(
+                    text = tr(
+                        "נוכחות: ${report.percentPresent}%",
+                        "Attendance: ${report.percentPresent}%"
+                    ),
+                    modifier =
+                        Modifier.fillMaxWidth(),
+                    color = Color(0xFF22C55E),
+                    style =
+                        KmiTypography.secondary,
+                    fontWeight =
+                        FontWeight.Bold,
+                    textAlign = textAlign
+                )
 
-            Text(
-                text =
-                    "סה״כ ${report.totalMembers} • " +
-                            "הגיעו ${report.presentCount} • " +
-                            "מוצדקים ${report.excusedCount}",
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                style = KmiTypography.caption
-            )
+                Text(
+                    text =
+                        if (isEnglish) {
+                            "Total ${report.totalMembers} • " +
+                                    "Present ${report.presentCount} • " +
+                                    "Excused ${report.excusedCount}"
+                        } else {
+                            "סה״כ ${report.totalMembers} • " +
+                                    "הגיעו ${report.presentCount} • " +
+                                    "מוצדקים ${report.excusedCount}"
+                        },
+                    modifier =
+                        Modifier.fillMaxWidth(),
+                    color =
+                        MaterialTheme
+                            .colorScheme
+                            .onSurfaceVariant,
+                    style =
+                        KmiTypography.caption,
+                    textAlign = textAlign,
+                    maxLines = 2,
+                    overflow =
+                        TextOverflow.Ellipsis
+                )
+            }
         }
     }
 }
@@ -2572,7 +3018,7 @@ private fun createAttendanceStatsPdf(
     val directory =
         File(
             context.cacheDir,
-            "pdfs"
+            "shared_pdfs"
         ).apply {
             mkdirs()
         }
@@ -2629,14 +3075,15 @@ private fun createAttendanceStatsPdf(
         )
 
     /*
-     * מונע הצטברות של עותקים לאותו דוח
-     * בתיקיית המטמון.
-     */
-    if (file.exists()) {
-        file.delete()
-    }
-
-    FileOutputStream(file).use { output ->
+   * מונע הצטברות של עותקים לאותו דוח
+   * בתיקיית המטמון.
+   *
+   * false = דריסה מלאה של הקובץ הקודם.
+   */
+    FileOutputStream(
+        file,
+        false
+    ).use { output ->
         document.writeTo(output)
     }
 

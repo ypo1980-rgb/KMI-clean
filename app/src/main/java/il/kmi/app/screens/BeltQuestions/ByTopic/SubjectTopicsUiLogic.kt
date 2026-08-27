@@ -45,7 +45,6 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import il.kmi.app.domain.SubjectTopic
 import il.kmi.shared.domain.Belt
 import androidx.compose.foundation.layout.wrapContentHeight
@@ -56,43 +55,20 @@ import androidx.compose.material3.IconButton
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
-import il.kmi.app.domain.ContentRepo
 import il.kmi.app.domain.DefenseKind
 import il.kmi.app.localization.rememberIsEnglish
+import il.kmi.app.ui.KmiTypography
+import il.kmi.app.ui.LocalAppIconScale
 import il.kmi.shared.domain.content.HardSectionsCatalog
-import il.kmi.shared.questions.model.util.ExerciseTitleFormatter
 
 // -------------------------------------------------------------
 // UI MODELS (הועברו מ-BeltQuestionsUiModels.kt)
 // -------------------------------------------------------------
 
-internal enum class TopicsViewMode {
-    BY_BELT,
-    BY_TOPIC
-}
-
 internal data class TopicDetails(
     val itemCount: Int,
     val subTitles: List<String>
-) {
-    val hasSubs: Boolean get() = subTitles.isNotEmpty()
-}
-
-internal data class CountsPayload(
-    val subjectCounts: Map<String, Int>,
-    val internalDefenseRootCount: Int,
-    val externalDefenseRootCount: Int,
-    val handsRootCount: Int,
-    val totalDefenseCount: Int
 )
-
-internal data class UiExercise(
-    val raw: String,
-    val title: String
-)
-
-internal typealias ItemsByBelt =
-        Map<Belt, List<UiExercise>>
 
 @Composable
 internal fun DefensePickModeDialogModern(
@@ -126,13 +102,14 @@ internal fun DefensePickModeDialogModern(
     AlertDialog(
         onDismissRequest = onDismiss,
         confirmButton = {},
-        containerColor = Color(0xFFF7F4FB),
+        containerColor = MaterialTheme.colorScheme.surface,
         shape = RoundedCornerShape(30.dp),
-        tonalElevation = 8.dp,
+        tonalElevation = 0.dp,
         title = {
             Text(
                 text = title,
-                style = MaterialTheme.typography.titleLarge,
+                style = KmiTypography.cardTitle,
+                color = MaterialTheme.colorScheme.onSurface,
                 fontWeight = FontWeight.ExtraBold,
                 textAlign = if (isEnglish) TextAlign.Left else TextAlign.Right,
                 modifier = Modifier.fillMaxWidth()
@@ -145,6 +122,8 @@ internal fun DefensePickModeDialogModern(
             ) {
                 Text(
                     text = tr("מה לבחור?", "Choose a category"),
+                    style = KmiTypography.secondary,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                     textAlign = if (isEnglish) TextAlign.Left else TextAlign.Right,
                     modifier = Modifier.fillMaxWidth()
                 )
@@ -178,6 +157,7 @@ internal fun DefensePickModeDialogModern(
     )
 }
 
+@Suppress("unused")
 @Composable
 internal fun HandsPickModeDialogModern(
     picks: List<String>,
@@ -192,7 +172,12 @@ internal fun HandsPickModeDialogModern(
     val dialogBg = if (isDarkMode) Color(0xFF111827) else Color(0xFFF7F4FB)
     val dialogBorder = if (isDarkMode) Color.White.copy(alpha = 0.12f) else Color(0xFFE3DDF0)
     val primaryTextColor = if (isDarkMode) Color(0xFFF8FAFC) else Color(0xFF111827)
-    val secondaryTextColor = if (isDarkMode) Color(0xFFCBD5E1) else MaterialTheme.colorScheme.onSurfaceVariant
+    val secondaryTextColor =
+        if (isDarkMode) {
+            Color(0xFFCBD5E1)
+        } else {
+            MaterialTheme.colorScheme.onSurfaceVariant
+        }
     val dividerColor = if (isDarkMode) Color.White.copy(alpha = 0.10f) else Color(0xFFD8D2E6).copy(alpha = 0.82f)
 
     val orderedPicks = picks.ifEmpty {
@@ -255,8 +240,8 @@ internal fun HandsPickModeDialogModern(
                                 interactionSource = remember { MutableInteractionSource() }
                             ) { },
                         shape = RoundedCornerShape(30.dp),
-                        tonalElevation = 10.dp,
-                        shadowElevation = 22.dp,
+                        tonalElevation = 0.dp,
+                        shadowElevation = 0.dp,
                         color = dialogBg,
                         border = BorderStroke(1.dp, dialogBorder)
                     ) {
@@ -282,7 +267,7 @@ internal fun HandsPickModeDialogModern(
 
                                         Text(
                                             text = tr("עבודת ידיים", "Hand Techniques"),
-                                            style = MaterialTheme.typography.titleLarge,
+                                            style = KmiTypography.cardTitle,
                                             fontWeight = FontWeight.ExtraBold,
                                             color = primaryTextColor,
                                             textAlign = TextAlign.Right,
@@ -291,7 +276,7 @@ internal fun HandsPickModeDialogModern(
                                     } else {
                                         Text(
                                             text = tr("עבודת ידיים", "Hand Techniques"),
-                                            style = MaterialTheme.typography.titleLarge,
+                                            style = KmiTypography.cardTitle,
                                             fontWeight = FontWeight.ExtraBold,
                                             color = primaryTextColor,
                                             textAlign = TextAlign.Left,
@@ -345,6 +330,7 @@ internal fun HandsPickModeDialogModern(
     }
 }
 
+@Suppress("unused")
 @Composable
 internal fun SubTopicsPickModeDialogModern(
     title: String,
@@ -360,7 +346,12 @@ internal fun SubTopicsPickModeDialogModern(
     val dialogBg = if (isDarkMode) Color(0xFF111827) else Color(0xFFF7F4FB)
     val dialogBorder = if (isDarkMode) Color.White.copy(alpha = 0.12f) else Color(0xFFE3DDF0)
     val primaryTextColor = if (isDarkMode) Color(0xFFF8FAFC) else Color(0xFF111827)
-    val secondaryTextColor = if (isDarkMode) Color(0xFFCBD5E1) else MaterialTheme.colorScheme.onSurfaceVariant
+    val secondaryTextColor =
+        if (isDarkMode) {
+            Color(0xFFCBD5E1)
+        } else {
+            MaterialTheme.colorScheme.onSurfaceVariant
+        }
     val dividerColor = if (isDarkMode) Color.White.copy(alpha = 0.10f) else Color(0xFFD8D2E6).copy(alpha = 0.82f)
 
     fun tr(he: String, en: String) = if (isEnglish) en else he
@@ -430,8 +421,8 @@ internal fun SubTopicsPickModeDialogModern(
                                 interactionSource = remember { MutableInteractionSource() }
                             ) { },
                         shape = RoundedCornerShape(30.dp),
-                        tonalElevation = 10.dp,
-                        shadowElevation = 22.dp,
+                        tonalElevation = 0.dp,
+                        shadowElevation = 0.dp,
                         color = dialogBg,
                         border = BorderStroke(1.dp, dialogBorder)
                     ) {
@@ -457,7 +448,7 @@ internal fun SubTopicsPickModeDialogModern(
 
                                         Text(
                                             text = title,
-                                            style = MaterialTheme.typography.titleLarge,
+                                            style = KmiTypography.cardTitle,
                                             fontWeight = FontWeight.ExtraBold,
                                             color = primaryTextColor,
                                             textAlign = TextAlign.Right,
@@ -466,7 +457,7 @@ internal fun SubTopicsPickModeDialogModern(
                                     } else {
                                         Text(
                                             text = title,
-                                            style = MaterialTheme.typography.titleLarge,
+                                            style = KmiTypography.cardTitle,
                                             fontWeight = FontWeight.ExtraBold,
                                             color = primaryTextColor,
                                             textAlign = TextAlign.Left,
@@ -559,7 +550,9 @@ private fun DrawerStylePickItem(
                         imageVector = Icons.Filled.ChevronLeft,
                         contentDescription = null,
                         tint = accent.copy(alpha = 0.86f),
-                        modifier = Modifier.size(18.dp)
+                        modifier = Modifier.size(
+                            18.dp * LocalAppIconScale.current
+                        )
                     )
 
                     Spacer(Modifier.width(10.dp))
@@ -579,18 +572,16 @@ private fun DrawerStylePickItem(
                                     imageVector = Icons.Default.Lock,
                                     contentDescription = null,
                                     tint = Color(0xFFF59E0B),
-                                    modifier = Modifier.size(14.dp)
+                                    modifier = Modifier.size(
+                                        14.dp * LocalAppIconScale.current
+                                    )
                                 )
                                 Spacer(Modifier.width(6.dp))
                             }
 
                             Text(
                                 text = cleanTitle,
-                                style = if (isEnglish) {
-                                    MaterialTheme.typography.titleMedium
-                                } else {
-                                    MaterialTheme.typography.titleSmall
-                                },
+                                style = KmiTypography.secondary,
                                 fontWeight = FontWeight.ExtraBold,
                                 color = titleColor,
                                 textAlign = if (isEnglish) TextAlign.Left else TextAlign.Right,
@@ -604,7 +595,7 @@ private fun DrawerStylePickItem(
                             Spacer(Modifier.height(3.dp))
                             Text(
                                 text = subtitle,
-                                style = MaterialTheme.typography.bodySmall,
+                                style = KmiTypography.caption,
                                 color = subtitleColor,
                                 fontWeight = FontWeight.Bold,
                                 textAlign = if (isEnglish) TextAlign.Left else TextAlign.Right,
@@ -626,6 +617,7 @@ private fun DrawerStylePickItem(
     }
 }
 
+@Suppress("unused")
 @Composable
 private fun ModernPickCard(
     title: String,
@@ -639,10 +631,13 @@ private fun ModernPickCard(
     CompositionLocalProvider(LocalLayoutDirection provides dir) {
         Surface(
             shape = RoundedCornerShape(22.dp),
-            tonalElevation = 1.dp,
-            shadowElevation = 3.dp,
-            border = BorderStroke(1.dp, Color(0xFFD8D2E6)),
-            color = Color.White.copy(alpha = 0.94f),
+            tonalElevation = 0.dp,
+            shadowElevation = 0.dp,
+            border = BorderStroke(
+                1.dp,
+                MaterialTheme.colorScheme.outlineVariant
+            ),
+            color = MaterialTheme.colorScheme.surface,
             modifier = Modifier
                 .fillMaxWidth()
                 .clip(RoundedCornerShape(22.dp))
@@ -663,14 +658,16 @@ private fun ModernPickCard(
                         if (icon != null) {
                             Text(
                                 text = icon,
-                                style = MaterialTheme.typography.titleMedium
+                                style = KmiTypography.secondary
                             )
                         } else {
                             Icon(
                                 imageVector = Icons.Outlined.Info,
                                 contentDescription = null,
                                 tint = accent.copy(alpha = 0.9f),
-                                modifier = Modifier.size(20.dp)
+                                modifier = Modifier.size(
+                                    20.dp * LocalAppIconScale.current
+                                )
                             )
                         }
                     }
@@ -684,7 +681,7 @@ private fun ModernPickCard(
                 ) {
                     Text(
                         text = title,
-                        style = MaterialTheme.typography.titleMedium,
+                        style = KmiTypography.secondary,
                         fontWeight = FontWeight.ExtraBold,
                         textAlign = TextAlign.Right,
                         modifier = Modifier.fillMaxWidth()
@@ -699,7 +696,7 @@ private fun ModernPickCard(
                         ) {
                             Text(
                                 text = it,
-                                style = MaterialTheme.typography.labelLarge,
+                                style = KmiTypography.caption,
                                 fontWeight = FontWeight.Bold,
                                 color = accent,
                                 textAlign = TextAlign.Center,
@@ -715,7 +712,9 @@ private fun ModernPickCard(
                     imageVector = Icons.Filled.ChevronLeft,
                     contentDescription = null,
                     tint = accent.copy(alpha = 0.8f),
-                    modifier = Modifier.size(20.dp)
+                    modifier = Modifier.size(
+                        20.dp * LocalAppIconScale.current
+                    )
                 )
             }
         }
@@ -735,7 +734,6 @@ internal fun DefenseCategoryPickDialogModern(
     val dialogBg = if (isDarkMode) Color(0xFF111827) else Color(0xFFF7F4FB)
     val dialogBorder = if (isDarkMode) Color.White.copy(alpha = 0.12f) else Color(0xFFE3DDF0)
     val primaryTextColor = if (isDarkMode) Color(0xFFF8FAFC) else Color(0xFF111827)
-    val secondaryTextColor = if (isDarkMode) Color(0xFFCBD5E1) else MaterialTheme.colorScheme.onSurfaceVariant
     val dividerColor = if (isDarkMode) Color.White.copy(alpha = 0.10f) else Color(0xFFD8D2E6).copy(alpha = 0.82f)
 
     fun tr(he: String, en: String) = if (isEnglish) en else he
@@ -776,8 +774,8 @@ internal fun DefenseCategoryPickDialogModern(
                                 interactionSource = remember { MutableInteractionSource() }
                             ) { },
                         shape = RoundedCornerShape(30.dp),
-                        tonalElevation = 10.dp,
-                        shadowElevation = 22.dp,
+                        tonalElevation = 0.dp,
+                        shadowElevation = 0.dp,
                         color = dialogBg,
                         border = BorderStroke(1.dp, dialogBorder)
                     ) {
@@ -805,7 +803,7 @@ internal fun DefenseCategoryPickDialogModern(
 
                                         Text(
                                             text = tr("הגנות", "Defenses"),
-                                            style = MaterialTheme.typography.titleLarge,
+                                            style = KmiTypography.cardTitle,
                                             fontWeight = FontWeight.ExtraBold,
                                             color = primaryTextColor,
                                             textAlign = TextAlign.Right,
@@ -814,7 +812,7 @@ internal fun DefenseCategoryPickDialogModern(
                                     } else {
                                         Text(
                                             text = tr("הגנות", "Defenses"),
-                                            style = MaterialTheme.typography.titleLarge,
+                                            style = KmiTypography.cardTitle,
                                             fontWeight = FontWeight.ExtraBold,
                                             color = primaryTextColor,
                                             textAlign = TextAlign.Left,
@@ -920,7 +918,7 @@ internal fun DefenseCategoryPickDialogModern(
                                             .padding(bottom = 4.dp),
                                         shape = RoundedCornerShape(999.dp),
                                         color = if (isDarkMode) Color(0xFF1E293B) else Color.White.copy(alpha = 0.95f),
-                                        shadowElevation = if (isDarkMode) 0.dp else 6.dp,
+                                        shadowElevation = 0.dp,
                                         border = BorderStroke(
                                             1.dp,
                                             if (isDarkMode) Color.White.copy(alpha = 0.12f) else Color(0xFFE3DDF0)
@@ -935,7 +933,7 @@ internal fun DefenseCategoryPickDialogModern(
                                                 text = "⌄",
                                                 color = Color(0xFF7C4DFF),
                                                 fontWeight = FontWeight.ExtraBold,
-                                                style = MaterialTheme.typography.titleMedium
+                                                style = KmiTypography.secondary
                                             )
 
                                             Spacer(Modifier.width(6.dp))
@@ -943,7 +941,7 @@ internal fun DefenseCategoryPickDialogModern(
                                             Text(
                                                 text = tr("גלול למטה", "Scroll down"),
                                                 color = Color(0xFF7C4DFF),
-                                                style = MaterialTheme.typography.labelLarge,
+                                                style = KmiTypography.caption,
                                                 fontWeight = FontWeight.Bold
                                             )
                                         }
@@ -958,6 +956,7 @@ internal fun DefenseCategoryPickDialogModern(
     }
 }
 
+@Suppress("unused")
 @Composable
 internal fun BaseTopicCard(
     title: String,
@@ -985,10 +984,13 @@ internal fun BaseTopicCard(
 
     Surface(
         shape = RoundedCornerShape(26.dp),
-        tonalElevation = 3.dp,
-        shadowElevation = 12.dp,
-        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.96f),
-        border = BorderStroke(1.dp, Color(0x10000000)),
+        tonalElevation = 0.dp,
+        shadowElevation = 0.dp,
+        color = MaterialTheme.colorScheme.surface,
+        border = BorderStroke(
+            1.dp,
+            MaterialTheme.colorScheme.outlineVariant
+        ),
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(24.dp))
@@ -1022,7 +1024,7 @@ internal fun BaseTopicCard(
                 ) {
                     Text(
                         text = title,
-                        style = MaterialTheme.typography.titleMedium,
+                        style = KmiTypography.secondary,
                         fontWeight = FontWeight.ExtraBold,
                         textAlign = TextAlign.Right,
                         maxLines = 1,
@@ -1031,7 +1033,7 @@ internal fun BaseTopicCard(
 
                     Text(
                         text = subtitle,
-                        style = MaterialTheme.typography.bodySmall,
+                        style = KmiTypography.caption,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         textAlign = TextAlign.Right,
                         maxLines = 2,
@@ -1058,7 +1060,9 @@ internal fun BaseTopicCard(
                         imageVector = Icons.Filled.ChevronLeft,
                         contentDescription = null,
                         tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.75f),
-                        modifier = Modifier.size(18.dp)
+                        modifier = Modifier.size(
+                            18.dp * LocalAppIconScale.current
+                        )
                     )
                 }
             }
@@ -1084,7 +1088,7 @@ internal fun CountBadge(
         ) {
             Text(
                 text = textTop,
-                style = MaterialTheme.typography.labelSmall,
+                style = KmiTypography.caption,
                 fontWeight = FontWeight.Bold,
                 color = accent,
                 textAlign = TextAlign.Center,
@@ -1093,7 +1097,7 @@ internal fun CountBadge(
 
             Text(
                 text = textBottom,
-                style = MaterialTheme.typography.titleSmall,
+                style = KmiTypography.secondary,
                 fontWeight = FontWeight.ExtraBold,
                 color = accent,
                 textAlign = TextAlign.Center,
@@ -1103,6 +1107,7 @@ internal fun CountBadge(
     }
 }
 
+@Suppress("unused")
 @Composable
 internal fun CountTextBadge(
     text: String,
@@ -1110,15 +1115,15 @@ internal fun CountTextBadge(
 ) {
     Text(
         text = text,
-        style = MaterialTheme.typography.labelLarge,
+        style = KmiTypography.caption,
         fontWeight = FontWeight.Bold,
         color = color,
         textAlign = TextAlign.Center,
-        maxLines = 2,
-        lineHeight = 14.sp
+        maxLines = 2
     )
 }
 
+@Suppress("SpellCheckingInspection")
 @Composable
 private fun subjectAccentFor(subjectId: String?): Color {
     return when (subjectId?.trim()) {
@@ -1144,6 +1149,7 @@ private fun subjectAccentFor(subjectId: String?): Color {
     }
 }
 
+@Suppress("unused", "UNUSED_PARAMETER")
 @Composable
 internal fun SubjectRootCard(
     title: String,
@@ -1174,13 +1180,16 @@ internal fun SubjectRootCard(
 
     Surface(
         shape = RoundedCornerShape(22.dp),
-        tonalElevation = 2.dp,
-        shadowElevation = 6.dp,
+        tonalElevation = 0.dp,
+        shadowElevation = 0.dp,
         modifier = Modifier
             .fillMaxWidth()
             .clickable { onClick() },
         color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.96f),
-        border = BorderStroke(1.dp, Color(0x12000000))
+        border = BorderStroke(
+            1.dp,
+            MaterialTheme.colorScheme.outlineVariant
+        )
     ) {
         Row(
             modifier = Modifier
@@ -1206,7 +1215,7 @@ internal fun SubjectRootCard(
             ) {
                 Text(
                     text = title,
-                    style = MaterialTheme.typography.titleSmall,
+                    style = KmiTypography.secondary,
                     fontWeight = FontWeight.Bold,
                     textAlign = if (isEnglish) TextAlign.Left else TextAlign.Right,
                     modifier = Modifier.fillMaxWidth(),
@@ -1223,14 +1232,14 @@ internal fun SubjectRootCard(
                         ) {
                             Text(
                                 text = lines[0],
-                                style = MaterialTheme.typography.labelMedium,
+                                style = KmiTypography.caption,
                                 fontWeight = FontWeight.Bold,
                                 color = accent,
                                 textAlign = if (isEnglish) TextAlign.Left else TextAlign.Right
                             )
                             Text(
                                 text = lines[1],
-                                style = MaterialTheme.typography.labelMedium,
+                                style = KmiTypography.caption,
                                 fontWeight = FontWeight.Bold,
                                 color = accent,
                                 textAlign = if (isEnglish) TextAlign.Right else TextAlign.Left
@@ -1239,7 +1248,7 @@ internal fun SubjectRootCard(
                     } else {
                         Text(
                             text = lines.first(),
-                            style = MaterialTheme.typography.labelMedium,
+                            style = KmiTypography.caption,
                             fontWeight = FontWeight.Bold,
                             color = accent,
                             textAlign = if (isEnglish) TextAlign.Left else TextAlign.Right,
@@ -1255,7 +1264,9 @@ internal fun SubjectRootCard(
                 imageVector = Icons.Filled.ChevronLeft,
                 contentDescription = null,
                 tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.72f),
-                modifier = Modifier.size(17.dp)
+                modifier = Modifier.size(
+                    17.dp * LocalAppIconScale.current
+                )
             )
 
             if (isEnglish && showLeftBadge) {
@@ -1272,6 +1283,7 @@ internal fun SubjectRootCard(
     }
 }
 
+@Suppress("unused")
 @Composable
 internal fun SubjectLeafCard(
     title: String,
@@ -1291,10 +1303,13 @@ internal fun SubjectLeafCard(
 
     Surface(
         shape = RoundedCornerShape(20.dp),
-        tonalElevation = 1.dp,
-        shadowElevation = 3.dp,
-        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.82f),
-        border = BorderStroke(1.dp, Color(0x0F000000)),
+        tonalElevation = 0.dp,
+        shadowElevation = 0.dp,
+        color = MaterialTheme.colorScheme.surfaceVariant,
+        border = BorderStroke(
+            1.dp,
+            MaterialTheme.colorScheme.outlineVariant
+        ),
         modifier = Modifier
             .fillMaxWidth(0.96f)
             .clip(RoundedCornerShape(20.dp))
@@ -1323,7 +1338,7 @@ internal fun SubjectLeafCard(
             ) {
                 Text(
                     text = title,
-                    style = MaterialTheme.typography.titleSmall,
+                    style = KmiTypography.secondary,
                     fontWeight = FontWeight.SemiBold,
                     textAlign = TextAlign.Right,
                     maxLines = 1,
@@ -1332,7 +1347,7 @@ internal fun SubjectLeafCard(
 
                 Text(
                     text = countText,
-                    style = MaterialTheme.typography.labelMedium,
+                    style = KmiTypography.caption,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     textAlign = TextAlign.Right,
                     maxLines = 1,
@@ -1346,7 +1361,9 @@ internal fun SubjectLeafCard(
                 imageVector = Icons.Filled.ChevronLeft,
                 contentDescription = null,
                 tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
-                modifier = Modifier.size(18.dp)
+                modifier = Modifier.size(
+                    18.dp * LocalAppIconScale.current
+                )
             )
         }
     }
@@ -1373,10 +1390,6 @@ internal object SubjectTopicsUiLogic {
         fun put(belt: Belt, value: TopicsUiCountsPayload) {
             payloadByBeltId = payloadByBeltId + (belt.id to value)
         }
-
-        fun clear() {
-            payloadByBeltId = emptyMap()
-        }
     }
 
     fun getCachedTopicsUiCountsPayload(currentBelt: Belt): TopicsUiCountsPayload? =
@@ -1387,10 +1400,6 @@ internal object SubjectTopicsUiLogic {
         value: TopicsUiCountsPayload
     ) {
         TopicsUiCountsMemoryCache.put(currentBelt, value)
-    }
-
-    fun clearCachedTopicsUiCountsPayload() {
-        TopicsUiCountsMemoryCache.clear()
     }
 
     fun ensureTopicsUiCountsPreloaded(
@@ -1513,53 +1522,6 @@ internal object SubjectTopicsUiLogic {
             .replace(Regex("\\s+"), " ")
             .trim()
 
-    private fun repoItemsForTopic(
-        currentBelt: Belt,
-        topicTitle: String
-    ): List<String> {
-        val cleanTopic = normalizeCountValue(topicTitle)
-        if (cleanTopic.isBlank()) return emptyList()
-
-        val directItems = runCatching {
-            ContentRepo.listItemTitles(
-                belt = currentBelt,
-                topicTitle = cleanTopic,
-                subTopicTitle = null
-            )
-        }.getOrDefault(emptyList())
-
-        val subTitles = runCatching {
-            ContentRepo.listSubTopicTitles(
-                belt = currentBelt,
-                topicTitle = cleanTopic
-            )
-        }.getOrDefault(emptyList())
-            .map { normalizeCountValue(it) }
-            .filter { it.isNotBlank() }
-            .filter { it != cleanTopic }
-            .distinct()
-
-        val subItems = subTitles.flatMap { subTitle ->
-            runCatching {
-                ContentRepo.listItemTitles(
-                    belt = currentBelt,
-                    topicTitle = cleanTopic,
-                    subTopicTitle = subTitle
-                )
-            }.getOrDefault(emptyList())
-        }
-
-        return (directItems + subItems)
-            .map { item ->
-                ExerciseTitleFormatter
-                    .displayName(item)
-                    .ifBlank { item }
-            }
-            .map { normalizeCountValue(it) }
-            .filter { it.isNotBlank() }
-            .distinct()
-    }
-
     private fun isKicksSubject(
         subject: SubjectTopic
     ): Boolean {
@@ -1659,8 +1621,7 @@ internal object SubjectTopicsUiLogic {
     }
 
     private fun countSubjectItemsForBelt(
-        subject: SubjectTopic,
-        currentBelt: Belt
+        subject: SubjectTopic
     ): Int {
         return SubjectTopicsEngine.countUiTitlesForSubject(
             subject
@@ -1684,8 +1645,7 @@ internal object SubjectTopicsUiLogic {
 
         val subjectCounts = subjects.associate { subject ->
             val regularCount = countSubjectItemsForBelt(
-                subject = subject,
-                currentBelt = currentBelt
+                subject = subject
             )
 
             val count =
@@ -1726,15 +1686,17 @@ internal object SubjectTopicsUiLogic {
 
         val handsPickCounts: Map<String, Int> =
             handsPicksOrder.associateWith { pick ->
-                val base = handsBase
-                if (base == null) {
+                if (handsBase == null) {
                     0
                 } else {
-                    val tmp = SubjectTopicsEngine.handsSubjectForPick(base, pick)
+                    val tmp =
+                        SubjectTopicsEngine.handsSubjectForPick(
+                            handsBase,
+                            pick
+                        )
 
                     countSubjectItemsForBelt(
-                        subject = tmp,
-                        currentBelt = currentBelt
+                        subject = tmp
                     )
                 }
             }
@@ -1909,7 +1871,6 @@ internal object SubjectTopicsUiLogic {
         subjects: List<SubjectTopic>,
         sectionCounts: Map<String, Int>,
         subjectCounts: Map<String, Int>,
-        subTopicsPickCountsBySubjectId: Map<String, Map<String, Int>> = emptyMap(),
         formatCount: (Int) -> String
     ): List<SubjectCardModel> {
         return subjects.map { subject ->
@@ -2091,15 +2052,6 @@ internal object SubjectTopicsUiLogic {
     ): SubjectTopic? {
         if (base == null) return null
         return SubjectTopicsEngine.handsSubjectForPick(base, picked)
-    }
-
-    fun unifiedSubjectIdOrNull(
-        subject: SubjectTopic
-    ): String? {
-        return when (subject.id) {
-            "hands_all" -> "hands_all"
-            else -> null
-        }
     }
 
     sealed interface DefenseDialogDecision {

@@ -7,8 +7,14 @@ import android.graphics.Paint
 import android.graphics.Typeface
 import android.graphics.pdf.PdfDocument
 import androidx.core.content.FileProvider
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -31,7 +37,6 @@ import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.Search
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -58,15 +63,17 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import il.kmi.app.ui.KmiTopBar
+import il.kmi.app.ui.KmiTypography
 import il.kmi.shared.localization.AppLanguage
 import il.kmi.shared.localization.AppLanguageManager
 import java.io.File
@@ -158,20 +165,24 @@ fun NationalStatisticsScreen(
 
     val availableBranches = remember(allRecords) {
         allRecords
-            .flatMap { it.branches }
+            .asSequence()
+            .flatMap { it.branches.asSequence() }
             .map { it.trim() }
             .filter { it.isNotBlank() }
             .distinct()
             .sorted()
+            .toList()
     }
 
     val availableGroups = remember(allRecords) {
         allRecords
-            .flatMap { it.groups }
+            .asSequence()
+            .flatMap { it.groups.asSequence() }
             .map { it.trim() }
             .filter { it.isNotBlank() }
             .distinct()
             .sorted()
+            .toList()
     }
 
     val availableBelts = remember(allRecords) {
@@ -267,9 +278,11 @@ fun NationalStatisticsScreen(
                     .background(
                         Brush.verticalGradient(
                             colors = listOf(
-                                Color(0xFFF8FBFF),
-                                Color(0xFFEAF4FF),
-                                Color(0xFFDDEBFA)
+                                MaterialTheme.colorScheme.background,
+                                MaterialTheme.colorScheme.surface,
+                                MaterialTheme.colorScheme.primaryContainer.copy(
+                                    alpha = 0.55f
+                                )
                             )
                         )
                     )
@@ -476,11 +489,16 @@ fun NationalStatisticsScreen(
                                         "Branch comparison"
                                     ),
                                     modifier = Modifier.fillMaxWidth(),
-                                    textAlign = startTextAlign(isEnglish),
+                                    textAlign =
+                                        startTextAlign(isEnglish),
                                     style =
-                                        MaterialTheme.typography.titleLarge,
-                                    fontWeight = FontWeight.Black,
-                                    color = Color(0xFF0F172A)
+                                        KmiTypography.sectionTitle.copy(
+                                            fontWeight = FontWeight.Black
+                                        ),
+                                    color =
+                                        MaterialTheme.colorScheme.onBackground,
+                                    maxLines = 2,
+                                    overflow = TextOverflow.Ellipsis
                                 )
                             }
 
@@ -527,7 +545,8 @@ private fun NationalStatisticsHero(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(26.dp),
         color = Color.Transparent,
-        shadowElevation = 7.dp
+        shadowElevation = 0.dp,
+        tonalElevation = 0.dp
     ) {
         Column(
             modifier = Modifier
@@ -547,14 +566,11 @@ private fun NationalStatisticsHero(
                 ),
             verticalArrangement = Arrangement.spacedBy(6.dp)
         ) {
-
-            // כותרת + אייקון באותה שורה
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-
                 Text(
                     text = tr(
                         isEnglish,
@@ -562,11 +578,12 @@ private fun NationalStatisticsHero(
                         "National overview"
                     ),
                     modifier = Modifier.weight(1f),
-                    fontSize = 25.sp,
-                    lineHeight = 28.sp,
-                    fontWeight = FontWeight.Black,
+                    style = KmiTypography.screenTitle.copy(
+                        fontWeight = FontWeight.Black
+                    ),
                     color = Color.White,
-                    textAlign = startTextAlign(isEnglish)
+                    textAlign = startTextAlign(isEnglish),
+                    maxLines = 2
                 )
             }
 
@@ -577,10 +594,10 @@ private fun NationalStatisticsHero(
                     "Unified data from all branches and groups"
                 ),
                 modifier = Modifier.fillMaxWidth(),
-                fontSize = 13.sp,
-                lineHeight = 17.sp,
+                style = KmiTypography.secondary,
                 color = Color.White.copy(alpha = 0.84f),
-                textAlign = startTextAlign(isEnglish)
+                textAlign = startTextAlign(isEnglish),
+                maxLines = 2
             )
 
             Spacer(Modifier.height(2.dp))
@@ -638,7 +655,9 @@ private fun HeroPill(
         border = BorderStroke(
             1.dp,
             Color.White.copy(alpha = 0.20f)
-        )
+        ),
+        shadowElevation = 0.dp,
+        tonalElevation = 0.dp
     ) {
         Column(
             modifier = Modifier.padding(
@@ -649,18 +668,19 @@ private fun HeroPill(
         ) {
             Text(
                 text = value,
-                fontSize = 21.sp,
-                lineHeight = 23.sp,
-                fontWeight = FontWeight.Black,
-                color = Color.White
+                style = KmiTypography.metric.copy(
+                    fontWeight = FontWeight.Black
+                ),
+                color = Color.White,
+                maxLines = 1
             )
 
             Text(
                 text = label,
-                fontSize = 10.sp,
-                lineHeight = 13.sp,
+                style = KmiTypography.caption,
                 color = Color.White.copy(alpha = 0.82f),
-                maxLines = 1
+                maxLines = 2,
+                textAlign = TextAlign.Center
             )
         }
     }
@@ -712,10 +732,30 @@ private fun NationalStatisticsSearch(
             }
         },
         colors = OutlinedTextFieldDefaults.colors(
-            focusedContainerColor = Color.White,
-            unfocusedContainerColor = Color.White,
-            focusedBorderColor = Color(0xFF7C3AED),
-            unfocusedBorderColor = Color(0xFFD7DEEA)
+            focusedContainerColor =
+                MaterialTheme.colorScheme.surface,
+            unfocusedContainerColor =
+                MaterialTheme.colorScheme.surface,
+            focusedBorderColor =
+                MaterialTheme.colorScheme.primary,
+            unfocusedBorderColor =
+                MaterialTheme.colorScheme.outlineVariant,
+            focusedTextColor =
+                MaterialTheme.colorScheme.onSurface,
+            unfocusedTextColor =
+                MaterialTheme.colorScheme.onSurface,
+            focusedPlaceholderColor =
+                MaterialTheme.colorScheme.onSurfaceVariant,
+            unfocusedPlaceholderColor =
+                MaterialTheme.colorScheme.onSurfaceVariant,
+            focusedLeadingIconColor =
+                MaterialTheme.colorScheme.primary,
+            unfocusedLeadingIconColor =
+                MaterialTheme.colorScheme.onSurfaceVariant,
+            focusedTrailingIconColor =
+                MaterialTheme.colorScheme.primary,
+            unfocusedTrailingIconColor =
+                MaterialTheme.colorScheme.onSurfaceVariant
         )
     )
 }
@@ -762,12 +802,13 @@ private fun NationalPremiumFiltersCard(
     Surface(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(26.dp),
-        color = Color.White,
+        color = MaterialTheme.colorScheme.surface,
         border = BorderStroke(
             width = 1.dp,
-            color = Color(0xFFDDD6FE)
+            color = MaterialTheme.colorScheme.outlineVariant
         ),
-        shadowElevation = 5.dp
+        shadowElevation = 0.dp,
+        tonalElevation = 0.dp
     ) {
         Column(
             modifier = Modifier
@@ -798,12 +839,13 @@ private fun NationalPremiumFiltersCard(
                             "Filter data"
                         ),
                         modifier = Modifier.fillMaxWidth(),
-                        fontSize = 20.sp,
-                        lineHeight = 23.sp,
-                        fontWeight = FontWeight.Black,
-                        color = Color(0xFF172036),
+                        style = KmiTypography.sectionTitle.copy(
+                            fontWeight = FontWeight.Black
+                        ),
+                        color = MaterialTheme.colorScheme.onSurface,
                         textAlign =
-                            startTextAlign(isEnglish)
+                            startTextAlign(isEnglish),
+                        maxLines = 2
                     )
 
                     Spacer(Modifier.height(2.dp))
@@ -815,10 +857,11 @@ private fun NationalPremiumFiltersCard(
                             "Fine-tune the displayed data"
                         ),
                         modifier = Modifier.fillMaxWidth(),
-                        fontSize = 12.sp,
-                        color = Color(0xFF64748B),
+                        style = KmiTypography.caption,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                         textAlign =
-                            startTextAlign(isEnglish)
+                            startTextAlign(isEnglish),
+                        maxLines = 2
                     )
                 }
 
@@ -828,14 +871,16 @@ private fun NationalPremiumFiltersCard(
                     Surface(
                         shape = RoundedCornerShape(999.dp),
                         color =
-                            Color(0xFF7C3AED)
+                            MaterialTheme.colorScheme.primary
                                 .copy(alpha = 0.10f),
                         border = BorderStroke(
                             width = 1.dp,
                             color =
-                                Color(0xFF7C3AED)
+                                MaterialTheme.colorScheme.primary
                                     .copy(alpha = 0.20f)
-                        )
+                        ),
+                        shadowElevation = 0.dp,
+                        tonalElevation = 0.dp
                     ) {
                         Row(
                             modifier = Modifier.padding(
@@ -849,7 +894,8 @@ private fun NationalPremiumFiltersCard(
                                 imageVector =
                                     Icons.Default.Check,
                                 contentDescription = null,
-                                tint = Color(0xFF7C3AED),
+                                tint =
+                                    MaterialTheme.colorScheme.primary,
                                 modifier =
                                     Modifier.size(15.dp)
                             )
@@ -862,10 +908,12 @@ private fun NationalPremiumFiltersCard(
                                     "$activeFiltersCount פעילים",
                                     "$activeFiltersCount active"
                                 ),
-                                fontSize = 11.sp,
-                                fontWeight =
-                                    FontWeight.ExtraBold,
-                                color = Color(0xFF6D28D9)
+                                style = KmiTypography.caption.copy(
+                                    fontWeight =
+                                        FontWeight.ExtraBold
+                                ),
+                                color =
+                                    MaterialTheme.colorScheme.primary
                             )
                         }
                     }
@@ -1034,9 +1082,10 @@ private fun NationalPremiumFiltersCard(
                                 "↻ איפוס סינונים",
                                 "↻ Reset filters"
                             ),
-                            fontWeight =
-                                FontWeight.ExtraBold,
-                            color = Color(0xFF6D28D9)
+                            style = KmiTypography.action.copy(
+                                fontWeight = FontWeight.ExtraBold
+                            ),
+                            color = MaterialTheme.colorScheme.primary
                         )
                     }
                 }
@@ -1095,11 +1144,14 @@ private fun <T> NationalFilterSection(
         Text(
             text = title,
             modifier = Modifier.fillMaxWidth(),
-            fontSize = 12.sp,
-            lineHeight = 15.sp,
-            fontWeight = FontWeight.ExtraBold,
-            color = Color(0xFF475569),
-            maxLines = 1,
+            style = KmiTypography.caption.copy(
+                fontWeight = FontWeight.ExtraBold
+            ),
+            color =
+                MaterialTheme.colorScheme.onSurfaceVariant,
+            textAlign =
+                startTextAlign(isEnglish),
+            maxLines = 2,
             overflow = TextOverflow.Ellipsis
         )
 
@@ -1111,21 +1163,20 @@ private fun <T> NationalFilterSection(
                     expanded = true
                 },
                 modifier = Modifier.fillMaxWidth(),
-                color = Color.White,
+                color =
+                    MaterialTheme.colorScheme.surface,
                 shape = RoundedCornerShape(17.dp),
                 border = BorderStroke(
                     width = 1.dp,
-                    color = if (selected.isNotEmpty()) {
-                        Color(0xFF7C3AED)
-                    } else {
-                        Color(0xFFD7DEEA)
-                    }
+                    color =
+                        if (selected.isNotEmpty()) {
+                            MaterialTheme.colorScheme.primary
+                        } else {
+                            MaterialTheme.colorScheme.outlineVariant
+                        }
                 ),
-                shadowElevation = if (expanded) {
-                    5.dp
-                } else {
-                    1.dp
-                }
+                shadowElevation = 0.dp,
+                tonalElevation = 0.dp
             ) {
                 Row(
                     modifier = Modifier
@@ -1141,15 +1192,18 @@ private fun <T> NationalFilterSection(
                     Text(
                         text = selectedText,
                         modifier = Modifier.weight(1f),
-                        fontSize = 13.sp,
-                        lineHeight = 16.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = if (selected.isNotEmpty()) {
-                            Color(0xFF6D28D9)
-                        } else {
-                            Color(0xFF475569)
-                        },
-                        maxLines = 1,
+                        style = KmiTypography.body.copy(
+                            fontWeight = FontWeight.Bold
+                        ),
+                        color =
+                            if (selected.isNotEmpty()) {
+                                MaterialTheme.colorScheme.primary
+                            } else {
+                                MaterialTheme.colorScheme.onSurfaceVariant
+                            },
+                        textAlign =
+                            startTextAlign(isEnglish),
+                        maxLines = 2,
                         overflow = TextOverflow.Ellipsis
                     )
 
@@ -1158,13 +1212,15 @@ private fun <T> NationalFilterSection(
                     Surface(
                         modifier = Modifier.size(30.dp),
                         shape = CircleShape,
-                        color = if (expanded) {
-                            Color(0xFF7C3AED)
-                        } else {
-                            Color(0xFF7C3AED).copy(
-                                alpha = 0.10f
-                            )
-                        }
+                        color =
+                            if (expanded) {
+                                MaterialTheme.colorScheme.primary
+                            } else {
+                                MaterialTheme.colorScheme.primary
+                                    .copy(alpha = 0.10f)
+                            },
+                        shadowElevation = 0.dp,
+                        tonalElevation = 0.dp
                     ) {
                         Box(
                             modifier = Modifier.fillMaxSize(),
@@ -1174,11 +1230,12 @@ private fun <T> NationalFilterSection(
                                 imageVector =
                                     Icons.Default.KeyboardArrowDown,
                                 contentDescription = null,
-                                tint = if (expanded) {
-                                    Color.White
-                                } else {
-                                    Color(0xFF7C3AED)
-                                }
+                                tint =
+                                    if (expanded) {
+                                        MaterialTheme.colorScheme.onPrimary
+                                    } else {
+                                        MaterialTheme.colorScheme.primary
+                                    }
                             )
                         }
                     }
@@ -1193,7 +1250,9 @@ private fun <T> NationalFilterSection(
                 modifier = Modifier
                     .fillMaxWidth(0.92f)
                     .heightIn(max = 380.dp)
-                    .background(Color.White)
+                    .background(
+                        MaterialTheme.colorScheme.surface
+                    )
             ) {
                 if (selected.isNotEmpty()) {
                     DropdownMenuItem(
@@ -1204,15 +1263,22 @@ private fun <T> NationalFilterSection(
                                     "נקה בחירה והצג הכול",
                                     "Clear selection and show all"
                                 ),
-                                fontWeight = FontWeight.ExtraBold,
-                                color = Color(0xFFDC2626)
+                                modifier = Modifier.fillMaxWidth(),
+                                style = KmiTypography.body.copy(
+                                    fontWeight = FontWeight.ExtraBold
+                                ),
+                                color =
+                                    MaterialTheme.colorScheme.error,
+                                textAlign =
+                                    startTextAlign(isEnglish)
                             )
                         },
                         leadingIcon = {
                             Icon(
                                 imageVector = Icons.Default.Close,
                                 contentDescription = null,
-                                tint = Color(0xFFDC2626)
+                                tint =
+                                    MaterialTheme.colorScheme.error
                             )
                         },
                         onClick = {
@@ -1234,16 +1300,23 @@ private fun <T> NationalFilterSection(
                         text = {
                             Text(
                                 text = labelForOption(option),
-                                fontWeight = if (isSelected) {
-                                    FontWeight.ExtraBold
-                                } else {
-                                    FontWeight.Medium
-                                },
-                                color = if (isSelected) {
-                                    Color(0xFF6D28D9)
-                                } else {
-                                    Color(0xFF334155)
-                                },
+                                modifier = Modifier.fillMaxWidth(),
+                                style = KmiTypography.body.copy(
+                                    fontWeight =
+                                        if (isSelected) {
+                                            FontWeight.ExtraBold
+                                        } else {
+                                            FontWeight.Medium
+                                        }
+                                ),
+                                color =
+                                    if (isSelected) {
+                                        MaterialTheme.colorScheme.primary
+                                    } else {
+                                        MaterialTheme.colorScheme.onSurface
+                                    },
+                                textAlign =
+                                    startTextAlign(isEnglish),
                                 maxLines = 2,
                                 overflow = TextOverflow.Ellipsis
                             )
@@ -1252,19 +1325,23 @@ private fun <T> NationalFilterSection(
                             Surface(
                                 modifier = Modifier.size(24.dp),
                                 shape = RoundedCornerShape(7.dp),
-                                color = if (isSelected) {
-                                    Color(0xFF7C3AED)
-                                } else {
-                                    Color.Transparent
-                                },
+                                color =
+                                    if (isSelected) {
+                                        MaterialTheme.colorScheme.primary
+                                    } else {
+                                        Color.Transparent
+                                    },
                                 border = BorderStroke(
                                     width = 1.dp,
-                                    color = if (isSelected) {
-                                        Color(0xFF7C3AED)
-                                    } else {
-                                        Color(0xFFCBD5E1)
-                                    }
-                                )
+                                    color =
+                                        if (isSelected) {
+                                            MaterialTheme.colorScheme.primary
+                                        } else {
+                                            MaterialTheme.colorScheme.outline
+                                        }
+                                ),
+                                shadowElevation = 0.dp,
+                                tonalElevation = 0.dp
                             ) {
                                 if (isSelected) {
                                     Box(
@@ -1277,7 +1354,8 @@ private fun <T> NationalFilterSection(
                                             imageVector =
                                                 Icons.Default.Check,
                                             contentDescription = null,
-                                            tint = Color.White,
+                                            tint =
+                                                MaterialTheme.colorScheme.onPrimary,
                                             modifier =
                                                 Modifier.size(16.dp)
                                         )
@@ -1304,10 +1382,16 @@ private fun <T> NationalFilterSection(
                                     "סיום בחירה",
                                     "Done"
                                 ),
-                                modifier = Modifier.fillMaxWidth(),
-                                textAlign = TextAlign.Center,
-                                fontWeight = FontWeight.Black,
-                                color = Color.White
+                                modifier =
+                                    Modifier.fillMaxWidth(),
+                                style =
+                                    KmiTypography.action.copy(
+                                        fontWeight =
+                                            FontWeight.Black
+                                    ),
+                                color =
+                                    MaterialTheme.colorScheme.onPrimary,
+                                textAlign = TextAlign.Center
                             )
                         },
                         onClick = {
@@ -1319,69 +1403,11 @@ private fun <T> NationalFilterSection(
                                 vertical = 4.dp
                             )
                             .background(
-                                color = Color(0xFF7C3AED),
-                                shape = RoundedCornerShape(13.dp)
+                                color =
+                                    MaterialTheme.colorScheme.primary,
+                                shape =
+                                    RoundedCornerShape(13.dp)
                             )
-                    )
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun NationalActiveFilterCard(
-    activeOnly: Boolean,
-    hasFilters: Boolean,
-    isEnglish: Boolean,
-    onActiveOnlyChange: (Boolean) -> Unit,
-    onClearFilters: () -> Unit
-) {
-    Surface(
-        modifier = Modifier.fillMaxWidth(),
-        color = Color.White,
-        shape = RoundedCornerShape(20.dp),
-        border = BorderStroke(
-            1.dp,
-            Color(0xFFDDE4EF)
-        )
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(
-                    horizontal = 12.dp,
-                    vertical = 8.dp
-                ),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            FilterChip(
-                selected = activeOnly,
-                onClick = {
-                    onActiveOnlyChange(!activeOnly)
-                },
-                label = {
-                    Text(
-                        tr(
-                            isEnglish,
-                            "פעילים בלבד",
-                            "Active only"
-                        )
-                    )
-                }
-            )
-
-            Spacer(Modifier.weight(1f))
-
-            if (hasFilters) {
-                TextButton(onClick = onClearFilters) {
-                    Text(
-                        tr(
-                            isEnglish,
-                            "ניקוי מסננים",
-                            "Clear filters"
-                        ),
-                        fontWeight = FontWeight.Bold
                     )
                 }
             }
@@ -1478,38 +1504,45 @@ private fun SummaryTile(
     modifier: Modifier = Modifier
 ) {
     Surface(
-        modifier = modifier.height(112.dp),
+        modifier = modifier.heightIn(
+            min = 112.dp
+        ),
         shape = RoundedCornerShape(22.dp),
-        color = Color.White,
-        shadowElevation = 4.dp,
+        color = MaterialTheme.colorScheme.surface,
+        shadowElevation = 0.dp,
+        tonalElevation = 0.dp,
         border = BorderStroke(
             1.dp,
-            accent.copy(alpha = 0.16f)
+            accent.copy(alpha = 0.22f)
         )
     ) {
         Column(
             modifier = Modifier.padding(14.dp),
             verticalArrangement =
-                Arrangement.SpaceBetween
+                Arrangement.spacedBy(8.dp)
         ) {
             Text(
                 text = icon,
-                fontSize = 22.sp
+                style = KmiTypography.action
             )
 
             Text(
                 text = value,
-                fontSize = 27.sp,
-                fontWeight = FontWeight.Black,
-                color = accent
+                style = KmiTypography.metric.copy(
+                    fontWeight = FontWeight.Black
+                ),
+                color = accent,
+                maxLines = 1
             )
 
             Text(
                 text = title,
-                fontSize = 12.sp,
-                fontWeight = FontWeight.Bold,
-                color = Color(0xFF64748B),
-                maxLines = 1
+                style = KmiTypography.caption.copy(
+                    fontWeight = FontWeight.Bold
+                ),
+                color =
+                    MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 2
             )
         }
     }
@@ -1525,12 +1558,13 @@ private fun NationalBreakdownCard(
 ) {
     Surface(
         modifier = Modifier.fillMaxWidth(),
-        color = Color.White,
+        color = MaterialTheme.colorScheme.surface,
         shape = RoundedCornerShape(24.dp),
-        shadowElevation = 4.dp,
+        shadowElevation = 0.dp,
+        tonalElevation = 0.dp,
         border = BorderStroke(
             1.dp,
-            color.copy(alpha = 0.16f)
+            color.copy(alpha = 0.22f)
         )
     ) {
         Column(
@@ -1543,16 +1577,17 @@ private fun NationalBreakdownCard(
             ) {
                 Text(
                     text = icon,
-                    fontSize = 23.sp
+                    style = KmiTypography.action
                 )
 
                 Spacer(Modifier.width(9.dp))
 
                 Text(
                     text = title,
-                    fontSize = 18.sp,
-                    fontWeight = FontWeight.Black,
-                    color = Color(0xFF0F172A)
+                    style = KmiTypography.sectionTitle.copy(
+                        fontWeight = FontWeight.Black
+                    ),
+                    color = MaterialTheme.colorScheme.onSurface
                 )
             }
 
@@ -1579,8 +1614,10 @@ private fun NationalBreakdownCard(
                             Text(
                                 text = label,
                                 modifier = Modifier.weight(1f),
-                                fontWeight = FontWeight.Bold,
-                                color = Color(0xFF334155)
+                                style = KmiTypography.body.copy(
+                                    fontWeight = FontWeight.Bold
+                                ),
+                                color = MaterialTheme.colorScheme.onSurface
                             )
 
                             Text(
@@ -1621,12 +1658,13 @@ private fun NationalBranchCard(
 
     Surface(
         modifier = Modifier.fillMaxWidth(),
-        color = Color.White,
+        color = MaterialTheme.colorScheme.surface,
         shape = RoundedCornerShape(24.dp),
-        shadowElevation = 4.dp,
+        shadowElevation = 0.dp,
+        tonalElevation = 0.dp,
         border = BorderStroke(
             1.dp,
-            Color(0xFFDDE5F0)
+            MaterialTheme.colorScheme.outlineVariant
         )
     ) {
         Column(
@@ -1640,15 +1678,18 @@ private fun NationalBranchCard(
                 Surface(
                     modifier = Modifier.size(42.dp),
                     shape = CircleShape,
-                    color = Color(0xFF4F46E5)
-                        .copy(alpha = 0.12f)
+                    color =
+                        MaterialTheme.colorScheme.primaryContainer,
+                    shadowElevation = 0.dp,
+                    tonalElevation = 0.dp
                 ) {
                     Box(
+                        modifier = Modifier.fillMaxSize(),
                         contentAlignment = Alignment.Center
                     ) {
                         Text(
                             text = "📍",
-                            fontSize = 20.sp
+                            style = KmiTypography.action
                         )
                     }
                 }
@@ -1658,9 +1699,11 @@ private fun NationalBranchCard(
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
                         text = statistics.branchName,
-                        fontSize = 18.sp,
-                        fontWeight = FontWeight.Black,
-                        color = Color(0xFF0F172A)
+                        style = KmiTypography.cardTitle.copy(
+                            fontWeight = FontWeight.Black
+                        ),
+                        color = MaterialTheme.colorScheme.onSurface,
+                        maxLines = 2
                     )
 
                     Text(
@@ -1669,17 +1712,19 @@ private fun NationalBranchCard(
                             "${statistics.traineeCount} מתאמנים",
                             "${statistics.traineeCount} trainees"
                         ),
-                        fontSize = 12.sp,
-                        color = Color(0xFF64748B)
+                        style = KmiTypography.caption,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
 
                 Text(
                     text =
                         statistics.traineeCount.toString(),
-                    fontSize = 25.sp,
-                    fontWeight = FontWeight.Black,
-                    color = Color(0xFF4F46E5)
+                    style = KmiTypography.metric.copy(
+                        fontWeight = FontWeight.Black
+                    ),
+                    color = MaterialTheme.colorScheme.primary,
+                    maxLines = 1
                 )
             }
 
@@ -1688,9 +1733,11 @@ private fun NationalBranchCard(
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(8.dp),
-                color = Color(0xFF4F46E5),
+                color =
+                    MaterialTheme.colorScheme.primary,
                 trackColor =
-                    Color(0xFF4F46E5).copy(alpha = 0.12f)
+                    MaterialTheme.colorScheme.primary
+                        .copy(alpha = 0.12f)
             )
 
             Row(
@@ -1744,7 +1791,9 @@ private fun BranchMiniStat(
     Surface(
         modifier = modifier,
         shape = RoundedCornerShape(14.dp),
-        color = Color(0xFFF5F7FC)
+        color = MaterialTheme.colorScheme.surfaceVariant,
+        shadowElevation = 0.dp,
+        tonalElevation = 0.dp
     ) {
         Column(
             modifier = Modifier.padding(
@@ -1755,16 +1804,18 @@ private fun BranchMiniStat(
         ) {
             Text(
                 text = value,
-                fontSize = 17.sp,
-                fontWeight = FontWeight.Black,
-                color = Color(0xFF334155)
+                style = KmiTypography.metric.copy(
+                    fontWeight = FontWeight.Black
+                ),
+                color = MaterialTheme.colorScheme.onSurface
             )
 
             Text(
                 text = label,
-                fontSize = 10.sp,
-                color = Color(0xFF64748B),
-                maxLines = 1
+                style = KmiTypography.caption,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 2,
+                textAlign = TextAlign.Center
             )
         }
     }
@@ -1778,12 +1829,12 @@ private fun NationalStatisticsLoading(
         modifier = Modifier
             .fillMaxSize()
             .padding(30.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center
+        horizontalAlignment =
+            Alignment.CenterHorizontally,
+        verticalArrangement =
+            Arrangement.Center
     ) {
-        CircularProgressIndicator(
-            color = Color(0xFF7C3AED)
-        )
+        NationalStatisticsPremiumLoading()
 
         Spacer(Modifier.height(16.dp))
 
@@ -1793,10 +1844,157 @@ private fun NationalStatisticsLoading(
                 "טוען נתונים מכל הסניפים...",
                 "Loading data from all branches..."
             ),
+            modifier = Modifier.fillMaxWidth(),
+            style = KmiTypography.body.copy(
+                fontWeight = FontWeight.Bold
+            ),
             textAlign = TextAlign.Center,
-            fontWeight = FontWeight.Bold,
-            color = Color(0xFF475569)
+            color =
+                MaterialTheme.colorScheme.onSurfaceVariant
         )
+    }
+}
+
+@Composable
+private fun NationalStatisticsPremiumLoadingRing(
+    size: Dp,
+    width: Dp,
+    rotation: Float,
+    colors: List<Color>
+) {
+    Box(
+        modifier = Modifier
+            .size(size)
+            .graphicsLayer {
+                rotationZ = rotation
+            }
+            .border(
+                width = width,
+                brush = Brush.sweepGradient(colors),
+                shape = CircleShape
+            )
+    )
+}
+
+@Composable
+private fun NationalStatisticsPremiumLoading() {
+    val infiniteTransition = rememberInfiniteTransition(
+        label = "nationalStatisticsLoading"
+    )
+
+    val outerRotation by infiniteTransition.animateFloat(
+        initialValue = 0f,
+        targetValue = 360f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(
+                durationMillis = 1350,
+                easing = LinearEasing
+            )
+        ),
+        label = "nationalStatisticsOuterRotation"
+    )
+
+    val middleRotation by infiniteTransition.animateFloat(
+        initialValue = 360f,
+        targetValue = 0f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(
+                durationMillis = 1650,
+                easing = LinearEasing
+            )
+        ),
+        label = "nationalStatisticsMiddleRotation"
+    )
+
+    val innerRotation by infiniteTransition.animateFloat(
+        initialValue = 0f,
+        targetValue = 360f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(
+                durationMillis = 2050,
+                easing = LinearEasing
+            )
+        ),
+        label = "nationalStatisticsInnerRotation"
+    )
+
+    Box(
+        modifier = Modifier.size(82.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        NationalStatisticsPremiumLoadingRing(
+            size = 76.dp,
+            width = 5.dp,
+            rotation = outerRotation,
+            colors = listOf(
+                Color.Transparent,
+                Color(0xFFA78BFA),
+                Color(0xFF38BDF8),
+                Color.Transparent
+            )
+        )
+
+        NationalStatisticsPremiumLoadingRing(
+            size = 62.dp,
+            width = 4.dp,
+            rotation = middleRotation,
+            colors = listOf(
+                Color.Transparent,
+                Color(0xFF38BDF8),
+                Color(0xFFA78BFA),
+                Color.Transparent
+            )
+        )
+
+        NationalStatisticsPremiumLoadingRing(
+            size = 48.dp,
+            width = 3.5.dp,
+            rotation = innerRotation,
+            colors = listOf(
+                Color.Transparent,
+                Color(0xFFF59E0B),
+                Color(0xFF22C55E),
+                Color.Transparent
+            )
+        )
+
+        Surface(
+            modifier = Modifier.size(25.dp),
+            shape = CircleShape,
+            color = MaterialTheme.colorScheme.surface,
+            shadowElevation = 0.dp,
+            border = BorderStroke(
+                width = 1.dp,
+                color = MaterialTheme.colorScheme.primary.copy(
+                    alpha = 0.32f
+                )
+            )
+        ) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(
+                        brush = Brush.radialGradient(
+                            colors = listOf(
+                                MaterialTheme.colorScheme.surface,
+                                MaterialTheme.colorScheme.primaryContainer,
+                                MaterialTheme.colorScheme.surfaceVariant
+                            )
+                        ),
+                        shape = CircleShape
+                    ),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = "✓",
+                    style = KmiTypography.caption.copy(
+                        fontWeight = FontWeight.Black
+                    ),
+                    color = MaterialTheme.colorScheme.primary,
+                    textAlign = TextAlign.Center
+                )
+            }
+        }
     }
 }
 
@@ -1810,33 +2008,41 @@ private fun NationalStatisticsError(
         modifier = Modifier
             .fillMaxSize()
             .padding(28.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center
+        horizontalAlignment =
+            Alignment.CenterHorizontally,
+        verticalArrangement =
+            Arrangement.Center
     ) {
         Text(
             text = "⚠️",
-            fontSize = 38.sp
+            style = KmiTypography.screenTitle
         )
 
         Spacer(Modifier.height(12.dp))
 
         Text(
             text = message,
+            modifier = Modifier.fillMaxWidth(),
+            style = KmiTypography.body,
             textAlign = TextAlign.Center,
-            color = Color(0xFF475569),
-            lineHeight = 21.sp
+            color =
+                MaterialTheme.colorScheme.onSurfaceVariant
         )
 
         Spacer(Modifier.height(12.dp))
 
-        TextButton(onClick = onRetry) {
+        TextButton(
+            onClick = onRetry
+        ) {
             Text(
-                tr(
+                text = tr(
                     isEnglish,
                     "נסה שוב",
                     "Try again"
                 ),
-                fontWeight = FontWeight.Black
+                style = KmiTypography.action.copy(
+                    fontWeight = FontWeight.Black
+                )
             )
         }
     }
@@ -1848,8 +2054,15 @@ private fun NationalEmptyCard(
 ) {
     Surface(
         modifier = Modifier.fillMaxWidth(),
-        color = Color.White,
-        shape = RoundedCornerShape(22.dp)
+        color = MaterialTheme.colorScheme.surface,
+        shape = RoundedCornerShape(22.dp),
+        border = BorderStroke(
+            width = 1.dp,
+            color =
+                MaterialTheme.colorScheme.outlineVariant
+        ),
+        shadowElevation = 0.dp,
+        tonalElevation = 0.dp
     ) {
         Text(
             text = tr(
@@ -1857,9 +2070,15 @@ private fun NationalEmptyCard(
                 "לא נמצאו נתונים המתאימים למסננים.",
                 "No data matches the selected filters."
             ),
-            modifier = Modifier.padding(22.dp),
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(22.dp),
+            style = KmiTypography.body.copy(
+                fontWeight = FontWeight.Bold
+            ),
             textAlign = TextAlign.Center,
-            color = Color(0xFF64748B)
+            color =
+                MaterialTheme.colorScheme.onSurfaceVariant
         )
     }
 }
@@ -2106,17 +2325,6 @@ private fun createNationalStatisticsPdf(
         }
     }
 
-    val titlePaint = paint(
-        size = 25f,
-        color = android.graphics.Color.WHITE,
-        typeface = boldTypeface
-    )
-
-    val subtitlePaint = paint(
-        size = 11f,
-        color = android.graphics.Color.WHITE
-    )
-
     val sectionPaint = paint(
         size = 16f,
         color = blue,
@@ -2231,18 +2439,23 @@ private fun createNationalStatisticsPdf(
                 pageNumber
             ).create()
 
-        page = document.startPage(pageInfo)
-        canvas = page!!.canvas
+        val newPage =
+            document.startPage(pageInfo)
+
+        page = newPage
+        canvas = newPage.canvas
 
         /*
- * ============================================================
- * Header — זהה ל-PDF של מסך הבית
- * ============================================================
- */
+         * ============================================================
+         * Header — זהה ל-PDF של מסך הבית
+         * ============================================================
+         */
 
-canvas!!.drawColor(
-    android.graphics.Color.WHITE
-)
+        val pageCanvas = newPage.canvas
+
+        pageCanvas.drawColor(
+            android.graphics.Color.WHITE
+        )
 
 val headerBottom = 122f
 
@@ -2283,7 +2496,7 @@ val accent2 =
 /*
  * האלכסון הראשי.
  */
-canvas!!.drawPath(
+        pageCanvas.drawPath(
     android.graphics.Path().apply {
         moveTo(
             pageWidth.toFloat(),
@@ -2309,7 +2522,7 @@ canvas!!.drawPath(
 /*
  * פס אקסנט ראשון.
  */
-canvas!!.drawPath(
+        pageCanvas.drawPath(
     android.graphics.Path().apply {
         moveTo(
             208f,
@@ -2335,7 +2548,7 @@ canvas!!.drawPath(
 /*
  * פס אקסנט שני.
  */
-canvas!!.drawPath(
+        pageCanvas.drawPath(
     android.graphics.Path().apply {
         moveTo(
             230f,
@@ -2365,14 +2578,14 @@ val logoX = 78f
 val logoY = 58f
 val logoRadius = 42f
 
-canvas!!.drawCircle(
+        pageCanvas.drawCircle(
     logoX,
     logoY,
     logoRadius,
     navyPaint
 )
 
-canvas!!.drawCircle(
+        pageCanvas.drawCircle(
     logoX,
     logoY,
     logoRadius - 4f,
@@ -2384,7 +2597,7 @@ canvas!!.drawCircle(
     }
 )
 
-canvas!!.drawText(
+        pageCanvas.drawText(
     "KAMI",
     logoX,
     logoY + logoRadius * 0.22f,
@@ -2402,7 +2615,7 @@ val headerX =
 /*
  * כותרת.
  */
-canvas!!.drawText(
+        pageCanvas.drawText(
     if (isEnglish) {
         "National Statistics"
     } else {
@@ -2422,7 +2635,7 @@ canvas!!.drawText(
 /*
  * תת־כותרת.
  */
-canvas!!.drawText(
+        pageCanvas.drawText(
     if (isEnglish) {
         "KAMI national overview"
     } else {
@@ -2451,7 +2664,7 @@ val generatedDate =
         Date()
     )
 
-canvas!!.drawText(
+        pageCanvas.drawText(
     if (isEnglish) {
         "Generated: $generatedDate"
     } else {
@@ -2473,9 +2686,9 @@ canvas!!.drawText(
 y = 164f
 }
 
-fun ensureSpace(
-    requiredHeight: Float
-) {
+    fun ensureSpace(
+        requiredHeight: Float
+    ) {
         if (
             y + requiredHeight >
             pageHeight - 35f
@@ -2484,12 +2697,23 @@ fun ensureSpace(
         }
     }
 
+    /*
+     * מחזיר תמיד את ה-Canvas של העמוד הפעיל.
+     * newPage() חייב להיקרא לפני כל ציור ראשון,
+     * ולכן מצב null כאן הוא מצב לא תקין.
+     */
+    fun currentCanvas(): android.graphics.Canvas {
+        return requireNotNull(canvas) {
+            "PDF canvas is not initialized"
+        }
+    }
+
     fun drawSectionTitle(
         title: String
     ) {
         ensureSpace(35f)
 
-        canvas!!.drawText(
+        currentCanvas().drawText(
             title,
             textXStart(),
             y,
@@ -2509,8 +2733,11 @@ fun ensureSpace(
         val right = left + width
         val bottom = top + 62f
 
+        val activeCanvas =
+            currentCanvas()
+
         drawRoundedRect(
-            canvas = canvas!!,
+            canvas = activeCanvas,
             left = left,
             top = top,
             right = right,
@@ -2519,7 +2746,7 @@ fun ensureSpace(
         )
 
         drawRoundedBorder(
-            canvas = canvas!!,
+            canvas = activeCanvas,
             left = left,
             top = top,
             right = right,
@@ -2542,14 +2769,14 @@ fun ensureSpace(
                     Paint.Align.CENTER
             }
 
-        canvas!!.drawText(
+        activeCanvas.drawText(
             value,
             centerX,
             top + 28f,
             centeredValuePaint
         )
 
-        canvas!!.drawText(
+        activeCanvas.drawText(
             label,
             centerX,
             top + 47f,
@@ -2564,7 +2791,7 @@ fun ensureSpace(
         drawSectionTitle(title)
 
         if (values.isEmpty()) {
-            canvas!!.drawText(
+            currentCanvas().drawText(
                 "—",
                 textXStart(),
                 y,
@@ -2576,6 +2803,10 @@ fun ensureSpace(
         }
 
         values.forEach { (label, count) ->
+            /*
+             * ensureSpace() עלולה ליצור עמוד חדש,
+             * לכן מקבלים את ה-Canvas רק אחריה.
+             */
             ensureSpace(22f)
 
             val line =
@@ -2585,7 +2816,7 @@ fun ensureSpace(
                     "$label : $count"
                 }
 
-            canvas!!.drawText(
+            currentCanvas().drawText(
                 line,
                 textXStart(),
                 y,
@@ -2618,7 +2849,6 @@ fun ensureSpace(
     val cardWidth =
         (contentWidth - cardGap * 2f) / 3f
 
-    val firstCardLeft = margin
     val secondCardLeft =
         margin + cardWidth + cardGap
     val thirdCardLeft =
@@ -2634,7 +2864,7 @@ fun ensureSpace(
         value =
             snapshot.filteredUniqueTrainees
                 .toString(),
-        left = firstCardLeft,
+        left = margin,
         top = y,
         width = cardWidth
     )
@@ -2884,7 +3114,7 @@ fun ensureSpace(
     }
 
     if (filterLines.isEmpty()) {
-        canvas!!.drawText(
+        currentCanvas().drawText(
             if (isEnglish) {
                 "No filters"
             } else {
@@ -2900,7 +3130,11 @@ fun ensureSpace(
         filterLines.forEach { line ->
             ensureSpace(20f)
 
-            canvas!!.drawText(
+            /*
+             * ensureSpace() יכולה לפתוח עמוד חדש,
+             * לכן משתמשים ב-Canvas המעודכן.
+             */
+            currentCanvas().drawText(
                 line,
                 textXStart(),
                 y,
@@ -2989,7 +3223,7 @@ fun ensureSpace(
     )
 
     if (snapshot.branchStatistics.isEmpty()) {
-        canvas!!.drawText(
+        currentCanvas().drawText(
             if (isEnglish) {
                 "No branch data"
             } else {
@@ -3005,14 +3239,21 @@ fun ensureSpace(
         snapshot.branchStatistics
             .forEach { branch ->
 
+                /*
+                 * ייתכן שמעבר עמוד התרחש כאן,
+                 * ולכן מקבלים Canvas חדש רק לאחר ensureSpace().
+                 */
                 ensureSpace(58f)
+
+                val activeCanvas =
+                    currentCanvas()
 
                 val cardTop = y - 12f
                 val cardBottom =
                     cardTop + 50f
 
                 drawRoundedRect(
-                    canvas = canvas!!,
+                    canvas = activeCanvas,
                     left = margin,
                     top = cardTop,
                     right =
@@ -3028,7 +3269,7 @@ fun ensureSpace(
                 )
 
                 drawRoundedBorder(
-                    canvas = canvas!!,
+                    canvas = activeCanvas,
                     left = margin,
                     top = cardTop,
                     right =
@@ -3038,7 +3279,7 @@ fun ensureSpace(
                     color = borderBlue
                 )
 
-                canvas!!.drawText(
+                activeCanvas.drawText(
                     branch.branchName,
                     textXStart(),
                     y + 3f,
@@ -3082,7 +3323,7 @@ fun ensureSpace(
                                 branch.beltCounts.size
                     }
 
-                canvas!!.drawText(
+                activeCanvas.drawText(
                     details,
                     textXStart(),
                     y + 3f,

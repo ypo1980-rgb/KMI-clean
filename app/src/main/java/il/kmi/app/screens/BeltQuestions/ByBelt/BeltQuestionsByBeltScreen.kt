@@ -1816,7 +1816,6 @@ internal fun BeltPangoLayout(
                 .fillMaxSize()
                 .padding(padding)
                 .background(backgroundBrush)
-                .statusBarsPadding()
         ) {
             Column(
                 modifier = Modifier
@@ -1857,7 +1856,6 @@ internal fun BeltPangoLayout(
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
                     .navigationBarsPadding()
-                    .offset(y = 34.dp)
             ) {
                 BeltArcPicker(
                     belts = belts,
@@ -2358,12 +2356,7 @@ private fun TopicsCardForBelt(
                         width = 1.dp,
                         color = noteBorderColor
                     ),
-                    shadowElevation =
-                        if (isDarkTheme) {
-                            14.dp
-                        } else {
-                            24.dp
-                        },
+                    shadowElevation = 0.dp,
                     tonalElevation = 0.dp
                 ) {
                     Box(
@@ -2565,12 +2558,7 @@ private fun TopicsCardForBelt(
                                 shape = RoundedCornerShape(16.dp),
                                 color = noteAccent,
                                 tonalElevation = 0.dp,
-                                shadowElevation =
-                                    if (isDarkTheme) {
-                                        0.dp
-                                    } else {
-                                        5.dp
-                                    }
+                                shadowElevation = 0.dp
                             ) {
                                 Row(
                                     modifier = Modifier
@@ -3210,7 +3198,8 @@ private fun TopicsCardForBelt(
                                                                             },
                                                                         modifier =
                                                                             Modifier.size(
-                                                                                17.dp
+                                                                                17.dp *
+                                                                                        LocalAppIconScale.current
                                                                             )
                                                                     )
                                                                 }
