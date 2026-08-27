@@ -45,11 +45,9 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
@@ -2532,11 +2530,13 @@ fun CoachTraineesScreen(
                                 createCoachTraineesPdf(
                                     context = ctx,
                                     profiles =
-                                        pdfProfiles.map { profile ->
+                                        pdfProfiles.mapIndexed { index,
+                                                                 profile ->
                                             profile.copy(
                                                 fullName =
                                                     demoSafeName(
-                                                        profile
+                                                        profile = profile,
+                                                        demoIndex = index + 1
                                                     )
                                             )
                                         },
@@ -2650,11 +2650,11 @@ fun CoachTraineesScreen(
                     Surface(
                         onClick = { showStatsSheet = true },
                         shape = RoundedCornerShape(15.dp),
-                        shadowElevation = 1.dp,
+                        shadowElevation = 0.dp,
+                        tonalElevation = 0.dp,
                         modifier = Modifier
                             .fillMaxWidth()
                             .height(44.dp)
-                            .shadow(2.dp, RoundedCornerShape(15.dp))
                             .border(
                                 width = 1.dp,
                                 brush = Brush.linearGradient(
@@ -2708,7 +2708,9 @@ fun CoachTraineesScreen(
                                         imageVector = Icons.Filled.Assessment,
                                         contentDescription = null,
                                         tint = Color.White,
-                                        modifier = Modifier.size(14.dp)
+                                        modifier = Modifier.size(
+                                            KmiIconSize.small
+                                        )
                                     )
 
                                     Spacer(Modifier.width(6.dp))
@@ -2723,7 +2725,9 @@ fun CoachTraineesScreen(
                                         fontWeight =
                                             FontWeight.ExtraBold,
                                         color = Color.White,
-                                        style = KmiTypography.action
+                                        style = KmiTypography.action,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
                                     )
                                 }
                             }
@@ -2745,7 +2749,9 @@ fun CoachTraineesScreen(
             LazyColumn(
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(horizontal = 12.dp),
+                    .padding(horizontal = 12.dp)
+                    .imePadding()
+                    .navigationBarsPadding(),
                 contentPadding = PaddingValues(
                     top = 12.dp,
                     bottom = if (
@@ -2772,12 +2778,16 @@ fun CoachTraineesScreen(
                                 isTopStatsExpanded = !isTopStatsExpanded
                             },
                             shape = RoundedCornerShape(999.dp),
-                            color = Color(0xFFF0EEFF),
-                            shadowElevation = 4.dp,
+                            color =
+                                MaterialTheme.colorScheme.primaryContainer
+                                    .copy(alpha = 0.55f),
+                            shadowElevation = 0.dp,
                             tonalElevation = 0.dp,
                             border = BorderStroke(
                                 width = 1.dp,
-                                color = Color(0xFFB7AEF5)
+                                color =
+                                    MaterialTheme.colorScheme.primary
+                                        .copy(alpha = 0.30f)
                             ),
                             modifier = Modifier
                                 .widthIn(min = 150.dp)
@@ -2797,8 +2807,11 @@ fun CoachTraineesScreen(
                                         Icons.Default.KeyboardArrowDown
                                     },
                                     contentDescription = null,
-                                    tint = Color(0xFF4B478F),
-                                    modifier = Modifier.size(19.dp)
+                                    tint =
+                                        MaterialTheme.colorScheme.onPrimaryContainer,
+                                    modifier = Modifier.size(
+                                        KmiIconSize.small
+                                    )
                                 )
 
                                 Spacer(Modifier.width(6.dp))
@@ -2823,8 +2836,11 @@ fun CoachTraineesScreen(
                                             fontWeight =
                                                 FontWeight.ExtraBold
                                         ),
-                                    color = Color(0xFF4B478F),
-                                    textAlign = TextAlign.Center
+                                    color =
+                                        MaterialTheme.colorScheme.onPrimaryContainer,
+                                    textAlign = TextAlign.Center,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
                                 )
                             }
                         }
@@ -3441,33 +3457,17 @@ fun CoachTraineesScreen(
                  */
                 if (selected != null) {
                     item {
-                        val isDarkMode =
-                            MaterialTheme.colorScheme.background
-                                .luminance() < 0.5f
-
-                        val traineeCardColor =
-                            if (isDarkMode) {
-                                Color(0xFF0F172A)
-                            } else {
-                                Color(0xFFF4F8FF)
-                            }
-
-                        val traineeCardBorder =
-                            if (isDarkMode) {
-                                Color(0xFF475569).copy(alpha = 0.62f)
-                            } else {
-                                Color(0xFFD8E4F4)
-                            }
-
                         // כרטיס פרטי מתאמן
                         Surface(
-                            color = traineeCardColor,
+                            color = MaterialTheme.colorScheme.surface,
                             shape = RoundedCornerShape(24.dp),
-                            shadowElevation = 1.dp,
+                            shadowElevation = 0.dp,
                             tonalElevation = 0.dp,
                             border = BorderStroke(
                                 width = 1.dp,
-                                color = traineeCardBorder
+                                color =
+                                    MaterialTheme.colorScheme.outline
+                                        .copy(alpha = 0.28f)
                             ),
                             modifier = Modifier.fillMaxWidth()
                         ) {
@@ -3476,20 +3476,12 @@ fun CoachTraineesScreen(
                                     .fillMaxWidth()
                                     .background(
                                         brush = Brush.verticalGradient(
-                                            colors =
-                                                if (isDarkMode) {
-                                                    listOf(
-                                                        Color(0xFF0F172A),
-                                                        Color(0xFF172036),
-                                                        Color(0xFF1E293B)
-                                                    )
-                                                } else {
-                                                    listOf(
-                                                        Color(0xFFF9FBFF),
-                                                        Color(0xFFF1F6FD),
-                                                        Color(0xFFEAF2FC)
-                                                    )
-                                                }
+                                            colors = listOf(
+                                                MaterialTheme.colorScheme.surface,
+                                                MaterialTheme.colorScheme.surfaceVariant
+                                                    .copy(alpha = 0.45f),
+                                                MaterialTheme.colorScheme.surface
+                                            )
                                         ),
                                         shape = RoundedCornerShape(24.dp)
                                     )
@@ -3548,13 +3540,8 @@ fun CoachTraineesScreen(
 
                                     HorizontalDivider(
                                         color =
-                                            if (isDarkMode) {
-                                                Color(0xFF475569).copy(
-                                                    alpha = 0.58f
-                                                )
-                                            } else {
-                                                Color(0xFFD8E4F4)
-                                            }
+                                            MaterialTheme.colorScheme.outline
+                                                .copy(alpha = 0.28f)
                                     )
 
                                     Column(
@@ -3627,7 +3614,9 @@ fun CoachTraineesScreen(
                                     }
 
                                     HorizontalDivider(
-                                        color = Color(0xFFD8E4F4)
+                                        color =
+                                            MaterialTheme.colorScheme.outline
+                                                .copy(alpha = 0.28f)
                                     )
 
                                     Column(
@@ -3658,7 +3647,7 @@ fun CoachTraineesScreen(
                                             },
                                             iconText = "📅",
                                             isExpanded = isBeltDatesSectionExpanded,
-                                            accent = Color(0xFF6D56B8),
+                                            accent = MaterialTheme.colorScheme.primary,
                                             isEnglish = isEnglish,
                                             onClick = {
                                                 expandedCoachSection =
@@ -3699,7 +3688,8 @@ fun CoachTraineesScreen(
 
                                             beltOrder.forEach { beltName ->
                                                 val beltAccent =
-                                                    beltAccentMap[beltName] ?: Color(0xFF6366F1)
+                                                    beltAccentMap[beltName]
+                                                        ?: MaterialTheme.colorScheme.primary
                                                 val currentDate = selectedDates[beltName].orEmpty()
                                                 val hasDate = currentDate.isNotBlank()
                                                 val isExpanded = expandedBelt == beltName
@@ -3888,7 +3878,6 @@ fun CoachTraineesScreen(
                                                                         "Choose belt award date"
                                                                     ),
                                                                     selectedDate = currentDate,
-                                                                    accent = beltAccent,
                                                                     isEnglish = isEnglish,
                                                                     onDismiss = {
                                                                         showBeltDatePicker = false
@@ -4575,12 +4564,23 @@ fun CoachTraineesScreen(
                             traineeProfiles
                                 .isNotEmpty()
                         ) {
+                            val demoSafePdfProfiles =
+                                traineeProfiles.mapIndexed { index,
+                                                             profile ->
+                                    profile.copy(
+                                        fullName =
+                                            demoSafeName(
+                                                profile = profile,
+                                                demoIndex = index + 1
+                                            )
+                                    )
+                                }
 
                             val pdfFile =
                                 createCoachGroupStatsPdf(
                                     context = ctx,
                                     stats = groupStats,
-                                    profiles = traineeProfiles,
+                                    profiles = demoSafePdfProfiles,
                                     branch =
                                         effectiveBranchPrimary,
                                     groupKey =
@@ -4657,23 +4657,12 @@ private fun PremiumCoachCompactSectionHeader(
     isEnglish: Boolean,
     onClick: () -> Unit
 ) {
-    val isDarkMode =
-        MaterialTheme.colorScheme.background
-            .luminance() < 0.5f
-
     val headerColor =
-        if (isDarkMode) {
-            Color(0xFF172036)
-        } else {
-            Color(0xFFFCFDFF)
-        }
+        MaterialTheme.colorScheme.surface
 
     val headerBorderColor =
-        if (isDarkMode) {
-            Color(0xFF475569).copy(alpha = 0.62f)
-        } else {
-            Color(0xFFE7ECF7)
-        }
+        MaterialTheme.colorScheme.outline
+            .copy(alpha = 0.28f)
 
     Surface(
         onClick = onClick,
@@ -4694,20 +4683,12 @@ private fun PremiumCoachCompactSectionHeader(
                 .fillMaxWidth()
                 .background(
                     brush = Brush.horizontalGradient(
-                        colors =
-                            if (isDarkMode) {
-                                listOf(
-                                    Color(0xFF172036),
-                                    Color(0xFF1E293B),
-                                    accent.copy(alpha = 0.14f)
-                                )
-                            } else {
-                                listOf(
-                                    Color.White,
-                                    Color(0xFFFAFBFF),
-                                    accent.copy(alpha = 0.025f)
-                                )
-                            }
+                        colors = listOf(
+                            MaterialTheme.colorScheme.surface,
+                            MaterialTheme.colorScheme.surfaceVariant
+                                .copy(alpha = 0.42f),
+                            accent.copy(alpha = 0.10f)
+                        )
                     )
                 )
                 .padding(horizontal = 9.dp, vertical = 6.dp),
@@ -4717,7 +4698,9 @@ private fun PremiumCoachCompactSectionHeader(
                 shape = RoundedCornerShape(10.dp),
                 color = accent.copy(alpha = 0.08f),
                 shadowElevation = 0.dp,
-                modifier = Modifier.size(28.dp)
+                modifier = Modifier.size(
+                    KmiIconSize.medium
+                )
             ) {
                 Box(
                     modifier = Modifier.fillMaxSize(),
@@ -4878,7 +4861,8 @@ private fun CoachDateSectionCard(
                             currentEntry.description.isNotBlank()
 
                 val isItemExpanded = expandedItem == itemName
-                val accent = Color(0xFF6366F1)
+                val accent =
+                    MaterialTheme.colorScheme.primary
 
                 Surface(
                     color =
@@ -5071,7 +5055,6 @@ private fun CoachDateSectionCard(
                                         "Choose date for ${coachDateItemNameForUi(itemName, true)}"
                                     ),
                                     selectedDate = currentEntry.date,
-                                    accent = sectionAccent,
                                     isEnglish = isEnglish,
                                     onDismiss = {
                                         showItemDatePicker = false

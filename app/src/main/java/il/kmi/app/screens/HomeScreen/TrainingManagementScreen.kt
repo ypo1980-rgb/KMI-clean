@@ -22,7 +22,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Cancel
-import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -299,10 +298,9 @@ fun TrainingManagementRoute(
                 isEnglish = isEnglish
             )
         },
-        onChangeTrainingTime = {
-                startTime,
-                endTime,
-                reason ->
+        onChangeTrainingTime = { startTime,
+                                 endTime,
+                                 reason ->
 
             changeManagedTrainingTime(
                 request = request,
@@ -650,6 +648,8 @@ fun TrainingManagementScreen(
                                     "בחירת שעת התחלה וסיום חדשות"
                                 },
                             iconTint = Color(0xFF6D4BB6),
+                            titleColor = colorScheme.onSurface,
+                            subtitleColor = colorScheme.onSurfaceVariant,
                             containerColor =
                                 colorScheme.surfaceVariant,
                             borderColor =
@@ -687,6 +687,9 @@ fun TrainingManagementScreen(
                                     "ביטול האימון ושליחת עדכון למתאמנים"
                                 },
                             iconTint = Color(0xFFC81E1E),
+                            titleColor = colorScheme.onErrorContainer,
+                            subtitleColor =
+                                colorScheme.onErrorContainer.copy(alpha = 0.82f),
                             containerColor =
                                 colorScheme.errorContainer
                                     .copy(alpha = 0.52f),
@@ -878,6 +881,8 @@ private fun TrainingDetailsCard(
                 color = colorScheme.onSurfaceVariant,
                 textAlign =
                     if (isEnglish) TextAlign.Left else TextAlign.Right,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.fillMaxWidth()
             )
 
@@ -892,6 +897,8 @@ private fun TrainingDetailsCard(
                 color = colorScheme.onSurfaceVariant,
                 textAlign =
                     if (isEnglish) TextAlign.Left else TextAlign.Right,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.fillMaxWidth()
             )
 
@@ -1006,6 +1013,8 @@ private fun TrainingManagementActionCard(
     title: String,
     subtitle: String,
     iconTint: Color,
+    titleColor: Color,
+    subtitleColor: Color,
     containerColor: Color,
     borderColor: Color,
     icon: @Composable () -> Unit,
@@ -1050,15 +1059,19 @@ private fun TrainingManagementActionCard(
                     style = KmiTypography.cardTitle.copy(
                         fontWeight = FontWeight.ExtraBold
                     ),
-                    color = iconTint,
-                    textAlign = TextAlign.Center
+                    color = titleColor,
+                    textAlign = TextAlign.Center,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis
                 )
 
                 Text(
                     text = subtitle,
                     style = KmiTypography.body,
-                    color = iconTint.copy(alpha = 0.78f),
-                    textAlign = TextAlign.Center
+                    color = subtitleColor,
+                    textAlign = TextAlign.Center,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis
                 )
             }
         }

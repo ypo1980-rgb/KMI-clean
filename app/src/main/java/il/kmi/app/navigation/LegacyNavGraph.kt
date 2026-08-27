@@ -239,7 +239,8 @@ fun NavGraphBuilder.legacyNavGraph(
 
         LaunchedEffect(item) {
             runCatching {
-                val f = vm::class.java.getDeclaredField("highlightItem").apply { isAccessible = true }
+                val f =
+                    vm::class.java.getDeclaredField("highlightItem").apply { isAccessible = true }
                 val flow = f.get(vm) as? kotlinx.coroutines.flow.MutableStateFlow<String?>
                 flow?.value = item
             }.onFailure {
@@ -304,14 +305,11 @@ fun NavGraphBuilder.legacyNavGraph(
             subTopicFilter = null,
             onHome = {
                 nav.navigate(Route.Home.route) {
-                    popUpTo(nav.graph.findStartDestination().id) { saveState = true }
+                    popUpTo(nav.graph.findStartDestination().id) {
+                        saveState = true
+                    }
                     launchSingleTop = true
                     restoreState = true
-                }
-            },
-            onSearch = {
-                nav.navigate(Route.Topics.route) {
-                    launchSingleTop = true
                 }
             }
         )
@@ -374,11 +372,10 @@ fun NavGraphBuilder.legacyNavGraph(
                 }
             },
 
-            onDateClick = {
-                    pickedDate,
-                    branch,
-                    group,
-                    timeText ->
+            onDateClick = { pickedDate,
+                            branch,
+                            group,
+                            timeText ->
 
                 nav.currentBackStackEntry
                     ?.savedStateHandle

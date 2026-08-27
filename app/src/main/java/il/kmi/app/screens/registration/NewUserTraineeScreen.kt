@@ -12,7 +12,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.platform.LocalContext
 import androidx.navigation.NavHostController
 import com.google.firebase.auth.FirebaseAuth
-import il.kmi.app.KmiViewModel
 import il.kmi.app.screens.registration.RegistrationFormScreen
 import il.kmi.shared.prefs.KmiPrefs
 
@@ -31,12 +30,10 @@ import il.kmi.shared.prefs.KmiPrefs
 @Composable
 fun NewUserTraineeScreen(
     nav: NavHostController,
-    vm: KmiViewModel,
     kmiPrefs: KmiPrefs,
     onBack: () -> Unit,
     onRegistrationComplete: () -> Unit,
     onOpenTerms: () -> Unit,
-    onOpenLegal: () -> Unit,
     onOpenDrawer: () -> Unit,
     // יכול להגיע מבחוץ, אבל אם null נפתח כאן בעצמנו את "kmi_user"
     sp: SharedPreferences? = null,
@@ -73,9 +70,7 @@ fun NewUserTraineeScreen(
         onBack = onBack,
         onRegistrationComplete = onRegistrationComplete,
         onOpenTerms = onOpenTerms,
-        onOpenLegal = onOpenLegal,
         onOpenDrawer = onOpenDrawer,
-        vm = vm,
         sp = userSp,
         kmiPrefs = kmiPrefs
     )

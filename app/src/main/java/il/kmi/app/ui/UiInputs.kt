@@ -103,9 +103,11 @@ fun ProgressButton(
                 )
                 Text("מבצע…")
             }
+
             justSucceeded && !successText.isNullOrBlank() -> {
                 Text(successText!!)
             }
+
             else -> {
                 content()
             }

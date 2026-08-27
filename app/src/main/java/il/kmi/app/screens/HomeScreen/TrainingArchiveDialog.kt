@@ -14,6 +14,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.ui.platform.LocalContext
 import il.kmi.app.ui.KmiTopBar
 import il.kmi.app.ui.KmiTypography
+import il.kmi.app.ui.scaledIconSize
 import il.kmi.shared.localization.AppLanguage
 import il.kmi.shared.localization.AppLanguageManager
 import androidx.compose.foundation.layout.fillMaxSize
@@ -101,10 +102,6 @@ private data class TrainingArchiveItem(
         get() =
             !isCancelled &&
                     status.isCompleted
-
-    val hasChangedTime: Boolean
-        get() =
-            activeOverride?.hasChangedTime == true
 }
 
 private enum class ArchiveStatusFilter {
@@ -479,10 +476,10 @@ fun TrainingArchiveDialog(
                     .background(
                         Brush.verticalGradient(
                             colors = listOf(
-                                Color(0xFF06152E),
-                                Color(0xFF0B2551),
-                                Color(0xFF0F5E9C),
-                                Color(0xFFEAF6FF)
+                                MaterialTheme.colorScheme.background,
+                                MaterialTheme.colorScheme.surfaceVariant
+                                    .copy(alpha = 0.38f),
+                                MaterialTheme.colorScheme.background
                             )
                         )
                     )
@@ -769,12 +766,14 @@ private fun ArchiveFilterPanel(
             .fillMaxWidth()
             .padding(horizontal = 22.dp),
         shape = RoundedCornerShape(22.dp),
-        color = Color.White.copy(alpha = 0.96f),
-        shadowElevation = 7.dp,
+        color = MaterialTheme.colorScheme.surface,
+        tonalElevation = 0.dp,
+        shadowElevation = 0.dp,
         border =
             BorderStroke(
                 1.dp,
-                Color(0xFF7DD3FC)
+                MaterialTheme.colorScheme.outline
+                    .copy(alpha = 0.30f)
             )
     ) {
         Column(
@@ -863,9 +862,8 @@ private fun ArchiveFilterPanel(
 
             HorizontalDivider(
                 color =
-                    Color(0xFF0F5E9C).copy(
-                        alpha = 0.12f
-                    )
+                    MaterialTheme.colorScheme.outline
+                        .copy(alpha = 0.18f)
             )
 
             Row(
@@ -881,7 +879,7 @@ private fun ArchiveFilterPanel(
                         } else {
                             "הכול"
                         },
-                    color = Color(0xFF0F5E9C),
+                    color = MaterialTheme.colorScheme.primary,
                     selected =
                         selectedStatusFilter ==
                                 ArchiveStatusFilter.ALL,
@@ -901,7 +899,7 @@ private fun ArchiveFilterPanel(
                         } else {
                             "הסתיימו"
                         },
-                    color = Color(0xFF2563EB),
+                    color = MaterialTheme.colorScheme.primary,
                     selected =
                         selectedStatusFilter ==
                                 ArchiveStatusFilter.COMPLETED,
@@ -921,7 +919,7 @@ private fun ArchiveFilterPanel(
                         } else {
                             "בוטלו"
                         },
-                    color = Color(0xFFB45309),
+                    color = MaterialTheme.colorScheme.error,
                     selected =
                         selectedStatusFilter ==
                                 ArchiveStatusFilter.CANCELLED,
@@ -948,12 +946,12 @@ private fun ArchiveDateField(
         onClick = onClick,
         modifier = modifier.height(58.dp),
         shape = RoundedCornerShape(17.dp),
-        color = Color(0xFFEFF8FF),
+        color = MaterialTheme.colorScheme.surfaceVariant,
         border = BorderStroke(
             width = 1.dp,
             color =
-                Color(0xFF38BDF8)
-                    .copy(alpha = 0.55f)
+                MaterialTheme.colorScheme.outline
+                    .copy(alpha = 0.35f)
         )
     ) {
         Box(
@@ -968,9 +966,11 @@ private fun ArchiveDateField(
                 imageVector =
                     Icons.Filled.CalendarMonth,
                 contentDescription = null,
-                tint = Color(0xFF0F5E9C),
+                tint = MaterialTheme.colorScheme.primary,
                 modifier = Modifier
-                    .size(17.dp)
+                    .size(
+                        scaledIconSize(17.dp)
+                    )
                     .align(Alignment.CenterEnd)
             )
 
@@ -990,7 +990,7 @@ private fun ArchiveDateField(
                     style = KmiTypography.caption.copy(
                         fontWeight = FontWeight.Bold
                     ),
-                    color = Color(0xFF64748B),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 1,
                     textAlign = TextAlign.Center,
                     modifier = Modifier.fillMaxWidth()
@@ -1005,7 +1005,7 @@ private fun ArchiveDateField(
                     style = KmiTypography.body.copy(
                         fontWeight = FontWeight.Black
                     ),
-                    color = Color(0xFF172033),
+                    color = MaterialTheme.colorScheme.onSurface,
                     maxLines = 1,
                     softWrap = false,
                     textAlign = TextAlign.Center,
@@ -1022,24 +1022,31 @@ private fun ArchiveQuickRangeChip(
     onClick: () -> Unit,
     isReset: Boolean = false
 ) {
+    val colorScheme =
+        MaterialTheme.colorScheme
+
     Surface(
         onClick = onClick,
         shape = RoundedCornerShape(16.dp),
         color =
             if (isReset) {
-                Color(0xFFFFF1F2)
+                colorScheme.errorContainer
+                    .copy(alpha = 0.55f)
             } else {
-                Color(0xFFE0F2FE)
+                colorScheme.primaryContainer
+                    .copy(alpha = 0.55f)
             },
+        tonalElevation = 0.dp,
+        shadowElevation = 0.dp,
         border = BorderStroke(
             width = 1.dp,
             color =
                 if (isReset) {
-                    Color(0xFFFB7185)
-                        .copy(alpha = 0.5f)
+                    colorScheme.error
+                        .copy(alpha = 0.40f)
                 } else {
-                    Color(0xFF38BDF8)
-                        .copy(alpha = 0.45f)
+                    colorScheme.primary
+                        .copy(alpha = 0.35f)
                 }
         )
     ) {
@@ -1051,9 +1058,9 @@ private fun ArchiveQuickRangeChip(
             ),
             color =
                 if (isReset) {
-                    Color(0xFFBE123C)
+                    colorScheme.onErrorContainer
                 } else {
-                    Color(0xFF075985)
+                    colorScheme.onPrimaryContainer
                 },
             style = KmiTypography.caption.copy(
                 fontWeight = FontWeight.Bold
@@ -1077,7 +1084,8 @@ private fun ArchiveSummaryChip(
         onClick = onClick,
         modifier = modifier.height(52.dp),
         shape = RoundedCornerShape(15.dp),
-        color = Color.White,
+        color = MaterialTheme.colorScheme.surface,
+        tonalElevation = 0.dp,
         shadowElevation = 0.dp,
         border = BorderStroke(
             width =
@@ -1090,7 +1098,8 @@ private fun ArchiveSummaryChip(
                 if (selected) {
                     color
                 } else {
-                    Color(0xFFE2E8F0)
+                    MaterialTheme.colorScheme.outline
+                        .copy(alpha = 0.28f)
                 }
         )
     ) {
@@ -1120,7 +1129,7 @@ private fun ArchiveSummaryChip(
                     if (selected) {
                         color
                     } else {
-                        Color(0xFF64748B)
+                        MaterialTheme.colorScheme.onSurfaceVariant
                     },
                 maxLines = 1
             )
@@ -1139,7 +1148,7 @@ private fun ArchiveSummaryChip(
                     if (selected) {
                         color
                     } else {
-                        Color(0xFF64748B)
+                        MaterialTheme.colorScheme.onSurfaceVariant
                     },
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
@@ -1159,12 +1168,14 @@ private fun ArchiveEmptyState(
     ) {
         Surface(
             shape = RoundedCornerShape(28.dp),
-            color = Color.White.copy(alpha = 0.95f),
-            shadowElevation = 8.dp,
+            color = MaterialTheme.colorScheme.surface,
+            tonalElevation = 0.dp,
+            shadowElevation = 0.dp,
             border =
                 BorderStroke(
                     1.dp,
-                    Color(0xFF7DD3FC)
+                    MaterialTheme.colorScheme.outline
+                        .copy(alpha = 0.30f)
                 )
         ) {
             Column(
@@ -1178,11 +1189,13 @@ private fun ArchiveEmptyState(
                     Arrangement.spacedBy(10.dp)
             ) {
                 Surface(
-                    modifier = Modifier.size(62.dp),
+                    modifier = Modifier.size(
+                        scaledIconSize(62.dp)
+                    ),
                     shape = CircleShape,
                     color =
-                        Color(0xFF0F5E9C)
-                            .copy(alpha = 0.11f)
+                        MaterialTheme.colorScheme.primaryContainer
+                            .copy(alpha = 0.55f)
                 ) {
                     Box(
                         contentAlignment =
@@ -1192,9 +1205,11 @@ private fun ArchiveEmptyState(
                             imageVector =
                                 Icons.Filled.History,
                             contentDescription = null,
-                            tint = Color(0xFF0F5E9C),
+                            tint = MaterialTheme.colorScheme.primary,
                             modifier =
-                                Modifier.size(32.dp)
+                                Modifier.size(
+                                    scaledIconSize(32.dp)
+                                )
                         )
                     }
                 }
@@ -1207,7 +1222,7 @@ private fun ArchiveEmptyState(
                             "אין אימונים בטווח שנבחר"
                         },
                     style = KmiTypography.sectionTitle,
-                    color = Color(0xFF172033),
+                    color = MaterialTheme.colorScheme.onSurface,
                     textAlign = TextAlign.Center
                 )
 
@@ -1219,7 +1234,7 @@ private fun ArchiveEmptyState(
                             "אפשר לבחור טווח תאריכים אחר או להשתמש באחד מהסינונים המהירים."
                         },
                     style = KmiTypography.body,
-                    color = Color(0xFF64748B),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                     textAlign = TextAlign.Center
                 )
             }
@@ -1295,24 +1310,26 @@ private fun TrainingArchiveCard(
 
     val statusColor =
         if (status.isCancelled) {
-            Color(0xFFB45309)
+            MaterialTheme.colorScheme.error
         } else {
-            Color(0xFF2563EB)
+            MaterialTheme.colorScheme.primary
         }
 
     val statusBackground =
         if (status.isCancelled) {
-            Color(0xFFFFF7ED)
+            MaterialTheme.colorScheme.errorContainer
+                .copy(alpha = 0.55f)
         } else {
-            Color(0xFFEFF6FF)
+            MaterialTheme.colorScheme.primaryContainer
+                .copy(alpha = 0.55f)
         }
 
     Surface(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(14.dp),
-        color = Color.White.copy(alpha = 0.97f),
-        tonalElevation = 1.dp,
-        shadowElevation = 2.dp,
+        color = MaterialTheme.colorScheme.surface,
+        tonalElevation = 0.dp,
+        shadowElevation = 0.dp,
         border = BorderStroke(
             width = 1.dp,
             color =
@@ -1339,7 +1356,9 @@ private fun TrainingArchiveCard(
                     Arrangement.spacedBy(7.dp)
             ) {
                 Surface(
-                    modifier = Modifier.size(26.dp),
+                    modifier = Modifier.size(
+                        scaledIconSize(26.dp)
+                    ),
                     shape = CircleShape,
                     color =
                         statusColor.copy(
@@ -1360,7 +1379,9 @@ private fun TrainingArchiveCard(
                             contentDescription = null,
                             tint = statusColor,
                             modifier =
-                                Modifier.size(14.dp)
+                                Modifier.size(
+                                    scaledIconSize(14.dp)
+                                )
                         )
                     }
                 }
@@ -1382,7 +1403,7 @@ private fun TrainingArchiveCard(
                         style = KmiTypography.sectionTitle.copy(
                             fontWeight = FontWeight.Black
                         ),
-                        color = Color(0xFF172033),
+                        color = MaterialTheme.colorScheme.onSurface,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
                     )
@@ -1392,7 +1413,7 @@ private fun TrainingArchiveCard(
                         style = KmiTypography.secondary.copy(
                             fontWeight = FontWeight.Bold
                         ),
-                        color = Color(0xFF334155),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                         maxLines = 2,
                         softWrap = true,
                         overflow = TextOverflow.Ellipsis
@@ -1468,7 +1489,12 @@ private fun TrainingArchiveCard(
                                 vertical = 4.dp
                             ),
                         textAlign = TextAlign.Center,
-                        color = statusColor,
+                        color =
+                            if (status.isCancelled) {
+                                MaterialTheme.colorScheme.onErrorContainer
+                            } else {
+                                MaterialTheme.colorScheme.onPrimaryContainer
+                            },
                         maxLines = 2,
                         overflow = TextOverflow.Ellipsis
                     )
@@ -1495,7 +1521,7 @@ private fun ArchiveDetailLine(
             style = KmiTypography.secondary.copy(
                 fontWeight = FontWeight.Bold
             ),
-            color = Color(0xFF64748B),
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
             maxLines = 1
         )
 
@@ -1505,7 +1531,7 @@ private fun ArchiveDetailLine(
                 fontWeight = FontWeight.SemiBold
             ),
             modifier = Modifier.weight(1f),
-            color = Color(0xFF334155),
+            color = MaterialTheme.colorScheme.onSurface,
             maxLines = 2,
             overflow = TextOverflow.Ellipsis
         )

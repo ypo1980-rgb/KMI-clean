@@ -570,165 +570,40 @@ fun TrainingSummaryScreen(
                         }
                 ) {
 
-                // -----------------------------
-                // ✅ כרטיס אימון קומפקטי (במקום "פרטי אימון" הגדול)
-                // -----------------------------
-                item {
-                    TrainingInfoCard(
-                        dateIso = state.dateIso,
-                        branchName = state.branchName,
-                        coachName = state.coachName,
-                        groupKey = state.groupKey,
-                        errorText = branchError,
-                        isEnglish = isEnglish,
-                        onOpenCalendar = onOpenCalendar
-                    )
-                }
+                    // -----------------------------
+                    // ✅ כרטיס אימון קומפקטי (במקום "פרטי אימון" הגדול)
+                    // -----------------------------
+                    item {
+                        TrainingInfoCard(
+                            dateIso = state.dateIso,
+                            branchName = state.branchName,
+                            coachName = state.coachName,
+                            groupKey = state.groupKey,
+                            errorText = branchError,
+                            isEnglish = isEnglish,
+                            onOpenCalendar = onOpenCalendar
+                        )
+                    }
 
 // הוספת תרגילים – כרטיס קומפקטי + פתיחת Bottom Sheet
 // -----------------------------
-                item {
-                    PremiumSummaryCard {
-                        SummarySectionHeader(
-                            title =
-                                tr(
-                                    "הוספת תרגילים",
-                                    "Add exercises"
-                                ),
-                            subtitle =
-                                tr(
-                                    "בחר תרגילים שבוצעו באימון",
-                                    "Choose exercises performed in training"
-                                ),
-                            icon =
-                                Icons.AutoMirrored
-                                    .Filled
-                                    .PlaylistAddCheck,
-                            isEnglish =
-                                isEnglish
-                        )
-
-                        Surface(
-                            modifier = Modifier.fillMaxWidth(),
-                            color = SummaryDivider,
-                            shape = RoundedCornerShape(999.dp)
-                        ) {
-                            Spacer(Modifier.height(2.dp))
-                        }
-
-                        Text(
-                            text =
-                                if (state.selected.isEmpty()) {
-                                    tr(
-                                        "עדיין לא נוספו תרגילים לאימון הזה",
-                                        "No exercises have been added to this training yet"
-                                    )
-                                } else {
-                                    tr(
-                                        "נוספו כבר ${state.selected.size} תרגילים לאימון הזה",
-                                        "${state.selected.size} exercises have already been added to this training"
-                                    )
-                                },
-                            style =
-                                KmiTypography.body.copy(
-                                    fontWeight = FontWeight.SemiBold
-                                ),
-                            color = SummaryTextMuted,
-                            textAlign =
-                                if (isEnglish) {
-                                    TextAlign.Start
-                                } else {
-                                    TextAlign.End
-                                },
-                            modifier = Modifier.fillMaxWidth()
-                        )
-
-                        FilledTonalButton(
-                            modifier =
-                                Modifier
-                                    .fillMaxWidth()
-                                    .height(54.dp),
-                            onClick = {
-                                showAddExercisesSheet = true
-                            },
-                            shape = RoundedCornerShape(999.dp),
-                            colors =
-                                ButtonDefaults.filledTonalButtonColors(
-                                    containerColor =
-                                        SummaryPurpleButton,
-                                    contentColor =
-                                        MaterialTheme
-                                            .colorScheme
-                                            .onPrimary
-                                )
-                        ) {
-                            Icon(
-                                imageVector =
-                                    Icons.AutoMirrored
-                                        .Filled
-                                        .PlaylistAddCheck,
-                                contentDescription = null,
-                                modifier =
-                                    Modifier.size(
-                                        18.dp * LocalAppIconScale.current
-                                    )
-                            )
-
-                            Spacer(
-                                Modifier.width(8.dp)
-                            )
-
-                            Text(
-                                text =
-                                    tr(
-                                        "הוסף תרגילים",
-                                        "Add exercises"
-                                    ),
-                                style =
-                                    KmiTypography.action.copy(
-                                        fontWeight =
-                                            FontWeight.SemiBold
-                                    ),
-                                color =
-                                    MaterialTheme
-                                        .colorScheme
-                                        .onPrimary
-                            )
-                        }
-                    }
-                }
-
-                item {
-                    Spacer(Modifier.height(6.dp))
-                    Surface(
-                        modifier = Modifier.fillMaxWidth(),
-                        color = SummaryDivider,
-                        shape = RoundedCornerShape(999.dp)
-                    ) {
-                        Spacer(Modifier.height(2.dp))
-                    }
-                    Spacer(Modifier.height(6.dp))
-                }
-
-// -----------------------------
-// תרגילים שנבחרו + עריכה (כרטיס מודרני)
-// -----------------------------
-                if (state.selected.isNotEmpty()) {
                     item {
                         PremiumSummaryCard {
                             SummarySectionHeader(
                                 title =
                                     tr(
-                                        "התרגילים שנוספו לאימון",
-                                        "Exercises added to training"
+                                        "הוספת תרגילים",
+                                        "Add exercises"
                                     ),
                                 subtitle =
                                     tr(
-                                        "ניהול, עריכה והוספת דגשים לכל תרגיל",
-                                        "Manage, edit, and add notes for each exercise"
+                                        "בחר תרגילים שבוצעו באימון",
+                                        "Choose exercises performed in training"
                                     ),
                                 icon =
-                                    Icons.Filled.FitnessCenter,
+                                    Icons.AutoMirrored
+                                        .Filled
+                                        .PlaylistAddCheck,
                                 isEnglish =
                                     isEnglish
                             )
@@ -741,85 +616,90 @@ fun TrainingSummaryScreen(
                                 Spacer(Modifier.height(2.dp))
                             }
 
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement =
-                                    if (isEnglish) {
-                                        Arrangement.Start
+                            Text(
+                                text =
+                                    if (state.selected.isEmpty()) {
+                                        tr(
+                                            "עדיין לא נוספו תרגילים לאימון הזה",
+                                            "No exercises have been added to this training yet"
+                                        )
                                     } else {
-                                        Arrangement.End
-                                    },
-                                verticalAlignment =
-                                    Alignment.CenterVertically
-                            ) {
-                                AssistChip(
-                                    onClick = { },
-                                    label = {
-                                        Text(
-                                            tr(
-                                                "סה\"כ ${state.selected.size} תרגילים",
-                                                "Total ${state.selected.size} exercises"
-                                            )
+                                        tr(
+                                            "נוספו כבר ${state.selected.size} תרגילים לאימון הזה",
+                                            "${state.selected.size} exercises have already been added to this training"
                                         )
                                     },
-                                    leadingIcon = {
-                                        Icon(
-                                            imageVector = Icons.Filled.Check,
-                                            contentDescription = null
-                                        )
+                                style =
+                                    KmiTypography.body.copy(
+                                        fontWeight = FontWeight.SemiBold
+                                    ),
+                                color = SummaryTextMuted,
+                                textAlign =
+                                    if (isEnglish) {
+                                        TextAlign.Start
+                                    } else {
+                                        TextAlign.End
                                     },
-                                    colors = AssistChipDefaults.assistChipColors(
-                                        containerColor = MaterialTheme.colorScheme.primaryContainer.copy(
-                                            alpha = 0.65f
-                                        )
+                                modifier = Modifier.fillMaxWidth()
+                            )
+
+                            FilledTonalButton(
+                                modifier =
+                                    Modifier
+                                        .fillMaxWidth()
+                                        .height(54.dp),
+                                onClick = {
+                                    showAddExercisesSheet = true
+                                },
+                                shape = RoundedCornerShape(999.dp),
+                                colors =
+                                    ButtonDefaults.filledTonalButtonColors(
+                                        containerColor =
+                                            SummaryPurpleButton,
+                                        contentColor =
+                                            MaterialTheme
+                                                .colorScheme
+                                                .onPrimary
                                     )
+                            ) {
+                                Icon(
+                                    imageVector =
+                                        Icons.AutoMirrored
+                                            .Filled
+                                            .PlaylistAddCheck,
+                                    contentDescription = null,
+                                    modifier =
+                                        Modifier.size(
+                                            18.dp * LocalAppIconScale.current
+                                        )
                                 )
-                            }
 
-                            val selectedList = state.selected.values.toList()
-                                .sortedBy { it.name.lowercase() }
+                                Spacer(
+                                    Modifier.width(8.dp)
+                                )
 
-                            LazyColumn(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .heightIn(min = 120.dp, max = 560.dp),
-                                verticalArrangement = Arrangement.spacedBy(12.dp),
-                                userScrollEnabled = true
-                            ) {
-                                items(selectedList, key = { it.exerciseId }) { ex ->
-                                    SelectedExerciseEditor(
-                                        item = ex,
-                                        onRemove = { vm.removeExercise(ex.exerciseId) },
-                                        onHighlight = { vm.setHighlight(ex.exerciseId, it) }
-                                    )
-                                }
+                                Text(
+                                    text =
+                                        tr(
+                                            "הוסף תרגילים",
+                                            "Add exercises"
+                                        ),
+                                    style =
+                                        KmiTypography.action.copy(
+                                            fontWeight =
+                                                FontWeight.SemiBold
+                                        ),
+                                    color =
+                                        MaterialTheme
+                                            .colorScheme
+                                            .onPrimary
+                                )
                             }
                         }
                     }
-                }
 
-                // -----------------------------
-                // סיכום חופשי (מאמן/מתאמן לפי role)
-                // -----------------------------
-                item {
-                    PremiumSummaryCard {
-                        SummarySectionHeader(
-                            title =
-                                tr(
-                                    "סיכום כללי",
-                                    "General summary"
-                                ),
-                            subtitle =
-                                tr(
-                                    "סיכום חופשי של האימון, תחושות, דגשים ומה לשפר",
-                                    "Free summary of the training, feelings, highlights, and what to improve"
-                                ),
-                            icon =
-                                Icons.AutoMirrored.Filled.Notes,
-                            isEnglish =
-                                isEnglish
-                        )
-
+                    item {
+                        Spacer(Modifier.height(6.dp))
                         Surface(
                             modifier = Modifier.fillMaxWidth(),
                             color = SummaryDivider,
@@ -827,196 +707,316 @@ fun TrainingSummaryScreen(
                         ) {
                             Spacer(Modifier.height(2.dp))
                         }
+                        Spacer(Modifier.height(6.dp))
+                    }
 
-                        OutlinedTextField(
-                            modifier =
-                                Modifier
-                                    .fillMaxWidth()
-                                    .heightIn(min = 160.dp),
-                            value =
-                                state.notes,
-                            onValueChange = {
-                                vm.setNotes(it)
-                            },
-                            label = {
-                                Text(
-                                    text =
-                                        if (state.isCoach) {
-                                            tr(
-                                                "דגשים מקצועיים, ביצוע, מה לשפר…",
-                                                "Professional notes, performance, what to improve…"
-                                            )
+// -----------------------------
+// תרגילים שנבחרו + עריכה (כרטיס מודרני)
+// -----------------------------
+                    if (state.selected.isNotEmpty()) {
+                        item {
+                            PremiumSummaryCard {
+                                SummarySectionHeader(
+                                    title =
+                                        tr(
+                                            "התרגילים שנוספו לאימון",
+                                            "Exercises added to training"
+                                        ),
+                                    subtitle =
+                                        tr(
+                                            "ניהול, עריכה והוספת דגשים לכל תרגיל",
+                                            "Manage, edit, and add notes for each exercise"
+                                        ),
+                                    icon =
+                                        Icons.Filled.FitnessCenter,
+                                    isEnglish =
+                                        isEnglish
+                                )
+
+                                Surface(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    color = SummaryDivider,
+                                    shape = RoundedCornerShape(999.dp)
+                                ) {
+                                    Spacer(Modifier.height(2.dp))
+                                }
+
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement =
+                                        if (isEnglish) {
+                                            Arrangement.Start
                                         } else {
-                                            tr(
-                                                "איך היה האימון? מה הרגשת? מה לשפר…",
-                                                "How was the training? What did you feel? What should be improved…"
+                                            Arrangement.End
+                                        },
+                                    verticalAlignment =
+                                        Alignment.CenterVertically
+                                ) {
+                                    AssistChip(
+                                        onClick = { },
+                                        label = {
+                                            Text(
+                                                tr(
+                                                    "סה\"כ ${state.selected.size} תרגילים",
+                                                    "Total ${state.selected.size} exercises"
+                                                )
                                             )
                                         },
-                                    style =
-                                        KmiTypography.caption
-                                )
-                            },
-                            minLines = 6,
-                            textStyle =
-                                KmiTypography.body.copy(
-                                    color =
-                                        MaterialTheme
-                                            .colorScheme
-                                            .onSurface
-                                ),
-                            colors =
-                                OutlinedTextFieldDefaults.colors(
-                                    focusedTextColor =
-                                        MaterialTheme
-                                            .colorScheme
-                                            .onSurface,
-                                    unfocusedTextColor =
-                                        MaterialTheme
-                                            .colorScheme
-                                            .onSurface,
-                                    focusedBorderColor =
-                                        MaterialTheme
-                                            .colorScheme
-                                            .primary,
-                                    unfocusedBorderColor =
-                                        MaterialTheme
-                                            .colorScheme
-                                            .outlineVariant,
-                                    focusedLabelColor =
-                                        MaterialTheme
-                                            .colorScheme
-                                            .onSurfaceVariant,
-                                    unfocusedLabelColor =
-                                        MaterialTheme
-                                            .colorScheme
-                                            .onSurfaceVariant,
-                                    cursorColor =
-                                        MaterialTheme
-                                            .colorScheme
-                                            .primary,
-                                    focusedContainerColor =
-                                        MaterialTheme
-                                            .colorScheme
-                                            .surfaceVariant,
-                                    unfocusedContainerColor =
-                                        MaterialTheme
-                                            .colorScheme
-                                            .surfaceVariant
-                                )
-                        )
-                    }
-                }
-
-                // -----------------------------
-                // שמירה
-                // -----------------------------
-                item {
-                    PremiumSummaryCard {
-                        SummarySectionHeader(
-                            title =
-                                tr(
-                                    "שמירה",
-                                    "Save"
-                                ),
-                            subtitle =
-                                tr(
-                                    "שמור את הסיכום והתרגילים שנוספו לאימון הזה",
-                                    "Save the summary and exercises added to this training"
-                                ),
-                            icon =
-                                Icons.Filled.Check,
-                            isEnglish =
-                                isEnglish
-                        )
-
-                        FilledTonalButton(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(58.dp),
-                            onClick = {
-                                val key = "training_summary_days"
-                                val cleanIso = state.dateIso.trim().take(10)
-
-                                fun markSummaryDayLocally() {
-                                    if (cleanIso.isBlank()) return
-
-                                    val summaryCur =
-                                        summarySp
-                                            .getStringSet(
-                                                key,
-                                                emptySet()
+                                        leadingIcon = {
+                                            Icon(
+                                                imageVector = Icons.Filled.Check,
+                                                contentDescription = null
                                             )
-                                            ?.toMutableSet()
-                                            ?: mutableSetOf()
-
-                                    summaryCur.add(cleanIso)
-
-                                    summarySp.edit {
-                                        putStringSet(
-                                            key,
-                                            summaryCur
+                                        },
+                                        colors = AssistChipDefaults.assistChipColors(
+                                            containerColor = MaterialTheme.colorScheme.primaryContainer.copy(
+                                                alpha = 0.65f
+                                            )
                                         )
+                                    )
+                                }
 
-                                        putLong(
-                                            "training_summary_days_updated_at",
-                                            System.currentTimeMillis()
+                                val selectedList = state.selected.values.toList()
+                                    .sortedBy { it.name.lowercase() }
+
+                                LazyColumn(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .heightIn(min = 120.dp, max = 560.dp),
+                                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                                    userScrollEnabled = true
+                                ) {
+                                    items(selectedList, key = { it.exerciseId }) { ex ->
+                                        SelectedExerciseEditor(
+                                            item = ex,
+                                            onRemove = { vm.removeExercise(ex.exerciseId) },
+                                            onHighlight = { vm.setHighlight(ex.exerciseId, it) }
                                         )
                                     }
                                 }
+                            }
+                        }
+                    }
 
-                                vm.save(
-                                    onSuccess = {
-                                        markSummaryDayLocally()
-                                        onBack?.invoke()
-                                    },
-                                    onError = {
-                                        // כרגע Firestore חסום בהרשאות.
-                                        // כדי שה-UX לא ייתקע, נסמן מקומית ונחזור למסך הקודם.
-                                        markSummaryDayLocally()
-                                        onBack?.invoke()
+                    // -----------------------------
+                    // סיכום חופשי (מאמן/מתאמן לפי role)
+                    // -----------------------------
+                    item {
+                        PremiumSummaryCard {
+                            SummarySectionHeader(
+                                title =
+                                    tr(
+                                        "סיכום כללי",
+                                        "General summary"
+                                    ),
+                                subtitle =
+                                    tr(
+                                        "סיכום חופשי של האימון, תחושות, דגשים ומה לשפר",
+                                        "Free summary of the training, feelings, highlights, and what to improve"
+                                    ),
+                                icon =
+                                    Icons.AutoMirrored.Filled.Notes,
+                                isEnglish =
+                                    isEnglish
+                            )
+
+                            Surface(
+                                modifier = Modifier.fillMaxWidth(),
+                                color = SummaryDivider,
+                                shape = RoundedCornerShape(999.dp)
+                            ) {
+                                Spacer(Modifier.height(2.dp))
+                            }
+
+                            OutlinedTextField(
+                                modifier =
+                                    Modifier
+                                        .fillMaxWidth()
+                                        .heightIn(min = 160.dp),
+                                value =
+                                    state.notes,
+                                onValueChange = {
+                                    vm.setNotes(it)
+                                },
+                                label = {
+                                    Text(
+                                        text =
+                                            if (state.isCoach) {
+                                                tr(
+                                                    "דגשים מקצועיים, ביצוע, מה לשפר…",
+                                                    "Professional notes, performance, what to improve…"
+                                                )
+                                            } else {
+                                                tr(
+                                                    "איך היה האימון? מה הרגשת? מה לשפר…",
+                                                    "How was the training? What did you feel? What should be improved…"
+                                                )
+                                            },
+                                        style =
+                                            KmiTypography.caption
+                                    )
+                                },
+                                minLines = 6,
+                                textStyle =
+                                    KmiTypography.body.copy(
+                                        color =
+                                            MaterialTheme
+                                                .colorScheme
+                                                .onSurface
+                                    ),
+                                colors =
+                                    OutlinedTextFieldDefaults.colors(
+                                        focusedTextColor =
+                                            MaterialTheme
+                                                .colorScheme
+                                                .onSurface,
+                                        unfocusedTextColor =
+                                            MaterialTheme
+                                                .colorScheme
+                                                .onSurface,
+                                        focusedBorderColor =
+                                            MaterialTheme
+                                                .colorScheme
+                                                .primary,
+                                        unfocusedBorderColor =
+                                            MaterialTheme
+                                                .colorScheme
+                                                .outlineVariant,
+                                        focusedLabelColor =
+                                            MaterialTheme
+                                                .colorScheme
+                                                .onSurfaceVariant,
+                                        unfocusedLabelColor =
+                                            MaterialTheme
+                                                .colorScheme
+                                                .onSurfaceVariant,
+                                        cursorColor =
+                                            MaterialTheme
+                                                .colorScheme
+                                                .primary,
+                                        focusedContainerColor =
+                                            MaterialTheme
+                                                .colorScheme
+                                                .surfaceVariant,
+                                        unfocusedContainerColor =
+                                            MaterialTheme
+                                                .colorScheme
+                                                .surfaceVariant
+                                    )
+                            )
+                        }
+                    }
+
+                    // -----------------------------
+                    // שמירה
+                    // -----------------------------
+                    item {
+                        PremiumSummaryCard {
+                            SummarySectionHeader(
+                                title =
+                                    tr(
+                                        "שמירה",
+                                        "Save"
+                                    ),
+                                subtitle =
+                                    tr(
+                                        "שמור את הסיכום והתרגילים שנוספו לאימון הזה",
+                                        "Save the summary and exercises added to this training"
+                                    ),
+                                icon =
+                                    Icons.Filled.Check,
+                                isEnglish =
+                                    isEnglish
+                            )
+
+                            FilledTonalButton(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(58.dp),
+                                onClick = {
+                                    val key = "training_summary_days"
+                                    val cleanIso = state.dateIso.trim().take(10)
+
+                                    fun markSummaryDayLocally() {
+                                        if (cleanIso.isBlank()) return
+
+                                        val summaryCur =
+                                            summarySp
+                                                .getStringSet(
+                                                    key,
+                                                    emptySet()
+                                                )
+                                                ?.toMutableSet()
+                                                ?: mutableSetOf()
+
+                                        summaryCur.add(cleanIso)
+
+                                        summarySp.edit {
+                                            putStringSet(
+                                                key,
+                                                summaryCur
+                                            )
+
+                                            putLong(
+                                                "training_summary_days_updated_at",
+                                                System.currentTimeMillis()
+                                            )
+                                        }
                                     }
-                                )
-                            },
-                            enabled = !state.isSaving,
-                            shape = RoundedCornerShape(999.dp),
-                            colors =
-                                ButtonDefaults.filledTonalButtonColors(
-                                    containerColor =
-                                        SummaryPrimaryButton,
-                                    contentColor =
+
+                                    vm.save(
+                                        onSuccess = {
+                                            markSummaryDayLocally()
+                                            onBack?.invoke()
+                                        },
+                                        onError = {
+                                            // כרגע Firestore חסום בהרשאות.
+                                            // כדי שה-UX לא ייתקע, נסמן מקומית ונחזור למסך הקודם.
+                                            markSummaryDayLocally()
+                                            onBack?.invoke()
+                                        }
+                                    )
+                                },
+                                enabled = !state.isSaving,
+                                shape = RoundedCornerShape(999.dp),
+                                colors =
+                                    ButtonDefaults.filledTonalButtonColors(
+                                        containerColor =
+                                            SummaryPrimaryButton,
+                                        contentColor =
+                                            MaterialTheme
+                                                .colorScheme
+                                                .onPrimary
+                                    )
+                            ) {
+                                Text(
+                                    text =
+                                        if (state.isSaving) {
+                                            tr(
+                                                "שומר...",
+                                                "Saving..."
+                                            )
+                                        } else {
+                                            tr(
+                                                "שמירת סיכום האימון",
+                                                "Save training summary"
+                                            )
+                                        },
+                                    style =
+                                        KmiTypography.action.copy(
+                                            fontWeight = FontWeight.Bold
+                                        ),
+                                    color =
                                         MaterialTheme
                                             .colorScheme
                                             .onPrimary
                                 )
-                        ) {
-                            Text(
-                                text =
-                                    if (state.isSaving) {
-                                        tr(
-                                            "שומר...",
-                                            "Saving..."
-                                        )
-                                    } else {
-                                        tr(
-                                            "שמירת סיכום האימון",
-                                            "Save training summary"
-                                        )
-                                    },
-                                style =
-                                    KmiTypography.action.copy(
-                                        fontWeight = FontWeight.Bold
-                                    ),
-                                color =
-                                    MaterialTheme
-                                        .colorScheme
-                                        .onPrimary
-                            )
+                            }
                         }
                     }
-                }
 
-                item { Spacer(Modifier.height(10.dp)) }
-            } // LazyColumn
+                    item { Spacer(Modifier.height(10.dp)) }
+                } // LazyColumn
 
                 if (showAddExercisesSheet) {
                     AddExercisesBottomSheet(

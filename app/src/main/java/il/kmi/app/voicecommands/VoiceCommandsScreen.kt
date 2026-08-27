@@ -439,138 +439,138 @@ fun VoiceCommandsScreen(
                 .navigationBarsPadding()
         ) {
             VoiceCommandsHeader(
-            isEnglish = isEnglish,
-            onDismiss = {
-                controller.cancelListening()
-                onDismiss()
-            }
-        )
-
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .verticalScroll(
-                    rememberScrollState()
-                )
-                .padding(
-                    horizontal = 20.dp,
-                    vertical = 14.dp
-                ),
-            horizontalAlignment =
-                Alignment.CenterHorizontally
-        ) {
-            VoiceCommandsHeroCard(
                 isEnglish = isEnglish,
-                accentColor = accentColor,
-                statusTitle = statusTitle,
-                statusDescription = statusDescription,
-                state = state,
-                errorMessage = errorMessage,
-                microphoneScale = microphoneScale,
-                outerPulseScale = outerPulseScale,
-                isActive = isActive,
-                onMicrophoneClick = {
-                    when {
-                        isStarting ||
-                                isListening -> {
-                            controller.stopListening()
-                        }
-
-                        isProcessing -> {
-                            // בזמן עיבוד אין לבצע פעולה נוספת.
-                        }
-
-                        else -> {
-                            requestListening()
-                        }
-                    }
+                onDismiss = {
+                    controller.cancelListening()
+                    onDismiss()
                 }
             )
 
-            Spacer(
-                modifier = Modifier.height(16.dp)
-            )
-
-            AnimatedVisibility(
-                visible = partialTranscript.isNotBlank()
-            ) {
-                Surface(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .widthIn(max = 620.dp),
-                    shape = RoundedCornerShape(22.dp),
-                    color = MaterialTheme.colorScheme.surface,
-                    tonalElevation = 0.dp,
-                    shadowElevation = 0.dp,
-                    border = BorderStroke(
-                        1.dp,
-                        MaterialTheme.colorScheme.outlineVariant
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .verticalScroll(
+                        rememberScrollState()
                     )
+                    .padding(
+                        horizontal = 20.dp,
+                        vertical = 14.dp
+                    ),
+                horizontalAlignment =
+                    Alignment.CenterHorizontally
+            ) {
+                VoiceCommandsHeroCard(
+                    isEnglish = isEnglish,
+                    accentColor = accentColor,
+                    statusTitle = statusTitle,
+                    statusDescription = statusDescription,
+                    state = state,
+                    errorMessage = errorMessage,
+                    microphoneScale = microphoneScale,
+                    outerPulseScale = outerPulseScale,
+                    isActive = isActive,
+                    onMicrophoneClick = {
+                        when {
+                            isStarting ||
+                                    isListening -> {
+                                controller.stopListening()
+                            }
+
+                            isProcessing -> {
+                                // בזמן עיבוד אין לבצע פעולה נוספת.
+                            }
+
+                            else -> {
+                                requestListening()
+                            }
+                        }
+                    }
+                )
+
+                Spacer(
+                    modifier = Modifier.height(16.dp)
+                )
+
+                AnimatedVisibility(
+                    visible = partialTranscript.isNotBlank()
                 ) {
-                    Column(
-                        modifier = Modifier.padding(18.dp)
+                    Surface(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .widthIn(max = 620.dp),
+                        shape = RoundedCornerShape(22.dp),
+                        color = MaterialTheme.colorScheme.surface,
+                        tonalElevation = 0.dp,
+                        shadowElevation = 0.dp,
+                        border = BorderStroke(
+                            1.dp,
+                            MaterialTheme.colorScheme.outlineVariant
+                        )
                     ) {
-                        Text(
-                            text = tr(
-                                "🎤 תמלול בזמן אמת",
-                                "🎤 Live transcript"
-                            ),
-                            style = KmiTypography.secondary,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.primary
-                        )
+                        Column(
+                            modifier = Modifier.padding(18.dp)
+                        ) {
+                            Text(
+                                text = tr(
+                                    "🎤 תמלול בזמן אמת",
+                                    "🎤 Live transcript"
+                                ),
+                                style = KmiTypography.secondary,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.primary
+                            )
 
-                        Spacer(
-                            modifier = Modifier.height(8.dp)
-                        )
+                            Spacer(
+                                modifier = Modifier.height(8.dp)
+                            )
 
-                        Text(
-                            text = partialTranscript,
-                            style = KmiTypography.body,
-                            color = MaterialTheme.colorScheme.onSurface
-                        )
+                            Text(
+                                text = partialTranscript,
+                                style = KmiTypography.body,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                        }
                     }
                 }
+
+                Spacer(
+                    modifier = Modifier.height(16.dp)
+                )
+
+                VoiceCommandExamplesCard(
+                    isEnglish = isEnglish
+                )
+
+                Spacer(
+                    modifier = Modifier.height(16.dp)
+                )
+
+                VoiceCommandBottomAction(
+                    isEnglish = isEnglish,
+                    state = state,
+                    hasError = errorMessage != null,
+                    onClick = {
+                        when {
+                            isStarting ||
+                                    isListening -> {
+                                controller.stopListening()
+                            }
+
+                            isProcessing -> {
+                                // בזמן עיבוד אין לבצע פעולה נוספת.
+                            }
+
+                            else -> {
+                                requestListening()
+                            }
+                        }
+                    }
+                )
+
+                Spacer(
+                    modifier = Modifier.height(20.dp)
+                )
             }
-
-            Spacer(
-                modifier = Modifier.height(16.dp)
-            )
-
-            VoiceCommandExamplesCard(
-                isEnglish = isEnglish
-            )
-
-            Spacer(
-                modifier = Modifier.height(16.dp)
-            )
-
-            VoiceCommandBottomAction(
-                isEnglish = isEnglish,
-                state = state,
-                hasError = errorMessage != null,
-                onClick = {
-                    when {
-                        isStarting ||
-                                isListening -> {
-                            controller.stopListening()
-                        }
-
-                        isProcessing -> {
-                            // בזמן עיבוד אין לבצע פעולה נוספת.
-                        }
-
-                        else -> {
-                            requestListening()
-                        }
-                    }
-                }
-            )
-
-            Spacer(
-                modifier = Modifier.height(20.dp)
-            )
-        }
         }
     }
 }
@@ -1173,8 +1173,7 @@ private fun VoiceExampleRow(
                     verticalArrangement =
                         Arrangement.spacedBy(6.dp)
                 ) {
-                    item.commands.forEach {
-                            command ->
+                    item.commands.forEach { command ->
                         Surface(
                             shape =
                                 RoundedCornerShape(

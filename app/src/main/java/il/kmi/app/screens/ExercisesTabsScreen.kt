@@ -1,4 +1,7 @@
-@file:OptIn(ExperimentalMaterial3Api::class, androidx.compose.foundation.ExperimentalFoundationApi::class)
+@file:OptIn(
+    ExperimentalMaterial3Api::class,
+    androidx.compose.foundation.ExperimentalFoundationApi::class
+)
 
 package il.kmi.app.screens
 
@@ -35,6 +38,8 @@ import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import il.kmi.app.ui.KmiTtsManager
+import il.kmi.app.ui.KmiIconSize
+import il.kmi.app.ui.KmiTypography
 import il.kmi.app.ui.dialogs.ExerciseExplanationDialog
 import il.kmi.app.ui.dialogs.ExerciseNoteEditorDialog
 import il.kmi.shared.questions.model.util.ExerciseTitleFormatter
@@ -47,7 +52,7 @@ import il.kmi.app.domain.ContentRepo
 import il.kmi.shared.domain.content.ExerciseIdentityRegistry
 import android.app.Activity
 import androidx.compose.foundation.BorderStroke
-import androidx.compose.ui.unit.sp
+import androidx.core.content.edit
 import il.kmi.app.ui.ext.color
 import il.kmi.shared.localization.AppLanguage
 import il.kmi.shared.localization.AppLanguageManager
@@ -700,7 +705,6 @@ fun ExercisesTabsScreen(
     onPractice: (Belt, String) -> Unit,
     subTopicFilter: String? = null,
     onHome: () -> Unit = {},
-    onSearch: () -> Unit = {},
 ) {
     val ctx = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -753,7 +757,7 @@ fun ExercisesTabsScreen(
         sp.all.keys.filter { it.startsWith("unknown_${belt.id}_") }
     }
 
-     // --- item list כמו ב-MaterialsScreen ---
+    // --- item list כמו ב-MaterialsScreen ---
     data class TopicItems(val topic: String, val items: Set<String>)
 
     // ✅ Source of truth דרך ContentRepo
@@ -768,7 +772,11 @@ fun ExercisesTabsScreen(
         .lowercase()
 
     fun dec(s: String) =
-        try { java.net.URLDecoder.decode(s, "UTF-8") } catch (_: Exception) { s }
+        try {
+            java.net.URLDecoder.decode(s, "UTF-8")
+        } catch (_: Exception) {
+            s
+        }
 
     fun contentItemsForTopicIncludingSubTopics(
         belt: Belt,
@@ -837,7 +845,9 @@ fun ExercisesTabsScreen(
             val wanted = subRaw.normTitle()
             val loose = subTitles.firstOrNull { st ->
                 val a = st.normTitle()
-                a.startsWith(wanted) || wanted.startsWith(a) || a.contains(wanted) || wanted.contains(a)
+                a.startsWith(wanted) || wanted.startsWith(a) || a.contains(wanted) || wanted.contains(
+                    a
+                )
             }
             if (loose != null) {
                 val items = ContentRepo.listItemTitles(belt, topic, subTopicTitle = loose)
@@ -845,8 +855,9 @@ fun ExercisesTabsScreen(
             }
 
             // 2) fallback: KmiSearchBridge (רק אם עדיין קיים אצלך)
-            val bySubBridge = runCatching { il.kmi.app.search.KmiSearchBridge.itemsFor(belt, subRaw) }
-                .getOrDefault(emptyList())
+            val bySubBridge =
+                runCatching { il.kmi.app.search.KmiSearchBridge.itemsFor(belt, subRaw) }
+                    .getOrDefault(emptyList())
             if (bySubBridge.isNotEmpty()) return@remember bySubBridge
 
             return@remember emptyList()
@@ -982,24 +993,28 @@ fun ExercisesTabsScreen(
     ) {
         val clean = value.trim()
 
-        notesSp.edit().apply {
+        notesSp.edit {
             if (clean.isBlank()) {
-                remove(noteKeyFor(raw))
+                remove(
+                    noteKeyFor(raw)
+                )
             } else {
                 putString(
                     noteKeyFor(raw),
                     clean
                 )
             }
-        }.apply()
+        }
 
         notesRefreshKey++
     }
 
     fun deleteNote(raw: String) {
-        notesSp.edit()
-            .remove(noteKeyFor(raw))
-            .apply()
+        notesSp.edit {
+            remove(
+                noteKeyFor(raw)
+            )
+        }
 
         notesRefreshKey++
     }
@@ -1151,12 +1166,12 @@ fun ExercisesTabsScreen(
         raw: String,
         status: ExerciseCoachStatus
     ) {
-        sp.edit()
-            .putString(
+        sp.edit {
+            putString(
                 coachStatusKey(raw),
                 status.storageValue
             )
-            .apply()
+        }
     }
 
     var coachStatusesVersion by rememberSaveable {
@@ -1198,72 +1213,72 @@ fun ExercisesTabsScreen(
     /**
      * סימון/הסרה ממועדפים
      */
-      /**
+    /**
      * סימון/הסרה "לא יודע"
      */
-      fun setUnknown(
-          rawItem: String,
-          set: Boolean
-      ) {
-          val itemTopic = topicForRawItem(rawItem)
-          val exerciseId = exerciseIdentityIdFor(rawItem)
-          val canonicalId = CanonicalIds.canonicalFor(
-              belt,
-              itemTopic,
-              rawItem
-          )
+    fun setUnknown(
+        rawItem: String,
+        set: Boolean
+    ) {
+        val itemTopic = topicForRawItem(rawItem)
+        val exerciseId = exerciseIdentityIdFor(rawItem)
+        val canonicalId = CanonicalIds.canonicalFor(
+            belt,
+            itemTopic,
+            rawItem
+        )
 
-          val storageKey =
-              if (topic == "__ALL__") {
-                  "unknown_${belt.id}_$itemTopic"
-              } else {
-                  "unknown_${belt.id}_$suffix"
-              }
+        val storageKey =
+            if (topic == "__ALL__") {
+                "unknown_${belt.id}_$itemTopic"
+            } else {
+                "unknown_${belt.id}_$suffix"
+            }
 
-          val storedUnknowns = readSet(storageKey)
+        val storedUnknowns = readSet(storageKey)
 
-          if (set) {
-              storedUnknowns.add(exerciseId)
+        if (set) {
+            storedUnknowns.add(exerciseId)
 
-              vm.setItemStatusNullable(
-                  belt = belt,
-                  topic = itemTopic,
-                  item = canonicalId,
-                  value = false
-              )
-          } else {
-              storedUnknowns.remove(exerciseId)
-              storedUnknowns.remove(rawItem.trim())
-              storedUnknowns.remove(canonicalId)
+            vm.setItemStatusNullable(
+                belt = belt,
+                topic = itemTopic,
+                item = canonicalId,
+                value = false
+            )
+        } else {
+            storedUnknowns.remove(exerciseId)
+            storedUnknowns.remove(rawItem.trim())
+            storedUnknowns.remove(canonicalId)
 
-              vm.setItemStatusNullable(
-                  belt = belt,
-                  topic = itemTopic,
-                  item = canonicalId,
-                  value = null
-              )
-          }
+            vm.setItemStatusNullable(
+                belt = belt,
+                topic = itemTopic,
+                item = canonicalId,
+                value = null
+            )
+        }
 
-          sp.edit()
-              .putStringSet(
-                  storageKey,
-                  storedUnknowns
-              )
-              .apply()
+        sp.edit {
+            putStringSet(
+                storageKey,
+                storedUnknowns
+            )
+        }
 
-          unknowns =
-              if (topic == "__ALL__") {
-                  allUnknownKeys
-                      .plus(storageKey)
-                      .distinct()
-                      .flatMap { key ->
-                          readSet(key)
-                      }
-                      .toMutableSet()
-              } else {
-                  storedUnknowns.toMutableSet()
-              }
-      }
+        unknowns =
+            if (topic == "__ALL__") {
+                allUnknownKeys
+                    .plus(storageKey)
+                    .distinct()
+                    .flatMap { key ->
+                        readSet(key)
+                    }
+                    .toMutableSet()
+            } else {
+                storedUnknowns.toMutableSet()
+            }
+    }
 
     val pdfFilteredItems: List<String> =
         if (isCoach) {
@@ -1433,6 +1448,7 @@ fun ExercisesTabsScreen(
     }
 
     Scaffold(
+        containerColor = MaterialTheme.colorScheme.background,
         topBar = {
             val contextLang = LocalContext.current
             val langManager = remember { AppLanguageManager(contextLang) }
@@ -1476,8 +1492,14 @@ fun ExercisesTabsScreen(
 
         bottomBar = {
             Surface(
-                color = Color(0xFFE0E0E0),
-                shadowElevation = 8.dp,
+                color = MaterialTheme.colorScheme.surface,
+                tonalElevation = 0.dp,
+                shadowElevation = 0.dp,
+                border = BorderStroke(
+                    width = 1.dp,
+                    color = MaterialTheme.colorScheme.outline
+                        .copy(alpha = 0.24f)
+                )
             ) {
                 Row(
                     modifier = Modifier
@@ -1520,13 +1542,19 @@ fun ExercisesTabsScreen(
                     ActionButton(
                         text = tr("תרגול", "Practice"),
                         modifier = Modifier.weight(1f),
-                        containerColor = Color(0xFF6F64FF),
-                        onClick = { onPractice(belt, practiceToken) }
+                        containerColor = MaterialTheme.colorScheme.primary,
+                        onClick = {
+                            onPractice(
+                                belt,
+                                practiceToken
+                            )
+                        }
                     )
+
                     ActionButton(
                         text = tr("איפוס", "Reset"),
                         modifier = Modifier.weight(1f),
-                        containerColor = Color(0xFFD32F2F),
+                        containerColor = MaterialTheme.colorScheme.error,
                         onClick = {
                             scope.launch {
                                 // איפוס סטטוסים בזיכרון הקומפוז
@@ -1538,18 +1566,35 @@ fun ExercisesTabsScreen(
                                 // ❓ איפוס unknown – נשאר מקומי לפי חגורה/נושא
                                 unknowns = mutableSetOf()
 
-                                val editor = sp.edit()
+                                sp.edit {
+                                    if (topic == "__ALL__") {
+                                        // ✅ 1) מחיקת unknown keys מה-SP
+                                        sp.all.keys
+                                            .filter {
+                                                it.startsWith("unknown_${belt.id}_")
+                                            }
+                                            .forEach { key ->
+                                                remove(key)
+                                            }
+                                    } else {
+                                        val singleUnknownKey =
+                                            "unknown_${belt.id}_$suffix"
 
+                                        remove(singleUnknownKey)
+                                    }
+                                }
+
+                                // ✅ 2) איפוס אמיתי של הסימונים ב-DataStore
                                 if (topic == "__ALL__") {
-                                    // ✅ 1) מחיקת unknown keys מה-SP (כמו שהיה)
-                                    sp.all.keys
-                                        .filter { it.startsWith("unknown_${belt.id}_") }
-                                        .forEach { key -> editor.remove(key) }
-
-                                    // ✅ 2) איפוס אמיתי של הסימונים (DataStore) לכל נושא
                                     allTopicItems.forEach { ti ->
                                         val canonicalIds = ti.items
-                                            .map { raw -> CanonicalIds.canonicalFor(belt, ti.topic, raw) }
+                                            .map { raw ->
+                                                CanonicalIds.canonicalFor(
+                                                    belt,
+                                                    ti.topic,
+                                                    raw
+                                                )
+                                            }
                                             .distinct()
 
                                         vm.clearTopicItems(
@@ -1559,13 +1604,11 @@ fun ExercisesTabsScreen(
                                         )
                                     }
                                 } else {
-                                    val singleUnknownKey = "unknown_${belt.id}_$suffix"
-                                    editor.remove(singleUnknownKey)
-
-                                    vm.clearTopic(belt, topic)
+                                    vm.clearTopic(
+                                        belt,
+                                        topic
+                                    )
                                 }
-
-                                editor.apply()
                             }
                         }
                     )
@@ -1585,68 +1628,66 @@ fun ExercisesTabsScreen(
         ) {
             val shape = RoundedCornerShape(18.dp)
 
-            val selectedGradient = Brush.verticalGradient(
-                colors = listOf(
-                    Color(0xFF7C3AED),
-                    Color(0xFF5B4BDB),
-                    Color(0xFF2563EB)
+            val selectedGradient =
+                Brush.verticalGradient(
+                    colors = listOf(
+                        MaterialTheme.colorScheme.primary,
+                        MaterialTheme.colorScheme.primary
+                            .copy(alpha = 0.90f),
+                        MaterialTheme.colorScheme.secondary
+                            .copy(alpha = 0.82f)
+                    )
                 )
-            )
 
-            val idleGradient = Brush.verticalGradient(
-                colors = listOf(
-                    Color.White.copy(alpha = 0.98f),
-                    Color(0xFFF5F3FF),
-                    Color(0xFFEDE9FE)
+            val idleGradient =
+                Brush.verticalGradient(
+                    colors = listOf(
+                        MaterialTheme.colorScheme.surface,
+                        MaterialTheme.colorScheme.surfaceVariant
+                            .copy(alpha = 0.62f),
+                        MaterialTheme.colorScheme.surface
+                    )
                 )
-            )
 
             Surface(
                 onClick = onClick,
                 modifier = modifier
-                    .padding(horizontal = 3.dp, vertical = 6.dp)
-                    .height(70.dp),
+                    .padding(
+                        horizontal = 3.dp,
+                        vertical = 6.dp
+                    )
+                    .heightIn(min = 70.dp),
                 shape = shape,
                 color = Color.Transparent,
                 tonalElevation = 0.dp,
-                shadowElevation = if (selected) 10.dp else 3.dp,
+                shadowElevation = 0.dp,
                 border = BorderStroke(
-                    width = if (selected) 2.dp else 1.dp,
-                    color = if (selected) {
-                        Color.White.copy(alpha = 0.90f)
-                    } else {
-                        Color(0xFF8B5CF6).copy(alpha = 0.22f)
-                    }
+                    width =
+                        if (selected) {
+                            2.dp
+                        } else {
+                            1.dp
+                        },
+                    color =
+                        if (selected) {
+                            MaterialTheme.colorScheme.primary
+                                .copy(alpha = 0.42f)
+                        } else {
+                            MaterialTheme.colorScheme.outline
+                                .copy(alpha = 0.28f)
+                        }
                 )
             ) {
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
                         .background(
-                            brush = if (selected) {
-                                selectedGradient
-                            } else {
-                                idleGradient
-                            },
-                            shape = shape
-                        )
-                        .border(
-                            width = 1.dp,
-                            brush = Brush.linearGradient(
-                                colors = if (selected) {
-                                    listOf(
-                                        Color.White.copy(alpha = 0.92f),
-                                        Color(0xFFA78BFA),
-                                        Color.White.copy(alpha = 0.70f)
-                                    )
+                            brush =
+                                if (selected) {
+                                    selectedGradient
                                 } else {
-                                    listOf(
-                                        Color.White,
-                                        Color(0xFFC4B5FD).copy(alpha = 0.46f),
-                                        Color.White
-                                    )
-                                }
-                            ),
+                                    idleGradient
+                                },
                             shape = shape
                         ),
                     contentAlignment = Alignment.Center
@@ -1654,22 +1695,27 @@ fun ExercisesTabsScreen(
                     Column(
                         modifier = Modifier
                             .fillMaxSize()
-                            .padding(horizontal = 4.dp, vertical = 7.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.Center
+                            .padding(
+                                horizontal = 4.dp,
+                                vertical = 7.dp
+                            ),
+                        horizontalAlignment =
+                            Alignment.CenterHorizontally,
+                        verticalArrangement =
+                            Arrangement.Center
                     ) {
                         Text(
                             text = title,
-                            color = if (selected) {
-                                Color.White
-                            } else {
-                                Color(0xFF312E81)
-                            },
-                            fontSize = if (selected) 14.sp else 13.sp,
-                            lineHeight = 16.sp,
-                            fontWeight = FontWeight.ExtraBold,
-                            maxLines = 1,
-                            softWrap = false,
+                            style = KmiTypography.caption.copy(
+                                fontWeight = FontWeight.ExtraBold
+                            ),
+                            color =
+                                if (selected) {
+                                    MaterialTheme.colorScheme.onPrimary
+                                } else {
+                                    MaterialTheme.colorScheme.onSurface
+                                },
+                            maxLines = 2,
                             overflow = TextOverflow.Ellipsis,
                             textAlign = TextAlign.Center
                         )
@@ -1678,32 +1724,33 @@ fun ExercisesTabsScreen(
 
                         Surface(
                             shape = RoundedCornerShape(999.dp),
-                            color = if (selected) {
-                                Color.White.copy(alpha = 0.95f)
-                            } else {
-                                Color.White.copy(alpha = 0.90f)
-                            },
+                            color =
+                                if (selected) {
+                                    MaterialTheme.colorScheme.surface
+                                        .copy(alpha = 0.96f)
+                                } else {
+                                    MaterialTheme.colorScheme.surfaceVariant
+                                },
                             tonalElevation = 0.dp,
-                            shadowElevation = if (selected) 3.dp else 0.dp,
+                            shadowElevation = 0.dp,
                             border = BorderStroke(
                                 width = 1.dp,
-                                color = if (selected) {
-                                    Color.White.copy(alpha = 0.94f)
-                                } else {
-                                    Color(0xFF8B5CF6).copy(alpha = 0.18f)
-                                }
+                                color =
+                                    MaterialTheme.colorScheme.outline
+                                        .copy(alpha = 0.24f)
                             )
                         ) {
                             Text(
                                 text = number.toString(),
-                                color = if (selected) {
-                                    Color(0xFF4338CA)
-                                } else {
-                                    Color(0xFF1F2937)
-                                },
-                                fontSize = 14.sp,
-                                lineHeight = 16.sp,
-                                fontWeight = FontWeight.Black,
+                                style = KmiTypography.action.copy(
+                                    fontWeight = FontWeight.Black
+                                ),
+                                color =
+                                    if (selected) {
+                                        MaterialTheme.colorScheme.primary
+                                    } else {
+                                        MaterialTheme.colorScheme.onSurface
+                                    },
                                 modifier = Modifier.padding(
                                     horizontal = 13.dp,
                                     vertical = 2.dp
@@ -1721,8 +1768,10 @@ fun ExercisesTabsScreen(
                                 .width(28.dp)
                                 .height(3.dp)
                                 .background(
-                                    color = Color.White,
-                                    shape = RoundedCornerShape(999.dp)
+                                    color =
+                                        MaterialTheme.colorScheme.onPrimary,
+                                    shape =
+                                        RoundedCornerShape(999.dp)
                                 )
                         )
                     }
@@ -2007,20 +2056,27 @@ fun ExercisesTabsScreen(
                                             "Exercise ${index + 1}"
                                         ),
                                         modifier = Modifier.fillMaxWidth(),
+                                        style = KmiTypography.caption.copy(
+                                            fontWeight = FontWeight.ExtraBold
+                                        ),
                                         color = when {
-                                            itemIsUnknown -> Color(0xFFDC2626)
-                                            isFav -> Color(0xFF7C3AED)
-                                            else -> MaterialTheme.colorScheme.primary
+                                            itemIsUnknown ->
+                                                MaterialTheme.colorScheme.error
+
+                                            isFav ->
+                                                MaterialTheme.colorScheme.primary
+
+                                            else ->
+                                                MaterialTheme.colorScheme.primary
                                         },
-                                        fontSize = 7.5.sp,
-                                        lineHeight = 9.sp,
-                                        fontWeight = FontWeight.ExtraBold,
-                                        textAlign = if (isEnglish) {
-                                            TextAlign.Left
-                                        } else {
-                                            TextAlign.Right
-                                        },
-                                        maxLines = 1
+                                        textAlign =
+                                            if (isEnglish) {
+                                                TextAlign.Left
+                                            } else {
+                                                TextAlign.Right
+                                            },
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
                                     )
 
                                     Spacer(Modifier.height(3.dp))
@@ -2028,17 +2084,17 @@ fun ExercisesTabsScreen(
                                     Text(
                                         text = displayName,
                                         modifier = Modifier.fillMaxWidth(),
-                                        textAlign = if (isEnglish) {
-                                            TextAlign.Left
-                                        } else {
-                                            TextAlign.Right
-                                        },
-                                        color = MaterialTheme.colorScheme.onBackground,
-                                        style = MaterialTheme.typography.bodyMedium.copy(
-                                            fontSize = 10.5.sp,
-                                            lineHeight = 14.sp
+                                        textAlign =
+                                            if (isEnglish) {
+                                                TextAlign.Left
+                                            } else {
+                                                TextAlign.Right
+                                            },
+                                        color =
+                                            MaterialTheme.colorScheme.onSurface,
+                                        style = KmiTypography.body.copy(
+                                            fontWeight = FontWeight.Bold
                                         ),
-                                        fontWeight = FontWeight.Bold,
                                         maxLines = 3,
                                         overflow = TextOverflow.Ellipsis
                                     )
@@ -2057,30 +2113,48 @@ fun ExercisesTabsScreen(
                                         ) {
                                             if (itemIsUnknown) {
                                                 Text(
-                                                    text = tr("לא יודע", "Unknown"),
-                                                    color = Color(0xFFDC2626),
-                                                    fontSize = 7.5.sp,
-                                                    lineHeight = 9.sp,
-                                                    fontWeight = FontWeight.Bold
+                                                    text = tr(
+                                                        "לא יודע",
+                                                        "Unknown"
+                                                    ),
+                                                    color = MaterialTheme.colorScheme.error,
+                                                    style =
+                                                        KmiTypography.caption.copy(
+                                                            fontWeight =
+                                                                FontWeight.Bold
+                                                        )
                                                 )
                                             }
 
-                                            if (itemIsUnknown && (isFav || itemHasNote)) {
-                                                Spacer(Modifier.width(7.dp))
+                                            if (
+                                                itemIsUnknown &&
+                                                (isFav || itemHasNote)
+                                            ) {
+                                                Spacer(
+                                                    Modifier.width(7.dp)
+                                                )
                                             }
 
                                             if (isFav) {
                                                 Text(
-                                                    text = tr("★ מועדף", "★ Favorite"),
-                                                    color = Color(0xFF7C3AED),
-                                                    fontSize = 7.5.sp,
-                                                    lineHeight = 9.sp,
-                                                    fontWeight = FontWeight.Bold
+                                                    text = tr(
+                                                        "★ מועדף",
+                                                        "★ Favorite"
+                                                    ),
+                                                    color =
+                                                        MaterialTheme.colorScheme.primary,
+                                                    style =
+                                                        KmiTypography.caption.copy(
+                                                            fontWeight =
+                                                                FontWeight.Bold
+                                                        )
                                                 )
                                             }
 
                                             if (isFav && itemHasNote) {
-                                                Spacer(Modifier.width(7.dp))
+                                                Spacer(
+                                                    Modifier.width(7.dp)
+                                                )
                                             }
 
                                             if (itemHasNote) {
@@ -2089,10 +2163,13 @@ fun ExercisesTabsScreen(
                                                         "הערה שמורה",
                                                         "Saved note"
                                                     ),
-                                                    color = MaterialTheme.colorScheme.primary,
-                                                    fontSize = 7.5.sp,
-                                                    lineHeight = 9.sp,
-                                                    fontWeight = FontWeight.Bold
+                                                    color =
+                                                        MaterialTheme.colorScheme.primary,
+                                                    style =
+                                                        KmiTypography.caption.copy(
+                                                            fontWeight =
+                                                                FontWeight.Bold
+                                                        )
                                                 )
                                             }
                                         }
@@ -2103,15 +2180,15 @@ fun ExercisesTabsScreen(
                     }
 
                     if (index < filtered.lastIndex) {
-                        Divider(
+                        HorizontalDivider(
                             modifier = Modifier.padding(
                                 start = 48.dp,
                                 end = 4.dp
                             ),
                             thickness = 1.dp,
-                            color = MaterialTheme.colorScheme.outlineVariant.copy(
-                                alpha = 0.72f
-                            )
+                            color =
+                                MaterialTheme.colorScheme.outlineVariant
+                                    .copy(alpha = 0.72f)
                         )
                     }
                 }
@@ -2266,14 +2343,16 @@ private fun ExerciseRowActionsMenu(
                 expanded = true
             },
             shape = CircleShape,
-            color = Color(0xFF60717A),
-            shadowElevation = 4.dp,
+            color = MaterialTheme.colorScheme.primaryContainer,
+            shadowElevation = 0.dp,
+            tonalElevation = 0.dp,
             border = BorderStroke(
                 width = 1.dp,
-                color = Color.White.copy(alpha = 0.24f)
+                color = MaterialTheme.colorScheme.outline
+                    .copy(alpha = 0.28f)
             ),
             modifier = Modifier
-                .size(34.dp)
+                .size(KmiIconSize.medium)
                 .graphicsLayer {
                     scaleX = infoScale
                     scaleY = infoScale
@@ -2285,10 +2364,11 @@ private fun ExerciseRowActionsMenu(
             ) {
                 Text(
                     text = "i",
-                    color = Color.White,
-                    fontSize = 17.sp,
-                    lineHeight = 17.sp,
-                    fontWeight = FontWeight.Black,
+                    color =
+                        MaterialTheme.colorScheme.onPrimaryContainer,
+                    style = KmiTypography.action.copy(
+                        fontWeight = FontWeight.Black
+                    ),
                     modifier = Modifier.graphicsLayer {
                         rotationZ = infoRotation
                     }
@@ -2305,20 +2385,19 @@ private fun ExerciseRowActionsMenu(
                 .background(
                     brush = Brush.verticalGradient(
                         colors = listOf(
-                            Color.White.copy(alpha = 0.99f),
-                            MaterialTheme.colorScheme.primary.copy(
-                                alpha = 0.05f
-                            ),
-                            Color.White.copy(alpha = 0.97f)
+                            MaterialTheme.colorScheme.surface,
+                            MaterialTheme.colorScheme.surfaceVariant
+                                .copy(alpha = 0.72f),
+                            MaterialTheme.colorScheme.surface
                         )
                     ),
                     shape = RoundedCornerShape(18.dp)
                 )
                 .border(
                     width = 1.dp,
-                    color = MaterialTheme.colorScheme.primary.copy(
-                        alpha = 0.12f
-                    ),
+                    color =
+                        MaterialTheme.colorScheme.outline
+                            .copy(alpha = 0.28f),
                     shape = RoundedCornerShape(18.dp)
                 )
         ) {
@@ -2326,7 +2405,7 @@ private fun ExerciseRowActionsMenu(
                 text = {
                     Text(
                         text = tr("מידע", "Info"),
-                        style = MaterialTheme.typography.labelLarge
+                        style = KmiTypography.action
                     )
                 },
                 onClick = {
@@ -2336,7 +2415,11 @@ private fun ExerciseRowActionsMenu(
             )
 
             if (isCoach) {
-                HorizontalDivider()
+                HorizontalDivider(
+                    color =
+                        MaterialTheme.colorScheme.outline
+                            .copy(alpha = 0.28f)
+                )
 
                 DropdownMenuItem(
                     text = {
@@ -2359,8 +2442,8 @@ private fun ExerciseRowActionsMenu(
                                     "Not taught"
                                 }
                             ),
-                            style = MaterialTheme.typography.labelLarge,
-                            color = Color(0xFF667085)
+                            style = KmiTypography.action,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     },
                     onClick = {
@@ -2393,7 +2476,7 @@ private fun ExerciseRowActionsMenu(
                                     "Taught"
                                 }
                             ),
-                            style = MaterialTheme.typography.labelLarge,
+                            style = KmiTypography.action,
                             color = Color(0xFF2E7D32)
                         )
                     },
@@ -2427,7 +2510,7 @@ private fun ExerciseRowActionsMenu(
                                     "Practice"
                                 }
                             ),
-                            style = MaterialTheme.typography.labelLarge,
+                            style = KmiTypography.action,
                             color = Color(0xFFF57C00)
                         )
                     },
@@ -2461,7 +2544,7 @@ private fun ExerciseRowActionsMenu(
                                     "Needs improvement"
                                 }
                             ),
-                            style = MaterialTheme.typography.labelLarge,
+                            style = KmiTypography.action,
                             color = Color(0xFFC62828)
                         )
                     },
@@ -2489,7 +2572,7 @@ private fun ExerciseRowActionsMenu(
                                     "Add to favorites"
                                 }
                             ),
-                            style = MaterialTheme.typography.labelLarge
+                            style = KmiTypography.action
                         )
                     },
                     onClick = {
@@ -2513,7 +2596,7 @@ private fun ExerciseRowActionsMenu(
                                     "Add note"
                                 }
                             ),
-                            style = MaterialTheme.typography.labelLarge
+                            style = KmiTypography.action
                         )
                     },
                     onClick = {
@@ -2537,7 +2620,7 @@ private fun ExerciseRowActionsMenu(
                                     "Mark as unknown"
                                 }
                             ),
-                            style = MaterialTheme.typography.labelLarge
+                            style = KmiTypography.action
                         )
                     },
                     onClick = {
@@ -2558,21 +2641,58 @@ fun ActionButton(
     containerColor: Color = MaterialTheme.colorScheme.primary,
     onClick: () -> Unit
 ) {
-    var pressed by remember { mutableStateOf(false) }
-    val scale by animateFloatAsState(if (pressed) 0.95f else 1f, label = "btnScale")
+    var pressed by remember {
+        mutableStateOf(false)
+    }
+
+    val scale by animateFloatAsState(
+        targetValue = if (pressed) {
+            0.95f
+        } else {
+            1f
+        },
+        label = "btnScale"
+    )
+
     val scope = rememberCoroutineScope()
-    val contentOnContainer = if (containerColor.luminance() < 0.5f) Color.White else Color.Black
+
+    val contentOnContainer =
+        if (containerColor.luminance() < 0.5f) {
+            Color.White
+        } else {
+            Color.Black
+        }
 
     Button(
         onClick = {
-            pressed = true; onClick()
-            scope.launch { kotlinx.coroutines.delay(150); pressed = false }
+            pressed = true
+            onClick()
+
+            scope.launch {
+                kotlinx.coroutines.delay(150)
+                pressed = false
+            }
         },
         shape = RoundedCornerShape(28.dp),
-        modifier = modifier.scale(scale).height(56.dp).defaultMinSize(minWidth = 90.dp),
-        colors = ButtonDefaults.buttonColors(containerColor = containerColor, contentColor = contentOnContainer)
+        modifier = modifier
+            .scale(scale)
+            .heightIn(min = 56.dp)
+            .defaultMinSize(minWidth = 90.dp),
+        colors = ButtonDefaults.buttonColors(
+            containerColor = containerColor,
+            contentColor = contentOnContainer
+        )
     ) {
-        Text(text, color = contentOnContainer, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center)
+        Text(
+            text = text,
+            style = KmiTypography.action.copy(
+                fontWeight = FontWeight.Bold
+            ),
+            color = contentOnContainer,
+            textAlign = TextAlign.Center,
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis
+        )
     }
 }
 

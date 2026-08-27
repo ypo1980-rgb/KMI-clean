@@ -1531,9 +1531,7 @@ fun MainNavHost(
                     onRegistrationComplete = {
                         nav.popBackStack()
                     },
-                    onOpenLegal = { nav.navigate(Route.Legal.route) },
                     onOpenTerms = { nav.navigate(Route.Legal.route) },
-                    vm = vm,
                     onOpenDrawer = {
                         DrawerBridge.open()
                     },

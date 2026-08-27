@@ -123,7 +123,7 @@ private fun cleanItem(topic: String, item: String): String {
 }
 
 private fun norm(s: String) = s
-    .replace("\u200F","").replace("\u200E","").replace("\u00A0"," ")
+    .replace("\u200F", "").replace("\u200E", "").replace("\u00A0", " ")
     .replace(Regex("[\u0591-\u05C7]"), "")
     .replace("[\\-–—:_]".toRegex(), " ")
     .replace(Regex("\\s+"), " ")
@@ -329,7 +329,7 @@ private fun exerciseDisplayNameForUi(
         append(s)
     }
 
-    val formatted: String =ExerciseTitleFormatter.displayName(cleaned)
+    val formatted: String = ExerciseTitleFormatter.displayName(cleaned)
         .trim()
 
     val base = formatted.ifBlank { cleaned }.trim()
@@ -817,7 +817,7 @@ private fun UserProgressComparisonCard(
         if (isEnglish) {
             TextAlign.Left
         } else {
-           TextAlign.Right
+            TextAlign.Right
         }
 
     val columnAlignment =
@@ -912,9 +912,9 @@ private fun UserProgressComparisonCard(
                         color = MaterialTheme.colorScheme.onSurface,
                         textAlign =
                             if (isEnglish) {
-                                 TextAlign.Left
+                                TextAlign.Left
                             } else {
-                              TextAlign.Right
+                                TextAlign.Right
                             },
                         maxLines = 1,
                         modifier = Modifier.fillMaxWidth()
@@ -1405,7 +1405,7 @@ private fun CoachGroupsProgressCard(
                         if (isEnglish) {
                             TextAlign.Left
                         } else {
-                           TextAlign.Right
+                            TextAlign.Right
                         }
                 )
             }
@@ -2232,49 +2232,49 @@ fun SummaryScreen(
 
             val computed: Map<Pair<String, String>, MarkState> =
                 withContext(Dispatchers.Default) {
-                val map = mutableMapOf<Pair<String, String>, MarkState>()
+                    val map = mutableMapOf<Pair<String, String>, MarkState>()
 
-                itemsByTopic.forEach { (topicTitle, rows) ->
+                    itemsByTopic.forEach { (topicTitle, rows) ->
 
-                    val snapshotsByStatusTopicKey = rows
-                        .map { it.statusTopicKey }
-                        .distinct()
-                        .associateWith { key ->
-                            vm.getTopicStatusSnapshot(belt, key)
+                        val snapshotsByStatusTopicKey = rows
+                            .map { it.statusTopicKey }
+                            .distinct()
+                            .associateWith { key ->
+                                vm.getTopicStatusSnapshot(belt, key)
+                            }
+
+                        rows.forEach { row ->
+                            val topicSnap = snapshotsByStatusTopicKey[row.statusTopicKey].orEmpty()
+
+                            val statusId = summaryExerciseIdentityIdFor(
+                                belt = belt,
+                                topicKey = row.statusTopicKey,
+                                topicTitle = row.sourceTopicTitle,
+                                index = row.indexInStatusGroup,
+                                item = row.itemRaw
+                            )
+
+                            val legacyStatusId = summaryLegacyStatusIdFor(
+                                belt = belt,
+                                topicKey = row.statusTopicKey,
+                                index = row.indexInStatusGroup,
+                                item = row.itemRaw
+                            )
+
+                            val v: Boolean? = topicSnap[statusId] ?: topicSnap[legacyStatusId]
+
+                            val state = when (v) {
+                                true -> MarkState.YES
+                                false -> MarkState.NO
+                                null -> MarkState.NONE
+                            }
+
+                            map[topicTitle to statusId] = state
                         }
-
-                    rows.forEach { row ->
-                        val topicSnap = snapshotsByStatusTopicKey[row.statusTopicKey].orEmpty()
-
-                        val statusId = summaryExerciseIdentityIdFor(
-                            belt = belt,
-                            topicKey = row.statusTopicKey,
-                            topicTitle = row.sourceTopicTitle,
-                            index = row.indexInStatusGroup,
-                            item = row.itemRaw
-                        )
-
-                        val legacyStatusId = summaryLegacyStatusIdFor(
-                            belt = belt,
-                            topicKey = row.statusTopicKey,
-                            index = row.indexInStatusGroup,
-                            item = row.itemRaw
-                        )
-
-                        val v: Boolean? = topicSnap[statusId] ?: topicSnap[legacyStatusId]
-
-                        val state = when (v) {
-                            true  -> MarkState.YES
-                            false -> MarkState.NO
-                            null  -> MarkState.NONE
-                        }
-
-                        map[topicTitle to statusId] = state
                     }
-                }
 
-                map
-            }
+                    map
+                }
 
             /*
              * קוראים את המצב „יודע חלקית” מאותו מפתח
@@ -2286,8 +2286,7 @@ fun SummaryScreen(
                     Set<Pair<String, String>> =
                 withContext(Dispatchers.Default) {
                     buildSet {
-                        itemsByTopic.forEach {
-                                (topicTitle, rows) ->
+                        itemsByTopic.forEach { (topicTitle, rows) ->
 
                             rows.forEach { row ->
                                 val statusId =
@@ -2553,7 +2552,11 @@ fun SummaryScreen(
     var notesRefreshKey by rememberSaveable { mutableIntStateOf(0) }
 
     val handlePickFromTopBar: (String) -> Unit = { key ->
-        fun dec(s: String) = try { java.net.URLDecoder.decode(s, "UTF-8") } catch (_: Exception) { s }
+        fun dec(s: String) = try {
+            java.net.URLDecoder.decode(s, "UTF-8")
+        } catch (_: Exception) {
+            s
+        }
 
         val resolved = runCatching { il.kmi.app.domain.ContentRepo.resolveItemKey(key) }.getOrNull()
         if (resolved != null) {
@@ -2605,7 +2608,12 @@ fun SummaryScreen(
                 addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
                 targetPackage?.let { setPackage(it) }
             }
-            ctx.startActivity(android.content.Intent.createChooser(intent, tr("שיתוף דו\"ח סיכום", "Share summary report")))
+            ctx.startActivity(
+                android.content.Intent.createChooser(
+                    intent,
+                    tr("שיתוף דו\"ח סיכום", "Share summary report")
+                )
+            )
         }.onFailure {
             val intent = android.content.Intent(android.content.Intent.ACTION_SEND).apply {
                 type = "text/plain"
@@ -2616,7 +2624,12 @@ fun SummaryScreen(
                 targetPackage?.let { setPackage(it) }
             }
             runCatching {
-                ctx.startActivity(android.content.Intent.createChooser(intent, tr("שיתוף", "Share")))
+                ctx.startActivity(
+                    android.content.Intent.createChooser(
+                        intent,
+                        tr("שיתוף", "Share")
+                    )
+                )
             }
         }
     }
@@ -3065,8 +3078,7 @@ fun SummaryScreen(
                         partiallyKnownIds.size
 
                     val notKnownCount =
-                        masteredMap.entries.count {
-                                (key, state) ->
+                        masteredMap.entries.count { (key, state) ->
                             state == MarkState.NO &&
                                     key !in partiallyKnownIds
                         }
@@ -3226,9 +3238,9 @@ fun SummaryScreen(
                                         color = summaryPrimaryText,
                                         textAlign =
                                             if (isEnglish) {
-                                                 TextAlign.Left
+                                                TextAlign.Left
                                             } else {
-                                              TextAlign.Right
+                                                TextAlign.Right
                                             },
                                         maxLines = 1,
                                         modifier = Modifier.fillMaxWidth()
@@ -3511,9 +3523,9 @@ fun SummaryScreen(
                                 color = summaryPrimaryText,
                                 textAlign =
                                     if (isEnglish) {
-                                         TextAlign.Left
+                                        TextAlign.Left
                                     } else {
-                                      TextAlign.Right
+                                        TextAlign.Right
                                     }
                             )
                         }
@@ -3623,7 +3635,12 @@ fun SummaryScreen(
                                             Text(
                                                 text =
                                                     if (isEnglish) {
-                                                        "${topicDisplayName(topicTitle, true)} - $pct%"
+                                                        "${
+                                                            topicDisplayName(
+                                                                topicTitle,
+                                                                true
+                                                            )
+                                                        } - $pct%"
                                                     } else {
                                                         "$topicTitle – $pct%"
                                                     },
@@ -3696,9 +3713,9 @@ fun SummaryScreen(
                                             style = KmiTypography.body,
                                             textAlign =
                                                 if (isEnglish) {
-                                                     TextAlign.Left
+                                                    TextAlign.Left
                                                 } else {
-                                                  TextAlign.Right
+                                                    TextAlign.Right
                                                 },
                                             modifier = Modifier.fillMaxWidth(),
                                             color =
@@ -3728,7 +3745,8 @@ fun SummaryScreen(
                                             }
 
                                             val subTotal = rowsInSubTopic.size
-                                            val subPct = if (subTotal > 0) (subDone * 100 / subTotal) else 0
+                                            val subPct =
+                                                if (subTotal > 0) (subDone * 100 / subTotal) else 0
 
                                             val hasRealSubTopic =
                                                 subTopicTitleRaw
@@ -3837,7 +3855,10 @@ fun SummaryScreen(
 
                                                     rowsInSubTopic.forEach { row ->
                                                         val itemRaw = row.itemRaw
-                                                        val canonicalId = canonicalFromRepo(row.sourceTopicTitle, itemRaw)
+                                                        val canonicalId = canonicalFromRepo(
+                                                            row.sourceTopicTitle,
+                                                            itemRaw
+                                                        )
 
                                                         val statusId = summaryExerciseIdentityIdFor(
                                                             belt = belt,
@@ -3934,17 +3955,23 @@ fun SummaryScreen(
                                                                                 CoachSummaryStatus.PRACTICED ->
                                                                                     Color(0xFF2F9B4E)
                                                                                         .copy(alpha = 0.07f)
-                                                                                        .compositeOver(summaryColors.surface)
+                                                                                        .compositeOver(
+                                                                                            summaryColors.surface
+                                                                                        )
 
                                                                                 CoachSummaryStatus.TAUGHT ->
                                                                                     Color(0xFFF3A062)
                                                                                         .copy(alpha = 0.07f)
-                                                                                        .compositeOver(summaryColors.surface)
+                                                                                        .compositeOver(
+                                                                                            summaryColors.surface
+                                                                                        )
 
                                                                                 CoachSummaryStatus.NEEDS_REINFORCEMENT ->
                                                                                     Color(0xFF3478D4)
                                                                                         .copy(alpha = 0.07f)
-                                                                                        .compositeOver(summaryColors.surface)
+                                                                                        .compositeOver(
+                                                                                            summaryColors.surface
+                                                                                        )
 
                                                                                 CoachSummaryStatus.NOT_TAUGHT ->
                                                                                     Color.Transparent
@@ -3954,12 +3981,16 @@ fun SummaryScreen(
                                                                                 isPartiallyKnown ->
                                                                                     Color(0xFFF28C28)
                                                                                         .copy(alpha = 0.075f)
-                                                                                        .compositeOver(summaryColors.surface)
+                                                                                        .compositeOver(
+                                                                                            summaryColors.surface
+                                                                                        )
 
                                                                                 state == MarkState.YES ->
                                                                                     belt.color
                                                                                         .copy(alpha = 0.075f)
-                                                                                        .compositeOver(summaryColors.surface)
+                                                                                        .compositeOver(
+                                                                                            summaryColors.surface
+                                                                                        )
 
                                                                                 else ->
                                                                                     Color.Transparent
@@ -4064,7 +4095,9 @@ fun SummaryScreen(
                                                                             Alignment.CenterHorizontally
                                                                     ) {
                                                                         Surface(
-                                                                            modifier = Modifier.size(36.dp),
+                                                                            modifier = Modifier.size(
+                                                                                36.dp
+                                                                            ),
                                                                             shape = CircleShape,
                                                                             color = summaryColors.outline,
                                                                             shadowElevation = 0.dp,
@@ -4122,16 +4155,24 @@ fun SummaryScreen(
                                                                             val coachColor =
                                                                                 when (status) {
                                                                                     CoachSummaryStatus.TAUGHT ->
-                                                                                        Color(0xFFF3A062)
+                                                                                        Color(
+                                                                                            0xFFF3A062
+                                                                                        )
 
                                                                                     CoachSummaryStatus.PRACTICED ->
-                                                                                        Color(0xFF2F9B4E)
+                                                                                        Color(
+                                                                                            0xFF2F9B4E
+                                                                                        )
 
                                                                                     CoachSummaryStatus.NEEDS_REINFORCEMENT ->
-                                                                                        Color(0xFF3478D4)
+                                                                                        Color(
+                                                                                            0xFF3478D4
+                                                                                        )
 
                                                                                     CoachSummaryStatus.NOT_TAUGHT ->
-                                                                                        Color(0xFF8A939D)
+                                                                                        Color(
+                                                                                            0xFF8A939D
+                                                                                        )
                                                                                 }
 
                                                                             val coachMark =
@@ -4185,7 +4226,9 @@ fun SummaryScreen(
                                                                                     Alignment.CenterHorizontally
                                                                             ) {
                                                                                 Surface(
-                                                                                    modifier = Modifier.size(36.dp),
+                                                                                    modifier = Modifier.size(
+                                                                                        36.dp
+                                                                                    ),
                                                                                     shape = CircleShape,
                                                                                     color = coachColor,
                                                                                     shadowElevation = 0.dp,
@@ -4210,7 +4253,9 @@ fun SummaryScreen(
                                                                                 }
 
                                                                                 Spacer(
-                                                                                    Modifier.height(2.dp)
+                                                                                    Modifier.height(
+                                                                                        2.dp
+                                                                                    )
                                                                                 )
 
                                                                                 Text(
@@ -4569,8 +4614,7 @@ private fun createSummaryPdf(
         itemsByTopic.values.flatten()
 
     val knownCount =
-        itemsByTopic.entries.sumOf {
-                (topicTitle, rows) ->
+        itemsByTopic.entries.sumOf { (topicTitle, rows) ->
             rows.count { row ->
                 stateFor(
                     topicTitle,
@@ -4580,8 +4624,7 @@ private fun createSummaryPdf(
         }
 
     val partiallyKnownCount =
-        itemsByTopic.entries.sumOf {
-                (topicTitle, rows) ->
+        itemsByTopic.entries.sumOf { (topicTitle, rows) ->
             rows.count { row ->
                 isPartiallyKnownFor(
                     topicTitle,
@@ -4591,8 +4634,7 @@ private fun createSummaryPdf(
         }
 
     val notKnownCount =
-        itemsByTopic.entries.sumOf {
-                (topicTitle, rows) ->
+        itemsByTopic.entries.sumOf { (topicTitle, rows) ->
             rows.count { row ->
                 stateFor(
                     topicTitle,
@@ -4653,6 +4695,7 @@ private fun createSummaryPdf(
                 )
             "$topicName · $subName"
         }
+
         topic.isNotBlank() -> topicDisplayName(topic, isEnglish)
         else -> tr("כל נושאי החגורה", "All belt topics")
     }
@@ -4784,7 +4827,12 @@ private fun createSummaryPdf(
                     )
                 )
 
-                if (used + elementHeight(subHeader) + elementHeight(PageElement(type = exerciseType, row = row)) > capacity &&
+                if (used + elementHeight(subHeader) + elementHeight(
+                        PageElement(
+                            type = exerciseType,
+                            row = row
+                        )
+                    ) > capacity &&
                     current.isNotEmpty()
                 ) {
                     pushPage()

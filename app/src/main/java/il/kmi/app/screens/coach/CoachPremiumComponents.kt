@@ -2,17 +2,10 @@
 
 package il.kmi.app.screens.coach
 
-import androidx.compose.animation.core.LinearEasing
-import androidx.compose.animation.core.animateFloat
-import androidx.compose.animation.core.infiniteRepeatable
-import androidx.compose.animation.core.rememberInfiniteTransition
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
@@ -27,12 +20,12 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
+import il.kmi.app.ui.KmiTypography
+import il.kmi.app.ui.scaledIconSize
 import il.kmi.app.ui.calendar.KmiCalendarPickerDialog
 import java.time.LocalDate
 
@@ -46,13 +39,14 @@ internal fun CoachTopStatsCard(
 ) {
 
     Surface(
-        color = Color(0xFFF4F8FF),
+        color = MaterialTheme.colorScheme.surface,
         shape = RoundedCornerShape(22.dp),
-        shadowElevation = 6.dp,
+        shadowElevation = 0.dp,
         tonalElevation = 0.dp,
         border = BorderStroke(
             width = 1.dp,
-            color = Color(0xFFD8E4F4)
+            color = MaterialTheme.colorScheme.outline
+                .copy(alpha = 0.28f)
         ),
         modifier = Modifier.fillMaxWidth()
     ) {
@@ -64,14 +58,18 @@ internal fun CoachTopStatsCard(
             horizontalAlignment = coachHorizontalAlignment(isEnglish)
         ) {
             Text(
-                text = coachTr(isEnglish, "רשימת מתאמנים", "Trainees list"),
-                style = MaterialTheme.typography.titleMedium.copy(
-                    fontSize = 17.sp,
-                    lineHeight = 20.sp
+                text = coachTr(
+                    isEnglish,
+                    "רשימת מתאמנים",
+                    "Trainees list"
                 ),
-                fontWeight = FontWeight.ExtraBold,
-                color = Color(0xFF172036),
+                style = KmiTypography.sectionTitle.copy(
+                    fontWeight = FontWeight.ExtraBold
+                ),
+                color = MaterialTheme.colorScheme.onSurface,
                 textAlign = coachTextAlign(isEnglish),
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.fillMaxWidth()
             )
 
@@ -81,12 +79,11 @@ internal fun CoachTopStatsCard(
                     "נתוני נוכחות וקבוצה בזמן אמת",
                     "attendance and group data"
                 ),
-                style = MaterialTheme.typography.bodySmall.copy(
-                    fontSize = 11.sp,
-                    lineHeight = 13.sp
-                ),
-                color = Color(0xFF64748B),
+                style = KmiTypography.secondary,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
                 textAlign = coachTextAlign(isEnglish),
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.fillMaxWidth()
             )
 
@@ -149,10 +146,9 @@ internal fun CoachTopStatsCard(
                     value = searchQuery,
                     onValueChange = onSearchQueryChange,
                     singleLine = true,
-                    textStyle = MaterialTheme.typography.bodySmall.copy(
-                        fontSize = 13.sp,
+                    textStyle = KmiTypography.body.copy(
                         textAlign = coachTextAlign(isEnglish),
-                        color = Color.White
+                        color = MaterialTheme.colorScheme.onSurface
                     ),
                     placeholder = {
                         Text(
@@ -161,50 +157,75 @@ internal fun CoachTopStatsCard(
                                 "חיפוש מתאמן",
                                 "Search trainee"
                             ),
-                            style = MaterialTheme.typography.bodySmall.copy(
-                                fontSize = 12.sp,
-                                color = Color.White.copy(alpha = 0.62f)
-                            )
+                            style = KmiTypography.secondary,
+                            color =
+                                MaterialTheme.colorScheme.onSurfaceVariant
+                                    .copy(alpha = 0.72f)
                         )
                     },
                     leadingIcon = {
                         Text(
                             text = "🔎",
-                            fontSize = 15.sp,
-                            color = Color.White.copy(alpha = 0.82f)
+                            style = KmiTypography.body,
+                            color =
+                                MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     },
                     trailingIcon = {
                         if (searchQuery.isNotBlank()) {
                             Icon(
                                 imageVector = Icons.Default.Close,
-                                contentDescription = coachTr(isEnglish, "נקה חיפוש", "Clear search"),
+                                contentDescription = coachTr(
+                                    isEnglish,
+                                    "נקה חיפוש",
+                                    "Clear search"
+                                ),
                                 modifier = Modifier
-                                    .size(18.dp)
+                                    .size(
+                                        scaledIconSize(18.dp)
+                                    )
                                     .clickable {
                                         onSearchQueryChange("")
                                     },
-                                tint = Color.White.copy(alpha = 0.82f)
+                                tint =
+                                    MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
                     },
                     shape = RoundedCornerShape(18.dp),
                     colors = OutlinedTextFieldDefaults.colors(
-                        focusedTextColor = Color.White,
-                        unfocusedTextColor = Color.White,
-                        disabledTextColor = Color.White.copy(alpha = 0.60f),
-                        cursorColor = Color.White,
-                        focusedBorderColor = Color(0xFFA78BFA),
-                        unfocusedBorderColor = Color.White.copy(alpha = 0.18f),
-                        focusedContainerColor = Color.Transparent,
-                        unfocusedContainerColor = Color.Transparent,
-                        disabledContainerColor = Color.Transparent,
-                        focusedPlaceholderColor = Color.White.copy(alpha = 0.62f),
-                        unfocusedPlaceholderColor = Color.White.copy(alpha = 0.62f),
-                        focusedLeadingIconColor = Color.White.copy(alpha = 0.82f),
-                        unfocusedLeadingIconColor = Color.White.copy(alpha = 0.82f),
-                        focusedTrailingIconColor = Color.White.copy(alpha = 0.82f),
-                        unfocusedTrailingIconColor = Color.White.copy(alpha = 0.82f)
+                        focusedTextColor =
+                            MaterialTheme.colorScheme.onSurface,
+                        unfocusedTextColor =
+                            MaterialTheme.colorScheme.onSurface,
+                        disabledTextColor =
+                            MaterialTheme.colorScheme.onSurface
+                                .copy(alpha = 0.60f),
+                        cursorColor =
+                            MaterialTheme.colorScheme.primary,
+                        focusedBorderColor =
+                            MaterialTheme.colorScheme.primary,
+                        unfocusedBorderColor =
+                            MaterialTheme.colorScheme.outline
+                                .copy(alpha = 0.35f),
+                        focusedContainerColor =
+                            MaterialTheme.colorScheme.surfaceVariant,
+                        unfocusedContainerColor =
+                            MaterialTheme.colorScheme.surfaceVariant,
+                        disabledContainerColor =
+                            MaterialTheme.colorScheme.surfaceVariant,
+                        focusedPlaceholderColor =
+                            MaterialTheme.colorScheme.onSurfaceVariant,
+                        unfocusedPlaceholderColor =
+                            MaterialTheme.colorScheme.onSurfaceVariant,
+                        focusedLeadingIconColor =
+                            MaterialTheme.colorScheme.onSurfaceVariant,
+                        unfocusedLeadingIconColor =
+                            MaterialTheme.colorScheme.onSurfaceVariant,
+                        focusedTrailingIconColor =
+                            MaterialTheme.colorScheme.onSurfaceVariant,
+                        unfocusedTrailingIconColor =
+                            MaterialTheme.colorScheme.onSurfaceVariant
                     ),
                     modifier = Modifier.fillMaxWidth()
                 )
@@ -230,13 +251,14 @@ private fun CoachTopStatTile(
     }
 
     Surface(
-        color = Color.White,
+        color = MaterialTheme.colorScheme.surfaceVariant,
         shape = RoundedCornerShape(16.dp),
-        shadowElevation = 2.dp,
+        shadowElevation = 0.dp,
         tonalElevation = 0.dp,
         border = BorderStroke(
             width = 1.dp,
-            color = Color(0xFFD6E0EE)
+            color = MaterialTheme.colorScheme.outline
+                .copy(alpha = 0.24f)
         ),
         modifier = modifier.heightIn(min = 72.dp)
     ) {
@@ -249,7 +271,7 @@ private fun CoachTopStatTile(
         ) {
             Text(
                 text = iconText,
-                fontSize = 15.sp,
+                style = KmiTypography.body,
                 textAlign = TextAlign.Center,
                 maxLines = 1
             )
@@ -258,12 +280,10 @@ private fun CoachTopStatTile(
 
             Text(
                 text = value,
-                style = MaterialTheme.typography.titleSmall.copy(
-                    fontSize = 15.sp,
-                    lineHeight = 17.sp
+                style = KmiTypography.cardTitle.copy(
+                    fontWeight = FontWeight.ExtraBold
                 ),
-                fontWeight = FontWeight.ExtraBold,
-                color = Color(0xFF172036),
+                color = MaterialTheme.colorScheme.onSurface,
                 textAlign = TextAlign.Center,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
@@ -274,12 +294,10 @@ private fun CoachTopStatTile(
 
             Text(
                 text = label,
-                style = MaterialTheme.typography.labelSmall.copy(
-                    fontSize = 9.sp,
-                    lineHeight = 10.sp
+                style = KmiTypography.caption.copy(
+                    fontWeight = FontWeight.SemiBold
                 ),
-                fontWeight = FontWeight.SemiBold,
-                color = Color(0xFF64748B),
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
                 textAlign = TextAlign.Center,
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
@@ -302,11 +320,12 @@ internal fun PremiumCoachDateField(
         onClick = onClick,
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(18.dp),
-        color = Color(0xFFF8FAFC),
-        shadowElevation = 4.dp,
+        color = MaterialTheme.colorScheme.surface,
+        tonalElevation = 0.dp,
+        shadowElevation = 0.dp,
         border = BorderStroke(
             1.dp,
-            accent.copy(alpha = 0.72f)
+            accent.copy(alpha = 0.55f)
         )
     ) {
         Row(
@@ -314,19 +333,11 @@ internal fun PremiumCoachDateField(
                 .fillMaxWidth()
                 .background(
                     brush = Brush.horizontalGradient(
-                        colors = if (isEnglish) {
-                            listOf(
-                                Color.White,
-                                accent.copy(alpha = 0.05f),
-                                Color.White
-                            )
-                        } else {
-                            listOf(
-                                Color.White,
-                                accent.copy(alpha = 0.05f),
-                                Color.White
-                            )
-                        }
+                        colors = listOf(
+                            MaterialTheme.colorScheme.surface,
+                            accent.copy(alpha = 0.08f),
+                            MaterialTheme.colorScheme.surface
+                        )
                     )
                 )
                 .padding(horizontal = 14.dp, vertical = 12.dp),
@@ -334,7 +345,7 @@ internal fun PremiumCoachDateField(
         ) {
             Text(
                 text = "📅",
-                fontSize = 22.sp,
+                style = KmiTypography.sectionTitle,
                 modifier = Modifier.padding(horizontal = 4.dp)
             )
 
@@ -347,29 +358,28 @@ internal fun PremiumCoachDateField(
             ) {
                 Text(
                     text = label,
-                    style = MaterialTheme.typography.labelMedium.copy(
-                        fontSize = 12.sp,
-                        lineHeight = 14.sp
+                    style = KmiTypography.caption.copy(
+                        fontWeight = FontWeight.ExtraBold
                     ),
                     color = accent,
-                    fontWeight = FontWeight.ExtraBold,
                     textAlign = coachTextAlign(isEnglish),
                     modifier = Modifier.fillMaxWidth()
                 )
 
                 Text(
                     text = value.ifBlank { placeholder },
-                    style = MaterialTheme.typography.titleMedium.copy(
-                        fontSize = 17.sp,
-                        lineHeight = 20.sp
+                    style = KmiTypography.sectionTitle.copy(
+                        fontWeight = FontWeight.Black
                     ),
-                    color = if (value.isBlank()) {
-                        Color(0xFF64748B)
-                    } else {
-                        Color(0xFF0F172A)
-                    },
-                    fontWeight = FontWeight.Black,
+                    color =
+                        if (value.isBlank()) {
+                            MaterialTheme.colorScheme.onSurfaceVariant
+                        } else {
+                            MaterialTheme.colorScheme.onSurface
+                        },
                     textAlign = coachTextAlign(isEnglish),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.fillMaxWidth()
                 )
             }
@@ -378,11 +388,9 @@ internal fun PremiumCoachDateField(
 }
 
 @Composable
-@Suppress("UNUSED_PARAMETER")
 internal fun PremiumCoachDatePickerDialog(
     title: String,
     selectedDate: String,
-    accent: Color,
     isEnglish: Boolean,
     onDismiss: () -> Unit,
     onDateSelected: (String) -> Unit
@@ -406,113 +414,4 @@ internal fun PremiumCoachDatePickerDialog(
             )
         }
     )
-}
-
-@Composable
-internal fun PremiumCoachLoading() {
-    val infiniteTransition = rememberInfiniteTransition(
-        label = "premiumCoachLoading"
-    )
-
-    val outerRotation by infiniteTransition.animateFloat(
-        initialValue = 0f,
-        targetValue = 360f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(
-                durationMillis = 1350,
-                easing = LinearEasing
-            )
-        ),
-        label = "premiumCoachOuterRotation"
-    )
-
-    val innerRotation by infiniteTransition.animateFloat(
-        initialValue = 360f,
-        targetValue = 0f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(
-                durationMillis = 1850,
-                easing = LinearEasing
-            )
-        ),
-        label = "premiumCoachInnerRotation"
-    )
-
-    Box(
-        modifier = Modifier.size(82.dp),
-        contentAlignment = Alignment.Center
-    ) {
-        Box(
-            modifier = Modifier
-                .size(76.dp)
-                .graphicsLayer {
-                    rotationZ = outerRotation
-                }
-                .border(
-                    width = 5.dp,
-                    brush = Brush.sweepGradient(
-                        colors = listOf(
-                            Color.Transparent,
-                            Color(0xFFA78BFA),
-                            Color(0xFF38BDF8),
-                            Color.Transparent
-                        )
-                    ),
-                    shape = CircleShape
-                )
-        )
-
-        Box(
-            modifier = Modifier
-                .size(52.dp)
-                .graphicsLayer {
-                    rotationZ = innerRotation
-                }
-                .border(
-                    width = 4.dp,
-                    brush = Brush.sweepGradient(
-                        colors = listOf(
-                            Color.Transparent,
-                            Color(0xFFF59E0B),
-                            Color(0xFF22C55E),
-                            Color.Transparent
-                        )
-                    ),
-                    shape = CircleShape
-                )
-        )
-
-        Surface(
-            modifier = Modifier.size(25.dp),
-            shape = CircleShape,
-            color = Color.White.copy(alpha = 0.96f),
-            shadowElevation = 8.dp,
-            border = BorderStroke(
-                width = 1.dp,
-                color = Color.White.copy(alpha = 0.42f)
-            )
-        ) {
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .background(
-                        brush = Brush.radialGradient(
-                            colors = listOf(
-                                Color.White,
-                                Color(0xFFEDE9FE),
-                                Color(0xFFE0F2FE)
-                            )
-                        ),
-                        shape = CircleShape
-                    ),
-                contentAlignment = Alignment.Center
-            ) {
-                Text(
-                    text = "👥",
-                    fontSize = 12.sp,
-                    textAlign = TextAlign.Center
-                )
-            }
-        }
-    }
 }

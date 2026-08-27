@@ -656,16 +656,12 @@ fun NavGraphBuilder.homeNavGraph(
                     Route.Home.route,
                     inclusive = false
                 )
+
                 if (!popped) {
                     nav.navigate(Route.Home.route) {
                         launchSingleTop = true
                         restoreState = true
                     }
-                }
-            },
-            onSearch = {
-                nav.navigate(Route.Topics.route) {
-                    launchSingleTop = true
                 }
             }
         )

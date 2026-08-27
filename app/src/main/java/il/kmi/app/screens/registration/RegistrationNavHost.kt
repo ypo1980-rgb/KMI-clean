@@ -76,12 +76,10 @@ fun RegistrationNavHost(
 
             NewUserTraineeScreen(
                 nav = nav,
-                vm = vm,
                 kmiPrefs = kmiPrefs,
                 onBack = { nav.popBackStack() },
                 onRegistrationComplete = { onRegistrationDone() },
                 onOpenTerms = onOpenTerms,
-                onOpenLegal = onOpenLegal,
                 onOpenDrawer = onOpenDrawer,
                 sp = sp,
                 skipOtp = skipOtp
@@ -93,7 +91,6 @@ fun RegistrationNavHost(
         composable(route = RRoutes.NewUserTraineeGoogle) {
             NewUserTraineeScreen(
                 nav = nav,
-                vm = vm,
                 kmiPrefs = kmiPrefs,
                 onBack = {
                     // חזרה מתוך השלמת פרטים אחרי Google תחזור למסך הקודם אם קיים
@@ -101,7 +98,6 @@ fun RegistrationNavHost(
                 },
                 onRegistrationComplete = { onRegistrationDone() },
                 onOpenTerms = onOpenTerms,
-                onOpenLegal = onOpenLegal,
                 onOpenDrawer = onOpenDrawer,
                 sp = sp,
                 skipOtp = true

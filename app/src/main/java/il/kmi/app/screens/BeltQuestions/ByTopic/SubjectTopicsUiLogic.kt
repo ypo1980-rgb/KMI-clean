@@ -129,7 +129,10 @@ internal fun DefensePickModeDialogModern(
                 )
 
                 DrawerStylePickItem(
-                    title = if (hasAccess) tr("אגרופים", "Punches") else tr("אגרופים 🔒", "Punches 🔒"),
+                    title = if (hasAccess) tr("אגרופים", "Punches") else tr(
+                        "אגרופים 🔒",
+                        "Punches 🔒"
+                    ),
                     subtitle = countLabel(punchCount),
                     accent = accent,
                     isEnglish = isEnglish,
@@ -178,7 +181,8 @@ internal fun HandsPickModeDialogModern(
         } else {
             MaterialTheme.colorScheme.onSurfaceVariant
         }
-    val dividerColor = if (isDarkMode) Color.White.copy(alpha = 0.10f) else Color(0xFFD8D2E6).copy(alpha = 0.82f)
+    val dividerColor =
+        if (isDarkMode) Color.White.copy(alpha = 0.10f) else Color(0xFFD8D2E6).copy(alpha = 0.82f)
 
     val orderedPicks = picks.ifEmpty {
         listOf(
@@ -352,7 +356,8 @@ internal fun SubTopicsPickModeDialogModern(
         } else {
             MaterialTheme.colorScheme.onSurfaceVariant
         }
-    val dividerColor = if (isDarkMode) Color.White.copy(alpha = 0.10f) else Color(0xFFD8D2E6).copy(alpha = 0.82f)
+    val dividerColor =
+        if (isDarkMode) Color.White.copy(alpha = 0.10f) else Color(0xFFD8D2E6).copy(alpha = 0.82f)
 
     fun tr(he: String, en: String) = if (isEnglish) en else he
     fun countLabel(n: Int) = if (isEnglish) "exercises $n" else "$n תרגילים"
@@ -474,7 +479,7 @@ internal fun SubTopicsPickModeDialogModern(
                                 }
                             }
 
-                        Spacer(Modifier.height(10.dp))
+                            Spacer(Modifier.height(10.dp))
 
                             Text(
                                 text = tr("בחר תת־נושא:", "Choose a sub-topic:"),
@@ -484,7 +489,7 @@ internal fun SubTopicsPickModeDialogModern(
                                 modifier = Modifier.fillMaxWidth()
                             )
 
-                        Spacer(Modifier.height(10.dp))
+                            Spacer(Modifier.height(10.dp))
 
                             Column(
                                 modifier = Modifier.wrapContentHeight(),
@@ -734,7 +739,8 @@ internal fun DefenseCategoryPickDialogModern(
     val dialogBg = if (isDarkMode) Color(0xFF111827) else Color(0xFFF7F4FB)
     val dialogBorder = if (isDarkMode) Color.White.copy(alpha = 0.12f) else Color(0xFFE3DDF0)
     val primaryTextColor = if (isDarkMode) Color(0xFFF8FAFC) else Color(0xFF111827)
-    val dividerColor = if (isDarkMode) Color.White.copy(alpha = 0.10f) else Color(0xFFD8D2E6).copy(alpha = 0.82f)
+    val dividerColor =
+        if (isDarkMode) Color.White.copy(alpha = 0.10f) else Color(0xFFD8D2E6).copy(alpha = 0.82f)
 
     fun tr(he: String, en: String) = if (isEnglish) en else he
     fun countLabel(n: Int) = if (isEnglish) "exercises $n" else "$n תרגילים"
@@ -829,7 +835,7 @@ internal fun DefenseCategoryPickDialogModern(
                                 }
                             }
 
-                        Spacer(Modifier.height(4.dp))
+                            Spacer(Modifier.height(4.dp))
 
                             Box(
                                 modifier = Modifier
@@ -844,7 +850,10 @@ internal fun DefenseCategoryPickDialogModern(
                                     verticalArrangement = Arrangement.spacedBy(2.dp)
                                 ) {
                                     DrawerStylePickItem(
-                                        title = if (hasAccess) tr("הגנות פנימיות", "Internal Defenses") else tr("הגנות פנימיות 🔒", "Internal Defenses 🔒"),
+                                        title = if (hasAccess) tr(
+                                            "הגנות פנימיות",
+                                            "Internal Defenses"
+                                        ) else tr("הגנות פנימיות 🔒", "Internal Defenses 🔒"),
                                         subtitle = countLabel(counts["הגנות פנימיות"] ?: 0),
                                         accent = Color(0xFF2E7D32),
                                         isEnglish = isEnglish,
@@ -855,7 +864,10 @@ internal fun DefenseCategoryPickDialogModern(
                                     )
 
                                     DrawerStylePickItem(
-                                        title = if (hasAccess) tr("הגנות חיצוניות", "External Defenses") else tr("הגנות חיצוניות 🔒", "External Defenses 🔒"),
+                                        title = if (hasAccess) tr(
+                                            "הגנות חיצוניות",
+                                            "External Defenses"
+                                        ) else tr("הגנות חיצוניות 🔒", "External Defenses 🔒"),
                                         subtitle = countLabel(counts["הגנות חיצוניות"] ?: 0),
                                         accent = Color(0xFF1565C0),
                                         isEnglish = isEnglish,
@@ -863,7 +875,10 @@ internal fun DefenseCategoryPickDialogModern(
                                     )
 
                                     DrawerStylePickItem(
-                                        title = if (hasAccess) tr("הגנות נגד בעיטות", "Defenses Against Kicks") else tr("הגנות נגד בעיטות 🔒", "Defenses Against Kicks 🔒"),
+                                        title = if (hasAccess) tr(
+                                            "הגנות נגד בעיטות",
+                                            "Defenses Against Kicks"
+                                        ) else tr("הגנות נגד בעיטות 🔒", "Defenses Against Kicks 🔒"),
                                         subtitle = countLabel(counts["הגנות נגד בעיטות"] ?: 0),
                                         accent = Color(0xFFFF9800),
                                         isEnglish = isEnglish,
@@ -871,7 +886,10 @@ internal fun DefenseCategoryPickDialogModern(
                                     )
 
                                     DrawerStylePickItem(
-                                        title = if (hasAccess) tr("הגנות מסכין", "Knife Defenses") else tr("הגנות מסכין 🔒", "Knife Defenses 🔒"),
+                                        title = if (hasAccess) tr(
+                                            "הגנות מסכין",
+                                            "Knife Defenses"
+                                        ) else tr("הגנות מסכין 🔒", "Knife Defenses 🔒"),
                                         subtitle = countLabel(counts["הגנות מסכין"] ?: 0),
                                         accent = Color(0xFFE53935),
                                         isEnglish = isEnglish,
@@ -879,15 +897,26 @@ internal fun DefenseCategoryPickDialogModern(
                                     )
 
                                     DrawerStylePickItem(
-                                        title = if (hasAccess) tr("הגנות עם רובה נגד דקירות סכין", "Rifle Defenses Against Knife Stabs") else tr("הגנות עם רובה נגד דקירות סכין 🔒", "Rifle Defenses Against Knife Stabs 🔒"),
-                                        subtitle = countLabel(counts["הגנות עם רובה נגד דקירות סכין"] ?: 0),
+                                        title = if (hasAccess) tr(
+                                            "הגנות עם רובה נגד דקירות סכין",
+                                            "Rifle Defenses Against Knife Stabs"
+                                        ) else tr(
+                                            "הגנות עם רובה נגד דקירות סכין 🔒",
+                                            "Rifle Defenses Against Knife Stabs 🔒"
+                                        ),
+                                        subtitle = countLabel(
+                                            counts["הגנות עם רובה נגד דקירות סכין"] ?: 0
+                                        ),
                                         accent = Color(0xFFEF6C00),
                                         isEnglish = isEnglish,
                                         onClick = { onPick("knife_rifle") }
                                     )
 
                                     DrawerStylePickItem(
-                                        title = if (hasAccess) tr("הגנות מאיום אקדח", "Gun Threat Defenses") else tr("הגנות מאיום אקדח 🔒", "Gun Threat Defenses 🔒"),
+                                        title = if (hasAccess) tr(
+                                            "הגנות מאיום אקדח",
+                                            "Gun Threat Defenses"
+                                        ) else tr("הגנות מאיום אקדח 🔒", "Gun Threat Defenses 🔒"),
                                         subtitle = countLabel(counts["הגנות מאיום אקדח"] ?: 0),
                                         accent = Color(0xFF5E35B1),
                                         isEnglish = isEnglish,
@@ -895,7 +924,13 @@ internal fun DefenseCategoryPickDialogModern(
                                     )
 
                                     DrawerStylePickItem(
-                                        title = if (hasAccess) tr("הגנות נגד מספר תוקפים", "Defenses Against Multiple Attackers") else tr("הגנות נגד מספר תוקפים 🔒", "Defenses Against Multiple Attackers 🔒"),
+                                        title = if (hasAccess) tr(
+                                            "הגנות נגד מספר תוקפים",
+                                            "Defenses Against Multiple Attackers"
+                                        ) else tr(
+                                            "הגנות נגד מספר תוקפים 🔒",
+                                            "Defenses Against Multiple Attackers 🔒"
+                                        ),
                                         subtitle = countLabel(counts["הגנות נגד מספר תוקפים"] ?: 0),
                                         accent = Color(0xFFD81B60),
                                         isEnglish = isEnglish,
@@ -903,7 +938,10 @@ internal fun DefenseCategoryPickDialogModern(
                                     )
 
                                     DrawerStylePickItem(
-                                        title = if (hasAccess) tr("הגנות נגד מקל", "Stick Defenses") else tr("הגנות נגד מקל 🔒", "Stick Defenses 🔒"),
+                                        title = if (hasAccess) tr(
+                                            "הגנות נגד מקל",
+                                            "Stick Defenses"
+                                        ) else tr("הגנות נגד מקל 🔒", "Stick Defenses 🔒"),
                                         subtitle = countLabel(counts["הגנות נגד מקל"] ?: 0),
                                         accent = Color(0xFF00897B),
                                         isEnglish = isEnglish,
@@ -917,15 +955,22 @@ internal fun DefenseCategoryPickDialogModern(
                                             .align(Alignment.BottomCenter)
                                             .padding(bottom = 4.dp),
                                         shape = RoundedCornerShape(999.dp),
-                                        color = if (isDarkMode) Color(0xFF1E293B) else Color.White.copy(alpha = 0.95f),
+                                        color = if (isDarkMode) Color(0xFF1E293B) else Color.White.copy(
+                                            alpha = 0.95f
+                                        ),
                                         shadowElevation = 0.dp,
                                         border = BorderStroke(
                                             1.dp,
-                                            if (isDarkMode) Color.White.copy(alpha = 0.12f) else Color(0xFFE3DDF0)
+                                            if (isDarkMode) Color.White.copy(alpha = 0.12f) else Color(
+                                                0xFFE3DDF0
+                                            )
                                         )
                                     ) {
                                         Row(
-                                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                                            modifier = Modifier.padding(
+                                                horizontal = 12.dp,
+                                                vertical = 6.dp
+                                            ),
                                             verticalAlignment = Alignment.CenterVertically,
                                             horizontalArrangement = Arrangement.Center
                                         ) {

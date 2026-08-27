@@ -1,6 +1,6 @@
 @file:OptIn(
     ExperimentalMaterial3Api::class,
-    androidx.compose.foundation.layout.ExperimentalLayoutApi::class
+    ExperimentalLayoutApi::class
 )
 
 package il.kmi.app.screens.registration
@@ -13,6 +13,7 @@ import android.util.Log
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.shape.CircleShape
+import androidx.core.content.edit
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
@@ -39,12 +40,10 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.FirebaseAuthUserCollisionException
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.SetOptions
-import il.kmi.app.KmiViewModel
 import il.kmi.app.screens.admin.AdminAccess
 import il.kmi.app.training.TrainingCatalog
 import il.kmi.app.database.KmiDatabaseProvider
@@ -53,6 +52,8 @@ import il.kmi.app.FcmTokenManager
 import il.kmi.app.KmiCalendarSync
 import il.kmi.app.hasCalendarPermission
 import il.kmi.app.training.TrainingAlarmReceiver
+import il.kmi.app.ui.KmiIconSize
+import il.kmi.app.ui.KmiTypography
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -66,9 +67,10 @@ private fun regAuthStateForLog(): String {
     return if (user == null) {
         "uid=null, email=null, isAnonymous=null, providers=[]"
     } else {
-        val providers = user.providerData
-            .map { it.providerId }
-            .joinToString("|")
+        val providers =
+            user.providerData.joinToString("|") { provider ->
+                provider.providerId
+            }
 
         "uid=${user.uid}, email=${user.email.orEmpty()}, isAnonymous=${user.isAnonymous}, providers=[$providers]"
     }
@@ -96,6 +98,7 @@ object CoachWhitelist {
         "0526969287" to "אה, מאמא?איציק ביטון",
         "0585911518" to "אדם הולצמן",
         "0526319090" to "גל חג'ג'",
+        "0529462832" to "מעיין פסח",
         "0505300596" to "אבי אביסדון"
     )
 
@@ -103,6 +106,7 @@ object CoachWhitelist {
     val allowedEmails: Map<String, String> = mapOf(
         "ypo1980@gmail.com" to "יובל פולק",
         "yonatanmalesa99@gmail.com" to "יוני מלסה",
+        "maayanpesach@gmail.com" to "מעיין פסח",
         "avi.abeceedon@gmail.com" to "אבי אביסדון"
         // ... תוסיף כאן עד ~20
     )
@@ -126,7 +130,7 @@ private fun RegistrationFormLockedTopBar(
 ) {
     Surface(
         modifier = Modifier.fillMaxWidth(),
-        color = Color.White,
+        color = MaterialTheme.colorScheme.surface,
         shadowElevation = 0.dp,
         tonalElevation = 0.dp
     ) {
@@ -153,31 +157,46 @@ private fun RegistrationFormLockedTopBar(
                             .weight(1f)
                             .padding(horizontal = 8.dp),
                         textAlign = TextAlign.Center,
-                        maxLines = 1,
+                        maxLines = 2,
                         overflow = TextOverflow.Ellipsis,
-                        style = MaterialTheme.typography.titleLarge.copy(
-                            fontWeight = FontWeight.ExtraBold,
-                            fontSize = 20.sp,
-                            lineHeight = 24.sp,
-                            color = Color(0xFF111827)
-                        )
+                        style = KmiTypography.screenTitle.copy(
+                            fontWeight = FontWeight.ExtraBold
+                        ),
+                        color = MaterialTheme.colorScheme.onSurface
                     )
 
                     Box(
                         modifier = Modifier
-                            .size(30.dp)
-                            .clip(RoundedCornerShape(6.dp))
-                            .background(Color(0xFFE6E6EE))
+                            .size(KmiIconSize.medium)
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(
+                                MaterialTheme.colorScheme.primaryContainer
+                                    .copy(alpha = 0.72f)
+                            )
                             .clickable {
-                                onLockedAction(if (isEnglish) "Menu" else "התפריט")
+                                onLockedAction(
+                                    if (isEnglish) {
+                                        "Menu"
+                                    } else {
+                                        "התפריט"
+                                    }
+                                )
                             },
                         contentAlignment = Alignment.Center
                     ) {
                         Icon(
                             imageVector = Icons.Filled.Menu,
-                            contentDescription = if (isEnglish) "Menu" else "תפריט",
-                            tint = Color(0xFF4B478F),
-                            modifier = Modifier.size(19.dp)
+                            contentDescription =
+                                if (isEnglish) {
+                                    "Menu"
+                                } else {
+                                    "תפריט"
+                                },
+                            tint =
+                                MaterialTheme.colorScheme.onPrimaryContainer,
+                            modifier = Modifier.size(
+                                KmiIconSize.small
+                            )
                         )
                     }
                 }
@@ -266,19 +285,23 @@ private fun RegistrationFormLockedTopAction(
         Surface(
             shape = CircleShape,
             color = circleColor,
-            modifier = Modifier.size(50.dp),
+            modifier = Modifier.size(
+                KmiIconSize.large
+            ),
             shadowElevation = 0.dp,
             tonalElevation = 0.dp
         ) {
             IconButton(
                 onClick = onClick,
-                modifier = Modifier.size(50.dp)
+                modifier = Modifier.fillMaxSize()
             ) {
                 Icon(
                     imageVector = icon,
                     contentDescription = label,
                     tint = iconTint,
-                    modifier = Modifier.size(27.dp)
+                    modifier = Modifier.size(
+                        KmiIconSize.medium
+                    )
                 )
             }
         }
@@ -287,15 +310,13 @@ private fun RegistrationFormLockedTopAction(
 
         Text(
             text = label,
-            style = MaterialTheme.typography.labelLarge.copy(
-                fontWeight = FontWeight.ExtraBold,
-                fontSize = 13.sp,
-                lineHeight = 15.sp,
-                color = Color(0xFF4B4F5C)
+            style = KmiTypography.caption.copy(
+                fontWeight = FontWeight.ExtraBold
             ),
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
             textAlign = TextAlign.Center,
-            maxLines = 1,
-            overflow = TextOverflow.Clip
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis
         )
     }
 }
@@ -305,9 +326,7 @@ fun RegistrationFormScreen(
     initial: String = "trainee",
     onBack: () -> Unit,
     onRegistrationComplete: () -> Unit,
-    onOpenLegal: () -> Unit,
     onOpenTerms: () -> Unit,
-    vm: KmiViewModel,
     onOpenDrawer: () -> Unit = { il.kmi.app.ui.DrawerBridge.open() },
     sp: SharedPreferences,
     kmiPrefs: KmiPrefs,
@@ -525,13 +544,27 @@ fun RegistrationFormScreen(
 
     // תאריך לידה
     var birthDay by rememberSaveable {
-        mutableStateOf(sp.getString("birth_day", "1")?.toIntOrNull() ?: 1)
+        mutableIntStateOf(
+            sp.getString("birth_day", "1")
+                ?.toIntOrNull()
+                ?: 1
+        )
     }
+
     var birthMonth by rememberSaveable {
-        mutableStateOf(sp.getString("birth_month", "1")?.toIntOrNull() ?: 1)
+        mutableIntStateOf(
+            sp.getString("birth_month", "1")
+                ?.toIntOrNull()
+                ?: 1
+        )
     }
+
     var birthYear by rememberSaveable {
-        mutableStateOf(sp.getString("birth_year", "2000")?.toIntOrNull() ?: 2000)
+        mutableIntStateOf(
+            sp.getString("birth_year", "2000")
+                ?.toIntOrNull()
+                ?: 2000
+        )
     }
 
     // מין (gender) – נשמר ב-SP
@@ -595,9 +628,14 @@ fun RegistrationFormScreen(
         }
 
         return keys
-            .flatMap { key -> readAnyPrefAsList(key) }
-            .map { it.trim() }
-            .filter { it.isNotBlank() }
+            .flatMap { key ->
+                readAnyPrefAsList(key)
+            }
+            .mapNotNull { value ->
+                value
+                    .trim()
+                    .takeIf { it.isNotBlank() }
+            }
             .distinct()
     }
 
@@ -826,8 +864,7 @@ fun RegistrationFormScreen(
                         groupsForSelectedBranch(branch)
 
                     val matchingLegacyGroups =
-                        selectedGroups.filter {
-                                selectedGroup ->
+                        selectedGroups.filter { selectedGroup ->
 
                             val normalizedSelected =
                                 TrainingCatalog
@@ -836,8 +873,7 @@ fun RegistrationFormScreen(
                                     )
                                     .normalizedAssignmentValue()
 
-                            branchGroups.any {
-                                    branchGroup ->
+                            branchGroups.any { branchGroup ->
 
                                 TrainingCatalog
                                     .normalizeGroupName(
@@ -939,17 +975,30 @@ fun RegistrationFormScreen(
     }
 
     // רקע לפי הטאב
-    val headerBrush = remember(isCoach) {
+    val headerBrush =
         if (isCoach) {
-            Brush.linearGradient(
-                colors = listOf(Color(0xFF141E30), Color(0xFF243B55), Color(0xFF0EA5E9))
+            Brush.verticalGradient(
+                colors = listOf(
+                    MaterialTheme.colorScheme.background,
+                    MaterialTheme.colorScheme.surfaceVariant
+                        .copy(alpha = 0.72f),
+                    MaterialTheme.colorScheme.secondary
+                        .copy(alpha = 0.18f),
+                    MaterialTheme.colorScheme.background
+                )
             )
         } else {
-            Brush.linearGradient(
-                colors = listOf(Color(0xFF7F00FF), Color(0xFF3F51B5), Color(0xFF03A9F4))
+            Brush.verticalGradient(
+                colors = listOf(
+                    MaterialTheme.colorScheme.background,
+                    MaterialTheme.colorScheme.surfaceVariant
+                        .copy(alpha = 0.72f),
+                    MaterialTheme.colorScheme.primary
+                        .copy(alpha = 0.18f),
+                    MaterialTheme.colorScheme.background
+                )
             )
         }
-    }
 
     // --------------------------------
     // פונקציית שליחה – יחידה אחת בלבד
@@ -957,7 +1006,11 @@ fun RegistrationFormScreen(
     fun submitRegistration() {
         Log.d(
             TAG_REG,
-            "stage=submit_registration_clicked, startAtProfile=$startAtProfile, isGoogleAuth=$isGoogleAuth, selectedTab=$selectedTab, email=${maskedEmailForLog(email)}, phone=${maskedPhoneForLog(phone)}, ${regAuthStateForLog()}"
+            "stage=submit_registration_clicked, startAtProfile=$startAtProfile, isGoogleAuth=$isGoogleAuth, selectedTab=$selectedTab, email=${
+                maskedEmailForLog(
+                    email
+                )
+            }, phone=${maskedPhoneForLog(phone)}, ${regAuthStateForLog()}"
         )
 
         var valid = true
@@ -1272,88 +1325,7 @@ fun RegistrationFormScreen(
         val completedAt = System.currentTimeMillis()
 
         // שמירה ב-SP הראשי
-        sp.edit()
-            // ✅ ניקוי ערכים ישנים שאולי נשמרו בעבר כ־StringSet / HashSet
-            .remove("groups")
-            .remove("branches")
-            .remove("selected_groups")
-            .remove("selected_branches")
-
-            .putString("fullName", fullName)
-            .putString("phone", phoneFinal)
-            .putString("phone_number", phoneFinal)
-            .putString("email", email.trim())
-
-            // ✅ אזורים — שומרים גם תאימות ישנה וגם מקור אמת רשימתי
-            .putString("region", primaryRegion)
-            .putString("regions", regionsCsv)
-            .putString("regions_json", regionsJson)
-            .putString("selected_regions", regionsCsv)
-
-            // ✅ סניפים — שומרים גם CSV וגם JSON גם ב־sp הראשי
-            .putString("branch", branchesFinal)
-            .putString("branches", branchesFinal)
-            .putString("branches_json", branchesJson)
-            .putString("selected_branches", branchesFinal)
-            .putString("active_branch", activeBranchFinal)
-
-            // ✅ קבוצות — שומרים גם CSV וגם JSON גם ב־sp הראשי
-            .putString("age_groups", groupsCsv)
-            .putString("groups", groupsCsv)
-            .putString("groups_json", groupsJson)
-            .putString("selected_groups", groupsCsv)
-            .putString("age_group", primaryGroup)
-            .putString("group", primaryGroup)
-            .putString(
-                "active_group",
-                activeGroupFinal
-            )
-
-            /*
-             * מקור האמת החדש לקשר בין
-             * סניפים לקבוצות.
-             */
-            .putString(
-                "coach_branch_assignments_json",
-                branchAssignmentsJson
-            )
-
-            .putString("username", if (isGoogleAuth) email.trim() else username)
-            .putString("authProvider", if (isGoogleAuth) "google" else "local")
-            .putBoolean("google_login", isGoogleAuth)
-            .putString("password", if (isGoogleAuth) "" else password)
-            .putBoolean("subscribeSms", subscribeSms)
-            .putString("user_role", roleFinal)
-            .putString("role_locked_by", roleLockedBy)
-            .putBoolean("coach_authorized", roleFinal == "coach" && profileAllowsCoach)
-            .putBoolean("can_open_coach_drawer", roleFinal == "coach" && profileAllowsCoach)
-            .putBoolean("can_view_trainees", roleFinal == "coach" && profileAllowsCoach)
-            .putBoolean("can_manage_trainees", roleFinal == "coach" && profileAllowsCoach)
-            .putBoolean("can_manage_attendance", roleFinal == "coach" && profileAllowsCoach)
-            .putBoolean("can_manage_internal_exams", roleFinal == "coach" && profileAllowsCoach)
-            .putBoolean("can_view_payment_reports", roleFinal == "coach" && profileAllowsCoach)
-            .putBoolean("can_manage_payments", roleFinal == "coach" && profileAllowsCoach)
-            .putBoolean("can_send_broadcasts", roleFinal == "coach" && profileAllowsCoach)
-            .putString("gender", gender)
-            .putString("branch_type", branchType)
-            .putString("current_belt", beltFinal)
-            .putString("belt_current", beltFinal)
-            .putBoolean("profile_completed", true)
-            .putBoolean("registration_complete", true)
-            .putBoolean("registration_form_completed", true)
-            .putInt("registration_schema_version", 3)
-            .putString("profile_completed_uid", completedUid)
-            .putLong("profile_completed_at", completedAt)
-            // תאריך לידה
-            .putString("birth_day", birthDay.toString())
-            .putString("birth_month", birthMonth.toString())
-            .putString("birth_year", birthYear.toString())
-            .commit()
-
-        // ✅ חגורה נשמרת גם למתאמן וגם למאמן.
-
-        // userSp – אחידות
-        userSp.edit().apply {
+        sp.edit {
             // ✅ ניקוי ערכים ישנים שאולי נשמרו בעבר כ־StringSet / HashSet
             remove("groups")
             remove("branches")
@@ -1364,17 +1336,165 @@ fun RegistrationFormScreen(
             putString("phone", phoneFinal)
             putString("phone_number", phoneFinal)
             putString("email", email.trim())
+
+            // ✅ אזורים — שומרים גם תאימות ישנה וגם מקור אמת רשימתי
+            putString("region", primaryRegion)
+            putString("regions", regionsCsv)
+            putString("regions_json", regionsJson)
+            putString("selected_regions", regionsCsv)
+
+            // ✅ סניפים — שומרים גם CSV וגם JSON גם ב־sp הראשי
+            putString("branch", branchesFinal)
+            putString("branches", branchesFinal)
+            putString("branches_json", branchesJson)
+            putString("selected_branches", branchesFinal)
+            putString("active_branch", activeBranchFinal)
+
+            // ✅ קבוצות — שומרים גם CSV וגם JSON גם ב־sp הראשי
+            putString("age_groups", groupsCsv)
+            putString("groups", groupsCsv)
+            putString("groups_json", groupsJson)
+            putString("selected_groups", groupsCsv)
+            putString("age_group", primaryGroup)
+            putString("group", primaryGroup)
+            putString(
+                "active_group",
+                activeGroupFinal
+            )
+
+            /*
+             * מקור האמת החדש לקשר בין
+             * סניפים לקבוצות.
+             */
+            putString(
+                "coach_branch_assignments_json",
+                branchAssignmentsJson
+            )
+
+            putString(
+                "username",
+                if (isGoogleAuth) email.trim() else username
+            )
+            putString(
+                "authProvider",
+                if (isGoogleAuth) "google" else "local"
+            )
+            putBoolean("google_login", isGoogleAuth)
+            putString(
+                "password",
+                if (isGoogleAuth) "" else password
+            )
+            putBoolean("subscribeSms", subscribeSms)
             putString("user_role", roleFinal)
             putString("role_locked_by", roleLockedBy)
-            putBoolean("coach_authorized", roleFinal == "coach" && profileAllowsCoach)
-            putBoolean("can_open_coach_drawer", roleFinal == "coach" && profileAllowsCoach)
-            putBoolean("can_view_trainees", roleFinal == "coach" && profileAllowsCoach)
-            putBoolean("can_manage_trainees", roleFinal == "coach" && profileAllowsCoach)
-            putBoolean("can_manage_attendance", roleFinal == "coach" && profileAllowsCoach)
-            putBoolean("can_manage_internal_exams", roleFinal == "coach" && profileAllowsCoach)
-            putBoolean("can_view_payment_reports", roleFinal == "coach" && profileAllowsCoach)
-            putBoolean("can_manage_payments", roleFinal == "coach" && profileAllowsCoach)
-            putBoolean("can_send_broadcasts", roleFinal == "coach" && profileAllowsCoach)
+            putBoolean(
+                "coach_authorized",
+                roleFinal == "coach" && profileAllowsCoach
+            )
+            putBoolean(
+                "can_open_coach_drawer",
+                roleFinal == "coach" && profileAllowsCoach
+            )
+            putBoolean(
+                "can_view_trainees",
+                roleFinal == "coach" && profileAllowsCoach
+            )
+            putBoolean(
+                "can_manage_trainees",
+                roleFinal == "coach" && profileAllowsCoach
+            )
+            putBoolean(
+                "can_manage_attendance",
+                roleFinal == "coach" && profileAllowsCoach
+            )
+            putBoolean(
+                "can_manage_internal_exams",
+                roleFinal == "coach" && profileAllowsCoach
+            )
+            putBoolean(
+                "can_view_payment_reports",
+                roleFinal == "coach" && profileAllowsCoach
+            )
+            putBoolean(
+                "can_manage_payments",
+                roleFinal == "coach" && profileAllowsCoach
+            )
+            putBoolean(
+                "can_send_broadcasts",
+                roleFinal == "coach" && profileAllowsCoach
+            )
+
+            putString("gender", gender)
+            putString("branch_type", branchType)
+            putString("current_belt", beltFinal)
+            putString("belt_current", beltFinal)
+            putBoolean("profile_completed", true)
+            putBoolean("registration_complete", true)
+            putBoolean("registration_form_completed", true)
+            putInt("registration_schema_version", 3)
+            putString("profile_completed_uid", completedUid)
+            putLong("profile_completed_at", completedAt)
+
+            // תאריך לידה
+            putString("birth_day", birthDay.toString())
+            putString("birth_month", birthMonth.toString())
+            putString("birth_year", birthYear.toString())
+        }
+
+        // ✅ חגורה נשמרת גם למתאמן וגם למאמן.
+
+        // userSp – אחידות
+        userSp.edit {
+            // ✅ ניקוי ערכים ישנים שאולי נשמרו בעבר כ־StringSet / HashSet
+            remove("groups")
+            remove("branches")
+            remove("selected_groups")
+            remove("selected_branches")
+
+            putString("fullName", fullName)
+            putString("phone", phoneFinal)
+            putString("phone_number", phoneFinal)
+            putString("email", email.trim())
+
+            putString("user_role", roleFinal)
+            putString("role_locked_by", roleLockedBy)
+
+            putBoolean(
+                "coach_authorized",
+                roleFinal == "coach" && profileAllowsCoach
+            )
+            putBoolean(
+                "can_open_coach_drawer",
+                roleFinal == "coach" && profileAllowsCoach
+            )
+            putBoolean(
+                "can_view_trainees",
+                roleFinal == "coach" && profileAllowsCoach
+            )
+            putBoolean(
+                "can_manage_trainees",
+                roleFinal == "coach" && profileAllowsCoach
+            )
+            putBoolean(
+                "can_manage_attendance",
+                roleFinal == "coach" && profileAllowsCoach
+            )
+            putBoolean(
+                "can_manage_internal_exams",
+                roleFinal == "coach" && profileAllowsCoach
+            )
+            putBoolean(
+                "can_view_payment_reports",
+                roleFinal == "coach" && profileAllowsCoach
+            )
+            putBoolean(
+                "can_manage_payments",
+                roleFinal == "coach" && profileAllowsCoach
+            )
+            putBoolean(
+                "can_send_broadcasts",
+                roleFinal == "coach" && profileAllowsCoach
+            )
 
             // ✅ אזורים — שומרים גם תאימות ישנה וגם מקור אמת רשימתי
             putString("region", primaryRegion)
@@ -1404,9 +1524,12 @@ fun RegistrationFormScreen(
                 "coach_branch_assignments_json",
                 branchAssignmentsJson
             )
+
+            // תאריך לידה
             putString("birth_day", birthDay.toString())
             putString("birth_month", birthMonth.toString())
             putString("birth_year", birthYear.toString())
+
             putString("gender", gender)
             putString("branch_type", branchType)
             putBoolean("profile_completed", true)
@@ -1419,8 +1542,6 @@ fun RegistrationFormScreen(
             // ✅ גם מתאמן וגם מאמן שומרים דרגת חגורה
             putString("current_belt", beltFinal)
             putString("belt_current", beltFinal)
-
-            commit()
         }
 
         // Persist – KMP
@@ -1436,7 +1557,11 @@ fun RegistrationFormScreen(
         fun persistRegistrationToFirestore(finalUid: String) {
             Log.d(
                 TAG_REG,
-                "stage=firestore_persist_start, finalUidBlank=${finalUid.isBlank()}, roleFinal=$roleFinal, roleLockedBy=$roleLockedBy, email=${maskedEmailForLog(email)}, phone=${maskedPhoneForLog(phoneFinal)}, isGoogleAuth=$isGoogleAuth, ${regAuthStateForLog()}"
+                "stage=firestore_persist_start, finalUidBlank=${finalUid.isBlank()}, roleFinal=$roleFinal, roleLockedBy=$roleLockedBy, email=${
+                    maskedEmailForLog(
+                        email
+                    )
+                }, phone=${maskedPhoneForLog(phoneFinal)}, isGoogleAuth=$isGoogleAuth, ${regAuthStateForLog()}"
             )
 
             if (finalUid.isBlank()) {
@@ -1448,10 +1573,12 @@ fun RegistrationFormScreen(
                 return
             }
 
-            val birthDate = "%04d-%02d-%02d".format(birthYear, birthMonth, birthDay)
-
-            val branchesListFinal = branchesListFinalForPrefs
-            val groupsListFinal = groupsListFinalForPrefs
+            val birthDate =
+                "%04d-%02d-%02d".format(
+                    birthYear,
+                    birthMonth,
+                    birthDay
+                )
 
             val firestoreData = hashMapOf(
                 "uid" to finalUid,
@@ -1469,7 +1596,7 @@ fun RegistrationFormScreen(
                 "regions" to regionsListFinalForPrefs,
                 "regionsCsv" to regionsCsv,
 
-                "branches" to branchesListFinal,
+                "branches" to branchesListFinalForPrefs,
                 "branchesCsv" to branchesFinal,
                 "activeBranch" to activeBranchFinal,
                 "branch" to activeBranchFinal,
@@ -1477,7 +1604,7 @@ fun RegistrationFormScreen(
                 /*
                  * הרשימה השטוחה נשמרת לתאימות.
                  */
-                "groups" to groupsListFinal,
+                "groups" to groupsListFinalForPrefs,
                 "groupsCsv" to groupsCsv,
                 "primaryGroup" to primaryGroup,
                 "activeGroup" to activeGroupFinal,
@@ -1525,15 +1652,21 @@ fun RegistrationFormScreen(
                         "stage=firestore_persist_success, finalUid=$finalUid, ${regAuthStateForLog()}"
                     )
 
-                    sp.edit()
-                        .putString("uid", finalUid)
-                        .putString("profile_completed_uid", finalUid)
-                        .apply()
+                    sp.edit {
+                        putString("uid", finalUid)
+                        putString(
+                            "profile_completed_uid",
+                            finalUid
+                        )
+                    }
 
-                    userSp.edit()
-                        .putString("uid", finalUid)
-                        .putString("profile_completed_uid", finalUid)
-                        .apply()
+                    userSp.edit {
+                        putString("uid", finalUid)
+                        putString(
+                            "profile_completed_uid",
+                            finalUid
+                        )
+                    }
 
                     FcmTokenManager.refreshTokenForUserDocId(finalUid)
 
@@ -1644,7 +1777,11 @@ fun RegistrationFormScreen(
 
                     Log.d(
                         TAG_REG,
-                        "stage=email_create_user_success, newUid=$newUid, email=${maskedEmailForLog(cleanEmail)}, ${regAuthStateForLog()}"
+                        "stage=email_create_user_success, newUid=$newUid, email=${
+                            maskedEmailForLog(
+                                cleanEmail
+                            )
+                        }, ${regAuthStateForLog()}"
                     )
 
                     persistRegistrationToFirestore(newUid)
@@ -1659,7 +1796,11 @@ fun RegistrationFormScreen(
                     if (e is FirebaseAuthUserCollisionException) {
                         Log.d(
                             TAG_REG,
-                            "stage=email_collision_try_sign_in_existing_user, email=${maskedEmailForLog(cleanEmail)}"
+                            "stage=email_collision_try_sign_in_existing_user, email=${
+                                maskedEmailForLog(
+                                    cleanEmail
+                                )
+                            }"
                         )
 
                         auth.signInWithEmailAndPassword(cleanEmail, cleanPassword)
@@ -1668,7 +1809,11 @@ fun RegistrationFormScreen(
 
                                 Log.d(
                                     TAG_REG,
-                                    "stage=email_collision_sign_in_success, existingUid=$existingUid, email=${maskedEmailForLog(cleanEmail)}, ${regAuthStateForLog()}"
+                                    "stage=email_collision_sign_in_success, existingUid=$existingUid, email=${
+                                        maskedEmailForLog(
+                                            cleanEmail
+                                        )
+                                    }, ${regAuthStateForLog()}"
                                 )
 
                                 persistRegistrationToFirestore(existingUid)
@@ -1676,7 +1821,11 @@ fun RegistrationFormScreen(
                             .addOnFailureListener { signInError ->
                                 Log.e(
                                     TAG_REG,
-                                    "stage=email_collision_sign_in_failure, email=${maskedEmailForLog(cleanEmail)}, errorClass=${signInError.javaClass.name}, errorMessage=${signInError.message.orEmpty()}, ${regAuthStateForLog()}",
+                                    "stage=email_collision_sign_in_failure, email=${
+                                        maskedEmailForLog(
+                                            cleanEmail
+                                        )
+                                    }, errorClass=${signInError.javaClass.name}, errorMessage=${signInError.message.orEmpty()}, ${regAuthStateForLog()}",
                                     signInError
                                 )
 
@@ -1757,6 +1906,8 @@ fun RegistrationFormScreen(
                 .fillMaxSize()
                 .background(headerBrush)
                 .padding(padding)
+                .imePadding()
+                .navigationBarsPadding()
         ) {
             Spacer(Modifier.height(8.dp))
 
@@ -1956,13 +2107,11 @@ fun RegistrationFormScreen(
                 selectedGroupsByBranch =
                     selectedGroupsByBranch.toMap(),
 
-                onGroupsByBranchChange = {
-                        updatedAssignments ->
+                onGroupsByBranchChange = { updatedAssignments ->
 
                     selectedGroupsByBranch.clear()
 
-                    updatedAssignments.forEach {
-                            (branch, groups) ->
+                    updatedAssignments.forEach { (branch, groups) ->
 
                         selectedGroupsByBranch[branch] =
                             groups
@@ -2009,8 +2158,7 @@ fun RegistrationFormScreen(
                     }
 
                     groupError =
-                        selectedBranches.any {
-                                branch ->
+                        selectedBranches.any { branch ->
                             selectedGroupsByBranch[
                                 branch
                             ].isNullOrEmpty()
@@ -2033,7 +2181,13 @@ fun RegistrationFormScreen(
                 branchType = branchType,
                 onBranchTypeChange = { newType ->
                     branchType = newType
-                    sp.edit().putString("branch_type", newType).apply()
+
+                    sp.edit {
+                        putString(
+                            "branch_type",
+                            newType
+                        )
+                    }
                 },
                 submitButtonText = if (startAtProfile) {
                     if (isEnglish) "Save profile" else "שמירת פרופיל"
@@ -2047,14 +2201,20 @@ fun RegistrationFormScreen(
 
             if (!acceptedTerms && termsError) {
                 Text(
-                    text = if (isEnglish) {
-                        "You must accept the Terms of Use and Privacy Policy"
-                    } else {
-                        "חובה לאשר תנאי שימוש ומדיניות פרטיות"
-                    },
+                    text =
+                        if (isEnglish) {
+                            "You must accept the Terms of Use and Privacy Policy"
+                        } else {
+                            "חובה לאשר תנאי שימוש ומדיניות פרטיות"
+                        },
                     color = MaterialTheme.colorScheme.error,
-                    style = MaterialTheme.typography.bodySmall,
-                    textAlign = if (isEnglish) TextAlign.Left else TextAlign.Right,
+                    style = KmiTypography.caption,
+                    textAlign =
+                        if (isEnglish) {
+                            TextAlign.Left
+                        } else {
+                            TextAlign.Right
+                        },
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(horizontal = 16.dp)
@@ -2079,9 +2239,9 @@ private fun RegistrationTabsBilingual(
             .fillMaxWidth()
             .padding(horizontal = 10.dp),
         shape = RoundedCornerShape(0.dp),
-        color = Color(0xFF6D4FE8).copy(alpha = 0.96f),
+        color = MaterialTheme.colorScheme.primary,
         tonalElevation = 0.dp,
-        shadowElevation = 4.dp
+        shadowElevation = 0.dp
     ) {
         // ✅ תמיד: מתאמן בצד ימין, מאמן בצד שמאל
         // נשאר תואם גם באנגלית: Trainee מימין, Coach משמאל.
@@ -2103,7 +2263,10 @@ private fun RegistrationTabsBilingual(
                     modifier = Modifier
                         .width(1.dp)
                         .height(28.dp)
-                        .background(Color.White.copy(alpha = 0.45f))
+                        .background(
+                            MaterialTheme.colorScheme.onPrimary
+                                .copy(alpha = 0.38f)
+                        )
                 )
 
                 RegistrationRoleTabButton(
@@ -2130,7 +2293,8 @@ private fun RegistrationRoleTabButton(
             .clickable { onClick() }
             .background(
                 if (selected) {
-                    Color.White.copy(alpha = 0.14f)
+                    MaterialTheme.colorScheme.onPrimary
+                        .copy(alpha = 0.14f)
                 } else {
                     Color.Transparent
                 }
@@ -2139,11 +2303,12 @@ private fun RegistrationRoleTabButton(
     ) {
         Text(
             text = text,
-            color = Color.White,
-            fontWeight = FontWeight.ExtraBold,
-            fontSize = 15.sp,
+            style = KmiTypography.action.copy(
+                fontWeight = FontWeight.ExtraBold
+            ),
+            color = MaterialTheme.colorScheme.onPrimary,
             textAlign = TextAlign.Center,
-            maxLines = 1,
+            maxLines = 2,
             overflow = TextOverflow.Ellipsis
         )
 
@@ -2154,8 +2319,11 @@ private fun RegistrationRoleTabButton(
                     .fillMaxWidth(0.72f)
                     .height(3.dp)
                     .background(
-                        color = Color.White,
-                        shape = RoundedCornerShape(topStart = 4.dp, topEnd = 4.dp)
+                        color = MaterialTheme.colorScheme.onPrimary,
+                        shape = RoundedCornerShape(
+                            topStart = 4.dp,
+                            topEnd = 4.dp
+                        )
                     )
             )
         }

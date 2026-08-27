@@ -281,7 +281,8 @@ fun KmiStartupLoadingScreen(
 
         val cardTopSpace = maxHeight * 0.550f
 
-        val videoWidth = if (isVeryCompactHeight) 184.dp else if (isCompactHeight) 198.dp else 214.dp
+        val videoWidth =
+            if (isVeryCompactHeight) 184.dp else if (isCompactHeight) 198.dp else 214.dp
         val videoHeight = if (isVeryCompactHeight) 74.dp else if (isCompactHeight) 80.dp else 88.dp
         val glowWidth = if (isVeryCompactHeight) 206.dp else if (isCompactHeight) 222.dp else 238.dp
         val glowHeight = if (isVeryCompactHeight) 82.dp else if (isCompactHeight) 88.dp else 96.dp

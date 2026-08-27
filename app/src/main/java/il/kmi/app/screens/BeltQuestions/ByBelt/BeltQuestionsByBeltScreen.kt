@@ -1251,9 +1251,8 @@ private fun createBeltTopicsPdf(
             /*
              * תרגילים ששייכים ישירות לנושא הראשי.
              */
-            topic.exercises.forEachIndexed {
-                    exerciseIndex,
-                    exerciseTitle ->
+            topic.exercises.forEachIndexed { exerciseIndex,
+                                             exerciseTitle ->
 
                 if (currentY + 25f > contentBottom) {
                     startPage()
@@ -1289,9 +1288,8 @@ private fun createBeltTopicsPdf(
                 }
 
             } else {
-                topic.subTopics.forEachIndexed {
-                        subIndex,
-                        subTopic ->
+                topic.subTopics.forEachIndexed { subIndex,
+                                                 subTopic ->
 
                     /*
                      * מקום לשורת תת־הנושא.
@@ -1314,9 +1312,8 @@ private fun createBeltTopicsPdf(
                      * מדפיסים עכשיו את כל התרגילים
                      * הישירים של תת־הנושא.
                      */
-                    subTopic.exercises.forEachIndexed {
-                            exerciseIndex,
-                            exerciseTitle ->
+                    subTopic.exercises.forEachIndexed { exerciseIndex,
+                                                        exerciseTitle ->
 
                         /*
                          * אם התרגיל הבא לא נכנס בעמוד,
@@ -2853,89 +2850,89 @@ private fun TopicsCardForBelt(
                                             Box(
                                                 modifier =
                                                     Modifier.size(30.dp),
-                                            contentAlignment = Alignment.Center
-                                        ) {
+                                                contentAlignment = Alignment.Center
+                                            ) {
                                                 if (hasTopicGeneralNote) {
-                                                Surface(
-                                                    modifier = Modifier
-                                                        .size(26.dp)
-                                                        .clickable {
-                                                            clickSound()
-                                                            haptic(false)
+                                                    Surface(
+                                                        modifier = Modifier
+                                                            .size(26.dp)
+                                                            .clickable {
+                                                                clickSound()
+                                                                haptic(false)
 
-                                                            generalNoteTitle =
-                                                                if (isEnglish) {
-                                                                    "General note: $displayTitle"
-                                                                } else {
-                                                                    "הערה כללית: $displayTitle"
-                                                                }
+                                                                generalNoteTitle =
+                                                                    if (isEnglish) {
+                                                                        "General note: $displayTitle"
+                                                                    } else {
+                                                                        "הערה כללית: $displayTitle"
+                                                                    }
 
-                                                            generalNoteText =
-                                                                topicGeneralNote
-                                                        },
-                                                    shape = CircleShape,
-                                                    color =
-                                                        if (isDarkTheme) {
-                                                            Color(0xFF2563EB)
-                                                                .copy(alpha = 0.24f)
-                                                        } else {
-                                                            Color(0xFFE8F1FF)
-                                                        },
-                                                    border = BorderStroke(
-                                                        width = 1.dp,
+                                                                generalNoteText =
+                                                                    topicGeneralNote
+                                                            },
+                                                        shape = CircleShape,
                                                         color =
-                                                            Color(0xFF2563EB)
-                                                                .copy(alpha = 0.45f)
-                                                    ),
-                                                    tonalElevation = 0.dp,
-                                                    shadowElevation = 0.dp
-                                                ) {
-                                                    Box(
-                                                        contentAlignment =
-                                                            Alignment.Center
+                                                            if (isDarkTheme) {
+                                                                Color(0xFF2563EB)
+                                                                    .copy(alpha = 0.24f)
+                                                            } else {
+                                                                Color(0xFFE8F1FF)
+                                                            },
+                                                        border = BorderStroke(
+                                                            width = 1.dp,
+                                                            color =
+                                                                Color(0xFF2563EB)
+                                                                    .copy(alpha = 0.45f)
+                                                        ),
+                                                        tonalElevation = 0.dp,
+                                                        shadowElevation = 0.dp
                                                     ) {
-                                                        Icon(
-                                                            imageVector =
-                                                                Icons.Filled.Info,
-                                                            contentDescription =
-                                                                if (isEnglish) {
-                                                                    "General note"
-                                                                } else {
-                                                                    "הערה כללית"
-                                                                },
-                                                            tint =
-                                                                if (isDarkTheme) {
-                                                                    Color(0xFF60A5FA)
-                                                                } else {
-                                                                    Color(0xFF2563EB)
-                                                                },
-                                                            modifier =
-                                                                Modifier.size(
-                                                                    17.dp * LocalAppIconScale.current
-                                                                )
-                                                        )
+                                                        Box(
+                                                            contentAlignment =
+                                                                Alignment.Center
+                                                        ) {
+                                                            Icon(
+                                                                imageVector =
+                                                                    Icons.Filled.Info,
+                                                                contentDescription =
+                                                                    if (isEnglish) {
+                                                                        "General note"
+                                                                    } else {
+                                                                        "הערה כללית"
+                                                                    },
+                                                                tint =
+                                                                    if (isDarkTheme) {
+                                                                        Color(0xFF60A5FA)
+                                                                    } else {
+                                                                        Color(0xFF2563EB)
+                                                                    },
+                                                                modifier =
+                                                                    Modifier.size(
+                                                                        17.dp * LocalAppIconScale.current
+                                                                    )
+                                                            )
+                                                        }
                                                     }
                                                 }
                                             }
-                                        }
 
-                                        Spacer(Modifier.width(4.dp))
+                                            Spacer(Modifier.width(4.dp))
 
-                                        Box(
-                                            modifier = Modifier.size(20.dp),
-                                            contentAlignment = Alignment.Center
-                                        ) {
-                                            if (parentLocked) {
-                                                PremiumPulsingLockBadge(
-                                                    modifier =
-                                                        Modifier.size(
-                                                            16.dp * LocalAppIconScale.current
-                                                        )
-                                                )
+                                            Box(
+                                                modifier = Modifier.size(20.dp),
+                                                contentAlignment = Alignment.Center
+                                            ) {
+                                                if (parentLocked) {
+                                                    PremiumPulsingLockBadge(
+                                                        modifier =
+                                                            Modifier.size(
+                                                                16.dp * LocalAppIconScale.current
+                                                            )
+                                                    )
+                                                }
                                             }
-                                        }
 
-                                        Spacer(Modifier.width(4.dp))
+                                            Spacer(Modifier.width(4.dp))
 
                                             Box(
                                                 modifier =
@@ -3540,42 +3537,42 @@ private fun BeltArcPicker(
                     // ✅ כדי שהטבעת לא “תכוסה” ע״י העיגול, מכניסים את העיגול פנימה קצת רק במרכז
                     val ringPad = if (isCenter) 8.dp else 0.dp
 
-                        Box(
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .padding(ringPad)
-                                .clip(CircleShape)
-                                .border(BorderStroke(3.dp, outlineColor), CircleShape)
-                                .background(circleColor),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            val ctx = LocalContext.current
-                            val lang = remember { AppLanguageManager(ctx) }.getCurrentLanguage()
-                            if (isCenter) {
-                                val clean = remember(belt, lang) {
-                                    beltShortNameForUi(belt, lang)
-                                }
-                                Text(
-                                    text =
-                                        if (lang == AppLanguage.ENGLISH) {
-                                            "Belt\n$clean"
-                                        } else {
-                                            "חגורה\n$clean"
-                                        },
-                                    style = KmiTypography.action,
-                                    color =
-                                        if (belt.color.luminance() < 0.5f) {
-                                            Color.White
-                                        } else {
-                                            Color.Black
-                                        },
-                                    textAlign = TextAlign.Center,
-                                    maxLines = 2,
-                                    overflow = TextOverflow.Ellipsis,
-                                    modifier = Modifier.padding(8.dp)
-                                )
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(ringPad)
+                            .clip(CircleShape)
+                            .border(BorderStroke(3.dp, outlineColor), CircleShape)
+                            .background(circleColor),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        val ctx = LocalContext.current
+                        val lang = remember { AppLanguageManager(ctx) }.getCurrentLanguage()
+                        if (isCenter) {
+                            val clean = remember(belt, lang) {
+                                beltShortNameForUi(belt, lang)
                             }
+                            Text(
+                                text =
+                                    if (lang == AppLanguage.ENGLISH) {
+                                        "Belt\n$clean"
+                                    } else {
+                                        "חגורה\n$clean"
+                                    },
+                                style = KmiTypography.action,
+                                color =
+                                    if (belt.color.luminance() < 0.5f) {
+                                        Color.White
+                                    } else {
+                                        Color.Black
+                                    },
+                                textAlign = TextAlign.Center,
+                                maxLines = 2,
+                                overflow = TextOverflow.Ellipsis,
+                                modifier = Modifier.padding(8.dp)
+                            )
                         }
+                    }
                 }
             }
         }

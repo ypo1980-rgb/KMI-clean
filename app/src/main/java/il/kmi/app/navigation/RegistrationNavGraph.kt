@@ -8,11 +8,9 @@ import androidx.navigation.compose.composable
 import androidx.navigation.navArgument
 import il.kmi.app.KmiViewModel
 import il.kmi.app.Route
-import il.kmi.app.screens.registration.RegistrationNavHost
 import il.kmi.app.screens.registration.ExistingUserCoachScreen
 import il.kmi.app.screens.registration.ExistingUserTraineeScreen
 import il.kmi.app.screens.NewUserCoachScreen
-import il.kmi.app.screens.registration.RegistrationFormScreen
 import androidx.compose.runtime.LaunchedEffect
 
 @Suppress("UNUSED_PARAMETER")
@@ -52,9 +50,7 @@ fun NavGraphBuilder.registrationNavGraph(
                 }
             },
             onOpenTerms = { nav.navigate(Route.Legal.route) },
-            onOpenLegal = { nav.navigate(Route.Legal.route) },
             onOpenDrawer = { il.kmi.app.ui.DrawerBridge.open() },
-            vm = vm,
             sp = sp,
             kmiPrefs = kmiPrefs,
             startAtProfile = startAtProfile
