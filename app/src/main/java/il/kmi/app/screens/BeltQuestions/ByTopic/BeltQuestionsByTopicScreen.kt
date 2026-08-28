@@ -57,7 +57,6 @@ import il.kmi.app.screens.PracticeMenuDialog
 import il.kmi.shared.domain.Belt
 import il.kmi.shared.domain.content.ExerciseTitlesEn
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
@@ -88,6 +87,7 @@ import il.kmi.app.ui.KmiTopBar
 import il.kmi.app.ui.LocalAppIconScale
 import il.kmi.app.ui.loading.KmiLoadingRings
 import il.yuval.ui.theme.kmiScreenBackgroundBrush
+import il.yuval.ui.theme.kmiSectionHeaderBrush
 import kotlinx.coroutines.yield
 import kotlin.math.ceil
 
@@ -334,10 +334,8 @@ private fun HardSubjectLoadingScreen(
 
 @Composable
 private fun EnsureContentRepoInitialized() {
-    val scope = rememberCoroutineScope()
-
     LaunchedEffect(Unit) {
-        scope.launch(Dispatchers.Default) {
+        withContext(Dispatchers.Default) {
             runCatching {
                 ContentRepo.initIfNeeded()
             }
@@ -923,9 +921,14 @@ private fun createSubjectTopicsPdf(
         File(
             context.cacheDir,
             "shared_pdfs"
-        ).apply {
-            mkdirs()
-        }
+        )
+
+    check(
+        directory.exists() ||
+                directory.mkdirs()
+    ) {
+        "Unable to create PDF sharing directory"
+    }
 
     val fileName =
         if (isEnglish) {
@@ -942,12 +945,9 @@ private fun createSubjectTopicsPdf(
 
     /*
      * שם הקובץ קבוע.
-     * כל יצירה חדשה מחליפה את הקובץ הקודם.
+     * FileOutputStream עם append = false
+     * מחליף את תוכן הקובץ הקודם.
      */
-    if (file.exists()) {
-        file.delete()
-    }
-
     FileOutputStream(
         file,
         false
@@ -1186,6 +1186,7 @@ fun BeltQuestionsByTopicScreen(
                 Spacer(Modifier.height(4.dp))
 
                 TopicsBySubjectCard(
+                    modifier = Modifier.weight(1f),
                     currentBelt = effectiveBelt,
                     accessMode = accessMode,
                     hasAccess = hasAccess,
@@ -1226,10 +1227,6 @@ fun BeltQuestionsByTopicScreen(
                         subjectTopicsPdfItems = items
                     }
                 )
-
-                // ✅ אין יותר כפתור תחתון של "מבט מהיר".
-                // התפריט המהיר נפתח עכשיו מהמלבן הצדדי כמו במסך לפי חגורה.
-                Spacer(modifier = Modifier.height(14.dp))
             }
 
             FloatingQuickMenu(
@@ -1264,6 +1261,8 @@ fun BeltQuestionsByTopicScreen(
 private fun TopicQuestionsModeSwitcher(
     onOpenByBelt: () -> Unit
 ) {
+    val isEnglish = rememberIsEnglish()
+
     val tabs = listOf(
         TopicQuestionsMode.BY_TOPIC,
         TopicQuestionsMode.BY_BELT
@@ -1277,7 +1276,7 @@ private fun TopicQuestionsModeSwitcher(
         modifier = Modifier
             .fillMaxWidth(0.88f)
             .padding(bottom = 6.dp),
-        color = Color(0xFF062B4A).copy(alpha = 0.78f),
+        color = Color.Transparent,
         shadowElevation = 0.dp,
         tonalElevation = 0.dp,
         border = BorderStroke(
@@ -1289,7 +1288,11 @@ private fun TopicQuestionsModeSwitcher(
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(48.dp)
+                .heightIn(min = 48.dp)
+                .background(
+                    brush = kmiSectionHeaderBrush(),
+                    shape = RoundedCornerShape(18.dp)
+                )
         ) {
             Box(
                 modifier = Modifier
@@ -1298,13 +1301,12 @@ private fun TopicQuestionsModeSwitcher(
                     .width(1.dp)
                     .height(24.dp)
                     .background(
-                        Color.White.copy(alpha = 0.65f)
+                        color = Color.White.copy(alpha = 0.65f)
                     )
             )
 
             CompositionLocalProvider(
-                LocalLayoutDirection provides
-                        LayoutDirection.Ltr
+                LocalLayoutDirection provides LayoutDirection.Ltr
             ) {
                 TabRow(
                     selectedTabIndex = selectedIndex,
@@ -1313,9 +1315,10 @@ private fun TopicQuestionsModeSwitcher(
                     divider = {},
                     indicator = { positions ->
                         TabRowDefaults.SecondaryIndicator(
-                            modifier = Modifier.tabIndicatorOffset(
-                                positions[selectedIndex]
-                            ),
+                            modifier =
+                                Modifier.tabIndicatorOffset(
+                                    positions[selectedIndex]
+                                ),
                             height = 3.dp,
                             color = Color.White
                         )
@@ -1326,14 +1329,14 @@ private fun TopicQuestionsModeSwitcher(
                         val label =
                             when (mode) {
                                 TopicQuestionsMode.BY_TOPIC ->
-                                    if (rememberIsEnglish()) {
+                                    if (isEnglish) {
                                         "By Topic"
                                     } else {
                                         "לפי נושא"
                                     }
 
                                 TopicQuestionsMode.BY_BELT ->
-                                    if (rememberIsEnglish()) {
+                                    if (isEnglish) {
                                         "By Belt"
                                     } else {
                                         "לפי חגורה"
@@ -2613,7 +2616,9 @@ internal fun TopicsBySubjectCard(
         val scrollState = rememberScrollState()
 
         Column(
-            modifier = modifier.fillMaxWidth(),
+            modifier = modifier
+                .fillMaxWidth()
+                .fillMaxHeight(),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             Surface(
@@ -2625,11 +2630,11 @@ internal fun TopicsBySubjectCard(
                         alpha = 0.97f
                     ),
                 modifier = Modifier
-                    .fillMaxWidth()
+                    .fillMaxSize()
                     .padding(horizontal = 4.dp)
             ) {
                 Column(
-                    modifier = Modifier.fillMaxWidth()
+                    modifier = Modifier.fillMaxSize()
                 ) {
                     Text(
                         text =
@@ -2667,11 +2672,11 @@ internal fun TopicsBySubjectCard(
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(440.dp)
+                            .weight(1f)
                     ) {
                         Column(
                             modifier = Modifier
-                                .fillMaxWidth()
+                                .fillMaxSize()
                                 .verticalScroll(scrollState)
                                 .padding(horizontal = 8.dp)
                                 .padding(top = 0.dp, bottom = 0.dp),

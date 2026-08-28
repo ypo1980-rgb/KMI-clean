@@ -94,8 +94,10 @@ import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.core.content.FileProvider
 import il.kmi.app.screens.BeltQuestions.ByTopic.TopicDetails
+import il.kmi.app.ui.KmiLanguageDirection
 import il.kmi.app.ui.KmiTopBar
 import il.kmi.app.ui.LocalAppIconScale
+import il.kmi.app.ui.pdf.KmiPdfDirection
 import il.yuval.ui.theme.kmiScreenBackgroundBrush
 import java.io.File
 import java.io.FileOutputStream
@@ -510,7 +512,9 @@ private fun createBeltTopicsPdf(
         color: Int = textDark,
         bold: Boolean = false,
         alignment: Paint.Align =
-            if (isEnglish) Paint.Align.LEFT else Paint.Align.RIGHT
+            KmiPdfDirection.textAlign(
+                isEnglish = isEnglish
+            )
     ): Paint {
         return Paint(Paint.ANTI_ALIAS_FLAG).apply {
             textSize = size
@@ -760,21 +764,23 @@ private fun createBeltTopicsPdf(
         )
 
         /*
-         * כותרות מימין בעברית ומשמאל באנגלית.
+         * כיווניות ומיקום הכותרת נלקחים ממנגנון
+         * הכיוונים הגלובלי של קובצי ה־PDF.
+         *
+         * שני המצבים נשארים בתוך אזור הכותרת הכחול
+         * ואינם חופפים ללוגו שנמצא משמאל.
          */
         val headerAlignment =
-            if (isEnglish) {
-                Paint.Align.LEFT
-            } else {
-                Paint.Align.RIGHT
-            }
+            KmiPdfDirection.textAlign(
+                isEnglish = isEnglish
+            )
 
         val headerX =
-            if (isEnglish) {
-                34f
-            } else {
-                pageWidth - 34f
-            }
+            KmiPdfDirection.startX(
+                isEnglish = isEnglish,
+                left = 308f,
+                right = 435f
+            )
 
         currentCanvas.drawText(
             translated(
@@ -883,18 +889,19 @@ private fun createBeltTopicsPdf(
                 }
 
             val summaryX =
-                if (isEnglish) {
-                    horizontalMargin + 20f
-                } else {
-                    pageWidth - horizontalMargin - 20f
-                }
+                KmiPdfDirection.startPaddingX(
+                    isEnglish = isEnglish,
+                    left = horizontalMargin,
+                    right =
+                        pageWidth -
+                                horizontalMargin,
+                    padding = 20f
+                )
 
             val summaryAlignment =
-                if (isEnglish) {
-                    Paint.Align.LEFT
-                } else {
-                    Paint.Align.RIGHT
-                }
+                KmiPdfDirection.textAlign(
+                    isEnglish = isEnglish
+                )
 
             currentCanvas.drawText(
                 translated(
@@ -1012,18 +1019,19 @@ private fun createBeltTopicsPdf(
         )
 
         val textX =
-            if (isEnglish) {
-                horizontalMargin + 20f
-            } else {
-                pageWidth - horizontalMargin - 20f
-            }
+            KmiPdfDirection.startPaddingX(
+                isEnglish = isEnglish,
+                left = horizontalMargin,
+                right =
+                    pageWidth -
+                            horizontalMargin,
+                padding = 20f
+            )
 
         val alignment =
-            if (isEnglish) {
-                Paint.Align.LEFT
-            } else {
-                Paint.Align.RIGHT
-            }
+            KmiPdfDirection.textAlign(
+                isEnglish = isEnglish
+            )
 
         val displayedTitle =
             if (continued) {
@@ -1088,18 +1096,26 @@ private fun createBeltTopicsPdf(
         val depthOffset = subTopic.depth * 13f
 
         val titleX =
-            if (isEnglish) {
-                horizontalMargin + 22f + depthOffset
-            } else {
-                pageWidth - horizontalMargin - 22f - depthOffset
-            }
+            KmiPdfDirection.startPaddingX(
+                isEnglish = isEnglish,
+                left = horizontalMargin,
+                right =
+                    pageWidth -
+                            horizontalMargin,
+                padding =
+                    22f +
+                            depthOffset
+            )
 
         val countX =
-            if (isEnglish) {
-                pageWidth - horizontalMargin - 22f
-            } else {
-                horizontalMargin + 22f
-            }
+            KmiPdfDirection.endPaddingX(
+                isEnglish = isEnglish,
+                left = horizontalMargin,
+                right =
+                    pageWidth -
+                            horizontalMargin,
+                padding = 22f
+            )
 
         currentCanvas.drawText(
             subTopic.title,
@@ -1108,13 +1124,12 @@ private fun createBeltTopicsPdf(
             textPaint(
                 size = 11.5f,
                 color = textDark,
-                bold = subTopic.depth == 0,
+                bold =
+                    subTopic.depth == 0,
                 alignment =
-                    if (isEnglish) {
-                        Paint.Align.LEFT
-                    } else {
-                        Paint.Align.RIGHT
-                    }
+                    KmiPdfDirection.textAlign(
+                        isEnglish = isEnglish
+                    )
             )
         )
 
@@ -1721,12 +1736,9 @@ internal fun BeltPangoLayout(
     val currentLanguage =
         langManager.getCurrentLanguage()
 
-    val screenLayoutDirection =
-        if (currentLanguage == AppLanguage.ENGLISH) {
-            LayoutDirection.Ltr
-        } else {
-            LayoutDirection.Rtl
-        }
+    val isEnglish =
+        currentLanguage ==
+                AppLanguage.ENGLISH
 
     val backgroundBrush =
         kmiScreenBackgroundBrush()
@@ -1755,8 +1767,8 @@ internal fun BeltPangoLayout(
         )
     }
 
-    CompositionLocalProvider(
-        LocalLayoutDirection provides screenLayoutDirection
+    KmiLanguageDirection(
+        isEnglish = isEnglish
     ) {
         Scaffold(
             topBar = {
@@ -1970,13 +1982,18 @@ private fun BeltQuestionsModeSwitcher(
         modifier = Modifier
             .fillMaxWidth(0.88f)
             .padding(bottom = 6.dp),
-        color = MaterialTheme.colorScheme.secondaryContainer,
-        contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
+        color =
+            Color(0xFF062B4A)
+                .copy(alpha = 0.78f),
+        contentColor = Color.White,
         shadowElevation = 0.dp,
         tonalElevation = 0.dp,
         border = BorderStroke(
             width = 1.dp,
-            color = MaterialTheme.colorScheme.outlineVariant
+            color =
+                Color.White.copy(
+                    alpha = 0.34f
+                )
         ),
         shape = RoundedCornerShape(18.dp)
     ) {
@@ -1992,7 +2009,7 @@ private fun BeltQuestionsModeSwitcher(
                     .width(1.dp)
                     .height(24.dp)
                     .background(
-                        MaterialTheme.colorScheme.onSecondaryContainer.copy(
+                        Color.White.copy(
                             alpha = 0.65f
                         )
                     )
@@ -2005,20 +2022,20 @@ private fun BeltQuestionsModeSwitcher(
                 TabRow(
                     selectedTabIndex = selectedIndex,
                     containerColor = Color.Transparent,
-                    contentColor =
-                        MaterialTheme.colorScheme.onSecondaryContainer,
+                    contentColor = Color.White,
                     divider = {},
                     indicator = { positions ->
                         TabRowDefaults.SecondaryIndicator(
-                            modifier = Modifier.tabIndicatorOffset(
-                                positions[selectedIndex]
-                            ),
+                            modifier =
+                                Modifier.tabIndicatorOffset(
+                                    positions[selectedIndex]
+                                ),
                             height = 3.dp,
-                            color =
-                                MaterialTheme.colorScheme.onSecondaryContainer
+                            color = Color.White
                         )
                     },
-                    modifier = Modifier.matchParentSize()
+                    modifier =
+                        Modifier.matchParentSize()
                 ) {
                     tabs.forEach { (mode, label) ->
                         Tab(
@@ -2042,9 +2059,9 @@ private fun BeltQuestionsModeSwitcher(
                                 )
                             },
                             selectedContentColor =
-                                MaterialTheme.colorScheme.onSecondaryContainer,
+                                Color.White,
                             unselectedContentColor =
-                                MaterialTheme.colorScheme.onSecondaryContainer.copy(
+                                Color.White.copy(
                                     alpha = 0.82f
                                 )
                         )
@@ -2076,7 +2093,10 @@ private fun PremiumPulsingLockBadge(
     Icon(
         imageVector = Icons.Filled.Lock,
         contentDescription = null,
-        tint = Color(0xFFF59E0B),
+        tint =
+            MaterialTheme
+                .colorScheme
+                .tertiary,
         modifier = modifier
             .size(
                 20.dp * LocalAppIconScale.current
@@ -2101,17 +2121,21 @@ private fun TopicsCardForBelt(
     haptic: (Boolean) -> Unit,
     clickSound: () -> Unit
 ) {
-    val isEnglish = lang == AppLanguage.ENGLISH
-    val isDarkTheme = MaterialTheme.colorScheme.surface.luminance() < 0.5f
+    val isEnglish =
+        lang == AppLanguage.ENGLISH
 
-    // ✅ חשוב:
-    // באנגלית משתמשים ב-Left פיזי ולא ב-Start,
-    // כדי שלא יתהפך אם המסך עדיין מקבל RTL.
-    val titleTextAlignByLang = if (isEnglish) TextAlign.Left else TextAlign.Right
-    val horizontalByLang = if (isEnglish) Alignment.Start else Alignment.End
-    val layoutByLang =
-        if (isEnglish) LayoutDirection.Ltr
-        else LayoutDirection.Rtl
+    val isDarkTheme =
+        MaterialTheme
+            .colorScheme
+            .surface
+            .luminance() < 0.5f
+
+    /*
+     * הכיווניות עצמה מתקבלת מהמעטפת הגלובלית.
+     * לכן כל התוכן מתחיל בצד Start.
+     */
+    val horizontalByLang =
+        Alignment.Start
 
     val cardBg =
         MaterialTheme.colorScheme.surface
@@ -2284,9 +2308,6 @@ private fun TopicsCardForBelt(
         ?.takeIf { it.isNotBlank() }
 
     if (visibleGeneralNote != null) {
-        val noteAccent =
-            MaterialTheme.colorScheme.secondary
-
         val noteCardBackground =
             Brush.verticalGradient(
                 colors = listOf(
@@ -2316,13 +2337,8 @@ private fun TopicsCardForBelt(
                 usePlatformDefaultWidth = false
             )
         ) {
-            CompositionLocalProvider(
-                LocalLayoutDirection provides
-                        if (isEnglish) {
-                            LayoutDirection.Ltr
-                        } else {
-                            LayoutDirection.Rtl
-                        }
+            KmiLanguageDirection(
+                isEnglish = isEnglish
             ) {
                 Surface(
                     modifier = Modifier
@@ -2490,12 +2506,9 @@ private fun TopicsCardForBelt(
                                     ),
                                     color = noteBodyColor,
                                     textAlign =
-                                        if (isEnglish) {
-                                            TextAlign.Left
-                                        } else {
-                                            TextAlign.Right
-                                        },
-                                    modifier = Modifier.fillMaxWidth()
+                                        TextAlign.Start,
+                                    modifier =
+                                        Modifier.fillMaxWidth()
                                 )
                             }
 
@@ -2725,12 +2738,14 @@ private fun TopicsCardForBelt(
 
                                 val topicImageRes = beltTopicImageFor(belt, title)
 
-                                CompositionLocalProvider(
-                                    LocalLayoutDirection provides layoutByLang
+                                KmiLanguageDirection(
+                                    isEnglish = isEnglish
                                 ) {
                                     Row(
-                                        modifier = Modifier.fillMaxWidth(),
-                                        verticalAlignment = Alignment.CenterVertically
+                                        modifier =
+                                            Modifier.fillMaxWidth(),
+                                        verticalAlignment =
+                                            Alignment.CenterVertically
                                     ) {
                                         Box(
                                             modifier = Modifier
@@ -2766,26 +2781,37 @@ private fun TopicsCardForBelt(
                                         ) {
                                             Text(
                                                 text = displayTitle,
-                                                style = KmiTypography.cardTitle,
+                                                style =
+                                                    KmiTypography.cardTitle,
                                                 color = rowTitleColor,
-                                                textAlign = titleTextAlignByLang,
+                                                textAlign =
+                                                    TextAlign.Start,
                                                 maxLines = 2,
-                                                overflow = TextOverflow.Ellipsis,
-                                                modifier = Modifier.fillMaxWidth()
+                                                overflow =
+                                                    TextOverflow.Ellipsis,
+                                                modifier =
+                                                    Modifier.fillMaxWidth()
                                             )
 
                                             Spacer(Modifier.height(1.dp))
 
                                             Text(
                                                 text = countsLine,
-                                                style = KmiTypography.caption.copy(
-                                                    fontWeight = FontWeight.ExtraBold
-                                                ),
+                                                style =
+                                                    KmiTypography
+                                                        .caption
+                                                        .copy(
+                                                            fontWeight =
+                                                                FontWeight.ExtraBold
+                                                        ),
                                                 color = rowSubColor,
-                                                textAlign = titleTextAlignByLang,
+                                                textAlign =
+                                                    TextAlign.Start,
                                                 maxLines = 2,
-                                                overflow = TextOverflow.Ellipsis,
-                                                modifier = Modifier.fillMaxWidth()
+                                                overflow =
+                                                    TextOverflow.Ellipsis,
+                                                modifier =
+                                                    Modifier.fillMaxWidth()
                                             )
                                         }
 
@@ -3035,26 +3061,36 @@ private fun TopicsCardForBelt(
                                                     ) {
                                                         Text(
                                                             text = displaySub,
-                                                            modifier = Modifier.fillMaxWidth(),
-                                                            textAlign = titleTextAlignByLang,
+                                                            modifier =
+                                                                Modifier.fillMaxWidth(),
+                                                            textAlign =
+                                                                TextAlign.Start,
                                                             color = rowTitleColor,
-                                                            style = KmiTypography.cardTitle,
+                                                            style =
+                                                                KmiTypography.cardTitle,
                                                             maxLines = 2,
-                                                            overflow = TextOverflow.Ellipsis
+                                                            overflow =
+                                                                TextOverflow.Ellipsis
                                                         )
 
                                                         if (subTopicStatsLine.isNotBlank()) {
                                                             Spacer(Modifier.height(1.dp))
 
                                                             Text(
-                                                                text = subTopicStatsLine,
-                                                                modifier = Modifier.fillMaxWidth(),
-                                                                textAlign = titleTextAlignByLang,
-                                                                color = readableBeltAccent,
+                                                                text =
+                                                                    subTopicStatsLine,
+                                                                modifier =
+                                                                    Modifier.fillMaxWidth(),
+                                                                textAlign =
+                                                                    TextAlign.Start,
+                                                                color =
+                                                                    readableBeltAccent,
                                                                 style =
-                                                                    KmiTypography.caption.copy(
-                                                                        fontWeight =
-                                                                            FontWeight.Bold
+                                                                    KmiTypography
+                                                                        .caption
+                                                                        .copy(
+                                                                            fontWeight =
+                                                                                FontWeight.Bold
                                                                     ),
                                                                 maxLines = 2,
                                                                 overflow =

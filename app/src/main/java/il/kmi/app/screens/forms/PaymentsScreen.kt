@@ -1,5 +1,6 @@
 package il.kmi.app.screens.forms
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -8,6 +9,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
@@ -25,19 +27,21 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
-import androidx.compose.material3.surfaceColorAtElevation
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import il.kmi.app.ui.KmiIconSize
 import il.kmi.app.ui.KmiTopBar
 import il.kmi.app.ui.KmiTypography
 import il.kmi.app.ui.scaledIconSize
+import il.yuval.ui.theme.kmiScreenBackgroundBrush
 
 //==============================================================
 
@@ -58,16 +62,6 @@ fun PaymentsScreen(
     val title = if (isEnglish) "Payments report" else "דו״ח תשלומים"
     val membershipTitle = if (isEnglish) "Association Membership Fee" else "דמי חבר לעמותה"
     val screenTextAlign = if (isEnglish) TextAlign.Left else TextAlign.Right
-
-    val backgroundBrush = Brush.verticalGradient(
-        colors = listOf(
-            Color(0xFFF8FBFF),
-            Color(0xFFEAF4FF),
-            Color(0xFFB7DDF7),
-            Color(0xFF1F78B4),
-            Color(0xFF062B4A)
-        )
-    )
 
     val items = listOf(
         PaymentMenuItemUi(
@@ -95,17 +89,30 @@ fun PaymentsScreen(
             )
         }
     ) { innerPadding ->
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(innerPadding)
-                .background(backgroundBrush)
+        CompositionLocalProvider(
+            LocalLayoutDirection provides
+                    if (isEnglish) {
+                        LayoutDirection.Ltr
+                    } else {
+                        LayoutDirection.Rtl
+                    }
         ) {
-            LazyColumn(
-                modifier = Modifier.fillMaxSize(),
-                contentPadding = PaddingValues(16.dp),
-                verticalArrangement = Arrangement.spacedBy(14.dp)
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(innerPadding)
+                    .background(
+                        brush = kmiScreenBackgroundBrush()
+                    )
             ) {
+                LazyColumn(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .navigationBarsPadding(),
+                    contentPadding = PaddingValues(16.dp),
+                    verticalArrangement =
+                        Arrangement.spacedBy(14.dp)
+                ) {
                 item {
                     PaymentHeaderCard(
                         isEnglish = isEnglish,
@@ -134,6 +141,7 @@ fun PaymentsScreen(
                         onClick = item.onClick
                     )
                 }
+                }
             }
         }
     }
@@ -148,9 +156,20 @@ private fun PaymentHeaderCard(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(24.dp),
         colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceColorAtElevation(3.dp)
+            containerColor =
+                MaterialTheme.colorScheme.surface.copy(
+                    alpha = 0.97f
+                )
         ),
-        elevation = CardDefaults.cardElevation(defaultElevation = 6.dp)
+        elevation =
+            CardDefaults.cardElevation(
+                defaultElevation = 0.dp
+            ),
+        border = BorderStroke(
+            width = 1.dp,
+            color =
+                MaterialTheme.colorScheme.outlineVariant
+        )
     ) {
         Column(
             modifier = Modifier
@@ -168,7 +187,9 @@ private fun PaymentHeaderCard(
                 style = KmiTypography.sectionTitle,
                 color = MaterialTheme.colorScheme.onSurface,
                 textAlign = textAlign,
-                modifier = Modifier.fillMaxWidth()
+                modifier = Modifier.fillMaxWidth(),
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis
             )
 
             Text(
@@ -180,7 +201,9 @@ private fun PaymentHeaderCard(
                 style = KmiTypography.secondary,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 textAlign = textAlign,
-                modifier = Modifier.fillMaxWidth()
+                modifier = Modifier.fillMaxWidth(),
+                maxLines = 3,
+                overflow = TextOverflow.Ellipsis
             )
         }
     }
@@ -196,9 +219,20 @@ private fun MembershipStatusCard(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(22.dp),
         colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceColorAtElevation(3.dp)
+            containerColor =
+                MaterialTheme.colorScheme.surface.copy(
+                    alpha = 0.97f
+                )
         ),
-        elevation = CardDefaults.cardElevation(defaultElevation = 6.dp)
+        elevation =
+            CardDefaults.cardElevation(
+                defaultElevation = 0.dp
+            ),
+        border = BorderStroke(
+            width = 1.dp,
+            color =
+                MaterialTheme.colorScheme.outlineVariant
+        )
     ) {
         Column(
             modifier = Modifier
@@ -227,16 +261,31 @@ private fun MembershipStatusCard(
             Text(
                 text = title,
                 style = KmiTypography.sectionTitle,
-                textAlign = if (isEnglish) TextAlign.Left else TextAlign.Right,
-                modifier = Modifier.fillMaxWidth()
+                textAlign =
+                    if (isEnglish) {
+                        TextAlign.Left
+                    } else {
+                        TextAlign.Right
+                    },
+                modifier = Modifier.fillMaxWidth(),
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis
             )
 
             Text(
                 text = status,
                 style = KmiTypography.body,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                textAlign = if (isEnglish) TextAlign.Left else TextAlign.Right,
-                modifier = Modifier.fillMaxWidth()
+                color =
+                    MaterialTheme.colorScheme.onSurfaceVariant,
+                textAlign =
+                    if (isEnglish) {
+                        TextAlign.Left
+                    } else {
+                        TextAlign.Right
+                    },
+                modifier = Modifier.fillMaxWidth(),
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis
             )
 
             Text(
@@ -246,9 +295,17 @@ private fun MembershipStatusCard(
                     "לאחר אישור תשלום, הסטטוס יתעדכן אוטומטית."
                 },
                 style = KmiTypography.secondary,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                textAlign = if (isEnglish) TextAlign.Left else TextAlign.Right,
-                modifier = Modifier.fillMaxWidth()
+                color =
+                    MaterialTheme.colorScheme.onSurfaceVariant,
+                textAlign =
+                    if (isEnglish) {
+                        TextAlign.Left
+                    } else {
+                        TextAlign.Right
+                    },
+                modifier = Modifier.fillMaxWidth(),
+                maxLines = 3,
+                overflow = TextOverflow.Ellipsis
             )
         }
     }
@@ -265,10 +322,30 @@ private fun PaymentRow(
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable(enabled = enabled, onClick = onClick),
+            .clickable(
+                enabled = enabled,
+                onClick = onClick
+            ),
         shape = RoundedCornerShape(18.dp),
         colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceColorAtElevation(1.dp)
+            containerColor =
+                MaterialTheme.colorScheme.surface.copy(
+                    alpha =
+                        if (enabled) {
+                            0.97f
+                        } else {
+                            0.62f
+                        }
+                )
+        ),
+        elevation =
+            CardDefaults.cardElevation(
+                defaultElevation = 0.dp
+            ),
+        border = BorderStroke(
+            width = 1.dp,
+            color =
+                MaterialTheme.colorScheme.outlineVariant
         )
     ) {
         androidx.compose.foundation.layout.Row(
@@ -302,13 +379,20 @@ private fun PaymentRow(
             ) {
                 Text(
                     text = title,
-                    style = KmiTypography.cardTitle
+                    style = KmiTypography.cardTitle,
+                    color =
+                        MaterialTheme.colorScheme.onSurface,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis
                 )
 
                 Text(
                     text = subtitle,
                     style = KmiTypography.secondary,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    color =
+                        MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 3,
+                    overflow = TextOverflow.Ellipsis
                 )
             }
 

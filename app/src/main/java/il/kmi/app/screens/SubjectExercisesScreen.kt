@@ -8,6 +8,7 @@ import android.graphics.Paint
 import android.graphics.Typeface
 import android.graphics.pdf.PdfDocument
 import androidx.core.content.FileProvider
+import androidx.core.content.edit
 import java.io.File
 import java.io.FileOutputStream
 import java.text.SimpleDateFormat
@@ -33,14 +34,13 @@ import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Star
-import androidx.compose.material.icons.filled.VolumeUp
+import androidx.compose.material.icons.automirrored.filled.VolumeUp
 import androidx.compose.material.icons.outlined.StarBorder
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.scale
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.platform.LocalContext
@@ -53,9 +53,11 @@ import il.kmi.app.KmiViewModel
 import il.kmi.app.domain.ExerciseExplanationResolver
 import il.kmi.app.domain.SubjectTopic as AppSubjectTopic
 import il.kmi.app.domain.TopicsBySubjectRegistry
+import il.kmi.app.ui.KmiIconSize
 import il.kmi.app.ui.KmiTtsManager
 import il.kmi.app.ui.KmiTypography
 import il.kmi.app.ui.color
+import il.yuval.ui.theme.kmiScreenBackgroundBrush
 import il.kmi.app.ui.rememberClickSound
 import il.kmi.app.ui.rememberHapticsGlobal
 import il.kmi.shared.domain.Belt
@@ -82,7 +84,11 @@ private fun toSharedBeltOrNull(rawId: String?): Belt? {
 
     // 3) אם הגיע "חגורה צהובה" / "צהובה" וכו' (fallback עדין)
     val heb = s.replace("חגורה", "").trim()
-    return Belt.order.firstOrNull { it.heb.contains(heb) || heb.contains(it.heb.replace("חגורה", "").trim()) }
+    return Belt.order.firstOrNull {
+        it.heb.contains(heb) || heb.contains(
+            it.heb.replace("חגורה", "").trim()
+        )
+    }
 }
 
 // ✅ עדיף להוציא enum החוצה כדי שלא "יתבלבל" קומפיילר/IDE בתוך scope
@@ -955,26 +961,53 @@ private fun createSubjectExercisesPdf(
 
     finishCurrentPage()
 
-    val directory = File(
-        context.cacheDir,
-        "pdfs"
-    ).apply {
-        mkdirs()
+    val directory =
+        File(
+            context.cacheDir,
+            "shared_pdfs"
+        )
+
+    check(
+        directory.exists() ||
+                directory.mkdirs()
+    ) {
+        "Unable to create PDF sharing directory"
     }
 
-    val safeTitle = cleanText(screenTitle)
-        .replace(Regex("[^\\p{L}\\p{N}_-]+"), "_")
-        .trim('_')
-        .take(48)
-        .ifBlank { "subject_exercises" }
+    val safeTitle =
+        cleanText(screenTitle)
+            .replace(
+                Regex("[^\\p{L}\\p{N}_-]+"),
+                "_"
+            )
+            .trim('_')
+            .take(48)
+            .ifBlank {
+                if (isEnglish) {
+                    "subject_exercises"
+                } else {
+                    "תרגילים_לפי_נושא"
+                }
+            }
 
-    val outputFile = File(
-        directory,
-        "${safeTitle}_${System.currentTimeMillis()}.pdf"
-    )
+    val fileName =
+        if (isEnglish) {
+            "Exercises_$safeTitle.pdf"
+        } else {
+            "תרגילים_$safeTitle.pdf"
+        }
+
+    val outputFile =
+        File(
+            directory,
+            fileName
+        )
 
     try {
-        FileOutputStream(outputFile).use { output ->
+        FileOutputStream(
+            outputFile,
+            false
+        ).use { output ->
             document.writeTo(output)
         }
     } finally {
@@ -992,6 +1025,7 @@ private fun createSubjectExercisesPdf(
  * @param onBack     חזרה אחורה
  * @param onExerciseClick  קריאה חיצונית בעת לחיצה (לוגיקת ניווט/סטטיסטיקות נוספת אם תרצה)
  */
+@Suppress("unused")
 @Composable
 fun SubjectExercisesScreen(
     subjectId: String,
@@ -1002,13 +1036,27 @@ fun SubjectExercisesScreen(
     screenTitle: String = "", // ✅ NEW
     vm: KmiViewModel = androidx.lifecycle.viewmodel.compose.viewModel()
 ) {
+    val ctx = LocalContext.current
+
+    val langManager =
+        remember(ctx) {
+            il.kmi.shared.localization.AppLanguageManager(
+                ctx
+            )
+        }
+
+    val isEnglish =
+        langManager.getCurrentLanguage() ==
+                il.kmi.shared.localization.AppLanguage.ENGLISH
+
     // ✅ normalize: לפעמים מגיע subjectId בעברית (תת־נושא) ולא id אמיתי -> לא לקרוס
     val normalizedSubjectId = remember(subjectId, screenTitle) {
         val raw = subjectId.trim()
         val title = screenTitle.trim()
 
         // אם זה כבר id אמיתי שקיים ברג'יסטרי — נשאיר כמו שהוא
-        val exists = runCatching { TopicsBySubjectRegistry.subjectById(raw) != null }.getOrDefault(false)
+        val exists =
+            runCatching { TopicsBySubjectRegistry.subjectById(raw) != null }.getOrDefault(false)
         if (exists) return@remember raw
 
         // ✅ fallback ממוקד: "שחרורים" (הבעיה אצלך)
@@ -1033,9 +1081,15 @@ fun SubjectExercisesScreen(
     // ✅ אם עדיין לא נמצא — לא לקרוס, אלא להציג מסך ברור + חזרה
     if (appSubjectOrNull == null) {
         Scaffold(
+            containerColor = Color.Transparent,
             topBar = {
                 il.kmi.app.ui.KmiTopBar(
-                    title = "נושא לא נמצא",
+                    title =
+                        if (isEnglish) {
+                            "Subject Not Found"
+                        } else {
+                            "נושא לא נמצא"
+                        },
                     onHome = onOpenHome,
                     showTopHome = false,
                     centerTitle = true,
@@ -1047,20 +1101,63 @@ fun SubjectExercisesScreen(
             Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(padding),
+                    .padding(padding)
+                    .background(
+                        brush = kmiScreenBackgroundBrush()
+                    ),
                 contentAlignment = Alignment.Center
             ) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Column(
+                    horizontalAlignment =
+                        Alignment.CenterHorizontally
+                ) {
                     Text(
-                        text = "לא נמצא subject עבור:\n${screenTitle.ifBlank { subjectId }}",
+                        text =
+                            if (isEnglish) {
+                                "No subject was found for:\n${
+                                    screenTitle.ifBlank {
+                                        subjectId
+                                    }
+                                }"
+                            } else {
+                                "לא נמצא נושא עבור:\n${
+                                    screenTitle.ifBlank {
+                                        subjectId
+                                    }
+                                }"
+                            },
                         style = KmiTypography.sectionTitle,
+                        color =
+                            MaterialTheme.colorScheme.onBackground,
                         textAlign = TextAlign.Center
                     )
-                    Spacer(Modifier.height(12.dp))
-                    Button(onClick = onBack) { Text("חזרה") }
+
+                    Spacer(
+                        modifier = Modifier.height(12.dp)
+                    )
+
+                    Button(
+                        onClick = onBack,
+                        elevation =
+                            ButtonDefaults.buttonElevation(
+                                defaultElevation = 0.dp,
+                                pressedElevation = 0.dp
+                            )
+                    ) {
+                        Text(
+                            text =
+                                if (isEnglish) {
+                                    "Back"
+                                } else {
+                                    "חזרה"
+                                },
+                            style = KmiTypography.action
+                        )
+                    }
                 }
             }
         }
+
         return
     }
 
@@ -1172,7 +1269,8 @@ fun SubjectExercisesScreen(
 
         // ----- releases -----
         if (appSubject.id == "releases") {
-            val pick = detectReleasesPickFromTitle(screenTitleResolved) ?: return@remember appSubject
+            val pick =
+                detectReleasesPickFromTitle(screenTitleResolved) ?: return@remember appSubject
             val f = releasesFilterForPick(pick)
 
             return@remember appSubject.copy(
@@ -1201,9 +1299,6 @@ fun SubjectExercisesScreen(
     }
 
     // (belts) המרה מרשימת החגורות ב־app לרשימת חגורות ב־shared ✅
-    val ctx = LocalContext.current
-    val langManager = remember(ctx) { il.kmi.shared.localization.AppLanguageManager(ctx) }
-    val isEnglish = langManager.getCurrentLanguage() == il.kmi.shared.localization.AppLanguage.ENGLISH
 
 // ✅ בודקים את מצב ה-Theme של האפליקציה בפועל
     val isDarkMode = MaterialTheme.colorScheme.surface.luminance() < 0.5f
@@ -1231,9 +1326,12 @@ fun SubjectExercisesScreen(
             titleHeb = effectiveAppSubject.titleHeb,
             topicsByBelt = sharedTopicsByBelt,
             subTopicHint = effectiveAppSubject.subTopicHint,
-            includeItemKeywords = effectiveAppSubject.includeItemKeywords.orEmpty(),
-            requireAllItemKeywords = effectiveAppSubject.requireAllItemKeywords.orEmpty(),
-            excludeItemKeywords = effectiveAppSubject.excludeItemKeywords.orEmpty()
+            includeItemKeywords =
+                effectiveAppSubject.includeItemKeywords,
+            requireAllItemKeywords =
+                effectiveAppSubject.requireAllItemKeywords,
+            excludeItemKeywords =
+                effectiveAppSubject.excludeItemKeywords
         )
     }
 
@@ -1245,30 +1343,8 @@ fun SubjectExercisesScreen(
         KmiTtsManager.setSpeechProfile(rate = 0.95f, pitch = 1.0f)
     }
 
-    val backgroundBrush =
-        Brush.verticalGradient(
-            colors =
-                if (isDarkMode) {
-                    listOf(
-                        MaterialTheme.colorScheme.background,
-                        MaterialTheme.colorScheme.surface,
-                        Color(0xFF10243A),
-                        Color(0xFF0A3657),
-                        Color(0xFF041E33)
-                    )
-                } else {
-                    listOf(
-                        Color(0xFFF8FBFF),
-                        Color(0xFFEAF4FF),
-                        Color(0xFFB7DDF7),
-                        Color(0xFF1F78B4),
-                        Color(0xFF062B4A)
-                    )
-                }
-        )
-
-            // נתוני שורה: belt + topic + rawItem (לניווט) + displayName + canonicalId
-            data class RowData(
+    // נתוני שורה: belt + topic + rawItem (לניווט) + displayName + canonicalId
+    data class RowData(
         val belt: Belt,
         val topic: String,
         val rawItem: String,
@@ -1277,125 +1353,174 @@ fun SubjectExercisesScreen(
     )
 
     // shared resolver: מקור אמת ✅
-    val rows: List<RowData> = remember(subjectId, beltsForUi, sharedSubject, effectiveAppSubject, screenTitleResolved) {
+    val rows: List<RowData> =
+        remember(subjectId, beltsForUi, sharedSubject, effectiveAppSubject, screenTitleResolved) {
 
-        // ✅ SPECIAL-CASE: releases מגיע *רק* מ-HardSectionsCatalog (לא מ-ContentRepo)
-        if (effectiveAppSubject.id == "releases") {
+            // ✅ SPECIAL-CASE: releases מגיע *רק* מ-HardSectionsCatalog (לא מ-ContentRepo)
+            if (effectiveAppSubject.id == "releases") {
 
-            // בוחרים איזה Section להציג לפי הכותרת (כמו במסך הבחירה)
-            val wantedSectionTitle: String? = run {
-                val t = screenTitleResolved
+                // בוחרים איזה Section להציג לפי הכותרת (כמו במסך הבחירה)
+                val wantedSectionTitle: String? =
+                    when {
+                        screenTitleResolved.contains(
+                            "חניק"
+                        ) -> {
+                            "שחרור מחניקות"
+                        }
 
-                when {
-                    t.contains("חניק") -> "שחרור מחניקות"
-                    t.contains("חביק") || t.contains("חיבוק") -> "שחרור מחביקות גוף"
+                        screenTitleResolved.contains(
+                            "חביק"
+                        ) ||
+                                screenTitleResolved.contains(
+                                    "חיבוק"
+                                ) -> {
+                            "שחרור מחביקות גוף"
+                        }
 
-                    // ✅ זה הסקשן הראשון, והוא כולל גם ידיים וגם שיער/חולצה
-                    t.contains("תפיס") || t.contains("אחיז") || t.contains("שיער") || t.contains("חולצ") ->
-                        "שחרור מתפיסות ידיים / שיער / חולצה"
+                        screenTitleResolved.contains(
+                            "תפיס"
+                        ) ||
+                                screenTitleResolved.contains(
+                                    "אחיז"
+                                ) ||
+                                screenTitleResolved.contains(
+                                    "שיער"
+                                ) ||
+                                screenTitleResolved.contains(
+                                    "חולצ"
+                                ) -> {
+                            "שחרור מתפיסות ידיים / שיער / חולצה"
+                        }
 
-                    else -> null
+                        else -> null
+                    }
+
+                val sectionsToUse = HardSectionsCatalog.releases
+                    .filter { sec -> wantedSectionTitle == null || sec.title.trim() == wantedSectionTitle }
+
+                val order = HardSectionsCatalog.beltOrder
+
+                order.flatMap { belt ->
+                    val itemsForBelt = sectionsToUse
+                        .flatMap { sec -> sec.itemsFor(belt) }
+                        .map { it.trim() }
+                        .filter { it.isNotBlank() }
+
+                    itemsForBelt.map { raw ->
+                        RowData(
+                            belt = belt,
+                            topic = "שחרורים",
+                            rawItem = raw,
+                            displayItem = stripSubjectPrefix(
+                                subjectTitle = effectiveAppSubject.titleHeb,
+                                itemTitle = raw
+                            ),
+                            canonicalId = "releases::${belt.id}::${wantedSectionTitle ?: "ALL"}::${raw.trim()}"
+                        )
+                    }
                 }
-            }
+            } else {
 
-            val sectionsToUse = HardSectionsCatalog.releases
-                .filter { sec -> wantedSectionTitle == null || sec.title.trim() == wantedSectionTitle }
+                // ✅ כל שאר הנושאים נשארים דרך resolver (ContentRepo)
+                beltsForUi
+                    .flatMap { belt ->
+                        val sections = SubjectItemsResolver.resolveBySubject(
+                            belt = belt,
+                            subject = sharedSubject
+                        )
 
-            val order = HardSectionsCatalog.beltOrder
+                        sections.flatMap { section ->
+                            val sectionTitle = section.title
 
-            order.flatMap { belt ->
-                val itemsForBelt = sectionsToUse
-                    .flatMap { sec -> sec.itemsFor(belt) }
-                    .map { it.trim() }
-                    .filter { it.isNotBlank() }
-
-                itemsForBelt.map { raw ->
-                    RowData(
-                        belt = belt,
-                        topic = "שחרורים",
-                        rawItem = raw,
-                        displayItem = stripSubjectPrefix(
-                            subjectTitle = effectiveAppSubject.titleHeb,
-                            itemTitle = raw
-                        ),
-                        canonicalId = "releases::${belt.id}::${wantedSectionTitle ?: "ALL"}::${raw.trim()}"
-                    )
-                }
-            }
-        } else {
-
-            // ✅ כל שאר הנושאים נשארים דרך resolver (ContentRepo)
-            beltsForUi
-                .flatMap { belt ->
-                    val sections = SubjectItemsResolver.resolveBySubject(
-                        belt = belt,
-                        subject = sharedSubject
-                    )
-
-                    sections.flatMap { section ->
-                        val sectionTitle = section.title // יכול להיות null
-
-                        // ✅ הסרה מוחלטת של section "כללי"
-                        if (sectionTitle?.trim() == "כללי") return@flatMap emptyList()
-
-                        // ✅ NEW: אכיפה של include/require/exclude/subTopicHint על כל פריט
-                        val filteredItems = section.items.filter { ui ->
-                            val rawTitle = buildString {
-                                append(ui.canonicalId)
-                                append("::")
-                                append(ui.rawItem)
-                                append("::")
-                                append(ui.displayName)
+                            // ✅ הסרה מוחלטת של section "כללי"
+                            if (
+                                sectionTitle.trim() == "כללי"
+                            ) {
+                                return@flatMap emptyList()
                             }
 
-                            TopicsBySubjectRegistry.run {
-                                effectiveAppSubject.matchesItem(
-                                    itemTitle = rawTitle,
-                                    subTopicTitle = sectionTitle
+                            // ✅ NEW: אכיפה של include/require/exclude/subTopicHint על כל פריט
+                            val filteredItems = section.items.filter { ui ->
+                                val rawTitle = buildString {
+                                    append(ui.canonicalId)
+                                    append("::")
+                                    append(ui.rawItem)
+                                    append("::")
+                                    append(ui.displayName)
+                                }
+
+                                TopicsBySubjectRegistry.run {
+                                    effectiveAppSubject.matchesItem(
+                                        itemTitle = rawTitle,
+                                        subTopicTitle = sectionTitle
+                                    )
+                                }
+                            }
+
+                            filteredItems.map { ui ->
+                                val cleanedDisplay = stripSubjectPrefix(
+                                    subjectTitle = effectiveAppSubject.titleHeb,
+                                    itemTitle = ui.displayName
+                                )
+
+                                RowData(
+                                    belt = belt,
+                                    topic = ui.topicTitle,
+                                    rawItem = ui.rawItem,
+                                    displayItem = cleanedDisplay,
+                                    canonicalId = ui.canonicalId
                                 )
                             }
                         }
-
-                        filteredItems.map { ui ->
-                            val cleanedDisplay = stripSubjectPrefix(
-                                subjectTitle = effectiveAppSubject.titleHeb,
-                                itemTitle = ui.displayName
-                            )
-
-                            RowData(
-                                belt = belt,
-                                topic = ui.topicTitle,
-                                rawItem = ui.rawItem,
-                                displayItem = cleanedDisplay,
-                                canonicalId = ui.canonicalId
-                            )
-                        }
                     }
-                }
-                .filterNot { it.topic.trim() == "כללי" }
+                    .filterNot { it.topic.trim() == "כללי" }
+            }
         }
-    }
 
     // ----------------- ⭐ Favorites + 🕒 Recents -----------------
-    val prefs = remember(ctx) {
-        ctx.getSharedPreferences("kmi_subject_exercises", android.content.Context.MODE_PRIVATE)
-    }
+    val prefs =
+        remember(ctx) {
+            ctx.getSharedPreferences(
+                "kmi_subject_exercises",
+                Context.MODE_PRIVATE
+            )
+        }
 
-    val SEP = "\u001F" // unit-separator (נדיר בטקסט)
+    val recentItemsSeparator = "\u001F"
 
-    val KEY_RECENTS = remember(subjectId) { "recent_ids_str__subject__$subjectId" }
+    val recentItemsKey =
+        remember(subjectId) {
+            "recent_ids_str__subject__$subjectId"
+        }
 
     fun loadRecents(): List<String> {
-        val raw = prefs.getString(KEY_RECENTS, "").orEmpty()
-        if (raw.isBlank()) return emptyList()
-        return raw.split(SEP).asSequence()
+        val raw =
+            prefs.getString(
+                recentItemsKey,
+                ""
+            ).orEmpty()
+
+        if (raw.isBlank()) {
+            return emptyList()
+        }
+
+        return raw
+            .split(recentItemsSeparator)
+            .asSequence()
             .map { it.trim() }
             .filter { it.isNotBlank() }
             .toList()
     }
 
     fun saveRecents(list: List<String>) {
-        prefs.edit().putString(KEY_RECENTS, list.joinToString(SEP)).apply()
+        prefs.edit {
+            putString(
+                recentItemsKey,
+                list.joinToString(
+                    recentItemsSeparator
+                )
+            )
+        }
     }
 
     val marksVersion by vm.marksVersion.collectAsState()
@@ -1483,10 +1608,17 @@ fun SubjectExercisesScreen(
                 }
             }
 
-            prefs.edit()
-                .putStringSet(masteredKey, masteredSet)
-                .putStringSet(unknownKey, unknownSet)
-                .apply()
+            prefs.edit {
+                putStringSet(
+                    masteredKey,
+                    masteredSet
+                )
+
+                putStringSet(
+                    unknownKey,
+                    unknownSet
+                )
+            }
         }
     }
 
@@ -1543,8 +1675,10 @@ fun SubjectExercisesScreen(
                     val masteredKey = "mastered_${row.belt.id}_${key}"
                     val unknownKey = "unknown_${row.belt.id}_${key}"
 
-                    val masteredSet = prefs.getStringSet(masteredKey, emptySet<String>()) ?: emptySet()
-                    val unknownSet = prefs.getStringSet(unknownKey, emptySet<String>()) ?: emptySet()
+                    val masteredSet =
+                        prefs.getStringSet(masteredKey, emptySet<String>()) ?: emptySet()
+                    val unknownSet =
+                        prefs.getStringSet(unknownKey, emptySet<String>()) ?: emptySet()
 
                     val localValue: Boolean? = when {
                         masteredSet.contains(statusId) || masteredSet.contains(legacyStatusId) -> true
@@ -1624,7 +1758,9 @@ fun SubjectExercisesScreen(
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .background(backgroundBrush) // שומר על אותו רקע מאחורי הכל
+                    .background(
+                        brush = kmiScreenBackgroundBrush()
+                    )
             ) {
                 il.kmi.app.ui.KmiTopBar(
                     title = screenTitleResolved,
@@ -1632,6 +1768,7 @@ fun SubjectExercisesScreen(
                     showTopHome = false,
                     centerTitle = true,
                     lockSearch = false,
+                    showTopShare = true,
                     showBottomActions = true,
                     onShare = {
                         val pdfItems = rows.map { row ->
@@ -1661,13 +1798,19 @@ fun SubjectExercisesScreen(
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .background(backgroundBrush)
-                        .padding(horizontal = 12.dp, vertical = 8.dp)
+                        .background(
+                            brush = kmiScreenBackgroundBrush()
+                        )
+                        .padding(
+                            horizontal = 12.dp,
+                            vertical = 8.dp
+                        )
                 ) {
                     TopFiltersBarModern(
                         filterMode = filterMode,
                         favCount = favoritesCountForThisSubject,
                         recentCount = recentIds.size,
+                        isEnglish = isEnglish,
                         onPick = { filterMode = it },
                         modifier = Modifier.fillMaxWidth()
                     )
@@ -1680,7 +1823,8 @@ fun SubjectExercisesScreen(
                         } else {
                             "→→ הזז לצד כדי לראות עוד נתונים →→"
                         },
-                        color = Color.White.copy(alpha = 0.86f),
+                        color =
+                            MaterialTheme.colorScheme.onBackground,
                         style = KmiTypography.caption,
                         fontWeight = FontWeight.SemiBold,
                         textAlign = TextAlign.Center,
@@ -1736,12 +1880,14 @@ fun SubjectExercisesScreen(
         }
     ) { padding ->
 
-    // ✅ התוכן מתחיל אחרי כל ה-topBar (כולל הפילטרים)
+        // ✅ התוכן מתחיל אחרי כל ה-topBar (כולל הפילטרים)
         Column(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
-                .background(backgroundBrush)
+                .background(
+                    brush = kmiScreenBackgroundBrush()
+                )
         ) {
             Surface(
                 modifier = Modifier
@@ -1750,18 +1896,17 @@ fun SubjectExercisesScreen(
                     .padding(horizontal = 16.dp)
                     .padding(bottom = 8.dp),
                 shape = RoundedCornerShape(28.dp),
-                color = if (isDarkMode) {
-                    Color(0xFF0F172A).copy(alpha = 0.96f)
-                } else {
-                    Color.White.copy(alpha = 0.97f)
-                },
-                tonalElevation = if (isDarkMode) 0.dp else 4.dp,
-                shadowElevation = 1.dp,
-                border = if (isDarkMode) {
-                    BorderStroke(1.dp, Color.White.copy(alpha = 0.10f))
-                } else {
-                    null
-                }
+                color =
+                    MaterialTheme.colorScheme.surface.copy(
+                        alpha = 0.97f
+                    ),
+                tonalElevation = 0.dp,
+                shadowElevation = 0.dp,
+                border = BorderStroke(
+                    width = 1.dp,
+                    color =
+                        MaterialTheme.colorScheme.outlineVariant
+                )
             ) {
                 // ... כל הקוד שלך של rows.isEmpty / LazyColumn נשאר אותו דבר
                 if (rows.isEmpty()) {
@@ -1770,9 +1915,15 @@ fun SubjectExercisesScreen(
                         contentAlignment = Alignment.Center
                     ) {
                         Text(
-                            text = "לא נמצאו תרגילים לנושא זה.",
+                            text =
+                                if (isEnglish) {
+                                    "No exercises were found for this subject."
+                                } else {
+                                    "לא נמצאו תרגילים לנושא זה."
+                                },
                             style = KmiTypography.body,
-                            color = if (isDarkMode) Color.White.copy(alpha = 0.86f) else Color(0xFF546E7A),
+                            color =
+                                MaterialTheme.colorScheme.onSurfaceVariant,
                             textAlign = TextAlign.Center
                         )
                     }
@@ -1895,10 +2046,12 @@ fun SubjectExercisesScreen(
                                 favoriteCount = currentFavoriteCount,
                                 unmarkedCount = currentUnmarkedCount,
                                 isEnglish = isEnglish,
-                                isDarkMode = isDarkMode,
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .padding(horizontal = 10.dp, vertical = 10.dp)
+                                    .padding(
+                                        horizontal = 10.dp,
+                                        vertical = 10.dp
+                                    )
                             )
 
                             LazyColumn(
@@ -1987,124 +2140,152 @@ fun SubjectExercisesScreen(
                     }
                 }
 
-            // ✅ דיאלוג נשאר אותו דבר (הוא מתחת ל-Column, אין שינוי)
-            selectedRow?.let { row ->
-    val isFavorite = row.canonicalId in favIds
+                // ✅ דיאלוג נשאר אותו דבר (הוא מתחת ל-Column, אין שינוי)
+                selectedRow?.let { row ->
+                    val isFavorite = row.canonicalId in favIds
 
-                val explanation = remember(row.canonicalId, row.belt, row.topic, row.rawItem, isEnglish) {
-                    val resolved = ExerciseExplanationResolver.get(
-                        belt = row.belt,
-                        topic = row.topic,
-                        item = row.rawItem,
-                        isEnglish = isEnglish
-                    ).trim()
+                    val explanation =
+                        remember(row.canonicalId, row.belt, row.topic, row.rawItem, isEnglish) {
+                            val resolved = ExerciseExplanationResolver.get(
+                                belt = row.belt,
+                                topic = row.topic,
+                                item = row.rawItem,
+                                isEnglish = isEnglish
+                            ).trim()
 
-                    val cleaned = if ("::" in resolved) {
-                        resolved
-                            .split("::")
-                            .map { it.trim() }
-                            .lastOrNull { it.isNotBlank() }
-                            ?: resolved
-                    } else {
-                        resolved
-                    }.trim()
+                            val cleaned = if ("::" in resolved) {
+                                resolved
+                                    .split("::")
+                                    .map { it.trim() }
+                                    .lastOrNull { it.isNotBlank() }
+                                    ?: resolved
+                            } else {
+                                resolved
+                            }.trim()
 
-                    val isFallback = if (isEnglish) {
-                        cleaned.isBlank() ||
-                                cleaned.startsWith("Detailed explanation for:") ||
-                                cleaned.startsWith("There is currently no explanation")
-                    } else {
-                        cleaned.isBlank() ||
-                                cleaned.startsWith("הסבר מפורט על") ||
-                                cleaned.startsWith("אין כרגע")
-                    }
+                            val isFallback = if (isEnglish) {
+                                cleaned.isBlank() ||
+                                        cleaned.startsWith("Detailed explanation for:") ||
+                                        cleaned.startsWith("There is currently no explanation")
+                            } else {
+                                cleaned.isBlank() ||
+                                        cleaned.startsWith("הסבר מפורט על") ||
+                                        cleaned.startsWith("אין כרגע")
+                            }
 
-                    if (!isFallback) {
-                        cleaned
-                    } else {
-                        if (isEnglish) {
-                            "There is currently no explanation for this exercise."
-                        } else {
-                            "אין כרגע הסבר לתרגיל הזה."
+                            if (!isFallback) {
+                                cleaned
+                            } else {
+                                if (isEnglish) {
+                                    "There is currently no explanation for this exercise."
+                                } else {
+                                    "אין כרגע הסבר לתרגיל הזה."
+                                }
+                            }
                         }
-                    }
-                }
 
-                AlertDialog(
-                    onDismissRequest = { selectedRow = null },
-                    title = {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Column(
-                                modifier = Modifier.weight(1f),
-                                horizontalAlignment = Alignment.Start
+                    AlertDialog(
+                        onDismissRequest = { selectedRow = null },
+                        title = {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Column(
+                                    modifier = Modifier.weight(1f),
+                                    horizontalAlignment = Alignment.Start
+                                ) {
+                                    Text(
+                                        text = row.displayItem,
+                                        style = KmiTypography.sectionTitle,
+                                        fontWeight = FontWeight.Bold,
+                                        textAlign = TextAlign.Start
+                                    )
+                                }
+
+                                Spacer(Modifier.width(4.dp))
+
+                                val context = LocalContext.current
+
+                                IconButton(
+                                    onClick = {
+                                        KmiTtsManager.init(context)
+                                        KmiTtsManager.stop()
+                                        KmiTtsManager.speak(explanation)
+                                    }
+                                ) {
+                                    Icon(
+                                        imageVector =
+                                            Icons.AutoMirrored.Filled.VolumeUp,
+                                        contentDescription =
+                                            if (isEnglish) {
+                                                "Play voice explanation"
+                                            } else {
+                                                "השמע הסבר קולי"
+                                            },
+                                        tint = MaterialTheme.colorScheme.primary
+                                    )
+                                }
+
+                                IconButton(
+                                    onClick = {
+                                        val wasFavorite = row.canonicalId in favIds
+                                        FavoritesStore.toggle(row.canonicalId)
+
+                                        // אם אנחנו בפילטר "מועדפים" והסרנו מועדף — נסגור דיאלוג
+                                        if (filterMode == FilterMode.FAVORITES && wasFavorite) {
+                                            selectedRow = null
+                                        }
+                                    }
+                                ) {
+                                    Icon(
+                                        imageVector = if (isFavorite) Icons.Filled.Star else Icons.Outlined.StarBorder,
+                                        contentDescription = null,
+                                        tint = if (isFavorite) {
+                                            Color(0xFFFFC107)
+                                        } else {
+                                            if (isDarkMode) Color.White.copy(alpha = 0.72f)
+                                            else MaterialTheme.colorScheme.onSurfaceVariant.copy(
+                                                alpha = 0.55f
+                                            )
+                                        }
+                                    )
+                                }
+                            }
+                        },
+                        text = {
+                            Text(
+                                text = explanation,
+                                style = KmiTypography.body,
+                                color =
+                                    MaterialTheme.colorScheme.onSurface,
+                                textAlign =
+                                    if (isEnglish) {
+                                        TextAlign.Left
+                                    } else {
+                                        TextAlign.Right
+                                    }
+                            )
+                        },
+                        confirmButton = {
+                            TextButton(
+                                onClick = {
+                                    selectedRow = null
+                                }
                             ) {
                                 Text(
-                                    text = row.displayItem,
-                                    style = KmiTypography.sectionTitle,
-                                    fontWeight = FontWeight.Bold,
-                                    textAlign = TextAlign.Start
-                                )
-                            }
-
-                            Spacer(Modifier.width(4.dp))
-
-                            val context = LocalContext.current
-
-                            IconButton(
-                                onClick = {
-                                    KmiTtsManager.init(context)
-                                    KmiTtsManager.stop()
-                                    KmiTtsManager.speak(explanation)
-                                }
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Filled.VolumeUp,
-                                    contentDescription = "השמע הסבר קולי",
-                                    tint = MaterialTheme.colorScheme.primary
-                                )
-                            }
-
-                            IconButton(
-                                onClick = {
-                                    val wasFavorite = row.canonicalId in favIds
-                                    FavoritesStore.toggle(row.canonicalId)
-
-                                    // אם אנחנו בפילטר "מועדפים" והסרנו מועדף — נסגור דיאלוג
-                                    if (filterMode == FilterMode.FAVORITES && wasFavorite) {
-                                        selectedRow = null
-                                    }
-                                }
-                            ) {
-                                Icon(
-                                    imageVector = if (isFavorite) Icons.Filled.Star else Icons.Outlined.StarBorder,
-                                    contentDescription = null,
-                                    tint = if (isFavorite) {
-                                        Color(0xFFFFC107)
-                                    } else {
-                                        if (isDarkMode) Color.White.copy(alpha = 0.72f)
-                                        else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.55f)
-                                    }
+                                    text =
+                                        if (isEnglish) {
+                                            "Close"
+                                        } else {
+                                            "סגור"
+                                        },
+                                    style = KmiTypography.action
                                 )
                             }
                         }
-                    },
-                    text = {
-                        Text(
-                            text = explanation,
-                            style = KmiTypography.body,
-                            textAlign = TextAlign.Right
-                        )
-                    },
-                    confirmButton = {
-                        TextButton(onClick = { selectedRow = null }) {
-                            Text("סגור")
-                            }
-                        }
-                     )
-                 }
+                    )
+                }
             }
         }
     }
@@ -2120,10 +2301,11 @@ private fun SubjectTopStatChip(
     Surface(
         shape = RoundedCornerShape(14.dp),
         color = containerColor,
-        shadowElevation = 1.dp,
+        tonalElevation = 0.dp,
+        shadowElevation = 0.dp,
         border = BorderStroke(
-            1.dp,
-            contentColor.copy(alpha = 0.14f)
+            width = 1.dp,
+            color = contentColor.copy(alpha = 0.18f)
         )
     ) {
         Column(
@@ -2189,33 +2371,23 @@ private fun TopFiltersBarModern(
     filterMode: FilterMode,
     favCount: Int,
     recentCount: Int,
+    isEnglish: Boolean,
     onPick: (FilterMode) -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val isDarkMode =
-        MaterialTheme.colorScheme.background
-            .luminance() < 0.5f
-
     Surface(
         modifier = modifier.fillMaxWidth(),
         shape = RoundedCornerShape(22.dp),
         color =
-            if (isDarkMode) {
-                MaterialTheme.colorScheme.surface
-            } else {
-                Color.White.copy(alpha = 0.92f)
-            },
+            MaterialTheme.colorScheme.surface.copy(
+                alpha = 0.92f
+            ),
         tonalElevation = 0.dp,
         shadowElevation = 0.dp,
         border = BorderStroke(
             width = 1.dp,
             color =
-                if (isDarkMode) {
-                    MaterialTheme.colorScheme.outline
-                        .copy(alpha = 0.45f)
-                } else {
-                    Color(0x14000000)
-                }
+                MaterialTheme.colorScheme.outlineVariant
         )
     ) {
         Row(
@@ -2227,23 +2399,46 @@ private fun TopFiltersBarModern(
         ) {
 
             FilterChipModern(
-                text = "הכל",
+                text =
+                    if (isEnglish) {
+                        "All"
+                    } else {
+                        "הכל"
+                    },
                 selected = filterMode == FilterMode.ALL,
-                onClick = { onPick(FilterMode.ALL) },
+                onClick = {
+                    onPick(FilterMode.ALL)
+                },
                 modifier = Modifier.weight(1f)
             )
 
             FilterChipModern(
-                text = "מועדפים ($favCount)\n⭐",
-                selected = filterMode == FilterMode.FAVORITES,
-                onClick = { onPick(FilterMode.FAVORITES) },
+                text =
+                    if (isEnglish) {
+                        "Favorites ($favCount)\n⭐"
+                    } else {
+                        "מועדפים ($favCount)\n⭐"
+                    },
+                selected =
+                    filterMode == FilterMode.FAVORITES,
+                onClick = {
+                    onPick(FilterMode.FAVORITES)
+                },
                 modifier = Modifier.weight(1f)
             )
 
             FilterChipModern(
-                text = "אחרונים ($recentCount)\n🕒",
-                selected = filterMode == FilterMode.RECENTS,
-                onClick = { onPick(FilterMode.RECENTS) },
+                text =
+                    if (isEnglish) {
+                        "Recent ($recentCount)\n🕒"
+                    } else {
+                        "אחרונים ($recentCount)\n🕒"
+                    },
+                selected =
+                    filterMode == FilterMode.RECENTS,
+                onClick = {
+                    onPick(FilterMode.RECENTS)
+                },
                 modifier = Modifier.weight(1f)
             )
         }
@@ -2285,8 +2480,13 @@ private fun FilterChipModern(
         else MaterialTheme.colorScheme.surfaceVariant
 
     val border =
-        if (selected) MaterialTheme.colorScheme.primary.copy(alpha = 0.55f)
-        else Color(0x16000000)
+        if (selected) {
+            MaterialTheme.colorScheme.primary.copy(
+                alpha = 0.55f
+            )
+        } else {
+            MaterialTheme.colorScheme.outlineVariant
+        }
 
     Surface(
         modifier = modifier
@@ -2316,6 +2516,7 @@ private fun FilterChipModern(
 
 /* ───────── כותרת חגורה בתוך המסך ───────── */
 
+@Suppress("unused")
 @Composable
 private fun BeltHeaderRow(
     belt: Belt,
@@ -2359,7 +2560,6 @@ private fun BeltStickyHeaderModern(
     favoriteCount: Int,
     unmarkedCount: Int,
     isEnglish: Boolean,
-    isDarkMode: Boolean = false,
     modifier: Modifier = Modifier
 ) {
     val onBelt = if (belt.color.luminance() < 0.5f) Color.White else Color.Black
@@ -2370,16 +2570,15 @@ private fun BeltStickyHeaderModern(
     }
 
     Surface(
-        modifier = modifier
-            .fillMaxWidth()
-            .padding(bottom = 0.dp),
+        modifier = modifier.fillMaxWidth(),
         shape = RoundedCornerShape(22.dp),
-        tonalElevation = if (isDarkMode) 0.dp else 2.dp,
+        tonalElevation = 0.dp,
         shadowElevation = 0.dp,
-        color = if (isDarkMode) Color(0xFF111827) else MaterialTheme.colorScheme.surface,
+        color = MaterialTheme.colorScheme.surface,
         border = BorderStroke(
-            1.dp,
-            if (isDarkMode) Color.White.copy(alpha = 0.10f) else Color(0x12000000)
+            width = 1.dp,
+            color =
+                MaterialTheme.colorScheme.outlineVariant
         )
     ) {
         Column(
@@ -2405,11 +2604,16 @@ private fun BeltStickyHeaderModern(
                     )
 
                     Text(
-                        text = if (isEnglish) {
-                            if (count == 1) "1 exercise" else "$count exercises"
-                        } else {
-                            "$count תרגילים"
-                        },
+                        text =
+                            if (isEnglish) {
+                                if (count == 1) {
+                                    "1 exercise"
+                                } else {
+                                    "$count exercises"
+                                }
+                            } else {
+                                "$count תרגילים"
+                            },
                         style = KmiTypography.secondary,
                         fontWeight = FontWeight.Bold,
                         color = onBelt.copy(alpha = 0.95f)
@@ -2430,13 +2634,7 @@ private fun BeltStickyHeaderModern(
                             "→→ הזז לצד כדי לראות עוד נתונים →→"
                         },
                     color =
-                        if (isDarkMode) {
-                            Color.White.copy(
-                                alpha = 0.78f
-                            )
-                        } else {
-                            Color(0xFF5B6472)
-                        },
+                        MaterialTheme.colorScheme.onSurfaceVariant,
                     style = KmiTypography.caption,
                     fontWeight =
                         FontWeight.SemiBold,
@@ -2499,13 +2697,19 @@ private fun beltTitleEnglishForSticky(belt: Belt): String {
     }
 }
 
+@Suppress("unused")
 @Composable
 private fun BeltSectionCardModern(
     belt: Belt,
     count: Int,
-    isDarkMode: Boolean = false,
     content: @Composable ColumnScope.() -> Unit
-) {    val onBelt = if (belt.color.luminance() < 0.5f) Color.White else Color.Black
+) {
+    val onBelt =
+        if (belt.color.luminance() < 0.5f) {
+            Color.White
+        } else {
+            Color.Black
+        }
 
     val cleanName = remember(belt.heb) {
         val s = belt.heb.trim()
@@ -2515,12 +2719,13 @@ private fun BeltSectionCardModern(
     Surface(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(22.dp),
-        tonalElevation = if (isDarkMode) 0.dp else 2.dp,
+        tonalElevation = 0.dp,
         shadowElevation = 0.dp,
-        color = if (isDarkMode) Color(0xFF111827) else MaterialTheme.colorScheme.surface,
+        color = MaterialTheme.colorScheme.surface,
         border = BorderStroke(
-            1.dp,
-            if (isDarkMode) Color.White.copy(alpha = 0.10f) else Color(0x12000000)
+            width = 1.dp,
+            color =
+                MaterialTheme.colorScheme.outlineVariant
         )
     ) {
         Column(
@@ -2582,33 +2787,33 @@ private fun ExerciseRowCardModern(
     onToggleFavorite: () -> Unit,
     onInfoClick: () -> Unit
 ) {
-    val rowBgColor = if (isDarkMode) {
-        Color(0xFF1E293B)
-    } else {
+    val rowBgColor =
         MaterialTheme.colorScheme.surfaceVariant
-    }
 
-    val rowTextColor = if (isDarkMode) {
-        Color(0xFFF8FAFC)
-    } else {
+    val rowTextColor =
         MaterialTheme.colorScheme.onSurface
-    }
 
-    val rowMetaColor = if (isDarkMode) {
-        Color(0xFFCBD5E1)
-    } else {
+    val rowMetaColor =
         MaterialTheme.colorScheme.onSurfaceVariant
-    }
 
     Surface(
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(16.dp)),
         color = rowBgColor,
-        tonalElevation = if (isDarkMode) 0.dp else 1.dp,
+        tonalElevation = 0.dp,
+        shadowElevation = 0.dp,
         border = BorderStroke(
-            1.dp,
-            if (isDarkMode) belt.color.copy(alpha = 0.55f) else belt.color.copy(alpha = 0.35f)
+            width = 1.dp,
+            color =
+                belt.color.copy(
+                    alpha =
+                        if (isDarkMode) {
+                            0.55f
+                        } else {
+                            0.35f
+                        }
+                )
         )
     ) {
         CompositionLocalProvider(
@@ -2651,7 +2856,8 @@ private fun ExerciseRowCardModern(
                                 SubjectExerciseMetaBadge(
                                     text = "No. $exerciseNumber",
                                     containerColor = belt.color.copy(alpha = 0.14f),
-                                    contentColor = Color(0xFF1F2937)
+                                    contentColor =
+                                        MaterialTheme.colorScheme.onSurface
                                 )
 
                                 if (isFavorite) {
@@ -2679,7 +2885,8 @@ private fun ExerciseRowCardModern(
                                 SubjectExerciseMetaBadge(
                                     text = "מס׳ $exerciseNumber",
                                     containerColor = belt.color.copy(alpha = 0.14f),
-                                    contentColor = Color(0xFF1F2937)
+                                    contentColor =
+                                        MaterialTheme.colorScheme.onSurface
                                 )
                             }
                         }
@@ -2721,17 +2928,25 @@ private fun ExerciseRowCardModern(
 
                 IconButton(
                     onClick = onInfoClick,
-                    modifier = Modifier.size(30.dp)
+                    modifier =
+                        Modifier.size(
+                            KmiIconSize.medium
+                        )
                 ) {
                     Icon(
                         imageVector = Icons.Filled.Info,
-                        contentDescription = if (isEnglish) "Exercise information" else "מידע על התרגיל",
-                        tint = if (isDarkMode) {
-                            Color.White.copy(alpha = 0.78f)
-                        } else {
-                            Color(0xFF607D8B)
-                        },
-                        modifier = Modifier.size(20.dp)
+                        contentDescription =
+                            if (isEnglish) {
+                                "Exercise information"
+                            } else {
+                                "מידע על התרגיל"
+                            },
+                        tint =
+                            MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier =
+                            Modifier.size(
+                                KmiIconSize.small
+                            )
                     )
                 }
 
@@ -2749,7 +2964,9 @@ private fun ExerciseRowCardModern(
                 IconButton(
                     onClick = onToggleFavorite,
                     modifier = Modifier
-                        .size(30.dp)
+                        .size(
+                            KmiIconSize.medium
+                        )
                         .graphicsLayer {
                             scaleX = scale
                             scaleY = scale
@@ -2758,12 +2975,18 @@ private fun ExerciseRowCardModern(
                     Icon(
                         imageVector = if (isFavorite) Icons.Filled.Star else Icons.Outlined.StarBorder,
                         contentDescription = if (isFavorite) "הסר ממועדפים" else "הוסף למועדפים",
-                        tint = if (isFavorite) {
-                            Color(0xFFFFC107)
-                        } else {
-                            if (isDarkMode) Color.White.copy(alpha = 0.62f) else Color(0xFF9CA3AF)
-                        },
-                        modifier = Modifier.size(20.dp)
+                        tint =
+                            if (isFavorite) {
+                                Color(0xFFFFC107)
+                            } else {
+                                MaterialTheme.colorScheme
+                                    .onSurfaceVariant
+                                    .copy(alpha = 0.68f)
+                            },
+                        modifier =
+                            Modifier.size(
+                                KmiIconSize.small
+                            )
                     )
                 }
 
@@ -2787,17 +3010,21 @@ private fun SubjectMasterToggle(
     mastered: Boolean?,
     onClick: () -> Unit
 ) {
-    val bg = when (mastered) {
-        true -> Color(0xFF2E7D32)
-        false -> Color(0xFFC62828)
-        null -> Color.White
-    }
+    val bg =
+        when (mastered) {
+            true -> Color(0xFF2E7D32)
+            false -> Color(0xFFC62828)
+            null ->
+                MaterialTheme.colorScheme.surfaceVariant
+        }
 
-    val border = when (mastered) {
-        true -> Color(0xFF1B5E20)
-        false -> Color(0xFF8E1B1B)
-        null -> Color(0xFFCBD5E1)
-    }
+    val border =
+        when (mastered) {
+            true -> Color(0xFF1B5E20)
+            false -> Color(0xFF8E1B1B)
+            null ->
+                MaterialTheme.colorScheme.outline
+        }
 
     val iconTint = when (mastered) {
         true, false -> Color.White
@@ -2806,13 +3033,18 @@ private fun SubjectMasterToggle(
 
     Surface(
         modifier = Modifier
-            .size(38.dp)
+            .size(
+                KmiIconSize.large
+            )
             .clickable(onClick = onClick),
         shape = CircleShape,
         color = bg,
-        border = BorderStroke(1.5.dp, border),
-        tonalElevation = 2.dp,
-        shadowElevation = 4.dp
+        border = BorderStroke(
+            width = 1.dp,
+            color = border
+        ),
+        tonalElevation = 0.dp,
+        shadowElevation = 0.dp
     ) {
         Box(
             modifier = Modifier.fillMaxSize(),
@@ -2823,14 +3055,20 @@ private fun SubjectMasterToggle(
                     imageVector = Icons.Filled.Check,
                     contentDescription = "יודע",
                     tint = iconTint,
-                    modifier = Modifier.size(24.dp)
+                    modifier =
+                        Modifier.size(
+                            KmiIconSize.medium
+                        )
                 )
 
                 false -> Icon(
                     imageVector = Icons.Filled.Close,
                     contentDescription = "לא יודע",
                     tint = iconTint,
-                    modifier = Modifier.size(24.dp)
+                    modifier =
+                        Modifier.size(
+                            KmiIconSize.medium
+                        )
                 )
 
                 null -> Spacer(Modifier.size(1.dp))

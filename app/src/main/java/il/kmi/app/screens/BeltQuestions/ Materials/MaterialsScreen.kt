@@ -85,6 +85,7 @@ import il.kmi.shared.domain.content.ExerciseIdentityRegistry
 import il.kmi.app.subscription.KmiAccess
 import il.kmi.app.progress.UserProgressRepository
 import il.kmi.app.ui.KmiTopBar
+import il.yuval.ui.theme.kmiScreenBackgroundBrush
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -447,19 +448,6 @@ fun MaterialsScreen(
 
     val isDarkSurface =
         MaterialTheme.colorScheme.surface.luminance() < 0.5f
-
-    /*
-     * אותו רקע בדיוק של מסך הבית.
-     */
-    val screenBackgroundBrush =
-        Brush.verticalGradient(
-            colors = listOf(
-                MaterialTheme.colorScheme.background,
-                MaterialTheme.colorScheme.surfaceVariant,
-                MaterialTheme.colorScheme.primaryContainer,
-                MaterialTheme.colorScheme.background
-            )
-        )
 
     // ✅ NEW: נושא לתצוגה/קאנוניקליזציה — כדי ש"" יתנהג בדיוק כמו "כללי"
     val topicUi = remember(topic) {
@@ -1816,7 +1804,9 @@ fun MaterialsScreen(
     Scaffold(
         modifier = Modifier
             .fillMaxSize()
-            .background(screenBackgroundBrush),
+            .background(
+                brush = kmiScreenBackgroundBrush()
+            ),
         containerColor = Color.Transparent,
         contentColor = MaterialTheme.colorScheme.onSurface,
         topBar = {
@@ -1864,7 +1854,7 @@ fun MaterialsScreen(
                 centerTitle = true,
                 alignTitleEnd = false,
                 showBottomActions = true,
-                showTopShare = false,
+                showTopShare = true,
                 onShare = {
                     shareMaterialsPdf(
                         context = context,
@@ -2680,11 +2670,7 @@ fun MaterialsScreen(
                                         fontWeight = FontWeight.SemiBold
                                     ),
                                     color =
-                                        if (isDarkSurface) {
-                                            MaterialTheme.colorScheme.onSurfaceVariant
-                                        } else {
-                                            Color(0xFF5B6472)
-                                        },
+                                        MaterialTheme.colorScheme.onSurfaceVariant,
                                     textAlign = TextAlign.Center,
                                     modifier = Modifier
                                         .fillMaxWidth()
@@ -2829,7 +2815,8 @@ fun MaterialsScreen(
                                     style = KmiTypography.caption.copy(
                                         fontWeight = FontWeight.Medium
                                     ),
-                                    color = Color(0xFF7A8392),
+                                    color =
+                                        MaterialTheme.colorScheme.onSurfaceVariant,
                                     textAlign = TextAlign.Center,
                                     modifier = Modifier
                                         .fillMaxWidth()
@@ -2872,14 +2859,11 @@ fun MaterialsScreen(
                                         },
                                     shape = RoundedCornerShape(20.dp),
                                     color =
-                                        if (isDarkSurface) {
-                                            MaterialTheme.colorScheme.surfaceVariant
-                                                .copy(alpha = 0.96f)
-                                        } else {
-                                            Color.White.copy(alpha = 0.92f)
-                                        },
-                                    tonalElevation = 2.dp,
-                                    shadowElevation = 3.dp,
+                                        MaterialTheme.colorScheme.surface.copy(
+                                            alpha = 0.96f
+                                        ),
+                                    tonalElevation = 0.dp,
+                                    shadowElevation = 0.dp,
                                     border = BorderStroke(
                                         width = 1.dp,
                                         color = belt.color.copy(
@@ -2919,11 +2903,7 @@ fun MaterialsScreen(
                                                         TextAlign.Right
                                                     },
                                                 color =
-                                                    if (isDarkSurface) {
-                                                        MaterialTheme.colorScheme.onSurface
-                                                    } else {
-                                                        Color(0xFF1F2937)
-                                                    },
+                                                    MaterialTheme.colorScheme.onSurface,
                                                 maxLines = 2,
                                                 overflow = TextOverflow.Ellipsis,
                                                 modifier = Modifier.weight(1f)
@@ -3339,12 +3319,9 @@ fun MaterialsScreen(
                                                                                     )
                                                                                 }
 
-                                                                            isDarkSurface ->
+                                                                            else ->
                                                                                 MaterialTheme.colorScheme
                                                                                     .onSurface
-
-                                                                            else ->
-                                                                                Color(0xFF111827)
                                                                         },
                                                                     style =
                                                                         KmiTypography.body.copy(
@@ -3392,19 +3369,11 @@ fun MaterialsScreen(
                                                                                 "מוחרג"
                                                                             },
                                                                         containerColor =
-                                                                            if (isDarkSurface) {
-                                                                                MaterialTheme.colorScheme
-                                                                                    .surfaceVariant
-                                                                            } else {
-                                                                                Color(0xFFE5E7EB)
-                                                                            },
+                                                                            MaterialTheme.colorScheme
+                                                                                .surfaceVariant,
                                                                         contentColor =
-                                                                            if (isDarkSurface) {
-                                                                                MaterialTheme.colorScheme
-                                                                                    .onSurfaceVariant
-                                                                            } else {
-                                                                                Color(0xFF6B7280)
-                                                                            }
+                                                                            MaterialTheme.colorScheme
+                                                                                .onSurfaceVariant
                                                                     )
                                                                 }
 
@@ -3541,12 +3510,9 @@ fun MaterialsScreen(
                                                                         .fillMaxHeight()
                                                                         .background(
                                                                             color =
-                                                                                Color(
-                                                                                    0xFF1976D2
-                                                                                ).copy(
-                                                                                    alpha =
-                                                                                        0.055f
-                                                                                ),
+                                                                                MaterialTheme.colorScheme
+                                                                                    .primaryContainer
+                                                                                    .copy(alpha = 0.22f),
                                                                             shape =
                                                                                 RoundedCornerShape(
                                                                                     16.dp
@@ -3555,15 +3521,11 @@ fun MaterialsScreen(
                                                                         .border(
                                                                             border =
                                                                                 BorderStroke(
-                                                                                    width =
-                                                                                        1.dp,
+                                                                                    width = 1.dp,
                                                                                     color =
-                                                                                        Color(
-                                                                                            0xFF1976D2
-                                                                                        ).copy(
-                                                                                            alpha =
-                                                                                                0.28f
-                                                                                        )
+                                                                                        MaterialTheme.colorScheme
+                                                                                            .primary
+                                                                                            .copy(alpha = 0.28f)
                                                                                 ),
                                                                             shape =
                                                                                 RoundedCornerShape(
@@ -3633,7 +3595,8 @@ fun MaterialsScreen(
                                                                                     FontWeight.SemiBold
                                                                             ),
                                                                         color =
-                                                                            Color(0xFF1976D2),
+                                                                            MaterialTheme.colorScheme
+                                                                                .primary,
                                                                         textAlign =
                                                                             TextAlign.Center,
                                                                         maxLines = 1
@@ -4002,14 +3965,9 @@ fun MaterialsScreen(
                                                             .height(1.dp)
                                                             .background(
                                                                 color =
-                                                                    if (isDarkSurface) {
-                                                                        MaterialTheme.colorScheme
-                                                                            .onSurface
-                                                                            .copy(alpha = 0.26f)
-                                                                    } else {
-                                                                        Color(0xFF607D8B)
-                                                                            .copy(alpha = 0.42f)
-                                                                    }
+                                                                    MaterialTheme.colorScheme
+                                                                        .outlineVariant
+                                                                        .copy(alpha = 0.72f)
                                                             )
                                                     )
                                                 }
@@ -4038,8 +3996,6 @@ fun MaterialsScreen(
                                                         }
                                                     )
                                                 }
-
-                                                Spacer(Modifier.height(0.dp))
                                             }
                                         }
                                     }
@@ -4860,9 +4816,14 @@ private fun createMaterialsPdf(
         File(
             context.cacheDir,
             "shared_pdfs"
-        ).apply {
-            mkdirs()
-        }
+        )
+
+    check(
+        dir.exists() ||
+                dir.mkdirs()
+    ) {
+        "Unable to create PDF sharing directory"
+    }
 
     /*
      * שם הקובץ מבוסס על הנושא / תת־הנושא
@@ -4903,7 +4864,10 @@ private fun createMaterialsPdf(
      * כל יצירה חדשה של אותו דוח
      * מחליפה את הקובץ הקודם.
      */
-    FileOutputStream(file, false).use { output ->
+    FileOutputStream(
+        file,
+        false
+    ).use { output ->
         document.writeTo(output)
     }
 
@@ -4918,20 +4882,19 @@ fun AnimatedButton(
     text: String,
     modifier: Modifier = Modifier,
     containerColor: Color = MaterialTheme.colorScheme.primary,
-    backgroundBrush: Brush? = null,
     onClick: () -> Unit
 ) {
     var pressed by remember { mutableStateOf(false) }
+
     val scale by animateFloatAsState(
         targetValue = if (pressed) 0.97f else 1f,
         label = "buttonScaleAnim"
     )
+
     val scope = rememberCoroutineScope()
 
     val contentOnContainer =
-        if (backgroundBrush != null) {
-            Color.White
-        } else if (containerColor.luminance() < 0.5f) {
+        if (containerColor.luminance() < 0.5f) {
             Color.White
         } else {
             Color.Black
@@ -4941,6 +4904,7 @@ fun AnimatedButton(
         onClick = {
             pressed = true
             onClick()
+
             scope.launch {
                 delay(140.milliseconds)
                 pressed = false
@@ -4952,30 +4916,24 @@ fun AnimatedButton(
             .heightIn(min = 56.dp)
             .defaultMinSize(minWidth = 72.dp),
         border = BorderStroke(
-            1.dp,
-            Color.White.copy(alpha = 0.22f)
+            width = 1.dp,
+            color =
+                contentOnContainer.copy(
+                    alpha = 0.22f
+                )
         ),
         colors = ButtonDefaults.buttonColors(
-            containerColor =
-                if (backgroundBrush != null) {
-                    Color.Transparent
-                } else {
-                    containerColor
-                },
+            containerColor = containerColor,
             contentColor = contentOnContainer
         ),
         elevation =
-            if (backgroundBrush != null) {
-                ButtonDefaults.buttonElevation(
-                    defaultElevation = 0.dp,
-                    pressedElevation = 0.dp
-                )
-            } else {
-                ButtonDefaults.buttonElevation(
-                    defaultElevation = 4.dp,
-                    pressedElevation = 1.5.dp
-                )
-            }
+            ButtonDefaults.buttonElevation(
+                defaultElevation = 0.dp,
+                pressedElevation = 0.dp,
+                focusedElevation = 0.dp,
+                hoveredElevation = 0.dp,
+                disabledElevation = 0.dp
+            )
     ) {
         Text(
             text = text,
@@ -5001,10 +4959,11 @@ private fun MaterialsTopStatChip(
         modifier = Modifier.widthIn(min = minWidth),
         shape = RoundedCornerShape(14.dp),
         color = containerColor,
-        shadowElevation = 1.dp,
+        tonalElevation = 0.dp,
+        shadowElevation = 0.dp,
         border = BorderStroke(
-            1.dp,
-            contentColor.copy(alpha = 0.14f)
+            width = 1.dp,
+            color = contentColor.copy(alpha = 0.18f)
         )
     ) {
         Column(
@@ -5133,15 +5092,9 @@ private fun TraineeMaterialStatusSelector(
                         if (isSelected) {
                             activeColor
                         } else {
-                            Color(0xFF8A939D)
-                                .copy(alpha = 0.34f)
+                            MaterialTheme.colorScheme.surfaceVariant
                         },
-                    shadowElevation =
-                        if (isSelected) {
-                            3.dp
-                        } else {
-                            0.dp
-                        },
+                    shadowElevation = 0.dp,
                     tonalElevation = 0.dp,
                     border = BorderStroke(
                         width = 1.dp,
@@ -5264,13 +5217,14 @@ internal fun CoachMaterialStatusSelector(
      * של MaterialTheme יישארו גלויים גם מאחורי האייקונים.
      */
     val iconsBackgroundColor =
-        if (isDarkMode) {
-            MaterialTheme.colorScheme.background.copy(
-                alpha = 0.86f
-            )
-        } else {
-            Color.Transparent
-        }
+        MaterialTheme.colorScheme.surface.copy(
+            alpha =
+                if (isDarkMode) {
+                    0.86f
+                } else {
+                    0.72f
+                }
+        )
 
     val statuses = listOf(
         CoachMaterialStatus.TAUGHT,
@@ -5308,8 +5262,9 @@ internal fun CoachMaterialStatusSelector(
             border = BorderStroke(
                 width = 1.dp,
                 color =
-                    Color(0xFF1976D2)
-                        .copy(alpha = 0.28f)
+                    MaterialTheme.colorScheme.primary.copy(
+                        alpha = 0.28f
+                    )
             )
         ) {
             Column(
@@ -5347,7 +5302,7 @@ internal fun CoachMaterialStatusSelector(
                             fontWeight =
                                 FontWeight.SemiBold
                         ),
-                    color = Color(0xFF1976D2),
+                    color = MaterialTheme.colorScheme.primary,
                     textAlign = TextAlign.Center,
                     maxLines = 1
                 )
@@ -5504,15 +5459,10 @@ internal fun CoachMaterialStatusSelector(
                                 if (isSelected) {
                                     activeColor
                                 } else {
-                                    Color(0xFF8A939D)
-                                        .copy(alpha = 0.34f)
+                                    MaterialTheme.colorScheme.surfaceVariant
                                 },
-                            shadowElevation =
-                                if (isSelected) {
-                                    3.dp
-                                } else {
-                                    0.dp
-                                },
+                            shadowElevation = 0.dp,
+                            tonalElevation = 0.dp,
                             border = BorderStroke(
                                 width = 1.dp,
                                 color =
@@ -5712,11 +5662,7 @@ private fun ItemFloatingActions(
         MaterialTheme.colorScheme.surface.luminance() < 0.5f
 
     val dropdownContainerColor =
-        if (isDarkMode) {
-            MaterialTheme.colorScheme.surfaceVariant
-        } else {
-            Color(0xFFF7F5FB)
-        }
+        MaterialTheme.colorScheme.surface
 
     val sp = remember {
         context.getSharedPreferences(
@@ -5756,11 +5702,15 @@ private fun ItemFloatingActions(
         Surface(
             onClick = { expanded = true },
             shape = CircleShape,
-            color = Color(0xFF1976D2),
-            shadowElevation = 3.dp,
+            color = MaterialTheme.colorScheme.primary,
+            shadowElevation = 0.dp,
+            tonalElevation = 0.dp,
             border = BorderStroke(
-                1.dp,
-                Color.White.copy(alpha = 0.22f)
+                width = 1.dp,
+                color =
+                    MaterialTheme.colorScheme.onPrimary.copy(
+                        alpha = 0.24f
+                    )
             ),
             modifier = Modifier
                 .size(
@@ -5780,7 +5730,7 @@ private fun ItemFloatingActions(
                     style = KmiTypography.body.copy(
                         fontWeight = FontWeight.ExtraBold
                     ),
-                    color = Color.White,
+                    color = MaterialTheme.colorScheme.onPrimary,
                     modifier = Modifier.graphicsLayer {
                         rotationZ = infoRotation
                     }
@@ -5794,30 +5744,27 @@ private fun ItemFloatingActions(
             shape = RoundedCornerShape(22.dp),
             containerColor = dropdownContainerColor,
             tonalElevation = 0.dp,
-            shadowElevation = 8.dp,
+            shadowElevation = 0.dp,
             border = BorderStroke(
-                1.dp,
-                MaterialTheme.colorScheme.primary.copy(
-                    alpha = if (isDarkMode) 0.32f else 0.14f
-                )
+                width = 1.dp,
+                color =
+                    MaterialTheme.colorScheme.outline.copy(
+                        alpha =
+                            if (isDarkMode) {
+                                0.32f
+                            } else {
+                                0.20f
+                            }
+                    )
             ),
             modifier = Modifier
                 .background(
                     brush = Brush.verticalGradient(
-                        colors =
-                            if (isDarkMode) {
-                                listOf(
-                                    MaterialTheme.colorScheme.surfaceVariant,
-                                    MaterialTheme.colorScheme.surface,
-                                    MaterialTheme.colorScheme.surfaceVariant
-                                )
-                            } else {
-                                listOf(
-                                    Color(0xFFF9F8FC),
-                                    Color(0xFFF3F0FA),
-                                    Color(0xFFF7F5FB)
-                                )
-                            }
+                        colors = listOf(
+                            MaterialTheme.colorScheme.surface,
+                            MaterialTheme.colorScheme.surfaceVariant,
+                            MaterialTheme.colorScheme.surface
+                        )
                     ),
                     shape = RoundedCornerShape(22.dp)
                 )

@@ -1,11 +1,13 @@
 package il.kmi.app.screens.forms.payment
 
+import android.content.Context
+import android.content.Intent
+import android.graphics.Paint
+import android.graphics.Typeface
+import android.graphics.pdf.PdfDocument
 import androidx.activity.compose.BackHandler
-import androidx.compose.animation.core.animateFloat
-import androidx.compose.animation.core.infiniteRepeatable
-import androidx.compose.animation.core.rememberInfiniteTransition
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
+import androidx.core.content.FileProvider
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -57,6 +59,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -65,9 +68,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.text.input.ImeAction
@@ -81,11 +84,8 @@ import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.Source
 import kotlinx.coroutines.tasks.await
 import androidx.compose.foundation.border
-import androidx.compose.foundation.isSystemInDarkTheme
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.CheckboxDefaults
 import androidx.compose.runtime.CompositionLocalProvider
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.text.font.FontWeight
 import il.kmi.app.ui.DrawerBridge
 import il.kmi.app.ui.KmiPremiumDropdown
@@ -93,6 +93,13 @@ import il.kmi.app.ui.KmiTopBar
 import il.kmi.app.ui.KmiTypography
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
+import il.kmi.app.ui.KmiLanguageDirection
+import il.kmi.app.ui.loading.KmiLoadingRings
+import il.kmi.app.ui.pdf.KmiPdfDirection
+import il.yuval.ui.theme.kmiScreenBackgroundBrush
+import java.io.File
+import java.io.FileOutputStream
+import java.util.Locale
 
 //==========================================================================
 
@@ -101,127 +108,12 @@ private fun MembershipPaymentPremiumLoading(
     text: String,
     modifier: Modifier = Modifier
 ) {
-    val transition =
-        rememberInfiniteTransition(
-            label = "membershipPaymentLoading"
-        )
-
-    val outerRotation by transition.animateFloat(
-        initialValue = 0f,
-        targetValue = 360f,
-        animationSpec =
-            infiniteRepeatable(
-                animation =
-                    tween(
-                        durationMillis = 1_250
-                    )
-            ),
-        label = "membershipPaymentOuterRing"
+    KmiLoadingRings(
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(vertical = 12.dp),
+        text = text
     )
-
-    val innerRotation by transition.animateFloat(
-        initialValue = 360f,
-        targetValue = 0f,
-        animationSpec =
-            infiniteRepeatable(
-                animation =
-                    tween(
-                        durationMillis = 1_750
-                    )
-            ),
-        label = "membershipPaymentInnerRing"
-    )
-
-    Column(
-        modifier =
-            modifier
-                .fillMaxWidth()
-                .padding(vertical = 16.dp),
-        horizontalAlignment =
-            Alignment.CenterHorizontally,
-        verticalArrangement =
-            Arrangement.spacedBy(8.dp)
-    ) {
-        Box(
-            modifier = Modifier.size(58.dp),
-            contentAlignment = Alignment.Center
-        ) {
-            Box(
-                modifier =
-                    Modifier
-                        .size(58.dp)
-                        .graphicsLayer {
-                            rotationZ = outerRotation
-                        }
-                        .border(
-                            width = 4.dp,
-                            brush =
-                                Brush.sweepGradient(
-                                    listOf(
-                                        Color.Transparent,
-                                        Color(0xFFA855F7),
-                                        Color(0xFF38BDF8),
-                                        Color.Transparent
-                                    )
-                                ),
-                            shape = CircleShape
-                        )
-            )
-
-            Box(
-                modifier =
-                    Modifier
-                        .size(40.dp)
-                        .graphicsLayer {
-                            rotationZ = innerRotation
-                        }
-                        .border(
-                            width = 3.dp,
-                            brush =
-                                Brush.sweepGradient(
-                                    listOf(
-                                        Color.Transparent,
-                                        Color(0xFFF59E0B),
-                                        Color(0xFF22C55E),
-                                        Color.Transparent
-                                    )
-                                ),
-                            shape = CircleShape
-                        )
-            )
-
-            Box(
-                modifier =
-                    Modifier
-                        .size(14.dp)
-                        .background(
-                            color =
-                                MaterialTheme.colorScheme.surface,
-                            shape = CircleShape
-                        )
-                        .border(
-                            width = 1.dp,
-                            color =
-                                Color(0xFFA78BFA).copy(
-                                    alpha = 0.55f
-                                ),
-                            shape = CircleShape
-                        )
-            )
-        }
-
-        Text(
-            text = text,
-            style =
-                KmiTypography.secondary.copy(
-                    fontWeight = FontWeight.Bold
-                ),
-            color =
-                MaterialTheme.colorScheme.onSurfaceVariant,
-            textAlign = TextAlign.Center,
-            modifier = Modifier.fillMaxWidth()
-        )
-    }
 }
 
 private const val MISSING_BRANCH_HE = "הסניף שלי לא מופיע"
@@ -336,6 +228,709 @@ data class MembershipPaymentFormData(
     val amount: Double
 )
 
+private fun createMembershipPaymentPdf(
+    context: Context,
+    formData: MembershipPaymentFormData,
+    isEnglish: Boolean
+): File {
+    val document = PdfDocument()
+
+    try {
+        val pageWidth = 595
+        val pageHeight = 842
+
+        val pageInfo =
+            PdfDocument.PageInfo.Builder(
+                pageWidth,
+                pageHeight,
+                1
+            ).create()
+
+        val page = document.startPage(pageInfo)
+        val canvas = page.canvas
+
+        canvas.drawColor(
+            android.graphics.Color.WHITE
+        )
+
+        val contentLeft = 42f
+        val contentRight = pageWidth - 42f
+
+        fun startX(): Float =
+            KmiPdfDirection.startX(
+                isEnglish = isEnglish,
+                left = contentLeft,
+                right = contentRight
+            )
+
+        val navy =
+            android.graphics.Color.rgb(
+                2,
+                43,
+                74
+            )
+
+        val mediumBlue =
+            android.graphics.Color.rgb(
+                36,
+                103,
+                158
+            )
+
+        val lightHeaderBlue =
+            android.graphics.Color.rgb(
+                128,
+                183,
+                220
+            )
+
+        val regularTypeface =
+            Typeface.create(
+                Typeface.SANS_SERIF,
+                Typeface.NORMAL
+            )
+
+        val boldTypeface =
+            Typeface.create(
+                Typeface.SANS_SERIF,
+                Typeface.BOLD
+            )
+
+        val titlePaint =
+            Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                color =
+                    android.graphics.Color.WHITE
+                textSize = 27f
+                typeface = boldTypeface
+                textAlign =
+                    KmiPdfDirection.textAlign(
+                        isEnglish = isEnglish
+                    )
+            }
+
+        val subtitlePaint =
+            Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                color =
+                    android.graphics.Color.WHITE
+                textSize = 13.5f
+                typeface = regularTypeface
+                textAlign =
+                    KmiPdfDirection.textAlign(
+                        isEnglish = isEnglish
+                    )
+            }
+
+        val sectionPaint =
+            Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                color = android.graphics.Color.rgb(
+                    79,
+                    55,
+                    139
+                )
+                textSize = 16f
+                typeface =
+                    Typeface.create(
+                        Typeface.DEFAULT,
+                        Typeface.BOLD
+                    )
+                textAlign =
+                    KmiPdfDirection.textAlign(
+                        isEnglish = isEnglish
+                    )
+            }
+
+        val rowPaint =
+            Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                color = android.graphics.Color.rgb(
+                    23,
+                    32,
+                    51
+                )
+                textSize = 13f
+                typeface = Typeface.DEFAULT
+                textAlign =
+                    KmiPdfDirection.textAlign(
+                        isEnglish = isEnglish
+                    )
+            }
+
+        val boldRowPaint =
+            Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                color = android.graphics.Color.rgb(
+                    23,
+                    32,
+                    51
+                )
+                textSize = 13f
+                typeface =
+                    Typeface.create(
+                        Typeface.DEFAULT,
+                        Typeface.BOLD
+                    )
+                textAlign =
+                    KmiPdfDirection.textAlign(
+                        isEnglish = isEnglish
+                    )
+            }
+
+        val dividerPaint =
+            Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                color = android.graphics.Color.rgb(
+                    213,
+                    222,
+                    229
+                )
+                strokeWidth = 1.2f
+            }
+
+        fun tr(
+            hebrew: String,
+            english: String
+        ): String {
+            return if (isEnglish) {
+                english
+            } else {
+                hebrew
+            }
+        }
+
+        fun drawKmiLogo(
+            targetCanvas: android.graphics.Canvas,
+            centerX: Float,
+            centerY: Float,
+            radius: Float
+        ) {
+            val outerPaint =
+                Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                    color = navy
+                    style = Paint.Style.FILL
+                }
+
+            val innerPaint =
+                Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                    color =
+                        android.graphics.Color.WHITE
+                    style = Paint.Style.FILL
+                }
+
+            val logoTextPaint =
+                Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                    color = navy
+                    typeface = boldTypeface
+                    textSize = radius * 0.62f
+                    textAlign = Paint.Align.CENTER
+                }
+
+            targetCanvas.drawCircle(
+                centerX,
+                centerY,
+                radius,
+                outerPaint
+            )
+
+            targetCanvas.drawCircle(
+                centerX,
+                centerY,
+                radius - 4f,
+                innerPaint
+            )
+
+            targetCanvas.drawText(
+                "KAMI",
+                centerX,
+                centerY + radius * 0.22f,
+                logoTextPaint
+            )
+        }
+
+        fun drawGlobalPdfHeader() {
+            val headerBottom = 122f
+
+            canvas.drawPath(
+                android.graphics.Path().apply {
+                    moveTo(
+                        pageWidth.toFloat(),
+                        0f
+                    )
+                    lineTo(
+                        pageWidth.toFloat(),
+                        headerBottom
+                    )
+                    lineTo(
+                        178f,
+                        headerBottom
+                    )
+                    lineTo(
+                        238f,
+                        0f
+                    )
+                    close()
+                },
+                Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                    color = navy
+                    style = Paint.Style.FILL
+                }
+            )
+
+            canvas.drawPath(
+                android.graphics.Path().apply {
+                    moveTo(
+                        208f,
+                        headerBottom
+                    )
+                    lineTo(
+                        224f,
+                        headerBottom
+                    )
+                    lineTo(
+                        284f,
+                        0f
+                    )
+                    lineTo(
+                        268f,
+                        0f
+                    )
+                    close()
+                },
+                Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                    color = mediumBlue
+                    style = Paint.Style.FILL
+                }
+            )
+
+            canvas.drawPath(
+                android.graphics.Path().apply {
+                    moveTo(
+                        230f,
+                        headerBottom
+                    )
+                    lineTo(
+                        238f,
+                        headerBottom
+                    )
+                    lineTo(
+                        298f,
+                        0f
+                    )
+                    lineTo(
+                        290f,
+                        0f
+                    )
+                    close()
+                },
+                Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                    color = lightHeaderBlue
+                    style = Paint.Style.FILL
+                }
+            )
+
+            drawKmiLogo(
+                targetCanvas = canvas,
+                centerX = 78f,
+                centerY = 58f,
+                radius = 42f
+            )
+
+            titlePaint.textAlign =
+                KmiPdfDirection.textAlign(
+                    isEnglish = isEnglish
+                )
+
+            subtitlePaint.textAlign =
+                KmiPdfDirection.textAlign(
+                    isEnglish = isEnglish
+                )
+
+            val headerTextX =
+                KmiPdfDirection.startX(
+                    isEnglish = isEnglish,
+                    left = 308f,
+                    right = 435f
+                )
+
+            canvas.drawText(
+                tr(
+                    hebrew = "טופס תשלום דמי חבר",
+                    english =
+                        "Membership Payment Form"
+                ),
+                headerTextX,
+                50f,
+                titlePaint
+            )
+
+            val traineeName =
+                listOf(
+                    formData.traineeFirstName,
+                    formData.traineeLastName
+                )
+                    .filter {
+                        it.isNotBlank()
+                    }
+                    .joinToString(" ")
+                    .ifBlank {
+                        tr(
+                            hebrew = "פרטי החניך",
+                            english = "Trainee Details"
+                        )
+                    }
+
+            canvas.drawText(
+                traineeName,
+                headerTextX,
+                77f,
+                subtitlePaint
+            )
+
+            val generatedDatePaint =
+                Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                    color =
+                        android.graphics.Color.rgb(
+                            100,
+                            116,
+                            139
+                        )
+                    textSize = 9.2f
+                    typeface = regularTypeface
+                    textAlign =
+                        KmiPdfDirection.textAlign(
+                            isEnglish = isEnglish
+                        )
+                }
+
+            val generatedDate =
+                LocalDate.now().format(
+                    DateTimeFormatter.ofPattern(
+                        "dd/MM/yyyy"
+                    )
+                )
+
+            canvas.drawText(
+                "${
+                    tr(
+                        hebrew = "תאריך הפקה",
+                        english = "Generated"
+                    )
+                }: $generatedDate",
+                startX(),
+                144f,
+                generatedDatePaint
+            )
+        }
+
+        fun cleanValue(
+            value: String
+        ): String {
+            return value
+                .trim()
+                .ifBlank { "—" }
+        }
+
+        fun drawSection(
+            title: String,
+            currentY: Float
+        ): Float {
+            canvas.drawText(
+                title,
+                startX(),
+                currentY,
+                sectionPaint
+            )
+
+            canvas.drawLine(
+                contentLeft,
+                currentY + 9f,
+                contentRight,
+                currentY + 9f,
+                dividerPaint
+            )
+
+            return currentY + 34f
+        }
+
+        fun drawRow(
+            label: String,
+            value: String,
+            currentY: Float,
+            bold: Boolean = false
+        ): Float {
+            val resolvedText =
+                if (isEnglish) {
+                    "$label: ${cleanValue(value)}"
+                } else {
+                    "$label: ${cleanValue(value)}"
+                }
+
+            canvas.drawText(
+                resolvedText,
+                startX(),
+                currentY,
+                if (bold) {
+                    boldRowPaint
+                } else {
+                    rowPaint
+                }
+            )
+
+            return currentY + 25f
+        }
+
+        drawGlobalPdfHeader()
+
+        var y = 184f
+
+        y = drawSection(
+            title = tr(
+                hebrew = "פרטי החניך",
+                english = "Trainee Details"
+            ),
+            currentY = y
+        )
+
+        y = drawRow(
+            label = tr("שם פרטי", "First name"),
+            value = formData.traineeFirstName,
+            currentY = y
+        )
+
+        y = drawRow(
+            label = tr("שם משפחה", "Last name"),
+            value = formData.traineeLastName,
+            currentY = y
+        )
+
+        y = drawRow(
+            label = tr("מספר זהות", "ID number"),
+            value = formData.traineeIdNumber,
+            currentY = y
+        )
+
+        y = drawRow(
+            label = tr("תאריך לידה", "Date of birth"),
+            value = formData.traineeBirthDate,
+            currentY = y
+        )
+
+        y = drawRow(
+            label = tr("דוא״ל", "Email"),
+            value = formData.traineeEmail,
+            currentY = y
+        )
+
+        y = drawRow(
+            label = tr("טלפון", "Phone"),
+            value = formData.traineePhone,
+            currentY = y
+        )
+
+        val resolvedBranch =
+            if (
+                formData.traineeOtherBranch
+                    .isNotBlank()
+            ) {
+                formData.traineeOtherBranch
+            } else {
+                formData.traineeBranch
+            }
+
+        y = drawRow(
+            label = tr("סניף", "Branch"),
+            value = resolvedBranch,
+            currentY = y
+        )
+
+        y += 10f
+
+        y = drawSection(
+            title = tr(
+                hebrew = "פרטי המשלם",
+                english = "Payer Details"
+            ),
+            currentY = y
+        )
+
+        y = drawRow(
+            label = tr("שם פרטי", "First name"),
+            value = formData.payerFirstName,
+            currentY = y
+        )
+
+        y = drawRow(
+            label = tr("שם משפחה", "Last name"),
+            value = formData.payerLastName,
+            currentY = y
+        )
+
+        y = drawRow(
+            label = tr("דוא״ל", "Email"),
+            value = formData.payerEmail,
+            currentY = y
+        )
+
+        y = drawRow(
+            label = tr("טלפון", "Phone"),
+            value = formData.payerPhone,
+            currentY = y
+        )
+
+        y += 10f
+
+        y = drawSection(
+            title = tr(
+                hebrew = "סיכום התשלום",
+                english = "Payment Summary"
+            ),
+            currentY = y
+        )
+
+        val formattedAmount =
+            String.format(
+                Locale.US,
+                "%.2f",
+                formData.amount
+            )
+
+        y = drawRow(
+            label = tr("סכום לתשלום", "Amount"),
+            value =
+                if (isEnglish) {
+                    "$formattedAmount NIS"
+                } else {
+                    "$formattedAmount ₪"
+                },
+            currentY = y,
+            bold = true
+        )
+
+        y = drawRow(
+            label = tr(
+                "אישור מדיניות ביטולים והחזרים",
+                "Cancellation and refund policy"
+            ),
+            value =
+                if (formData.policyAccepted) {
+                    tr("אושר", "Approved")
+                } else {
+                    tr("טרם אושר", "Not approved")
+                },
+            currentY = y,
+            bold = true
+        )
+
+        val footerPaint =
+            Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                color = android.graphics.Color.rgb(
+                    71,
+                    84,
+                    103
+                )
+                textSize = 10.5f
+                textAlign = Paint.Align.CENTER
+            }
+
+        canvas.drawText(
+            tr(
+                hebrew = "מסמך זה הוא סיכום פרטי הטופס ואינו מהווה אישור לביצוע התשלום.",
+                english = "This document summarizes the form and is not a payment confirmation."
+            ),
+            pageWidth / 2f,
+            pageHeight - 42f,
+            footerPaint
+        )
+
+        document.finishPage(page)
+
+        val pdfDirectory =
+            File(
+                context.cacheDir,
+                "shared_pdfs"
+            ).apply {
+                if (!exists()) {
+                    mkdirs()
+                }
+            }
+
+        val pdfFile =
+            File(
+                pdfDirectory,
+                "טופס_תשלום_דמי_חבר_קמי.pdf"
+            )
+
+        FileOutputStream(pdfFile).use {
+                outputStream ->
+            document.writeTo(outputStream)
+        }
+
+        return pdfFile
+    } finally {
+        document.close()
+    }
+}
+
+private fun shareMembershipPaymentPdf(
+    context: Context,
+    formData: MembershipPaymentFormData,
+    isEnglish: Boolean
+) {
+    val pdfFile =
+        createMembershipPaymentPdf(
+            context = context,
+            formData = formData,
+            isEnglish = isEnglish
+        )
+
+    val pdfUri =
+        FileProvider.getUriForFile(
+            context,
+            "${context.packageName}.fileprovider",
+            pdfFile
+        )
+
+    val shareIntent =
+        Intent(Intent.ACTION_SEND).apply {
+            type = "application/pdf"
+
+            putExtra(
+                Intent.EXTRA_SUBJECT,
+                if (isEnglish) {
+                    "K.M.I Membership Payment Form"
+                } else {
+                    "ק.מ.י — טופס תשלום דמי חבר"
+                }
+            )
+
+            putExtra(
+                Intent.EXTRA_TEXT,
+                if (isEnglish) {
+                    "Attached is the K.M.I membership payment form."
+                } else {
+                    "מצורף טופס תשלום דמי חבר של ק.מ.י."
+                }
+            )
+
+            putExtra(
+                Intent.EXTRA_STREAM,
+                pdfUri
+            )
+
+            addFlags(
+                Intent.FLAG_GRANT_READ_URI_PERMISSION
+            )
+        }
+
+    val chooserIntent =
+        Intent.createChooser(
+            shareIntent,
+            if (isEnglish) {
+                "Share payment form"
+            } else {
+                "שיתוף טופס התשלום"
+            }
+        )
+
+    context.startActivity(chooserIntent)
+}
+
 private fun MembershipPaymentPrefill.hasAnyValue(): Boolean {
     return traineeFirstName.isNotBlank() ||
             traineeLastName.isNotBlank() ||
@@ -363,15 +958,20 @@ private fun Map<String, Any?>.stringValue(vararg keys: String): String {
     return ""
 }
 
-private fun Map<String, Any?>.nestedStringValue(
-    nestedKey: String,
+private fun Map<String, Any?>.profileStringValue(
     vararg keys: String
 ): String {
-    val nested = this[nestedKey] as? Map<*, *> ?: return ""
+    val profile =
+        this["profile"] as? Map<*, *>
+            ?: return ""
+
     for (key in keys) {
-        val value = nested[key]
-        if (value is String && value.isNotBlank()) return value
+        val value = profile[key]
+        if (value is String && value.isNotBlank()) {
+            return value
+        }
     }
+
     return ""
 }
 
@@ -441,8 +1041,7 @@ private suspend fun loadMembershipPaymentPrefillFromServer(): MembershipPaymentP
             "traineeName",
             "trainee_name"
         ).ifBlank {
-            data.nestedStringValue(
-                "profile",
+           data.profileStringValue(
                 "fullName",
                 "full_name",
                 "displayName",
@@ -461,8 +1060,7 @@ private suspend fun loadMembershipPaymentPrefillFromServer(): MembershipPaymentP
             "traineeFirstName",
             "trainee_first_name"
         ).ifBlank {
-            data.nestedStringValue(
-                "profile",
+           data.profileStringValue(
                 "firstName",
                 "first_name",
                 "traineeFirstName",
@@ -482,8 +1080,7 @@ private suspend fun loadMembershipPaymentPrefillFromServer(): MembershipPaymentP
             "familyName",
             "family_name"
         ).ifBlank {
-            data.nestedStringValue(
-                "profile",
+           data.profileStringValue(
                 "lastName",
                 "last_name",
                 "traineeLastName",
@@ -506,8 +1103,7 @@ private suspend fun loadMembershipPaymentPrefillFromServer(): MembershipPaymentP
             "teudatZehut",
             "traineeIdNumber"
         ).ifBlank {
-            data.nestedStringValue(
-                "profile",
+           data.profileStringValue(
                 "idNumber",
                 "id_number",
                 "identityNumber",
@@ -525,8 +1121,7 @@ private suspend fun loadMembershipPaymentPrefillFromServer(): MembershipPaymentP
             "dob",
             "traineeBirthDate"
         ).ifBlank {
-            data.nestedStringValue(
-                "profile",
+           data.profileStringValue(
                 "birthDate",
                 "birth_date",
                 "dateOfBirth",
@@ -541,8 +1136,7 @@ private suspend fun loadMembershipPaymentPrefillFromServer(): MembershipPaymentP
             "email_address",
             "traineeEmail"
         ).ifBlank {
-            data.nestedStringValue(
-                "profile",
+           data.profileStringValue(
                 "email",
                 "emailAddress",
                 "email_address"
@@ -559,8 +1153,7 @@ private suspend fun loadMembershipPaymentPrefillFromServer(): MembershipPaymentP
             "mobilePhone",
             "traineePhone"
         ).ifBlank {
-            data.nestedStringValue(
-                "profile",
+           data.profileStringValue(
                 "phone",
                 "phoneNumber",
                 "phone_number",
@@ -579,8 +1172,7 @@ private suspend fun loadMembershipPaymentPrefillFromServer(): MembershipPaymentP
             "selected_branch",
             "traineeBranch"
         ).ifBlank {
-            data.nestedStringValue(
-                "profile",
+           data.profileStringValue(
                 "branch",
                 "branchName",
                 "branch_name",
@@ -637,6 +1229,8 @@ fun MembershipPaymentScreen(
     onReadFullPolicy: () -> Unit = {},
     onContinueToPayment: (MembershipPaymentFormData) -> Unit = {}
 ) {
+    val context = LocalContext.current
+
     var serverPrefill by remember {
         mutableStateOf(prefill)
     }
@@ -650,7 +1244,7 @@ fun MembershipPaymentScreen(
         mutableStateOf(false)
     }
     var serverPrefillReloadKey by rememberSaveable {
-        mutableStateOf(0)
+        mutableIntStateOf(0)
     }
 
     LaunchedEffect(
@@ -729,7 +1323,8 @@ fun MembershipPaymentScreen(
     val policyTitle = if (isEnglish) "Cancellation & Refund Policy" else "מדיניות ביטולים והחזרים"
     val continueText = if (isEnglish) "Continue to Payment" else "המשך לתשלום"
     val readPolicyText = if (isEnglish) "Read Full Policy" else "קרא מדיניות מלאה"
-    val payerSameToggleText = if (isEnglish) "Payer is the same as trainee" else "המשלם זהה לפרטי החניך"
+    val payerSameToggleText =
+        if (isEnglish) "Payer is the same as trainee" else "המשלם זהה לפרטי החניך"
 
     val branchOptions = remember(isEnglish) {
         il.kmi.app.training.TrainingCatalog.allVisibleBranches() +
@@ -894,6 +1489,39 @@ fun MembershipPaymentScreen(
         }
     }
 
+    val currentFormData =
+        MembershipPaymentFormData(
+            traineeFirstName =
+                traineeFirstName.trim(),
+            traineeLastName =
+                traineeLastName.trim(),
+            traineeIdNumber =
+                traineeIdNumber.trim(),
+            traineeBirthDate =
+                traineeBirthDate.trim(),
+            traineeEmail =
+                traineeEmail.trim(),
+            traineePhone =
+                traineePhone.trim(),
+            traineeBranch =
+                traineeBranch.trim(),
+            traineeOtherBranch =
+                traineeOtherBranch.trim(),
+            payerSameAsTrainee =
+                payerSameAsTrainee,
+            payerFirstName =
+                payerFirstName.trim(),
+            payerLastName =
+                payerLastName.trim(),
+            payerEmail =
+                payerEmail.trim(),
+            payerPhone =
+                payerPhone.trim(),
+            policyAccepted =
+                policyAccepted,
+            amount = 150.0
+        )
+
     val isFormValid =
         traineeFirstName.isNotBlank() &&
                 traineeLastName.isNotBlank() &&
@@ -909,894 +1537,866 @@ fun MembershipPaymentScreen(
                 payerPhone.isNotBlank() &&
                 policyAccepted
 
-    val isDarkMode =
-        isSystemInDarkTheme()
-
-    val paymentBackgroundBrush =
-        if (isDarkMode) {
-            Brush.verticalGradient(
-                colors =
-                    listOf(
-                        MaterialTheme.colorScheme.background,
-                        MaterialTheme.colorScheme.surface,
-                        Color(0xFF041E33)
-                    )
-            )
-        } else {
-            Brush.verticalGradient(
-                colors =
-                    listOf(
-                        Color(0xFFF8FBFF),
-                        Color(0xFFEAF4FF),
-                        Color(0xFFD7E9FF),
-                        Color(0xFF0EA5D7)
-                    )
-            )
-        }
-
-    Scaffold(
-        containerColor = Color.Transparent,
-        topBar = {
-            KmiTopBar(
-                title = title,
-                currentLang = if (isEnglish) "en" else "he",
-                showMenu = true,
-                showRoleStatus = true,
-                showSettings = true,
-                showBottomActions = true,
-                showModePill = true,
-                showRoleBadge = true,
-                showTopHome = false,
-                showTopSearch = false,
-                showTopShare = false,
-                centerTitle = true,
-                lockHome = false,
-                lockSearch = false,
-                onOpenDrawer = {
-                    DrawerBridge.open()
-                },
-                onHome = {
-                    DrawerBridge.openHome()
-                }
-            )
-        }
-    ) { innerPadding ->
-        Box(
-            modifier =
-                Modifier
-                    .fillMaxSize()
-                    .background(
-                        paymentBackgroundBrush
-                    )
-        ) {
-            Column(
-                modifier =
-                    Modifier
-                        .fillMaxSize()
-                        .padding(innerPadding)
-                        .verticalScroll(rememberScrollState())
-                        .imePadding()
-                        .navigationBarsPadding()
-                        .padding(
-                            horizontal = 14.dp,
-                            vertical = 10.dp
-                        ),
-                verticalArrangement =
-                    Arrangement.spacedBy(8.dp)
-            ) {
-                if (serverPrefillLoadFailed) {
-                    Card(
-                        shape = RoundedCornerShape(18.dp),
-                        colors =
-                            CardDefaults.cardColors(
-                                containerColor =
-                                    MaterialTheme
-                                        .colorScheme
-                                        .errorContainer
-                            ),
-                        elevation =
-                            CardDefaults.cardElevation(
-                                defaultElevation = 0.dp
-                            ),
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Column(
-                            modifier =
-                                Modifier
-                                    .fillMaxWidth()
-                                    .padding(12.dp),
-                            verticalArrangement =
-                                Arrangement.spacedBy(8.dp),
-                            horizontalAlignment =
-                                Alignment.CenterHorizontally
-                        ) {
-                            Text(
-                                text =
-                                    if (isEnglish) {
-                                        "We couldn't load your latest details. Check your connection and try again."
-                                    } else {
-                                        "לא הצלחנו לטעון את הפרטים העדכניים שלך. בדוק את החיבור ונסה שוב."
-                                    },
-                                style =
-                                    KmiTypography.body.copy(
-                                        fontWeight =
-                                            FontWeight.SemiBold
-                                    ),
-                                color =
-                                    MaterialTheme
-                                        .colorScheme
-                                        .onErrorContainer,
-                                textAlign = TextAlign.Center,
-                                modifier = Modifier.fillMaxWidth()
-                            )
-
-                            TextButton(
-                                onClick = {
-                                    serverPrefillReloadKey += 1
-                                },
-                                colors =
-                                    ButtonDefaults.textButtonColors(
-                                        contentColor =
-                                            MaterialTheme
-                                                .colorScheme
-                                                .onErrorContainer
-                                    )
-                            ) {
-                                Text(
-                                    text =
-                                        if (isEnglish) {
-                                            "Try again"
-                                        } else {
-                                            "נסה שוב"
-                                        },
-                                    style =
-                                        KmiTypography.action
-                                )
-                            }
-                        }
-                    }
-                }
-
-                ProductHeroCard(
-                    isEnglish = isEnglish,
-                    amountText =
+    KmiLanguageDirection(
+        isEnglish = isEnglish
+    ) {
+        Scaffold(
+            containerColor = Color.Transparent,
+            topBar = {
+                KmiTopBar(
+                    title = title,
+                    currentLang =
                         if (isEnglish) {
-                            "₪150.00"
+                            "en"
                         } else {
-                            "150.00 ₪"
-                        }
-                )
-
-                SectionCard(
-                    title = traineeTitle,
-                    icon = Icons.Default.AccountCircle,
-                    isEnglish = isEnglish
-                ) {
-                    FormTextField(
-                        value = traineeFirstName,
-                        onValueChange = { traineeFirstName = it },
-                        label = if (isEnglish) "First Name" else "שם פרטי",
-                        leadingIcon = Icons.Default.AccountCircle,
-                        isEnglish = isEnglish
-                    )
-
-                    FormTextField(
-                        value = traineeLastName,
-                        onValueChange = { traineeLastName = it },
-                        label = if (isEnglish) "Last Name" else "שם משפחה",
-                        leadingIcon = Icons.Default.AccountCircle,
-                        isEnglish = isEnglish
-                    )
-
-                    FormTextField(
-                        value = traineeIdNumber,
-                        onValueChange = { traineeIdNumber = it },
-                        label = if (isEnglish) "ID Number" else "מספר ת.ז.",
-                        keyboardType = KeyboardType.Number,
-                        leadingIcon = Icons.Default.Badge,
-                        isEnglish = isEnglish
-                    )
-
-                    Column(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalArrangement =
-                            Arrangement.spacedBy(6.dp),
-                        horizontalAlignment =
-                            if (isEnglish) {
-                                Alignment.Start
-                            } else {
-                                Alignment.End
-                            }
-                    ) {
-                        Text(
-                            text =
-                                if (isEnglish) {
-                                    "Birth Date"
-                                } else {
-                                    "תאריך לידה"
-                                },
-                            style =
-                                KmiTypography.body.copy(
-                                    fontWeight =
-                                        FontWeight.ExtraBold
-                                ),
-                            color =
-                                MaterialTheme.colorScheme.onSurface,
-                            textAlign =
-                                if (isEnglish) {
-                                    TextAlign.Left
-                                } else {
-                                    TextAlign.Right
-                                },
-                            modifier = Modifier.fillMaxWidth()
-                        )
-
-                        CompositionLocalProvider(
-                            LocalLayoutDirection provides
-                                    LayoutDirection.Ltr
-                        ) {
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                verticalAlignment =
-                                    Alignment.CenterVertically,
-                                horizontalArrangement =
-                                    Arrangement.spacedBy(6.dp)
-                            ) {
-                                BirthDatePartField(
-                                    value = birthDay,
-                                    onValueChange = { value ->
-                                        birthDay = value
-                                        traineeBirthDate =
-                                            buildMembershipBirthDate(
-                                                day = value,
-                                                month = birthMonth,
-                                                year = birthYear
-                                            )
-                                    },
-                                    label =
-                                        if (isEnglish) {
-                                            "Day"
-                                        } else {
-                                            "יום"
-                                        },
-                                    placeholder = "DD",
-                                    maxLength = 2,
-                                    focusRequester =
-                                        birthDayFocusRequester,
-                                    imeAction = ImeAction.Next,
-                                    onCompleted = {
-                                        birthMonthFocusRequester
-                                            .requestFocus()
-                                    },
-                                    modifier = Modifier.weight(1f)
-                                )
-
-                                Text(
-                                    text = "/",
-                                    style =
-                                        KmiTypography.action.copy(
-                                            fontWeight =
-                                                FontWeight.Bold
-                                        ),
-                                    color =
-                                        MaterialTheme
-                                            .colorScheme
-                                            .onSurfaceVariant
-                                )
-
-                                BirthDatePartField(
-                                    value = birthMonth,
-                                    onValueChange = { value ->
-                                        birthMonth = value
-                                        traineeBirthDate =
-                                            buildMembershipBirthDate(
-                                                day = birthDay,
-                                                month = value,
-                                                year = birthYear
-                                            )
-                                    },
-                                    label =
-                                        if (isEnglish) {
-                                            "Month"
-                                        } else {
-                                            "חודש"
-                                        },
-                                    placeholder = "MM",
-                                    maxLength = 2,
-                                    focusRequester =
-                                        birthMonthFocusRequester,
-                                    imeAction = ImeAction.Next,
-                                    onCompleted = {
-                                        birthYearFocusRequester
-                                            .requestFocus()
-                                    },
-                                    modifier = Modifier.weight(1f)
-                                )
-
-                                Text(
-                                    text = "/",
-                                    style =
-                                        KmiTypography.action.copy(
-                                            fontWeight =
-                                                FontWeight.Bold
-                                        ),
-                                    color =
-                                        MaterialTheme
-                                            .colorScheme
-                                            .onSurfaceVariant
-                                )
-
-                                BirthDatePartField(
-                                    value = birthYear,
-                                    onValueChange = { value ->
-                                        birthYear = value
-                                        traineeBirthDate =
-                                            buildMembershipBirthDate(
-                                                day = birthDay,
-                                                month = birthMonth,
-                                                year = value
-                                            )
-                                    },
-                                    label =
-                                        if (isEnglish) {
-                                            "Year"
-                                        } else {
-                                            "שנה"
-                                        },
-                                    placeholder = "YYYY",
-                                    maxLength = 4,
-                                    focusRequester =
-                                        birthYearFocusRequester,
-                                    imeAction = ImeAction.Done,
-                                    onCompleted = {
-                                        focusManager.clearFocus()
-                                    },
-                                    modifier =
-                                        Modifier.weight(1.2f)
-                                )
-                            }
-                        }
-                    }
-
-                    FormTextField(
-                        value = traineeEmail,
-                        onValueChange = { traineeEmail = it },
-                        label = if (isEnglish) "Email" else "כתובת דוא\"ל",
-                        keyboardType = KeyboardType.Email,
-                        leadingIcon = Icons.Default.MarkEmailRead,
-                        isEnglish = isEnglish
-                    )
-
-                    FormTextField(
-                        value = traineePhone,
-                        onValueChange = { traineePhone = it },
-                        label = if (isEnglish) "Mobile Phone" else "מספר טלפון נייד",
-                        keyboardType = KeyboardType.Phone,
-                        leadingIcon = Icons.Default.LocalPhone,
-                        isEnglish = isEnglish
-                    )
-
-                    KmiPremiumDropdown(
-                        title =
-                            if (isEnglish) {
-                                "Branch Name"
-                            } else {
-                                "שם הסניף"
-                            },
-                        options =
-                            branchOptions
-                                .map { option ->
-                                    option.trim()
-                                }
-                                .filter { option ->
-                                    option.isNotBlank()
-                                }
-                                .distinct(),
-                        selectedValue = traineeBranch.trim(),
-                        isEnglish = isEnglish,
-                        placeholder =
-                            if (isEnglish) {
-                                "Select branch"
-                            } else {
-                                "בחר סניף"
-                            },
-                        enabled = branchOptions.isNotEmpty(),
-                        onSelected = { selectedBranch ->
-                            traineeBranch = selectedBranch
-
-                            if (selectedBranch != missingBranchValue) {
-                                traineeOtherBranch = ""
-                            }
-                        }
-                    )
-
-                    if (shouldShowOtherBranch) {
-                        FormTextField(
-                            value = traineeOtherBranch,
-                            onValueChange = { traineeOtherBranch = it },
-                            label = if (isEnglish) {
-                                "Other Branch Name"
-                            } else {
-                                "שם סניף נוסף אם חסר ברשימה"
-                            },
-                            leadingIcon = Icons.Default.Domain,
+                            "he"
+                        },
+                    showMenu = true,
+                    showRoleStatus = true,
+                    showSettings = true,
+                    showBottomActions = true,
+                    showModePill = true,
+                    showRoleBadge = true,
+                    showTopHome = false,
+                    showTopSearch = false,
+                    showTopShare = true,
+                    centerTitle = true,
+                    lockHome = false,
+                    lockSearch = false,
+                    onOpenDrawer = {
+                        DrawerBridge.open()
+                    },
+                    onHome = onClose,
+                    onShare = {
+                        shareMembershipPaymentPdf(
+                            context = context,
+                            formData = currentFormData,
                             isEnglish = isEnglish
                         )
                     }
-                }
-
-                SectionCard(
-                    title = payerTitle,
-                    icon = Icons.Default.Receipt,
-                    isEnglish = isEnglish
-                ) {
-                    Surface(
-                        shape = RoundedCornerShape(18.dp),
-                        color = MaterialTheme.colorScheme.secondaryContainer
-                    ) {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = 12.dp, vertical = 8.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Surface(
-                                shape = RoundedCornerShape(12.dp),
-                                color = MaterialTheme.colorScheme.primary.copy(alpha = 0.16f)
-                            ) {
-                                Box(
-                                    modifier = Modifier
-                                        .size(32.dp)
-                                        .padding(7.dp),
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Default.Shield,
-                                        contentDescription = null,
-                                        tint = MaterialTheme.colorScheme.primary
-                                    )
-                                }
-                            }
-
-                            Text(
-                                text = payerSameToggleText,
-                                style = KmiTypography.body,
-                                color = MaterialTheme.colorScheme.onSecondaryContainer,
-                                textAlign = if (isEnglish) TextAlign.Left else TextAlign.Right,
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .padding(horizontal = 12.dp)
-                            )
-
-                            Switch(
-                                checked = payerSameAsTrainee,
-                                onCheckedChange = { payerSameAsTrainee = it }
-                            )
-                        }
-                    }
-
-                    HorizontalDivider(
-                        color = MaterialTheme.colorScheme.outline.copy(alpha = 0.18f)
-                    )
-
-                    FormTextField(
-                        value = payerFirstName,
-                        onValueChange = { if (!payerSameAsTrainee) payerFirstName = it },
-                        label = if (isEnglish) "First Name" else "שם פרטי",
-                        enabled = !payerSameAsTrainee,
-                        leadingIcon = Icons.Default.Person,
-                        isEnglish = isEnglish
-                    )
-
-                    FormTextField(
-                        value = payerLastName,
-                        onValueChange = { if (!payerSameAsTrainee) payerLastName = it },
-                        label = if (isEnglish) "Last Name" else "שם משפחה",
-                        enabled = !payerSameAsTrainee,
-                        leadingIcon = Icons.Default.Person,
-                        isEnglish = isEnglish
-                    )
-
-                    FormTextField(
-                        value = payerEmail,
-                        onValueChange = { if (!payerSameAsTrainee) payerEmail = it },
-                        label = if (isEnglish) "Email Address" else "כתובת דוא\"ל",
-                        keyboardType = KeyboardType.Email,
-                        enabled = !payerSameAsTrainee,
-                        leadingIcon = Icons.Default.Email,
-                        isEnglish = isEnglish
-                    )
-
-                    FormTextField(
-                        value = payerPhone,
-                        onValueChange = { if (!payerSameAsTrainee) payerPhone = it },
-                        label = if (isEnglish) "Phone Number" else "מספר טלפון",
-                        keyboardType = KeyboardType.Phone,
-                        enabled = !payerSameAsTrainee,
-                        leadingIcon = Icons.Default.PhoneIphone,
-                        isEnglish = isEnglish
-                    )
-                }
-
-                SectionCard(
-                    title = productTitle,
-                    icon = Icons.Default.Wallet,
-                    isEnglish = isEnglish
-                ) {
-                    ProductPriceRow(
-                        label = if (isEnglish) "Product" else "מוצר",
-                        value = if (isEnglish) "Association Membership Fee" else "דמי חבר לעמותה",
-                        isEnglish = isEnglish
-                    )
-
-                    ProductPriceRow(
-                        label = if (isEnglish) "Price" else "מחיר",
-                        value = if (isEnglish) "₪150.00" else "150.00 ₪",
-                        emphasize = true,
-                        isEnglish = isEnglish
-                    )
-                }
-
-                SectionCard(
-                    title = policyTitle,
-                    icon = Icons.Default.Description,
-                    isEnglish = isEnglish
-                ) {
-                    Surface(
-                        shape = RoundedCornerShape(16.dp),
-                        color = MaterialTheme.colorScheme.surfaceVariant,
-                        border = androidx.compose.foundation.BorderStroke(
-                            width = 1.dp,
-                            color = MaterialTheme.colorScheme.outlineVariant
-                        )
-                    ) {
-                        Text(
-                            text = if (isEnglish) {
-                                "Payment of membership fees is final after approval, except in cases such as duplicate payment or another good-faith mistake, subject to review by the association."
-                            } else {
-                                "תשלום דמי חבר הוא סופי לאחר אישור הפעולה, למעט מקרים של תשלום כפול בטעות או טעות אחרת בתום לב, בכפוף לבדיקת העמותה."
-                            },
-                            style = KmiTypography.body,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            fontWeight = FontWeight.SemiBold,
-                            textAlign = if (isEnglish) TextAlign.Left else TextAlign.Right,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(12.dp)
-                        )
-                    }
-
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = if (isEnglish) {
-                            Arrangement.Start
-                        } else {
-                            Arrangement.End
-                        }
-                    ) {
-                        TextButton(
-                            onClick = {
-                                showFullRefundPolicy = true
-                                onReadFullPolicy()
-                            },
-                            colors = ButtonDefaults.textButtonColors(
-                                contentColor = MaterialTheme.colorScheme.primary
-                            )
-                        ) {
-                            if (isEnglish) {
-                                Icon(
-                                    imageVector = Icons.Default.Description,
-                                    contentDescription = null,
-                                    modifier = Modifier.padding(end = 6.dp)
-                                )
-                                Text(
-                                    text = readPolicyText,
-                                    style = KmiTypography.body,
-                                    fontWeight = FontWeight.SemiBold
-                                )
-                            } else {
-                                Text(
-                                    text = readPolicyText,
-                                    style = KmiTypography.body,
-                                    fontWeight = FontWeight.SemiBold
-                                )
-                                Icon(
-                                    imageVector = Icons.Default.Description,
-                                    contentDescription = null,
-                                    modifier = Modifier.padding(start = 6.dp)
-                                )
-                            }
-                        }
-                    }
-
-                    Surface(
-                        shape = RoundedCornerShape(18.dp),
-                        color =
-                            if (policyAccepted) {
-                                MaterialTheme.colorScheme.tertiaryContainer
-                            } else {
-                                MaterialTheme.colorScheme.surfaceVariant
-                            },
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .border(
-                                width = 1.5.dp,
-                                color =
-                                    if (policyAccepted) {
-                                        Color(0xFF19C37D)
-                                    } else {
-                                        MaterialTheme.colorScheme.outlineVariant
-                                    },
-                                shape = RoundedCornerShape(18.dp)
-                            )
-                    ) {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = 10.dp, vertical = 10.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            if (isEnglish) {
-                                Checkbox(
-                                    checked = policyAccepted,
-                                    onCheckedChange = { policyAccepted = it },
-                                    modifier = Modifier.size(34.dp),
-                                    colors = CheckboxDefaults.colors(
-                                        checkedColor = Color(0xFF19C37D),
-                                        uncheckedColor = Color(0xFF7CFFB2),
-                                        checkmarkColor = Color.White
-                                    )
-                                )
-
-                                Text(
-                                    text = "I have read and agree to the cancellation and refund policy.",
-                                    style = KmiTypography.body,
-                                    color =
-                                        if (policyAccepted) {
-                                            MaterialTheme.colorScheme.onTertiaryContainer
-                                        } else {
-                                            MaterialTheme.colorScheme.onSurfaceVariant
-                                        },
-                                    fontWeight = FontWeight.SemiBold,
-                                    textAlign = TextAlign.Left,
-                                    modifier = Modifier
-                                        .weight(1f)
-                                        .padding(start = 8.dp)
-                                )
-                            } else {
-                                Text(
-                                    text = "קראתי ואני מאשר/ת את מדיניות הביטולים וההחזרים.",
-                                    style = KmiTypography.body,
-                                    color =
-                                        if (policyAccepted) {
-                                            MaterialTheme.colorScheme.onTertiaryContainer
-                                        } else {
-                                            MaterialTheme.colorScheme.onSurfaceVariant
-                                        },
-                                    fontWeight = FontWeight.SemiBold,
-                                    textAlign = TextAlign.Right,
-                                    modifier = Modifier
-                                        .weight(1f)
-                                        .padding(end = 8.dp)
-                                )
-
-                                Checkbox(
-                                    checked = policyAccepted,
-                                    onCheckedChange = { policyAccepted = it },
-                                    modifier = Modifier.size(34.dp),
-                                    colors = CheckboxDefaults.colors(
-                                        checkedColor = Color(0xFF19C37D),
-                                        uncheckedColor = Color(0xFF7CFFB2),
-                                        checkmarkColor = Color.White
-                                    )
-                                )
-                            }
-                        }
-                    }
-                }
-
-                Button(
-                    onClick = {
-                        onContinueToPayment(
-                            MembershipPaymentFormData(
-                                traineeFirstName = traineeFirstName.trim(),
-                                traineeLastName = traineeLastName.trim(),
-                                traineeIdNumber = traineeIdNumber.trim(),
-                                traineeBirthDate = traineeBirthDate.trim(),
-                                traineeEmail = traineeEmail.trim(),
-                                traineePhone = traineePhone.trim(),
-                                traineeBranch = traineeBranch.trim(),
-                                traineeOtherBranch = traineeOtherBranch.trim(),
-                                payerSameAsTrainee = payerSameAsTrainee,
-                                payerFirstName = payerFirstName.trim(),
-                                payerLastName = payerLastName.trim(),
-                                payerEmail = payerEmail.trim(),
-                                payerPhone = payerPhone.trim(),
-                                policyAccepted = policyAccepted,
-                                amount = 150.0
-                            )
-                        )
-                    },
-                    enabled = isFormValid,
-                    shape = MaterialTheme.shapes.extraLarge,
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = Color(0xFF7C5CE6),
-                        contentColor = Color.White,
-                        disabledContainerColor =
-                            MaterialTheme.colorScheme.surfaceVariant,
-
-                        disabledContentColor =
-                            MaterialTheme.colorScheme.onSurfaceVariant.copy(
-                                alpha = 0.55f
-                            )
-                    ),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Payments,
-                        contentDescription = null
-                    )
-                    Text(
-                        text = "  $continueText",
-                        style = KmiTypography.cardTitle,
-                        fontWeight = FontWeight.Bold,
-                        modifier = Modifier.padding(vertical = 4.dp)
-                    )
-                }
+                )
             }
-
-            if (isLoadingServerPrefill) {
-                Surface(
+        ) { innerPadding ->
+            Box(
+                modifier =
+                    Modifier
+                        .fillMaxSize()
+                        .background(
+                            brush =
+                                kmiScreenBackgroundBrush()
+                        )
+            ) {
+                Column(
                     modifier =
                         Modifier
                             .fillMaxSize()
-                            .padding(innerPadding),
-                    color =
-                        MaterialTheme.colorScheme.background.copy(
-                            alpha = 0.96f
-                        ),
-                    tonalElevation = 0.dp,
-                    shadowElevation = 0.dp
+                            .padding(innerPadding)
+                            .verticalScroll(rememberScrollState())
+                            .imePadding()
+                            .navigationBarsPadding()
+                            .padding(
+                                horizontal = 14.dp,
+                                vertical = 10.dp
+                            ),
+                    verticalArrangement =
+                        Arrangement.spacedBy(8.dp)
                 ) {
-                    Box(
-                        modifier = Modifier.fillMaxSize(),
-                        contentAlignment = Alignment.Center
-                    ) {
+                    if (serverPrefillLoadFailed) {
                         Card(
-                            shape = RoundedCornerShape(22.dp),
+                            shape = RoundedCornerShape(18.dp),
                             colors =
                                 CardDefaults.cardColors(
                                     containerColor =
-                                        MaterialTheme.colorScheme.surface
+                                        MaterialTheme
+                                            .colorScheme
+                                            .errorContainer
                                 ),
                             elevation =
                                 CardDefaults.cardElevation(
                                     defaultElevation = 0.dp
                                 ),
-                            modifier =
-                                Modifier
-                                    .fillMaxWidth()
-                                    .padding(horizontal = 24.dp)
+                            modifier = Modifier.fillMaxWidth()
                         ) {
-                            MembershipPaymentPremiumLoading(
+                            Column(
+                                modifier =
+                                    Modifier
+                                        .fillMaxWidth()
+                                        .padding(12.dp),
+                                verticalArrangement =
+                                    Arrangement.spacedBy(8.dp),
+                                horizontalAlignment =
+                                    Alignment.CenterHorizontally
+                            ) {
+                                Text(
+                                    text =
+                                        if (isEnglish) {
+                                            "We couldn't load your latest details. Check your connection and try again."
+                                        } else {
+                                            "לא הצלחנו לטעון את הפרטים העדכניים שלך. בדוק את החיבור ונסה שוב."
+                                        },
+                                    style =
+                                        KmiTypography.body.copy(
+                                            fontWeight =
+                                                FontWeight.SemiBold
+                                        ),
+                                    color =
+                                        MaterialTheme
+                                            .colorScheme
+                                            .onErrorContainer,
+                                    textAlign = TextAlign.Center,
+                                    modifier = Modifier.fillMaxWidth()
+                                )
+
+                                TextButton(
+                                    onClick = {
+                                        serverPrefillReloadKey += 1
+                                    },
+                                    colors =
+                                        ButtonDefaults.textButtonColors(
+                                            contentColor =
+                                                MaterialTheme
+                                                    .colorScheme
+                                                    .onErrorContainer
+                                        )
+                                ) {
+                                    Text(
+                                        text =
+                                            if (isEnglish) {
+                                                "Try again"
+                                            } else {
+                                                "נסה שוב"
+                                            },
+                                        style =
+                                            KmiTypography.action
+                                    )
+                                }
+                            }
+                        }
+                    }
+
+                    ProductHeroCard(
+                        isEnglish = isEnglish,
+                        amountText =
+                            if (isEnglish) {
+                                "₪150.00"
+                            } else {
+                                "150.00 ₪"
+                            }
+                    )
+
+                    SectionCard(
+                        title = traineeTitle,
+                        icon = Icons.Default.AccountCircle,
+                        isEnglish = isEnglish
+                    ) {
+                        FormTextField(
+                            value = traineeFirstName,
+                            onValueChange = { traineeFirstName = it },
+                            label = if (isEnglish) "First Name" else "שם פרטי",
+                            leadingIcon = Icons.Default.AccountCircle,
+                            isEnglish = isEnglish
+                        )
+
+                        FormTextField(
+                            value = traineeLastName,
+                            onValueChange = { traineeLastName = it },
+                            label = if (isEnglish) "Last Name" else "שם משפחה",
+                            leadingIcon = Icons.Default.AccountCircle,
+                            isEnglish = isEnglish
+                        )
+
+                        FormTextField(
+                            value = traineeIdNumber,
+                            onValueChange = { traineeIdNumber = it },
+                            label = if (isEnglish) "ID Number" else "מספר ת.ז.",
+                            keyboardType = KeyboardType.Number,
+                            leadingIcon = Icons.Default.Badge,
+                            isEnglish = isEnglish
+                        )
+
+                        Column(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalArrangement =
+                                Arrangement.spacedBy(6.dp),
+                            horizontalAlignment =
+                                Alignment.Start
+                        ) {
+                            Text(
                                 text =
                                     if (isEnglish) {
-                                        "Loading your details..."
+                                        "Birth Date"
                                     } else {
-                                        "טוען את הפרטים שלך..."
-                                    }
+                                        "תאריך לידה"
+                                    },
+                                style =
+                                    KmiTypography.body.copy(
+                                        fontWeight =
+                                            FontWeight.ExtraBold
+                                    ),
+                                color =
+                                    MaterialTheme.colorScheme.onSurface,
+                                textAlign = TextAlign.Start,
+                                modifier = Modifier.fillMaxWidth()
                             )
+
+                            CompositionLocalProvider(
+                                LocalLayoutDirection provides
+                                        LayoutDirection.Ltr
+                            ) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    verticalAlignment =
+                                        Alignment.CenterVertically,
+                                    horizontalArrangement =
+                                        Arrangement.spacedBy(6.dp)
+                                ) {
+                                    BirthDatePartField(
+                                        value = birthDay,
+                                        onValueChange = { value ->
+                                            birthDay = value
+                                            traineeBirthDate =
+                                                buildMembershipBirthDate(
+                                                    day = value,
+                                                    month = birthMonth,
+                                                    year = birthYear
+                                                )
+                                        },
+                                        label =
+                                            if (isEnglish) {
+                                                "Day"
+                                            } else {
+                                                "יום"
+                                            },
+                                        placeholder = "DD",
+                                        maxLength = 2,
+                                        focusRequester =
+                                            birthDayFocusRequester,
+                                        imeAction = ImeAction.Next,
+                                        onCompleted = {
+                                            birthMonthFocusRequester
+                                                .requestFocus()
+                                        },
+                                        modifier = Modifier.weight(1f)
+                                    )
+
+                                    Text(
+                                        text = "/",
+                                        style =
+                                            KmiTypography.action.copy(
+                                                fontWeight =
+                                                    FontWeight.Bold
+                                            ),
+                                        color =
+                                            MaterialTheme
+                                                .colorScheme
+                                                .onSurfaceVariant
+                                    )
+
+                                    BirthDatePartField(
+                                        value = birthMonth,
+                                        onValueChange = { value ->
+                                            birthMonth = value
+                                            traineeBirthDate =
+                                                buildMembershipBirthDate(
+                                                    day = birthDay,
+                                                    month = value,
+                                                    year = birthYear
+                                                )
+                                        },
+                                        label =
+                                            if (isEnglish) {
+                                                "Month"
+                                            } else {
+                                                "חודש"
+                                            },
+                                        placeholder = "MM",
+                                        maxLength = 2,
+                                        focusRequester =
+                                            birthMonthFocusRequester,
+                                        imeAction = ImeAction.Next,
+                                        onCompleted = {
+                                            birthYearFocusRequester
+                                                .requestFocus()
+                                        },
+                                        modifier = Modifier.weight(1f)
+                                    )
+
+                                    Text(
+                                        text = "/",
+                                        style =
+                                            KmiTypography.action.copy(
+                                                fontWeight =
+                                                    FontWeight.Bold
+                                            ),
+                                        color =
+                                            MaterialTheme
+                                                .colorScheme
+                                                .onSurfaceVariant
+                                    )
+
+                                    BirthDatePartField(
+                                        value = birthYear,
+                                        onValueChange = { value ->
+                                            birthYear = value
+                                            traineeBirthDate =
+                                                buildMembershipBirthDate(
+                                                    day = birthDay,
+                                                    month = birthMonth,
+                                                    year = value
+                                                )
+                                        },
+                                        label =
+                                            if (isEnglish) {
+                                                "Year"
+                                            } else {
+                                                "שנה"
+                                            },
+                                        placeholder = "YYYY",
+                                        maxLength = 4,
+                                        focusRequester =
+                                            birthYearFocusRequester,
+                                        imeAction = ImeAction.Done,
+                                        onCompleted = {
+                                            focusManager.clearFocus()
+                                        },
+                                        modifier =
+                                            Modifier.weight(1.2f)
+                                    )
+                                }
+                            }
+                        }
+
+                        FormTextField(
+                            value = traineeEmail,
+                            onValueChange = { traineeEmail = it },
+                            label = if (isEnglish) "Email" else "כתובת דוא\"ל",
+                            keyboardType = KeyboardType.Email,
+                            leadingIcon = Icons.Default.MarkEmailRead,
+                            isEnglish = isEnglish
+                        )
+
+                        FormTextField(
+                            value = traineePhone,
+                            onValueChange = { traineePhone = it },
+                            label = if (isEnglish) "Mobile Phone" else "מספר טלפון נייד",
+                            keyboardType = KeyboardType.Phone,
+                            leadingIcon = Icons.Default.LocalPhone,
+                            isEnglish = isEnglish
+                        )
+
+                        KmiPremiumDropdown(
+                            title =
+                                if (isEnglish) {
+                                    "Branch Name"
+                                } else {
+                                    "שם הסניף"
+                                },
+                            options =
+                                branchOptions
+                                    .map { option ->
+                                        option.trim()
+                                    }
+                                    .filter { option ->
+                                        option.isNotBlank()
+                                    }
+                                    .distinct(),
+                            selectedValue = traineeBranch.trim(),
+                            isEnglish = isEnglish,
+                            placeholder =
+                                if (isEnglish) {
+                                    "Select branch"
+                                } else {
+                                    "בחר סניף"
+                                },
+                            enabled = branchOptions.isNotEmpty(),
+                            onSelected = { selectedBranch ->
+                                traineeBranch = selectedBranch
+
+                                if (selectedBranch != missingBranchValue) {
+                                    traineeOtherBranch = ""
+                                }
+                            }
+                        )
+
+                        if (shouldShowOtherBranch) {
+                            FormTextField(
+                                value = traineeOtherBranch,
+                                onValueChange = { traineeOtherBranch = it },
+                                label = if (isEnglish) {
+                                    "Other Branch Name"
+                                } else {
+                                    "שם סניף נוסף אם חסר ברשימה"
+                                },
+                                leadingIcon = Icons.Default.Domain,
+                                isEnglish = isEnglish
+                            )
+                        }
+                    }
+
+                    SectionCard(
+                        title = payerTitle,
+                        icon = Icons.Default.Receipt,
+                        isEnglish = isEnglish
+                    ) {
+                        Surface(
+                            shape = RoundedCornerShape(18.dp),
+                            color = MaterialTheme.colorScheme.secondaryContainer
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 12.dp, vertical = 8.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Surface(
+                                    shape = RoundedCornerShape(12.dp),
+                                    color = MaterialTheme.colorScheme.primary.copy(alpha = 0.16f)
+                                ) {
+                                    Box(
+                                        modifier = Modifier
+                                            .size(32.dp)
+                                            .padding(7.dp),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.Shield,
+                                            contentDescription = null,
+                                            tint = MaterialTheme.colorScheme.primary
+                                        )
+                                    }
+                                }
+
+                                Text(
+                                    text = payerSameToggleText,
+                                    style = KmiTypography.body,
+                                    color =
+                                        MaterialTheme
+                                            .colorScheme
+                                            .onSecondaryContainer,
+                                    textAlign = TextAlign.Start,
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .padding(horizontal = 12.dp)
+                                )
+
+                                Switch(
+                                    checked = payerSameAsTrainee,
+                                    onCheckedChange = { payerSameAsTrainee = it }
+                                )
+                            }
+                        }
+
+                        HorizontalDivider(
+                            color = MaterialTheme.colorScheme.outline.copy(alpha = 0.18f)
+                        )
+
+                        FormTextField(
+                            value = payerFirstName,
+                            onValueChange = { if (!payerSameAsTrainee) payerFirstName = it },
+                            label = if (isEnglish) "First Name" else "שם פרטי",
+                            enabled = !payerSameAsTrainee,
+                            leadingIcon = Icons.Default.Person,
+                            isEnglish = isEnglish
+                        )
+
+                        FormTextField(
+                            value = payerLastName,
+                            onValueChange = { if (!payerSameAsTrainee) payerLastName = it },
+                            label = if (isEnglish) "Last Name" else "שם משפחה",
+                            enabled = !payerSameAsTrainee,
+                            leadingIcon = Icons.Default.Person,
+                            isEnglish = isEnglish
+                        )
+
+                        FormTextField(
+                            value = payerEmail,
+                            onValueChange = { if (!payerSameAsTrainee) payerEmail = it },
+                            label = if (isEnglish) "Email Address" else "כתובת דוא\"ל",
+                            keyboardType = KeyboardType.Email,
+                            enabled = !payerSameAsTrainee,
+                            leadingIcon = Icons.Default.Email,
+                            isEnglish = isEnglish
+                        )
+
+                        FormTextField(
+                            value = payerPhone,
+                            onValueChange = { if (!payerSameAsTrainee) payerPhone = it },
+                            label = if (isEnglish) "Phone Number" else "מספר טלפון",
+                            keyboardType = KeyboardType.Phone,
+                            enabled = !payerSameAsTrainee,
+                            leadingIcon = Icons.Default.PhoneIphone,
+                            isEnglish = isEnglish
+                        )
+                    }
+
+                    SectionCard(
+                        title = productTitle,
+                        icon = Icons.Default.Wallet,
+                        isEnglish = isEnglish
+                    ) {
+                        ProductPriceRow(
+                            label = if (isEnglish) "Product" else "מוצר",
+                            value = if (isEnglish) "Association Membership Fee" else "דמי חבר לעמותה",
+                            isEnglish = isEnglish
+                        )
+
+                        ProductPriceRow(
+                            label = if (isEnglish) "Price" else "מחיר",
+                            value = if (isEnglish) "₪150.00" else "150.00 ₪",
+                            emphasize = true,
+                            isEnglish = isEnglish
+                        )
+                    }
+
+                    SectionCard(
+                        title = policyTitle,
+                        icon = Icons.Default.Description,
+                        isEnglish = isEnglish
+                    ) {
+                        Surface(
+                            shape = RoundedCornerShape(16.dp),
+                            color = MaterialTheme.colorScheme.surfaceVariant,
+                            border = androidx.compose.foundation.BorderStroke(
+                                width = 1.dp,
+                                color = MaterialTheme.colorScheme.outlineVariant
+                            )
+                        ) {
+                            Text(
+                                text = if (isEnglish) {
+                                    "Payment of membership fees is final after approval, except in cases such as duplicate payment or another good-faith mistake, subject to review by the association."
+                                } else {
+                                    "תשלום דמי חבר הוא סופי לאחר אישור הפעולה, למעט מקרים של תשלום כפול בטעות או טעות אחרת בתום לב, בכפוף לבדיקת העמותה."
+                                },
+                                style = KmiTypography.body,
+                                color =
+                                    MaterialTheme
+                                        .colorScheme
+                                        .onSurfaceVariant,
+                                fontWeight = FontWeight.SemiBold,
+                                textAlign = TextAlign.Start,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(12.dp)
+                            )
+                        }
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement =
+                                Arrangement.Start
+                        ) {
+                            TextButton(
+                                onClick = {
+                                    showFullRefundPolicy = true
+                                    onReadFullPolicy()
+                                },
+                                colors = ButtonDefaults.textButtonColors(
+                                    contentColor = MaterialTheme.colorScheme.primary
+                                )
+                            ) {
+                                Icon(
+                                    imageVector =
+                                        Icons.Default.Description,
+                                    contentDescription = null
+                                )
+
+                                Text(
+                                    text = readPolicyText,
+                                    style = KmiTypography.body,
+                                    fontWeight =
+                                        FontWeight.SemiBold,
+                                    modifier =
+                                        Modifier.padding(
+                                            start = 6.dp
+                                        )
+                                )
+                            }
+                        }
+
+                        Surface(
+                            shape = RoundedCornerShape(18.dp),
+                            color =
+                                if (policyAccepted) {
+                                    MaterialTheme.colorScheme.tertiaryContainer
+                                } else {
+                                    MaterialTheme.colorScheme.surfaceVariant
+                                },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .border(
+                                    width = 1.5.dp,
+                                    color =
+                                        if (policyAccepted) {
+                                            MaterialTheme
+                                                .colorScheme
+                                                .primary
+                                        } else {
+                                            MaterialTheme
+                                                .colorScheme
+                                                .outlineVariant
+                                        },
+                                    shape = RoundedCornerShape(18.dp)
+                                )
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 10.dp, vertical = 10.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Checkbox(
+                                    checked = policyAccepted,
+                                    onCheckedChange = {
+                                        policyAccepted = it
+                                    },
+                                    modifier =
+                                        Modifier.size(34.dp),
+                                    colors =
+                                        CheckboxDefaults.colors(
+                                            checkedColor =
+                                                MaterialTheme
+                                                    .colorScheme
+                                                    .primary,
+                                            uncheckedColor =
+                                                MaterialTheme
+                                                    .colorScheme
+                                                    .outline,
+                                            checkmarkColor =
+                                                MaterialTheme
+                                                    .colorScheme
+                                                    .onPrimary
+                                        )
+                                )
+
+                                Text(
+                                    text =
+                                        if (isEnglish) {
+                                            "I have read and agree to the cancellation and refund policy."
+                                        } else {
+                                            "קראתי ואני מאשר/ת את מדיניות הביטולים וההחזרים."
+                                        },
+                                    style = KmiTypography.body,
+                                    color =
+                                        if (policyAccepted) {
+                                            MaterialTheme
+                                                .colorScheme
+                                                .onTertiaryContainer
+                                        } else {
+                                            MaterialTheme
+                                                .colorScheme
+                                                .onSurfaceVariant
+                                        },
+                                    fontWeight =
+                                        FontWeight.SemiBold,
+                                    textAlign = TextAlign.Start,
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .padding(start = 8.dp)
+                                )
+                            }
+                        }
+                    }
+
+                    Button(
+                        onClick = {
+                            onContinueToPayment(
+                                currentFormData
+                            )
+                        },
+                        enabled = isFormValid,
+                        shape = MaterialTheme.shapes.extraLarge,
+                        colors =
+                            ButtonDefaults.buttonColors(
+                                containerColor =
+                                    MaterialTheme
+                                        .colorScheme
+                                        .primary,
+                                contentColor =
+                                    MaterialTheme
+                                        .colorScheme
+                                        .onPrimary,
+                                disabledContainerColor =
+                                    MaterialTheme
+                                        .colorScheme
+                                        .surfaceVariant,
+                                disabledContentColor =
+                                    MaterialTheme
+                                        .colorScheme
+                                        .onSurfaceVariant
+                                        .copy(alpha = 0.55f)
+                            ),
+                        elevation =
+                            ButtonDefaults.buttonElevation(
+                                defaultElevation = 0.dp,
+                                pressedElevation = 0.dp,
+                                focusedElevation = 0.dp,
+                                hoveredElevation = 0.dp,
+                                disabledElevation = 0.dp
+                            ),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Payments,
+                            contentDescription = null
+                        )
+                        Text(
+                            text = "  $continueText",
+                            style = KmiTypography.cardTitle,
+                            fontWeight = FontWeight.Bold,
+                            modifier = Modifier.padding(vertical = 4.dp)
+                        )
+                    }
+                }
+
+                if (isLoadingServerPrefill) {
+                    Surface(
+                        modifier =
+                            Modifier
+                                .fillMaxSize()
+                                .padding(innerPadding),
+                        color =
+                            MaterialTheme.colorScheme.background.copy(
+                                alpha = 0.96f
+                            ),
+                        tonalElevation = 0.dp,
+                        shadowElevation = 0.dp
+                    ) {
+                        Box(
+                            modifier = Modifier.fillMaxSize(),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Card(
+                                shape = RoundedCornerShape(22.dp),
+                                colors =
+                                    CardDefaults.cardColors(
+                                        containerColor =
+                                            MaterialTheme.colorScheme.surface
+                                    ),
+                                elevation =
+                                    CardDefaults.cardElevation(
+                                        defaultElevation = 0.dp
+                                    ),
+                                modifier =
+                                    Modifier
+                                        .fillMaxWidth()
+                                        .padding(horizontal = 24.dp)
+                            ) {
+                                MembershipPaymentPremiumLoading(
+                                    text =
+                                        if (isEnglish) {
+                                            "Loading your details..."
+                                        } else {
+                                            "טוען את הפרטים שלך..."
+                                        }
+                                )
+                            }
                         }
                     }
                 }
             }
         }
-    }
 
-    if (showFullRefundPolicy) {
-        AlertDialog(
-            onDismissRequest = {
-                showFullRefundPolicy = false
-            },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        showFullRefundPolicy = false
+        if (showFullRefundPolicy) {
+            AlertDialog(
+                onDismissRequest = {
+                    showFullRefundPolicy = false
+                },
+                confirmButton = {
+                    TextButton(
+                        onClick = {
+                            showFullRefundPolicy = false
+                        }
+                    ) {
+                        Text(
+                            text = if (isEnglish) "Close" else "סגור",
+                            style = KmiTypography.body,
+                            fontWeight = FontWeight.SemiBold
+                        )
                     }
-                ) {
+                },
+                title = {
                     Text(
-                        text = if (isEnglish) "Close" else "סגור",
-                        style = KmiTypography.body,
-                        fontWeight = FontWeight.SemiBold
-                    )
-                }
-            },
-            title = {
-                Text(
-                    text = policyTitle,
-                    style = KmiTypography.sectionTitle,
-                    color = MaterialTheme.colorScheme.onSurface,
-                    modifier = Modifier.fillMaxWidth(),
-                    textAlign =
-                        if (isEnglish) {
-                            TextAlign.Left
-                        } else {
-                            TextAlign.Right
-                        },
-                    fontWeight = FontWeight.ExtraBold
-                )
-            },
-            text = {
-                Column(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalArrangement = Arrangement.spacedBy(10.dp),
-                    horizontalAlignment = if (isEnglish) Alignment.Start else Alignment.End
-                ) {
-                    Text(
-                        text = if (isEnglish) {
-                            "1. The membership fee is a registration and association membership payment."
-                        } else {
-                            "1. דמי החבר הם תשלום עבור רישום וחברות בעמותה."
-                        },
+                        text = policyTitle,
+                        style = KmiTypography.sectionTitle,
+                        color = MaterialTheme.colorScheme.onSurface,
                         modifier = Modifier.fillMaxWidth(),
-                        textAlign = if (isEnglish) TextAlign.Left else TextAlign.Right
+                        textAlign = TextAlign.Start,
+                        fontWeight = FontWeight.ExtraBold
                     )
+                },
+                text = {
+                    Column(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalArrangement = Arrangement.spacedBy(10.dp),
+                        horizontalAlignment = Alignment.Start
+                    ) {
+                        Text(
+                            text = if (isEnglish) {
+                                "1. The membership fee is a registration and association membership payment."
+                            } else {
+                                "1. דמי החבר הם תשלום עבור רישום וחברות בעמותה."
+                            },
+                            modifier = Modifier.fillMaxWidth(),
+                            textAlign = TextAlign.Start
+                        )
 
-                    Text(
-                        text = if (isEnglish) {
-                            "2. After payment approval, the payment is considered final, except in cases of duplicate payment, technical error, or another good-faith mistake."
-                        } else {
-                            "2. לאחר אישור התשלום, התשלום נחשב סופי, למעט מקרים של תשלום כפול, תקלה טכנית או טעות אחרת בתום לב."
-                        },
-                        modifier = Modifier.fillMaxWidth(),
-                        textAlign = if (isEnglish) TextAlign.Left else TextAlign.Right
-                    )
+                        Text(
+                            text = if (isEnglish) {
+                                "2. After payment approval, the payment is considered final, except in cases of duplicate payment, technical error, or another good-faith mistake."
+                            } else {
+                                "2. לאחר אישור התשלום, התשלום נחשב סופי, למעט מקרים של תשלום כפול, תקלה טכנית או טעות אחרת בתום לב."
+                            },
+                            modifier = Modifier.fillMaxWidth(),
+                            textAlign = TextAlign.Start
+                        )
 
-                    Text(
-                        text = if (isEnglish) {
-                            "3. Refund requests will be reviewed by the association according to the payment details, payment date, and the reason for the request."
-                        } else {
-                            "3. בקשות להחזר ייבחנו על ידי העמותה בהתאם לפרטי התשלום, מועד התשלום וסיבת הבקשה."
-                        },
-                        modifier = Modifier.fillMaxWidth(),
-                        textAlign = if (isEnglish) TextAlign.Left else TextAlign.Right
-                    )
+                        Text(
+                            text = if (isEnglish) {
+                                "3. Refund requests will be reviewed by the association according to the payment details, payment date, and the reason for the request."
+                            } else {
+                                "3. בקשות להחזר ייבחנו על ידי העמותה בהתאם לפרטי התשלום, מועד התשלום וסיבת הבקשה."
+                            },
+                            modifier = Modifier.fillMaxWidth(),
+                            textAlign = TextAlign.Start
+                        )
 
-                    Text(
-                        text = if (isEnglish) {
-                            "4. If a refund is approved, it will be processed using the same payment method or another method approved by the association."
-                        } else {
-                            "4. אם יאושר החזר, הוא יבוצע באמצעי התשלום המקורי או באמצעי אחר שיאושר על ידי העמותה."
-                        },
-                        modifier = Modifier.fillMaxWidth(),
-                        textAlign = if (isEnglish) TextAlign.Left else TextAlign.Right
-                    )
+                        Text(
+                            text = if (isEnglish) {
+                                "4. If a refund is approved, it will be processed using the same payment method or another method approved by the association."
+                            } else {
+                                "4. אם יאושר החזר, הוא יבוצע באמצעי התשלום המקורי או באמצעי אחר שיאושר על ידי העמותה."
+                            },
+                            modifier = Modifier.fillMaxWidth(),
+                            textAlign = TextAlign.Start
+                        )
 
-                    Text(
-                        text = if (isEnglish) {
-                            "5. Administrative or clearing fees may be deducted if required by the payment provider or applicable rules."
-                        } else {
-                            "5. ייתכן ניכוי עמלות טיפול או סליקה, ככל שהדבר נדרש על ידי ספק התשלום או לפי הנהלים החלים."
-                        },
-                        modifier = Modifier.fillMaxWidth(),
-                        textAlign = if (isEnglish) TextAlign.Left else TextAlign.Right
-                    )
+                        Text(
+                            text = if (isEnglish) {
+                                "5. Administrative or clearing fees may be deducted if required by the payment provider or applicable rules."
+                            } else {
+                                "5. ייתכן ניכוי עמלות טיפול או סליקה, ככל שהדבר נדרש על ידי ספק התשלום או לפי הנהלים החלים."
+                            },
+                            modifier = Modifier.fillMaxWidth(),
+                            textAlign = TextAlign.Start
+                        )
 
-                    Text(
-                        text = if (isEnglish) {
-                            "6. By checking the approval box, the payer confirms that they have read and agreed to this cancellation and refund policy before continuing to payment."
-                        } else {
-                            "6. סימון תיבת האישור מהווה אישור לכך שהמשלם קרא והסכים למדיניות הביטולים וההחזרים לפני המעבר לתשלום."
-                        },
-                        modifier = Modifier.fillMaxWidth(),
-                        textAlign = if (isEnglish) TextAlign.Left else TextAlign.Right,
-                        fontWeight = FontWeight.Bold
-                    )
-                }
-            },
-            containerColor = MaterialTheme.colorScheme.surface
-        )
-    }
+                        Text(
+                            text = if (isEnglish) {
+                                "6. By checking the approval box, the payer confirms that they have read and agreed to this cancellation and refund policy before continuing to payment."
+                            } else {
+                                "6. סימון תיבת האישור מהווה אישור לכך שהמשלם קרא והסכים למדיניות הביטולים וההחזרים לפני המעבר לתשלום."
+                            },
+                            modifier = Modifier.fillMaxWidth(),
+                            textAlign = TextAlign.Start,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                },
+                containerColor =
+                    MaterialTheme.colorScheme.surface
+            )
+        }
+    } // סוף KmiLanguageDirection
 }
 
 @Composable
@@ -1804,7 +2404,7 @@ private fun ProductHeroCard(
     isEnglish: Boolean,
     amountText: String
 ) {
-    val textAlign = if (isEnglish) TextAlign.Left else TextAlign.Right
+    val textAlign = TextAlign.Start
     val horizontalAlignment = if (isEnglish) Alignment.Start else Alignment.End
 
     val compactAmount = amountText

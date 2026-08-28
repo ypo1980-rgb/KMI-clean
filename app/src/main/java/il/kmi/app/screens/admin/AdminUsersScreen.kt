@@ -24,13 +24,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.StrokeCap
-import androidx.compose.ui.graphics.drawscope.Stroke
-import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -56,31 +51,31 @@ import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
-import androidx.compose.animation.core.LinearEasing
-import androidx.compose.animation.core.animateFloat
-import androidx.compose.animation.core.infiniteRepeatable
-import androidx.compose.animation.core.rememberInfiniteTransition
-import androidx.compose.animation.core.tween
-import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.clickable
 import androidx.compose.runtime.saveable.rememberSaveable
+import il.kmi.app.ui.KmiLanguageDirection
 import il.kmi.app.ui.KmiTypography
+import il.kmi.app.ui.loading.KmiLoadingRings
+import il.kmi.app.ui.pdf.KmiPdfDirection
+import il.yuval.ui.theme.kmiScreenBackgroundBrush
 
 //=====================================================================
 
-private fun adminTr(isEnglish: Boolean, he: String, en: String): String =
-    if (isEnglish) en else he
-
-private fun adminTextAlign(
-    isEnglish: Boolean
-): TextAlign =
+private fun adminTr(
+    isEnglish: Boolean,
+    he: String,
+    en: String
+): String =
     if (isEnglish) {
-        TextAlign.Left
+        en
     } else {
-        TextAlign.Right
+        he
     }
 
-private fun adminAgeBucketLabel(bucket: String, isEnglish: Boolean): String {
+private fun adminAgeBucketLabel(
+    bucket: String,
+    isEnglish: Boolean
+): String {
     return when (bucket) {
         "לא ידוע" -> adminTr(isEnglish, "לא ידוע", "Unknown")
         else -> bucket
@@ -522,15 +517,9 @@ private fun AdminUserRecord.isSameAdminUser(
                 otherEmail.isNotBlank() ||
                 otherPhone.isNotBlank()
 
-    if (
-        sameName &&
-        !thisHasStrongIdentity &&
-        !otherHasStrongIdentity
-    ) {
-        return true
-    }
-
-    return false
+    return sameName &&
+            !thisHasStrongIdentity &&
+            !otherHasStrongIdentity
 }
 
 /**
@@ -930,7 +919,7 @@ private fun DocumentSnapshot.adminBranchAssignments():
  * המרה של מסמך Firestore למודל AdminUserRecord
  * מנסה לתמוך במספר שמות אפשריים לשדות.
  */
-private fun DocumentSnapshot.toAdminUserRecord(): AdminUserRecord? {
+private fun DocumentSnapshot.toAdminUserRecord(): AdminUserRecord {
     fun intOrNull(field: String): Int? =
         when (val v = get(field)) {
             is Long -> v.toInt()
@@ -958,38 +947,62 @@ private fun DocumentSnapshot.toAdminUserRecord(): AdminUserRecord? {
         return null
     }
 
-    fun boolOrNull(vararg keys: String): Boolean? {
-        for (k in keys) {
-            val v = get(k)
-            when (v) {
-                is Boolean -> return v
-                is String -> v.trim().lowercase().let {
-                    if (it == "true") return true
-                    if (it == "false") return false
-                }
+    fun boolOrNull(
+        vararg keys: String
+    ): Boolean? {
+        for (key in keys) {
+            when (val value = get(key)) {
+                is Boolean ->
+                    return value
+
+                is String ->
+                    when (
+                        value
+                            .trim()
+                            .lowercase()
+                    ) {
+                        "true" -> return true
+                        "false" -> return false
+                    }
             }
         }
+
         return null
     }
 
-    fun stringListOrEmpty(vararg keys: String): List<String> {
-        for (k in keys) {
-            val v = get(k)
-
-            when (v) {
+    fun stringListOrEmpty(
+        vararg keys: String
+    ): List<String> {
+        for (key in keys) {
+            when (val value = get(key)) {
                 is List<*> -> {
-                    val list = v
-                        .mapNotNull { it?.toString()?.trim() }
-                        .filter { it.isNotBlank() }
+                    val list =
+                        value
+                            .mapNotNull {
+                                it
+                                    ?.toString()
+                                    ?.trim()
+                            }
+                            .filter {
+                                it.isNotBlank()
+                            }
 
                     if (list.isNotEmpty()) return list
                 }
 
                 is String -> {
-                    val list = v
-                        .split(",", "•", "|", ";")
-                        .map { it.trim() }
-                        .filter { it.isNotBlank() }
+                    val list =
+                        value
+                            .split(
+                                ",",
+                                "•",
+                                "|",
+                                ";"
+                            )
+                            .map {
+                                it.trim()
+                            }
+                            .filter { it.isNotBlank() }
 
                     if (list.isNotEmpty()) return list
                 }
@@ -1212,84 +1225,119 @@ object AdminUsersPreloadCache {
         return refresh(isEnglish)
     }
 
-    suspend fun refresh(isEnglish: Boolean): AdminUsersPreloadResult {
-        var loadedUsers: List<AdminUserRecord> = emptyList()
-        var loadedUnlikeQuestions: List<AdminUserRecord.AssistantQuestionRecord> = emptyList()
+    suspend fun refresh(
+        isEnglish: Boolean
+    ): AdminUsersPreloadResult {
         var errorMsg: String? = null
 
-        try {
-            val snap = Firebase.firestore
-                .collection("users")
-                .get()
-                .await()
+        val loadedUsers =
+            try {
+                val snapshot =
+                    Firebase.firestore
+                        .collection("users")
+                        .get()
+                        .await()
 
-            val raw = snap.documents
-                .mapNotNull { doc ->
-                    doc.toAdminUserRecord()
-                }
-                .filter { user ->
-                    user.hasRealAdminUserContent()
-                }
+                val rawUsers =
+                    snapshot.documents
+                        .map { document ->
+                            document.toAdminUserRecord()
+                        }
+                        .filter { user ->
+                            user.hasRealAdminUserContent()
+                        }
 
-            loadedUsers =
-                mergeDuplicateAdminUsers(raw)
+                mergeDuplicateAdminUsers(rawUsers)
                     .sortedWith(
-                        compareBy<AdminUserRecord> {
-                            it.fullName.startsWith(
+                        compareBy<AdminUserRecord> { user ->
+                            user.fullName.startsWith(
                                 "Unknown user",
                                 ignoreCase = true
                             )
-                        }.thenBy {
-                            it.fullName
+                        }.thenBy { user ->
+                            user.fullName
                                 .trim()
                                 .lowercase()
                         }
                     )
+            } catch (error: Throwable) {
+                val rawError =
+                    error.message
+                        ?: adminTr(
+                            isEnglish,
+                            "שגיאה בטעינת המשתמשים",
+                            "Error loading users"
+                        )
 
-        } catch (t: Throwable) {
-            val rawErr = t.message ?: adminTr(
-                isEnglish,
-                "שגיאה בטעינת המשתמשים",
-                "Error loading users"
-            )
+                errorMsg =
+                    if (
+                        rawError.contains(
+                            "PERMISSION_DENIED",
+                            ignoreCase = true
+                        )
+                    ) {
+                        adminTr(
+                            isEnglish,
+                            "אין לך הרשאה לצפות ברשימת המשתמשים. בדוק את הגדרות ההרשאות או פנה למנהל המערכת.",
+                            "You do not have permission to view the users list. Check the permission settings or contact the system administrator."
+                        )
+                    } else {
+                        rawError
+                    }
 
-            errorMsg = if (rawErr.contains("PERMISSION_DENIED")) {
-                adminTr(
-                    isEnglish,
-                    "אין לך הרשאה לצפות ברשימת המשתמשים. בדוק את הגדרות ההרשאות או פנה למנהל המערכת.",
-                    "You do not have permission to view the users list. Check the permission settings or contact the system administrator."
-                )
-            } else {
-                rawErr
+                emptyList()
             }
-        }
 
-        try {
-            val feedbackSnap = Firebase.firestore
-                .collection("assistantFeedback")
-                .whereEqualTo("liked", false)
-                .orderBy("createdAt", Query.Direction.DESCENDING)
-                .limit(50)
-                .get()
-                .await()
+        val loadedUnlikeQuestions =
+            try {
+                val feedbackSnapshot =
+                    Firebase.firestore
+                        .collection("assistantFeedback")
+                        .whereEqualTo("liked", false)
+                        .orderBy(
+                            "createdAt",
+                            Query.Direction.DESCENDING
+                        )
+                        .limit(50)
+                        .get()
+                        .await()
 
-            loadedUnlikeQuestions = feedbackSnap.documents.mapNotNull { doc ->
-                val qText = doc.getString("question") ?: return@mapNotNull null
+                feedbackSnapshot.documents
+                    .mapNotNull { document ->
+                        val questionText =
+                            document.getString("question")
+                                ?: return@mapNotNull null
 
-                AdminUserRecord.AssistantQuestionRecord(
-                    id = doc.id,
-                    question = qText,
-                    answer = doc.getString("answer"),
-                    createdAtMillis = adminMillisFromFirestore(
-                        doc.get("createdAt") ?: doc.get("ts")
-                    ),
-                    userName = doc.getString("userName"),
-                    userUid = doc.getString("userUid")
-                )
+                        AdminUserRecord
+                            .AssistantQuestionRecord(
+                                id = document.id,
+                                question = questionText,
+                                answer =
+                                    document.getString(
+                                        "answer"
+                                    ),
+                                createdAtMillis =
+                                    adminMillisFromFirestore(
+                                        document.get(
+                                            "createdAt"
+                                        )
+                                            ?: document.get(
+                                                "ts"
+                                            )
+                                    ),
+                                userName =
+                                    document.getString(
+                                        "userName"
+                                    ),
+                                userUid =
+                                    document.getString(
+                                        "userUid"
+                                    )
+                            )
+                    }
+            } catch (_: Throwable) {
+                emptyList()
             }
-        } catch (_: Throwable) {
-            loadedUnlikeQuestions = emptyList()
-        }
 
         usersSnapshot = loadedUsers
         unlikeQuestionsSnapshot = loadedUnlikeQuestions
@@ -1448,9 +1496,32 @@ private fun createAdminUsersPdf(
         return if (isEnglish) en else he
     }
 
-    fun textX(): Float {
-        return if (isEnglish) contentLeft else contentRight
-    }
+    fun textX(): Float =
+        KmiPdfDirection.startX(
+            isEnglish = isEnglish,
+            left = contentLeft,
+            right = contentRight
+        )
+
+    fun startPaddingX(
+        padding: Float
+    ): Float =
+        KmiPdfDirection.startPaddingX(
+            isEnglish = isEnglish,
+            left = contentLeft,
+            right = contentRight,
+            padding = padding
+        )
+
+    fun endPaddingX(
+        padding: Float
+    ): Float =
+        KmiPdfDirection.endPaddingX(
+            isEnglish = isEnglish,
+            left = contentLeft,
+            right = contentRight,
+            padding = padding
+        )
 
     fun cleanText(value: String): String {
         return value
@@ -1629,23 +1700,22 @@ private fun createAdminUsersPdf(
             logoTextPaint
         )
 
-        headerTitlePaint.textAlign = if (isEnglish) {
-            android.graphics.Paint.Align.LEFT
-        } else {
-            android.graphics.Paint.Align.RIGHT
-        }
+        headerTitlePaint.textAlign =
+            KmiPdfDirection.textAlign(
+                isEnglish = isEnglish
+            )
 
-        headerSubtitlePaint.textAlign = if (isEnglish) {
-            android.graphics.Paint.Align.LEFT
-        } else {
-            android.graphics.Paint.Align.RIGHT
-        }
+        headerSubtitlePaint.textAlign =
+            KmiPdfDirection.textAlign(
+                isEnglish = isEnglish
+            )
 
-        val headerTextX = if (isEnglish) {
-            308f
-        } else {
-            pageWidth - 34f
-        }
+        val headerTextX =
+            KmiPdfDirection.startX(
+                isEnglish = isEnglish,
+                left = 308f,
+                right = pageWidth.toFloat() - 34f
+            )
 
         canvas.drawText(
             tr(
@@ -1667,10 +1737,13 @@ private fun createAdminUsersPdf(
             headerSubtitlePaint
         )
 
-        val generatedDate = java.text.SimpleDateFormat(
-            "dd/MM/yyyy HH:mm",
-            java.util.Locale.getDefault()
-        ).format(java.util.Date())
+        val generatedDate =
+            java.text.SimpleDateFormat(
+                "dd/MM/yyyy HH:mm",
+                Locale.getDefault()
+            ).format(
+                java.util.Date()
+            )
 
         smallPaint.textAlign = android.graphics.Paint.Align.RIGHT
 
@@ -1836,17 +1909,15 @@ private fun createAdminUsersPdf(
             cardFillPaint
         )
 
-        bodyBoldPaint.textAlign = if (isEnglish) {
-            android.graphics.Paint.Align.LEFT
-        } else {
-            android.graphics.Paint.Align.RIGHT
-        }
+        bodyBoldPaint.textAlign =
+            KmiPdfDirection.textAlign(
+                isEnglish = isEnglish
+            )
 
-        val labelX = if (isEnglish) {
-            contentLeft + 12f
-        } else {
-            contentRight - 12f
-        }
+        val labelX =
+            startPaddingX(
+                padding = 12f
+            )
 
         canvas.drawText(
             label,
@@ -1866,7 +1937,9 @@ private fun createAdminUsersPdf(
 
         canvas.drawText(
             count.toString(),
-            if (isEnglish) contentRight - 26f else contentLeft + 26f,
+            endPaddingX(
+                padding = 26f
+            ),
             rowTop + 17f,
             countPaint
         )
@@ -2015,11 +2088,10 @@ private fun createAdminUsersPdf(
             roleStripePaint
         )
 
-        val innerX = if (isEnglish) {
-            contentLeft + 14f
-        } else {
-            contentRight - 14f
-        }
+        val innerX =
+            startPaddingX(
+                padding = 14f
+            )
 
         var textY = rowTop + 18f
 
@@ -2034,22 +2106,26 @@ private fun createAdminUsersPdf(
             textY += 14f
         }
 
-        val rolePaint = android.graphics.Paint(
-            android.graphics.Paint.ANTI_ALIAS_FLAG
-        ).apply {
-            color = roleColor
-            textSize = 9f
-            typeface = boldTypeface
-            textAlign = if (isEnglish) {
-                android.graphics.Paint.Align.RIGHT
-            } else {
-                android.graphics.Paint.Align.LEFT
+        val rolePaint =
+            android.graphics.Paint(
+                android.graphics.Paint.ANTI_ALIAS_FLAG
+            ).apply {
+                color = roleColor
+                textSize = 9f
+                typeface = boldTypeface
+                textAlign =
+                    if (isEnglish) {
+                        android.graphics.Paint.Align.RIGHT
+                    } else {
+                        android.graphics.Paint.Align.LEFT
+                    }
             }
-        }
 
         canvas.drawText(
             roleTitle,
-            if (isEnglish) contentRight - 14f else contentLeft + 14f,
+            endPaddingX(
+                padding = 14f
+            ),
             rowTop + 18f,
             rolePaint
         )
@@ -2153,11 +2229,10 @@ private fun createAdminUsersPdf(
             textAlign = android.graphics.Paint.Align.CENTER
         }
 
-        val numberX = if (isEnglish) {
-            contentLeft + 16f
-        } else {
-            contentRight - 16f
-        }
+        val numberX =
+            startPaddingX(
+                padding = 16f
+            )
 
         canvas.drawText(
             (index + 1).toString(),
@@ -2166,11 +2241,10 @@ private fun createAdminUsersPdf(
             numberPaint
         )
 
-        val innerX = if (isEnglish) {
-            contentLeft + 34f
-        } else {
-            contentRight - 34f
-        }
+        val innerX =
+            startPaddingX(
+                padding = 34f
+            )
 
         var textY = rowTop + 18f
 
@@ -2234,7 +2308,7 @@ private fun createAdminUsersPdf(
         title = tr("גיל ממוצע", "Avg. age"),
         value = averageAge?.let {
             String.format(
-                java.util.Locale.US,
+                Locale.US,
                 "%.1f",
                 it
             )
@@ -2376,40 +2450,41 @@ private fun createAdminUsersPdf(
     drawFooter()
     document.finishPage(page)
 
-    val outputDirectory = java.io.File(
-        context.cacheDir,
-        "admin_users_pdf"
-    ).apply {
-        mkdirs()
+    val outputDirectory =
+        java.io.File(
+            context.cacheDir,
+            "shared_pdfs"
+        )
+
+    check(
+        outputDirectory.exists() ||
+                outputDirectory.mkdirs()
+    ) {
+        "Unable to create PDF sharing directory"
     }
 
     /*
-     * שם קריא לקובץ המשותף.
-     * התאריך והשעה נשמרים כדי שניתן יהיה
-     * להבדיל בין דוחות ניהול שהופקו בזמנים שונים.
+     * שם קבוע לפי השפה:
+     * הפקה חדשה באותה שפה מחליפה את הקובץ הקודם.
      */
-    val fileDate =
-        java.text.SimpleDateFormat(
-            "dd-MM-yyyy_HH-mm",
-            java.util.Locale.getDefault()
-        ).format(
-            java.util.Date()
-        )
-
     val outputFileName =
         if (isEnglish) {
-            "KAMI User Management - $fileDate.pdf"
+            "KAMI User Management.pdf"
         } else {
-            "דוח ניהול משתמשים קמי - $fileDate.pdf"
+            "דוח ניהול משתמשים קמי.pdf"
         }
 
-    val outputFile = java.io.File(
-        outputDirectory,
-        outputFileName
-    )
+    val outputFile =
+        java.io.File(
+            outputDirectory,
+            outputFileName
+        )
 
     try {
-        java.io.FileOutputStream(outputFile).use { output ->
+        java.io.FileOutputStream(
+            outputFile,
+            false
+        ).use { output ->
             document.writeTo(output)
         }
     } finally {
@@ -2424,127 +2499,12 @@ private fun AdminUsersPremiumLoading(
     text: String,
     modifier: Modifier = Modifier
 ) {
-    val transition = rememberInfiniteTransition(
-        label = "adminUsersPremiumLoading"
-    )
-
-    val outerRotation by transition.animateFloat(
-        initialValue = 0f,
-        targetValue = 360f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(
-                durationMillis = 1_200,
-                easing = LinearEasing
-            )
-        ),
-        label = "adminUsersOuterRing"
-    )
-
-    val innerRotation by transition.animateFloat(
-        initialValue = 360f,
-        targetValue = 0f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(
-                durationMillis = 1_650,
-                easing = LinearEasing
-            )
-        ),
-        label = "adminUsersInnerRing"
-    )
-
-    val outerRingColor =
-        MaterialTheme.colorScheme.primary
-
-    val middleRingColor =
-        MaterialTheme.colorScheme.secondary
-
-    val innerRingColor =
-        MaterialTheme.colorScheme.tertiary
-
-    Column(
+    KmiLoadingRings(
         modifier = modifier
             .fillMaxWidth()
             .padding(vertical = 10.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(8.dp)
-    ) {
-        Canvas(
-            modifier = Modifier.size(64.dp)
-        ) {
-            val outerStroke = 4.dp.toPx()
-            val middleStroke = 3.dp.toPx()
-            val innerStroke = 3.dp.toPx()
-
-            rotate(outerRotation) {
-                drawArc(
-                    color = outerRingColor,
-                    startAngle = 18f,
-                    sweepAngle = 265f,
-                    useCenter = false,
-                    style = Stroke(
-                        width = outerStroke,
-                        cap = StrokeCap.Round
-                    )
-                )
-            }
-
-            val middleInset = 10.dp.toPx()
-
-            rotate(innerRotation) {
-                drawArc(
-                    color = middleRingColor,
-                    startAngle = 55f,
-                    sweepAngle = 225f,
-                    useCenter = false,
-                    topLeft = Offset(
-                        middleInset,
-                        middleInset
-                    ),
-                    size = Size(
-                        width = size.width - middleInset * 2f,
-                        height = size.height - middleInset * 2f
-                    ),
-                    style = Stroke(
-                        width = middleStroke,
-                        cap = StrokeCap.Round
-                    )
-                )
-            }
-
-            val innerInset = 20.dp.toPx()
-
-            rotate(outerRotation * 0.72f) {
-                drawArc(
-                    color = innerRingColor,
-                    startAngle = 110f,
-                    sweepAngle = 190f,
-                    useCenter = false,
-                    topLeft = Offset(
-                        innerInset,
-                        innerInset
-                    ),
-                    size = Size(
-                        width = size.width - innerInset * 2f,
-                        height = size.height - innerInset * 2f
-                    ),
-                    style = Stroke(
-                        width = innerStroke,
-                        cap = StrokeCap.Round
-                    )
-                )
-            }
-        }
-
-        Text(
-            text = text,
-            style = KmiTypography.body.copy(
-                fontWeight = FontWeight.SemiBold
-            ),
-            color = MaterialTheme.colorScheme.onSurface,
-            textAlign = TextAlign.Center,
-            modifier = Modifier.fillMaxWidth()
-        )
-    }
+        text = text
+    )
 }
 
 // ===========================
@@ -2556,19 +2516,17 @@ fun AdminUsersScreen(
     onHome: () -> Unit = onBack
 ) {
     val contextLang = LocalContext.current
-    val langManager = remember { AppLanguageManager(contextLang) }
-    val isEnglish = langManager.getCurrentLanguage() == AppLanguage.ENGLISH
-    val screenTextAlign = adminTextAlign(isEnglish)
 
-    val gradient = Brush.verticalGradient(
-        colors = listOf(
-            MaterialTheme.colorScheme.background,
-            MaterialTheme.colorScheme.surface,
-            MaterialTheme.colorScheme.primary.copy(
-                alpha = 0.34f
-            )
-        )
-    )
+    val langManager =
+        remember {
+            AppLanguageManager(contextLang)
+        }
+
+    val isEnglish =
+        langManager.getCurrentLanguage() ==
+                AppLanguage.ENGLISH
+
+    val screenTextAlign = TextAlign.Start
 
     // --- מצב נתונים מ-Firestore / Cache מוקדם ממסך הטעינה ---
     var users by remember {
@@ -2676,16 +2634,23 @@ fun AdminUsersScreen(
 
     // -------- סטטיסטיקות כלליות --------
     val totalUsers = users.size
-    val genderCounts = users.groupBy { user ->
-        when ((user.gender ?: "unknown").trim().lowercase()) {
-            "m", "male", "זכר" -> "male"
-            "f", "female", "נקבה" -> "female"
-            else -> "unknown"
-        }
-    }.mapValues { it.value.size }
-
-    val regionCounts = users.groupBy { it.region ?: "לא ידוע" }
-        .mapValues { it.value.size }
+    val genderCounts =
+        users
+            .groupBy { user ->
+                when (
+                    user.gender
+                        .orEmpty()
+                        .trim()
+                        .lowercase()
+                ) {
+                    "m", "male", "זכר" -> "male"
+                    "f", "female", "נקבה" -> "female"
+                    else -> "unknown"
+                }
+            }
+            .mapValues { entry ->
+                entry.value.size
+            }
 
     val branchCount = users
         .flatMap { user ->
@@ -2844,7 +2809,7 @@ fun AdminUsersScreen(
                         android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION
                     )
 
-                    if (contextLang !is android.app.Activity) {
+                    if (contextLang !is Activity) {
                         addFlags(
                             android.content.Intent.FLAG_ACTIVITY_NEW_TASK
                         )
@@ -2860,7 +2825,7 @@ fun AdminUsersScreen(
                     )
                 )
 
-                if (contextLang !is android.app.Activity) {
+                if (contextLang !is Activity) {
                     chooserIntent.addFlags(
                         android.content.Intent.FLAG_ACTIVITY_NEW_TASK
                     )
@@ -2881,467 +2846,600 @@ fun AdminUsersScreen(
         }
     }
 
-    Scaffold(
-        topBar = {
+    KmiLanguageDirection(
+        isEnglish = isEnglish
+    ) {
+        Scaffold(
+            topBar = {
+                KmiTopBar(
+                    title = adminTr(
+                        isEnglish,
+                        "ניהול משתמשים",
+                        "User management"
+                    ),
+                    onHome = onHome,
+                    showTopHome = false,
+                    showTopSearch = false,
+                    showTopShare = false,
+                    lockSearch = false,
+                    lockHome = false,
+                    showBottomActions = true,
+                    onShare = onExportUsersPdf,
+                    currentLang = if (
+                        langManager.getCurrentLanguage() == AppLanguage.ENGLISH
+                    ) {
+                        "en"
+                    } else {
+                        "he"
+                    },
+                    onToggleLanguage = {
+                        val newLang =
+                            if (
+                                langManager.getCurrentLanguage() ==
+                                AppLanguage.HEBREW
+                            ) {
+                                AppLanguage.ENGLISH
+                            } else {
+                                AppLanguage.HEBREW
+                            }
 
-            KmiTopBar(
-                title = adminTr(
-                    isEnglish,
-                    "ניהול משתמשים",
-                    "User management"
-                ),
-                onHome = onHome,
-                showTopHome = false,
-                showTopSearch = false,
-                showTopShare = false,
-                lockSearch = false,
-                lockHome = false,
-                showBottomActions = true,
-                onShare = onExportUsersPdf,
-                currentLang = if (
-                    langManager.getCurrentLanguage() == AppLanguage.ENGLISH
-                ) {
-                    "en"
-                } else {
-                    "he"
-                },
-                onToggleLanguage = {
-                    val newLang =
-                        if (
-                            langManager.getCurrentLanguage() ==
-                            AppLanguage.HEBREW
-                        ) {
-                            AppLanguage.ENGLISH
-                        } else {
-                            AppLanguage.HEBREW
-                        }
-
-                    langManager.setLanguage(newLang)
-                    (contextLang as? Activity)?.recreate()
-                }
-            )
-        }
-    ) { padding ->
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(gradient)
-                .padding(padding)
-        ) {
-            Column(
+                        langManager.setLanguage(newLang)
+                        (contextLang as? Activity)?.recreate()
+                    }
+                )
+            }
+        ) { padding ->
+            Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .verticalScroll(outerScroll)
-                    .padding(16.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
+                    .background(
+                        brush = kmiScreenBackgroundBrush()
+                    )
+                    .padding(padding)
             ) {
-                if (loading) {
-                    AdminUsersPremiumLoading(
-                        text = adminTr(
-                            isEnglish,
-                            "טוען נתוני משתמשים…",
-                            "Loading users data…"
-                        )
-                    )
-                }
-
-                // ---------- כרטיסי סטטוס עליונים ----------
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .verticalScroll(outerScroll)
+                        .padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
-                    StatCard(
-                        title = adminTr(isEnglish, "משתמשים", "Users"),
-                        value = if (loading) "…" else totalUsers.toString(),
-                        modifier = Modifier.weight(1f)
-                    )
-                    StatCard(
-                        title = adminTr(isEnglish, "סניפים", "Branches"),
-                        value = if (loading) "…" else branchCount.toString(),
-                        modifier = Modifier.weight(1f)
-                    )
-                    StatCard(
-                        title = adminTr(isEnglish, "גיל ממוצע", "Avg. age"),
-                        value = if (loading) {
-                            "…"
-                        } else {
-                            avgAge?.let { String.format("%.1f", it) }
-                                ?: "-"
-                        },
-                        modifier = Modifier.weight(1f)
-                    )
-                }
-
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(6.dp)
-                ) {
-                    StatCard(
-                        title = adminTr(isEnglish, "שימושים", "App opens"),
-                        value = if (loading) "…" else totalAppOpens.toString(),
-                        modifier = Modifier.weight(1f)
-                    )
-
-                    StatCard(
-                        title = adminTr(isEnglish, "משתמשים פעילים", "Active users"),
-                        value = if (loading) "…" else activeUsersWithUsage.toString(),
-                        modifier = Modifier.weight(1f)
-                    )
-
-                    StatCard(
-                        title = adminTr(isEnglish, "ממוצע שימוש", "Avg. opens"),
-                        value = if (loading || totalUsers == 0) {
-                            "…"
-                        } else {
-                            String.format(
-                                Locale.US,
-                                "%.1f",
-                                totalAppOpens.toDouble() / totalUsers.toDouble()
-                            )
-                        },
-                        modifier = Modifier.weight(1f)
-                    )
-                }
-
-                // הודעת שגיאה (אם יש)
-                if (errorMsg != null) {
-                    Text(
-                        text = errorMsg!!,
-                        color = MaterialTheme.colorScheme.error,
-                        style = KmiTypography.caption,
-                        textAlign = screenTextAlign,
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                }
-
-                // ---------- גרף קטן – לפי מין ----------
-                MiniBarChartCard(
-                    title = adminTr(isEnglish, "חלוקה לפי מין", "Gender distribution"),
-                    data = listOf(
-                        adminTr(isEnglish, "זכר", "Male") to (genderCounts["male"]
-                            ?: genderCounts["m"] ?: 0),
-                        adminTr(isEnglish, "נקבה", "Female") to (genderCounts["female"]
-                            ?: genderCounts["f"] ?: 0)
-                    ),
-                    accent = Color(0xFF38BDF8)
-                )
-
-                // ---------- Belt distribution ----------
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(20.dp),
-                    colors = CardDefaults.cardColors(
-                        containerColor = Color(0xFF020617).copy(alpha = 0.9f)
-                    )
-                ) {
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 12.dp, vertical = 10.dp),
-                        verticalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        Text(
+                    if (loading) {
+                        AdminUsersPremiumLoading(
                             text = adminTr(
                                 isEnglish,
-                                "חלוקה לפי חגורה",
-                                "Belt distribution"
-                            ),
-                            style = KmiTypography.cardTitle.copy(
-                                fontWeight = FontWeight.SemiBold
-                            ),
-                            color = Color(0xFFE5E7EB),
-                            textAlign = screenTextAlign,
-                            modifier = Modifier.fillMaxWidth()
+                                "טוען נתוני משתמשים…",
+                                "Loading users data…"
+                            )
                         )
-
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .horizontalScroll(rememberScrollState()),
-                            horizontalArrangement = Arrangement.spacedBy(12.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            beltCountsOrdered.forEach { (label, value, circleColor) ->
-                                Column(
-                                    horizontalAlignment = Alignment.CenterHorizontally,
-                                    verticalArrangement = Arrangement.spacedBy(4.dp),
-                                    modifier = Modifier.padding(vertical = 4.dp)
-                                ) {
-                                    Box(
-                                        modifier = Modifier
-                                            .width(66.dp)
-                                            .height(39.dp)
-                                            .clip(RoundedCornerShape(20.dp))
-                                            .background(circleColor)
-                                    )
-
-                                    Text(
-                                        text = value.toString(),
-                                        style = KmiTypography.caption,
-                                        color = Color(0xFFE5E7EB)
-                                    )
-
-                                    Text(
-                                        text = label,
-                                        style = KmiTypography.caption,
-                                        color = Color(0xFF9CA3AF),
-                                        maxLines = 1
-                                    )
-                                }
-                            }
-                        }
                     }
-                }
 
-                // ---------- פילטרים ----------
-                FilterRow(
-                    isEnglish = isEnglish,
-                    textAlign = screenTextAlign,
-                    genderFilter = genderFilter,
-                    onGenderChange = { genderFilter = it },
-                    regionFilter = regionFilter,
-                    onRegionChange = { regionFilter = it },
-                    beltFilter = beltFilter,
-                    onBeltChange = { beltFilter = it },
-                    ageBucketFilter = ageBucketFilter,
-                    onAgeBucketChange = { ageBucketFilter = it },
-                    regions = allRegions,
-                    belts = allBelts,
-                    ageBuckets = allAgeBuckets
-                )
-
-// ---------- משתמשים – מתאמנים ----------
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(24.dp),
-                    colors = CardDefaults.cardColors(
-                        containerColor = Color(0xFF0B1220).copy(alpha = 0.92f)
-                    )
-                ) {
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(12.dp)
+                    // ---------- כרטיסי סטטוס עליונים ----------
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
-                        Text(
-                            text = adminTr(
-                                isEnglish,
-                                "משתמשים – מתאמנים (${traineeUiUsers.size})",
-                                "Users – trainees (${traineeUiUsers.size})"
-                            ),
-                            style = KmiTypography.cardTitle.copy(
-                                fontWeight = FontWeight.Bold
-                            ),
-                            color = Color(0xFFE2E8F0),
-                            textAlign = screenTextAlign,
-                            modifier = Modifier.fillMaxWidth()
+                        StatCard(
+                            title = adminTr(isEnglish, "משתמשים", "Users"),
+                            value = if (loading) "…" else totalUsers.toString(),
+                            modifier = Modifier.weight(1f)
                         )
-
-                        Spacer(Modifier.height(8.dp))
-
-                        if (loading) {
-                            Text(
-                                text = adminTr(
-                                    isEnglish,
-                                    "טוען משתמשים…",
-                                    "Loading users…"
-                                ),
-                                style = KmiTypography.body,
-                                color = Color(0xFF9CA3AF),
-                                textAlign = screenTextAlign,
-                                modifier = Modifier.fillMaxWidth()
-                            )
-                        } else if (traineeUiUsers.isEmpty()) {
-                            Text(
-                                text = adminTr(
-                                    isEnglish,
-                                    "אין מתאמנים מתאימים לפילטרים.",
-                                    "No trainees match the selected filters."
-                                ),
-                                style = KmiTypography.body,
-                                color = Color(0xFF9CA3AF),
-                                textAlign = screenTextAlign,
-                                modifier = Modifier.fillMaxWidth()
-                            )
-                        } else {
-                            Column(
-                                modifier = Modifier.fillMaxWidth(),
-                                verticalArrangement = Arrangement.spacedBy(8.dp)
-                            ) {
-                                traineeUiUsers.forEachIndexed { index, user ->
-                                    UserRowCard(
-                                        user = user,
-                                        isEnglish = isEnglish,
-                                        demoIndex = index
+                        StatCard(
+                            title = adminTr(isEnglish, "סניפים", "Branches"),
+                            value = if (loading) "…" else branchCount.toString(),
+                            modifier = Modifier.weight(1f)
+                        )
+                        StatCard(
+                            title = adminTr(isEnglish, "גיל ממוצע", "Avg. age"),
+                            value = if (loading) {
+                                "…"
+                            } else {
+                                avgAge?.let { average ->
+                                    String.format(
+                                        Locale.getDefault(),
+                                        "%.1f",
+                                        average
                                     )
-                                }
-                            }
-                        }
+                                } ?: "-"
+                            },
+                            modifier = Modifier.weight(1f)
+                        )
                     }
-                }
 
-                Spacer(Modifier.height(12.dp))
-
-// ---------- משתמשים – מאמנים ----------
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(24.dp),
-                    colors = CardDefaults.cardColors(
-                        containerColor = Color(0xFF0B1220).copy(alpha = 0.92f)
-                    )
-                ) {
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(12.dp)
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
-                        Text(
-                            text = adminTr(
-                                isEnglish,
-                                "משתמשים – מאמנים (${coachUiUsers.size})",
-                                "Users – coaches (${coachUiUsers.size})"
-                            ),
-                            style = KmiTypography.cardTitle.copy(
-                                fontWeight = FontWeight.Bold
-                            ),
-                            color = Color(0xFFE2E8F0),
-                            textAlign = screenTextAlign,
-                            modifier = Modifier.fillMaxWidth()
+                        StatCard(
+                            title = adminTr(isEnglish, "שימושים", "App opens"),
+                            value = if (loading) "…" else totalAppOpens.toString(),
+                            modifier = Modifier.weight(1f)
                         )
 
-                        Spacer(Modifier.height(8.dp))
+                        StatCard(
+                            title = adminTr(isEnglish, "משתמשים פעילים", "Active users"),
+                            value = if (loading) "…" else activeUsersWithUsage.toString(),
+                            modifier = Modifier.weight(1f)
+                        )
 
-                        if (loading) {
-                            Text(
-                                text = adminTr(
-                                    isEnglish,
-                                    "טוען משתמשים…",
-                                    "Loading users…"
-                                ),
-                                style = KmiTypography.body,
-                                color = Color(0xFF9CA3AF),
-                                textAlign = screenTextAlign,
-                                modifier = Modifier.fillMaxWidth()
-                            )
-                        } else if (coachUiUsers.isEmpty()) {
-                            Text(
-                                text = adminTr(
-                                    isEnglish,
-                                    "אין מאמנים מתאימים לפילטרים.",
-                                    "No coaches match the selected filters."
-                                ),
-                                style = KmiTypography.body,
-                                color = Color(0xFF9CA3AF),
-                                textAlign = screenTextAlign,
-                                modifier = Modifier.fillMaxWidth()
-                            )
-                        } else {
-                            Column(
-                                modifier = Modifier.fillMaxWidth(),
-                                verticalArrangement = Arrangement.spacedBy(8.dp)
-                            ) {
-                                coachUiUsers.forEachIndexed { index, user ->
-                                    UserRowCard(
-                                        user = user,
-                                        isEnglish = isEnglish,
-                                        demoIndex = index
-                                    )
-                                }
-                            }
-                        }
+                        StatCard(
+                            title = adminTr(isEnglish, "ממוצע שימוש", "Avg. opens"),
+                            value = if (loading || totalUsers == 0) {
+                                "…"
+                            } else {
+                                String.format(
+                                    Locale.US,
+                                    "%.1f",
+                                    totalAppOpens.toDouble() / totalUsers.toDouble()
+                                )
+                            },
+                            modifier = Modifier.weight(1f)
+                        )
                     }
-                } // ✅ סגירת ה-Card
 
-                Spacer(Modifier.height(12.dp))
+                    // הודעת שגיאה (אם יש)
+                    errorMsg?.let { message ->
+                        Text(
+                            text = message,
+                            color =
+                                MaterialTheme.colorScheme.error,
+                            style = KmiTypography.caption,
+                            textAlign = TextAlign.Start,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    }
 
-                // ---------- שאלות שסומנו UNLIKE מהעוזר הקולי ----------
-                if (unlikeQuestions.isNotEmpty()) {
+                    // ---------- גרף קטן – לפי מין ----------
+                    MiniBarChartCard(
+                        title =
+                            adminTr(
+                                isEnglish,
+                                "חלוקה לפי מין",
+                                "Gender distribution"
+                            ),
+                        data =
+                            listOf(
+                                adminTr(
+                                    isEnglish,
+                                    "זכר",
+                                    "Male"
+                                ) to
+                                        (
+                                                genderCounts["male"]
+                                                    ?: genderCounts["m"]
+                                                    ?: 0
+                                                ),
+                                adminTr(
+                                    isEnglish,
+                                    "נקבה",
+                                    "Female"
+                                ) to
+                                        (
+                                                genderCounts["female"]
+                                                    ?: genderCounts["f"]
+                                                    ?: 0
+                                                )
+                            ),
+                        accent =
+                            MaterialTheme.colorScheme.primary
+                    )
+
+                    // ---------- Belt distribution ----------
                     Card(
                         modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(24.dp),
-                        colors = CardDefaults.cardColors(
-                            containerColor = Color(0xFF020617).copy(alpha = 0.95f)
-                        ),
-                        border = BorderStroke(1.dp, Color(0xFF38BDF8).copy(alpha = 0.4f))
+                        shape = RoundedCornerShape(20.dp),
+                        colors =
+                            CardDefaults.cardColors(
+                                containerColor =
+                                    MaterialTheme
+                                        .colorScheme
+                                        .surface
+                            ),
+                        elevation =
+                            CardDefaults.cardElevation(
+                                defaultElevation = 0.dp
+                            )
                     ) {
                         Column(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(12.dp),
-                            verticalArrangement = Arrangement.spacedBy(6.dp)
+                                .padding(horizontal = 12.dp, vertical = 10.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
                             Text(
                                 text = adminTr(
                                     isEnglish,
-                                    "שאלות לסקירה (UNLIKE)",
-                                    "Questions for review (UNLIKE)"
+                                    "חלוקה לפי חגורה",
+                                    "Belt distribution"
+                                ),
+                                style = KmiTypography.cardTitle.copy(
+                                    fontWeight = FontWeight.SemiBold
+                                ),
+                                color =
+                                    MaterialTheme
+                                        .colorScheme
+                                        .onSurface,
+                                textAlign = TextAlign.Start,
+                                modifier = Modifier.fillMaxWidth()
+                            )
+
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .horizontalScroll(rememberScrollState()),
+                                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                beltCountsOrdered.forEach { (label, value, circleColor) ->
+                                    Column(
+                                        horizontalAlignment = Alignment.CenterHorizontally,
+                                        verticalArrangement = Arrangement.spacedBy(4.dp),
+                                        modifier = Modifier.padding(vertical = 4.dp)
+                                    ) {
+                                        Box(
+                                            modifier = Modifier
+                                                .width(66.dp)
+                                                .height(39.dp)
+                                                .clip(RoundedCornerShape(20.dp))
+                                                .background(circleColor)
+                                        )
+
+                                        Text(
+                                            text = value.toString(),
+                                            style =
+                                                KmiTypography.caption,
+                                            color =
+                                                MaterialTheme
+                                                    .colorScheme
+                                                    .onSurface
+                                        )
+
+                                        Text(
+                                            text = label,
+                                            style =
+                                                KmiTypography.caption,
+                                            color =
+                                                MaterialTheme
+                                                    .colorScheme
+                                                    .onSurfaceVariant,
+                                            maxLines = 1
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    // ---------- פילטרים ----------
+                    FilterRow(
+                        isEnglish = isEnglish,
+                        genderFilter = genderFilter,
+                        onGenderChange = { genderFilter = it },
+                        regionFilter = regionFilter,
+                        onRegionChange = { regionFilter = it },
+                        beltFilter = beltFilter,
+                        onBeltChange = { beltFilter = it },
+                        ageBucketFilter = ageBucketFilter,
+                        onAgeBucketChange = { ageBucketFilter = it },
+                        regions = allRegions,
+                        belts = allBelts,
+                        ageBuckets = allAgeBuckets
+                    )
+
+// ---------- משתמשים – מתאמנים ----------
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(24.dp),
+                        colors =
+                            CardDefaults.cardColors(
+                                containerColor =
+                                    MaterialTheme
+                                        .colorScheme
+                                        .surface
+                            ),
+                        elevation =
+                            CardDefaults.cardElevation(
+                                defaultElevation = 0.dp
+                            )
+                    ) {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(12.dp)
+                        ) {
+                            Text(
+                                text = adminTr(
+                                    isEnglish,
+                                    "משתמשים – מתאמנים (${traineeUiUsers.size})",
+                                    "Users – trainees (${traineeUiUsers.size})"
                                 ),
                                 style = KmiTypography.cardTitle.copy(
                                     fontWeight = FontWeight.Bold
                                 ),
-                                color = Color(0xFFE5E7EB),
-                                textAlign = screenTextAlign,
-                                modifier = Modifier.fillMaxWidth()
-                            )
-
-                            Text(
-                                text = adminTr(
-                                    isEnglish,
-                                    "רשימת שאלות שהעוזר לא ענה עליהן טוב – לסקירה ולשיפור מאגר התכנים.",
-                                    "Questions where the assistant response was marked as not helpful — for review and content improvement."
-                                ),
-                                style = KmiTypography.body,
-                                color = Color(0xFF9CA3AF),
-                                textAlign = screenTextAlign,
+                                color =
+                                    MaterialTheme
+                                        .colorScheme
+                                        .onSurface,
+                                textAlign = TextAlign.Start,
                                 modifier = Modifier.fillMaxWidth()
                             )
 
                             Spacer(Modifier.height(8.dp))
 
-                            unlikeQuestions
-                                .take(20) // לא להציף – 20 אחרונות
-                                .forEach { fb ->
-                                    Column(
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .padding(vertical = 4.dp)
-                                            .clip(RoundedCornerShape(12.dp))
-                                            .background(Color(0xFF020617))
-                                            .padding(horizontal = 10.dp, vertical = 6.dp),
-                                        verticalArrangement = Arrangement.spacedBy(2.dp)
-                                    ) {
-                                        Text(
-                                            text = "• ${fb.question}",
-                                            style = KmiTypography.body,
-                                            color = Color(0xFFE5E7EB),
-                                            textAlign = screenTextAlign,
-                                            modifier = Modifier.fillMaxWidth()
+                            if (loading) {
+                                Text(
+                                    text = adminTr(
+                                        isEnglish,
+                                        "טוען משתמשים…",
+                                        "Loading users…"
+                                    ),
+                                    style = KmiTypography.body,
+                                    color =
+                                        MaterialTheme
+                                            .colorScheme
+                                            .onSurfaceVariant,
+                                    textAlign = TextAlign.Start,
+                                    modifier = Modifier.fillMaxWidth()
+                                )
+                            } else if (traineeUiUsers.isEmpty()) {
+                                Text(
+                                    text = adminTr(
+                                        isEnglish,
+                                        "אין מתאמנים מתאימים לפילטרים.",
+                                        "No trainees match the selected filters."
+                                    ),
+                                    style = KmiTypography.body,
+                                    color =
+                                        MaterialTheme
+                                            .colorScheme
+                                            .onSurfaceVariant,
+                                    textAlign = TextAlign.Start,
+                                    modifier = Modifier.fillMaxWidth()
+                                )
+                            } else {
+                                Column(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    traineeUiUsers.forEachIndexed { index, user ->
+                                        UserRowCard(
+                                            user = user,
+                                            isEnglish = isEnglish,
+                                            demoIndex = index
                                         )
-
-                                        val meta = listOfNotNull(
-                                            fb.userName,
-                                            fb.userUid
-                                        ).joinToString(" • ")
-
-                                        if (meta.isNotBlank()) {
-                                            Text(
-                                                text = meta,
-                                                style = KmiTypography.caption,
-                                                color = Color(0xFF9CA3AF),
-                                                textAlign = screenTextAlign,
-                                                modifier = Modifier.fillMaxWidth()
-                                            )
-                                        }
                                     }
                                 }
+                            }
                         }
                     }
-                }
 
-                Spacer(Modifier.height(8.dp))
+                    Spacer(Modifier.height(12.dp))
+
+// ---------- משתמשים – מאמנים ----------
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(24.dp),
+                        colors =
+                            CardDefaults.cardColors(
+                                containerColor =
+                                    MaterialTheme
+                                        .colorScheme
+                                        .surface
+                            ),
+                        elevation =
+                            CardDefaults.cardElevation(
+                                defaultElevation = 0.dp
+                            )
+                    ) {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(12.dp)
+                        ) {
+                            Text(
+                                text = adminTr(
+                                    isEnglish,
+                                    "משתמשים – מאמנים (${coachUiUsers.size})",
+                                    "Users – coaches (${coachUiUsers.size})"
+                                ),
+                                style =
+                                    KmiTypography.cardTitle.copy(
+                                        fontWeight =
+                                            FontWeight.Bold
+                                    ),
+                                color =
+                                    MaterialTheme
+                                        .colorScheme
+                                        .onSurface,
+                                textAlign = TextAlign.Start,
+                                modifier = Modifier.fillMaxWidth()
+                            )
+
+                            Spacer(Modifier.height(8.dp))
+
+                            if (loading) {
+                                Text(
+                                    text = adminTr(
+                                        isEnglish,
+                                        "טוען משתמשים…",
+                                        "Loading users…"
+                                    ),
+                                    style = KmiTypography.body,
+                                    color =
+                                        MaterialTheme
+                                            .colorScheme
+                                            .onSurfaceVariant,
+                                    textAlign = TextAlign.Start,
+                                    modifier = Modifier.fillMaxWidth()
+                                )
+                            } else if (coachUiUsers.isEmpty()) {
+                                Text(
+                                    text = adminTr(
+                                        isEnglish,
+                                        "אין מאמנים מתאימים לפילטרים.",
+                                        "No coaches match the selected filters."
+                                    ),
+                                    style = KmiTypography.body,
+                                    color =
+                                        MaterialTheme
+                                            .colorScheme
+                                            .onSurfaceVariant,
+                                    textAlign = TextAlign.Start,
+                                    modifier = Modifier.fillMaxWidth()
+                                )
+                            } else {
+                                Column(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    coachUiUsers.forEachIndexed { index, user ->
+                                        UserRowCard(
+                                            user = user,
+                                            isEnglish = isEnglish,
+                                            demoIndex = index
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    } // ✅ סגירת ה-Card
+
+                    Spacer(Modifier.height(12.dp))
+
+                    // ---------- שאלות שסומנו UNLIKE מהעוזר הקולי ----------
+                    if (unlikeQuestions.isNotEmpty()) {
+                        Card(
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(24.dp),
+                            colors =
+                                CardDefaults.cardColors(
+                                    containerColor =
+                                        MaterialTheme
+                                            .colorScheme
+                                            .surface
+                                ),
+                            border =
+                                BorderStroke(
+                                    width = 1.dp,
+                                    color =
+                                        MaterialTheme
+                                            .colorScheme
+                                            .outlineVariant
+                                ),
+                            elevation =
+                                CardDefaults.cardElevation(
+                                    defaultElevation = 0.dp
+                                )
+                        ) {
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(12.dp),
+                                verticalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                Text(
+                                    text = adminTr(
+                                        isEnglish,
+                                        "שאלות לסקירה (UNLIKE)",
+                                        "Questions for review (UNLIKE)"
+                                    ),
+                                    style = KmiTypography.cardTitle.copy(
+                                        fontWeight = FontWeight.Bold
+                                    ),
+                                    color =
+                                        MaterialTheme
+                                            .colorScheme
+                                            .onSurface,
+                                    textAlign = TextAlign.Start,
+                                    modifier = Modifier.fillMaxWidth()
+                                )
+
+                                Text(
+                                    text = adminTr(
+                                        isEnglish,
+                                        "רשימת שאלות שהעוזר לא ענה עליהן טוב – לסקירה ולשיפור מאגר התכנים.",
+                                        "Questions where the assistant response was marked as not helpful — for review and content improvement."
+                                    ),
+                                    style = KmiTypography.body,
+                                    color =
+                                        MaterialTheme
+                                            .colorScheme
+                                            .onSurfaceVariant,
+                                    textAlign = TextAlign.Start,
+                                    modifier = Modifier.fillMaxWidth()
+                                )
+
+                                Spacer(Modifier.height(8.dp))
+
+                                unlikeQuestions
+                                    .take(20) // לא להציף – 20 אחרונות
+                                    .forEach { fb ->
+                                        Column(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .padding(vertical = 4.dp)
+                                                .clip(
+                                                    RoundedCornerShape(
+                                                        12.dp
+                                                    )
+                                                )
+                                                .background(
+                                                    MaterialTheme
+                                                        .colorScheme
+                                                        .surfaceVariant
+                                                )
+                                                .padding(
+                                                    horizontal = 10.dp,
+                                                    vertical = 6.dp
+                                                ),
+                                            verticalArrangement =
+                                                Arrangement.spacedBy(2.dp)
+                                        ) {
+                                            Text(
+                                                text = "• ${fb.question}",
+                                                style =
+                                                    KmiTypography.body,
+                                                color =
+                                                    MaterialTheme
+                                                        .colorScheme
+                                                        .onSurface,
+                                                textAlign =
+                                                    TextAlign.Start,
+                                                modifier =
+                                                    Modifier.fillMaxWidth()
+                                            )
+
+                                            val meta = listOfNotNull(
+                                                fb.userName,
+                                                fb.userUid
+                                            ).joinToString(" • ")
+
+                                            if (meta.isNotBlank()) {
+                                                Text(
+                                                    text = meta,
+                                                    style =
+                                                        KmiTypography.caption,
+                                                    color =
+                                                        MaterialTheme
+                                                            .colorScheme
+                                                            .onSurfaceVariant,
+                                                    textAlign =
+                                                        TextAlign.Start,
+                                                    modifier =
+                                                        Modifier.fillMaxWidth()
+                                                )
+                                            }
+                                        }
+                                    }
+                            }
+                        }
+                    }
+
+                    Spacer(Modifier.height(8.dp))
+                }
             }
-        }
-    }
+        } // סוף Scaffold
+    } // סוף KmiLanguageDirection
 }
 
 // ===================== כרטיסי עזר =====================
@@ -3353,12 +3451,30 @@ private fun StatCard(
     modifier: Modifier = Modifier
 ) {
     Card(
-        modifier = modifier.heightIn(min = 108.dp),
+        modifier =
+            modifier.heightIn(
+                min = 92.dp
+            ),
         shape = RoundedCornerShape(20.dp),
-        colors = CardDefaults.cardColors(
-            containerColor = Color(0xFF020617).copy(alpha = 0.9f)
-        ),
-        border = BorderStroke(1.dp, Color(0xFF38BDF8).copy(alpha = 0.45f))
+        colors =
+            CardDefaults.cardColors(
+                containerColor =
+                    MaterialTheme
+                        .colorScheme
+                        .surface
+            ),
+        border =
+            BorderStroke(
+                width = 1.dp,
+                color =
+                    MaterialTheme
+                        .colorScheme
+                        .outlineVariant
+            ),
+        elevation =
+            CardDefaults.cardElevation(
+                defaultElevation = 0.dp
+            )
     ) {
         Column(
             modifier = Modifier
@@ -3378,7 +3494,10 @@ private fun StatCard(
                 Text(
                     text = title,
                     style = KmiTypography.caption,
-                    color = Color(0xFF9CA3AF),
+                    color =
+                        MaterialTheme
+                            .colorScheme
+                            .onSurfaceVariant,
                     textAlign = TextAlign.Center,
                     modifier = Modifier.fillMaxWidth(),
                     maxLines = 3
@@ -3396,10 +3515,14 @@ private fun StatCard(
             ) {
                 Text(
                     text = value,
-                    style = KmiTypography.metric.copy(
-                        fontWeight = FontWeight.Black
-                    ),
-                    color = Color(0xFFE5E7EB),
+                    style =
+                        KmiTypography.metric.copy(
+                            fontWeight = FontWeight.Black
+                        ),
+                    color =
+                        MaterialTheme
+                            .colorScheme
+                            .onSurface,
                     textAlign = TextAlign.Center,
                     modifier = Modifier.fillMaxWidth(),
                     maxLines = 1
@@ -3421,9 +3544,15 @@ private fun MiniBarChartCard(
     Card(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(20.dp),
-        colors = CardDefaults.cardColors(
-            containerColor = Color(0xFF020617).copy(alpha = 0.9f)
-        )
+        colors =
+            CardDefaults.cardColors(
+                containerColor =
+                    MaterialTheme.colorScheme.surface
+            ),
+        elevation =
+            CardDefaults.cardElevation(
+                defaultElevation = 0.dp
+            )
     ) {
         Column(
             modifier = Modifier
@@ -3433,10 +3562,12 @@ private fun MiniBarChartCard(
         ) {
             Text(
                 text = title,
-                style = KmiTypography.cardTitle.copy(
-                    fontWeight = FontWeight.SemiBold
-                ),
-                color = Color(0xFFE5E7EB),
+                style =
+                    KmiTypography.cardTitle.copy(
+                        fontWeight = FontWeight.SemiBold
+                    ),
+                color =
+                    MaterialTheme.colorScheme.onSurface,
                 maxLines = 2
             )
 
@@ -3460,9 +3591,16 @@ private fun MiniBarChartCard(
                             modifier = Modifier
                                 .height(60.dp)
                                 .fillMaxWidth()
-                                .clip(RoundedCornerShape(999.dp))
-                                .background(Color(0xFF1E293B)),
-                            contentAlignment = Alignment.BottomCenter
+                                .clip(
+                                    RoundedCornerShape(999.dp)
+                                )
+                                .background(
+                                    MaterialTheme
+                                        .colorScheme
+                                        .surfaceVariant
+                                ),
+                            contentAlignment =
+                                Alignment.BottomCenter
                         ) {
                             Box(
                                 modifier = Modifier
@@ -3482,15 +3620,23 @@ private fun MiniBarChartCard(
                         Spacer(Modifier.height(4.dp))
                         Text(
                             text = value.toString(),
-                            style = KmiTypography.caption,
-                            color = Color(0xFFE5E7EB),
+                            style =
+                                KmiTypography.caption,
+                            color =
+                                MaterialTheme
+                                    .colorScheme
+                                    .onSurface,
                             maxLines = 1
                         )
 
                         Text(
                             text = label,
-                            style = KmiTypography.caption,
-                            color = Color(0xFF9CA3AF),
+                            style =
+                                KmiTypography.caption,
+                            color =
+                                MaterialTheme
+                                    .colorScheme
+                                    .onSurfaceVariant,
                             textAlign = TextAlign.Center,
                             maxLines = 2
                         )
@@ -3516,7 +3662,6 @@ private fun AdminFilterChipLabel(
 @Composable
 private fun FilterRow(
     isEnglish: Boolean,
-    textAlign: TextAlign,
     genderFilter: String?,
     onGenderChange: (String?) -> Unit,
     regionFilter: String?,
@@ -3564,30 +3709,56 @@ private fun FilterRow(
         }
     }.joinToString(" • ")
 
-    val collapsedSummary = if (activeFiltersCount == 0) {
-        adminTr(
-            isEnglish,
-            "אין פילטרים פעילים",
-            "No active filters"
+    val collapsedSummary =
+        if (activeFiltersCount == 0) {
+            adminTr(
+                isEnglish,
+                "אין פילטרים פעילים",
+                "No active filters"
+            )
+        } else {
+            selectedFiltersSummary
+        }
+
+    val filterChipColors =
+        FilterChipDefaults.filterChipColors(
+            containerColor =
+                MaterialTheme.colorScheme.surfaceVariant,
+            labelColor =
+                MaterialTheme.colorScheme.onSurfaceVariant,
+            selectedContainerColor =
+                MaterialTheme.colorScheme.primary,
+            selectedLabelColor =
+                MaterialTheme.colorScheme.onPrimary
         )
-    } else {
-        selectedFiltersSummary
-    }
 
     Card(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(24.dp),
-        colors = CardDefaults.cardColors(
-            containerColor = Color(0xFF0B1220).copy(alpha = 0.92f)
-        ),
-        border = BorderStroke(
-            width = 1.dp,
-            color = if (filtersExpanded) {
-                Color(0xFF38BDF8).copy(alpha = 0.75f)
-            } else {
-                Color(0xFF38BDF8).copy(alpha = 0.35f)
-            }
-        )
+        colors =
+            CardDefaults.cardColors(
+                containerColor =
+                    MaterialTheme.colorScheme.surface
+            ),
+        border =
+            BorderStroke(
+                width = 1.dp,
+                color =
+                    if (filtersExpanded) {
+                        MaterialTheme
+                            .colorScheme
+                            .primary
+                            .copy(alpha = 0.75f)
+                    } else {
+                        MaterialTheme
+                            .colorScheme
+                            .outlineVariant
+                    }
+            ),
+        elevation =
+            CardDefaults.cardElevation(
+                defaultElevation = 0.dp
+            )
     ) {
         Column(
             modifier = Modifier
@@ -3598,122 +3769,95 @@ private fun FilterRow(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .clip(RoundedCornerShape(18.dp))
-                    .background(Color(0xFF020617).copy(alpha = 0.75f))
+                    .clip(
+                        RoundedCornerShape(18.dp)
+                    )
+                    .background(
+                        MaterialTheme
+                            .colorScheme
+                            .surfaceVariant
+                    )
                     .clickable {
-                        filtersExpanded = !filtersExpanded
+                        filtersExpanded =
+                            !filtersExpanded
                     }
-                    .padding(horizontal = 12.dp, vertical = 10.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = if (isEnglish) {
+                    .padding(
+                        horizontal = 12.dp,
+                        vertical = 10.dp
+                    ),
+                verticalAlignment =
+                    Alignment.CenterVertically,
+                horizontalArrangement =
                     Arrangement.Start
-                } else {
-                    Arrangement.End
-                }
             ) {
-                if (isEnglish) {
-                    Text(
-                        text = if (filtersExpanded) "▴" else "▾",
-                        style = KmiTypography.action.copy(
+                Text(
+                    text =
+                        if (filtersExpanded) {
+                            "▴"
+                        } else {
+                            "▾"
+                        },
+                    style =
+                        KmiTypography.action.copy(
                             fontWeight = FontWeight.Black
                         ),
-                        color = Color(0xFF38BDF8)
+                    color =
+                        MaterialTheme.colorScheme.primary
+                )
+
+                Spacer(
+                    modifier = Modifier.width(10.dp)
+                )
+
+                Column(
+                    modifier = Modifier.weight(1f),
+                    horizontalAlignment = Alignment.Start
+                ) {
+                    Text(
+                        text =
+                            if (filtersExpanded) {
+                                adminTr(
+                                    isEnglish,
+                                    "הסתר פילטרים",
+                                    "Hide filters"
+                                )
+                            } else {
+                                adminTr(
+                                    isEnglish,
+                                    "פתח פילטרים",
+                                    "Show filters"
+                                )
+                            },
+                        style =
+                            KmiTypography.cardTitle.copy(
+                                fontWeight = FontWeight.Bold
+                            ),
+                        color =
+                            MaterialTheme.colorScheme.onSurface,
+                        textAlign = TextAlign.Start,
+                        modifier = Modifier.fillMaxWidth(),
+                        maxLines = 2
                     )
 
-                    Spacer(Modifier.width(10.dp))
-
-                    Column(
-                        modifier = Modifier.weight(1f),
-                        horizontalAlignment = Alignment.Start
-                    ) {
-                        Text(
-                            text = if (filtersExpanded) {
-                                adminTr(
-                                    isEnglish,
-                                    "הסתר פילטרים",
-                                    "Hide filters"
-                                )
-                            } else {
-                                adminTr(
-                                    isEnglish,
-                                    "פתח פילטרים",
-                                    "Show filters"
-                                )
-                            },
-                            style = KmiTypography.cardTitle.copy(
-                                fontWeight = FontWeight.Bold
-                            ),
-                            color = Color(0xFFE5E7EB),
-                            textAlign = TextAlign.Left,
-                            modifier = Modifier.fillMaxWidth(),
-                            maxLines = 2
-                        )
-
-                        Text(
-                            text = collapsedSummary,
-                            style = KmiTypography.caption,
-                            color = if (activeFiltersCount == 0) {
-                                Color(0xFF94A3B8)
-                            } else {
-                                Color(0xFF7DD3FC)
-                            },
-                            textAlign = TextAlign.Left,
-                            modifier = Modifier.fillMaxWidth(),
-                            maxLines = 2,
-                            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
-                        )
-                    }
-                } else {
-                    Column(
-                        modifier = Modifier.weight(1f),
-                        horizontalAlignment = Alignment.End
-                    ) {
-                        Text(
-                            text = if (filtersExpanded) {
-                                adminTr(
-                                    isEnglish,
-                                    "הסתר פילטרים",
-                                    "Hide filters"
-                                )
-                            } else {
-                                adminTr(
-                                    isEnglish,
-                                    "פתח פילטרים",
-                                    "Show filters"
-                                )
-                            },
-                            style = KmiTypography.cardTitle.copy(
-                                fontWeight = FontWeight.Bold
-                            ),
-                            color = Color(0xFFE5E7EB),
-                            textAlign = TextAlign.Right,
-                            modifier = Modifier.fillMaxWidth(),
-                            maxLines = 2
-                        )
-
-                        Text(
-                            text = collapsedSummary,
-                            style = KmiTypography.caption,
-                            color = if (activeFiltersCount == 0) {
-                                Color(0xFF94A3B8)
-                            } else {
-                                Color(0xFF7DD3FC)
-                            },
-                            textAlign = TextAlign.Right,
-                            modifier = Modifier.fillMaxWidth(),
-                            maxLines = 2,
-                            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
-                        )
-                    }
-
-                    Spacer(Modifier.width(10.dp))
-
                     Text(
-                        text = if (filtersExpanded) "▴" else "▾",
-                        style = KmiTypography.action.copy(
-                            fontWeight = FontWeight.Black
-                        ),
-                        color = Color(0xFF38BDF8)
+                        text = collapsedSummary,
+                        style = KmiTypography.caption,
+                        color =
+                            if (activeFiltersCount == 0) {
+                                MaterialTheme
+                                    .colorScheme
+                                    .onSurfaceVariant
+                            } else {
+                                MaterialTheme
+                                    .colorScheme
+                                    .primary
+                            },
+                        textAlign = TextAlign.Start,
+                        modifier = Modifier.fillMaxWidth(),
+                        maxLines = 2,
+                        overflow =
+                            androidx.compose.ui.text.style
+                                .TextOverflow.Ellipsis
                     )
                 }
             }
@@ -3730,11 +3874,8 @@ private fun FilterRow(
                     if (activeFiltersCount > 0) {
                         Row(
                             modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = if (isEnglish) {
+                            horizontalArrangement =
                                 Arrangement.Start
-                            } else {
-                                Arrangement.End
-                            }
                         ) {
                             FilterChip(
                                 selected = false,
@@ -3753,23 +3894,25 @@ private fun FilterRow(
                                         )
                                     )
                                 },
-                                colors = FilterChipDefaults.filterChipColors(
-                                    containerColor = Color(0xFF1E293B),
-                                    labelColor = Color(0xFFE5E7EB),
-                                    selectedContainerColor = Color(0xFF0EA5E9),
-                                    selectedLabelColor = Color(0xFF020617)
-                                )
+                                colors = filterChipColors
                             )
                         }
                     }
 
                     Text(
-                        text = adminTr(isEnglish, "מין", "Gender"),
-                        style = KmiTypography.action.copy(
-                            fontWeight = FontWeight.Bold
-                        ),
-                        color = Color(0xFFBAE6FD),
-                        textAlign = textAlign,
+                        text =
+                            adminTr(
+                                isEnglish,
+                                "מין",
+                                "Gender"
+                            ),
+                        style =
+                            KmiTypography.action.copy(
+                                fontWeight = FontWeight.Bold
+                            ),
+                        color =
+                            MaterialTheme.colorScheme.primary,
+                        textAlign = TextAlign.Start,
                         modifier = Modifier.fillMaxWidth()
                     )
 
@@ -3779,12 +3922,6 @@ private fun FilterRow(
                             .horizontalScroll(rememberScrollState()),
                         horizontalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
-                        val chipColors = FilterChipDefaults.filterChipColors(
-                            containerColor = Color(0xFF0B1220),
-                            labelColor = Color(0xFFE5E7EB),
-                            selectedContainerColor = Color(0xFF0EA5E9),
-                            selectedLabelColor = Color(0xFF020617)
-                        )
 
                         FilterChip(
                             selected = genderFilter == null,
@@ -3800,7 +3937,7 @@ private fun FilterRow(
                                     )
                                 )
                             },
-                            colors = chipColors
+                            colors = filterChipColors
                         )
 
                         FilterChip(
@@ -3817,7 +3954,7 @@ private fun FilterRow(
                                     )
                                 )
                             },
-                            colors = chipColors
+                            colors = filterChipColors
                         )
 
                         FilterChip(
@@ -3834,7 +3971,7 @@ private fun FilterRow(
                                     )
                                 )
                             },
-                            colors = chipColors
+                            colors = filterChipColors
                         )
                     }
 
@@ -3843,8 +3980,8 @@ private fun FilterRow(
                         style = KmiTypography.action.copy(
                             fontWeight = FontWeight.Bold
                         ),
-                        color = Color(0xFFBAE6FD),
-                        textAlign = textAlign,
+                        color = MaterialTheme.colorScheme.primary,
+                        textAlign = TextAlign.Start,
                         modifier = Modifier.fillMaxWidth()
                     )
 
@@ -3854,12 +3991,6 @@ private fun FilterRow(
                             .horizontalScroll(rememberScrollState()),
                         horizontalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
-                        val chipColors = FilterChipDefaults.filterChipColors(
-                            containerColor = Color(0xFF0B1220),
-                            labelColor = Color(0xFFE5E7EB),
-                            selectedContainerColor = Color(0xFF0EA5E9),
-                            selectedLabelColor = Color(0xFF020617)
-                        )
 
                         FilterChip(
                             selected = regionFilter == null,
@@ -3875,7 +4006,7 @@ private fun FilterRow(
                                     )
                                 )
                             },
-                            colors = chipColors
+                            colors = filterChipColors
                         )
 
                         regions.forEach { region ->
@@ -3889,17 +4020,25 @@ private fun FilterRow(
                                         text = region
                                     )
                                 },
-                                colors = chipColors
+                                colors = filterChipColors
                             )
                         }
                     }
 
                     Text(
-                        text = adminTr(isEnglish, "חגורה", "Belt"),
-                        style = MaterialTheme.typography.labelMedium,
-                        color = Color(0xFFBAE6FD),
-                        fontWeight = FontWeight.Bold,
-                        textAlign = textAlign,
+                        text =
+                            adminTr(
+                                isEnglish,
+                                "חגורה",
+                                "Belt"
+                            ),
+                        style =
+                            KmiTypography.action.copy(
+                                fontWeight = FontWeight.Bold
+                            ),
+                        color =
+                            MaterialTheme.colorScheme.primary,
+                        textAlign = TextAlign.Start,
                         modifier = Modifier.fillMaxWidth()
                     )
 
@@ -3909,12 +4048,6 @@ private fun FilterRow(
                             .horizontalScroll(rememberScrollState()),
                         horizontalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
-                        val chipColors = FilterChipDefaults.filterChipColors(
-                            containerColor = Color(0xFF0B1220),
-                            labelColor = Color(0xFFE5E7EB),
-                            selectedContainerColor = Color(0xFF0EA5E9),
-                            selectedLabelColor = Color(0xFF020617)
-                        )
 
                         FilterChip(
                             selected = beltFilter == null,
@@ -3930,7 +4063,7 @@ private fun FilterRow(
                                     )
                                 )
                             },
-                            colors = chipColors
+                            colors = filterChipColors
                         )
 
                         belts.forEach { belt ->
@@ -3944,17 +4077,25 @@ private fun FilterRow(
                                         text = belt
                                     )
                                 },
-                                colors = chipColors
+                                colors = filterChipColors
                             )
                         }
                     }
 
                     Text(
-                        text = adminTr(isEnglish, "קבוצת גיל", "Age group"),
-                        style = MaterialTheme.typography.labelMedium,
-                        color = Color(0xFFBAE6FD),
-                        fontWeight = FontWeight.Bold,
-                        textAlign = textAlign,
+                        text =
+                            adminTr(
+                                isEnglish,
+                                "קבוצת גיל",
+                                "Age group"
+                            ),
+                        style =
+                            KmiTypography.action.copy(
+                                fontWeight = FontWeight.Bold
+                            ),
+                        color =
+                            MaterialTheme.colorScheme.primary,
+                        textAlign = TextAlign.Start,
                         modifier = Modifier.fillMaxWidth()
                     )
 
@@ -3964,12 +4105,6 @@ private fun FilterRow(
                             .horizontalScroll(rememberScrollState()),
                         horizontalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
-                        val chipColors = FilterChipDefaults.filterChipColors(
-                            containerColor = Color(0xFF0B1220),
-                            labelColor = Color(0xFFE5E7EB),
-                            selectedContainerColor = Color(0xFF0EA5E9),
-                            selectedLabelColor = Color(0xFF020617)
-                        )
 
                         FilterChip(
                             selected = ageBucketFilter == null,
@@ -3985,7 +4120,7 @@ private fun FilterRow(
                                     )
                                 )
                             },
-                            colors = chipColors
+                            colors = filterChipColors
                         )
 
                         ageBuckets.forEach { bucket ->
@@ -4002,7 +4137,7 @@ private fun FilterRow(
                                         )
                                     )
                                 },
-                                colors = chipColors
+                                colors = filterChipColors
                             )
                         }
                     }
@@ -4309,12 +4444,14 @@ private fun UserRowCard(
     val activeWindowMillis =
         30L * 24L * 60L * 60L * 1000L
 
+    val activeWindowStart =
+        nowMillis - activeWindowMillis
+
     val isActiveUser =
         user.lastSeenAtMillis
             ?.let { lastSeen ->
-                lastSeen > 0L &&
-                        lastSeen <= nowMillis &&
-                        nowMillis - lastSeen <= activeWindowMillis
+                lastSeen in
+                        activeWindowStart..nowMillis
             }
             ?: false
 
@@ -4332,91 +4469,106 @@ private fun UserRowCard(
             Color(0xFFEF4444)
         }
 
-    val textAlign = adminTextAlign(isEnglish)
-    val contentAlignment =
-        if (isEnglish) {
-            Alignment.Start
-        } else {
-            Alignment.End
-        }
-
     Card(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(18.dp),
-        colors = CardDefaults.cardColors(
-            containerColor = Color(0xFF020617)
-        ),
-        border = BorderStroke(1.dp, beltColor.copy(alpha = 0.35f))
+        colors =
+            CardDefaults.cardColors(
+                containerColor =
+                    MaterialTheme.colorScheme.surfaceVariant
+            ),
+        border =
+            BorderStroke(
+                width = 1.dp,
+                color = beltColor.copy(alpha = 0.35f)
+            ),
+        elevation =
+            CardDefaults.cardElevation(
+                defaultElevation = 0.dp
+            )
     ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 12.dp, vertical = 10.dp),
-            verticalAlignment = Alignment.CenterVertically
+                .padding(
+                    horizontal = 12.dp,
+                    vertical = 10.dp
+                ),
+            verticalAlignment =
+                Alignment.CenterVertically
         ) {
-            if (isEnglish) {
-                UserBeltAccent(beltColor)
-                Spacer(Modifier.width(10.dp))
-                UserAvatar(
-                    displayName = displayName,
-                    beltColor = beltColor
-                )
-                Spacer(Modifier.width(10.dp))
-            }
+            UserBeltAccent(
+                beltColor = beltColor
+            )
+
+            Spacer(
+                modifier = Modifier.width(8.dp)
+            )
 
             Column(
                 modifier = Modifier.weight(1f),
-                verticalArrangement = Arrangement.spacedBy(3.dp),
-                horizontalAlignment = contentAlignment
+                verticalArrangement =
+                    Arrangement.spacedBy(3.dp),
+                horizontalAlignment = Alignment.Start
             ) {
-                // שם המתאמן – שורה נפרדת כדי שלא ייחתך בגלל התגים
-                Text(
-                    text = displayName,
-                    style = KmiTypography.cardTitle.copy(
-                        fontWeight = FontWeight.SemiBold
-                    ),
-                    color = Color(0xFFE5E7EB),
-                    textAlign = if (isEnglish) {
-                        TextAlign.Left
-                    } else {
-                        TextAlign.Right
-                    },
-                    maxLines = 2,
-                    overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
-                    modifier = Modifier.fillMaxWidth()
-                )
-
-// תפקיד + סטטוס פעילות – בתחילת השורה
+                // שם המתאמן והאווטאר באותה שורה.
                 Row(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.Start,
-                    verticalAlignment = Alignment.CenterVertically
+                    verticalAlignment =
+                        Alignment.CenterVertically,
+                    horizontalArrangement =
+                        Arrangement.Start
                 ) {
-                    if (isEnglish) {
-                        UserRoleBadge(
-                            label = roleLabel,
-                            isCoach = user.isCoach
-                        )
+                    Text(
+                        text = displayName,
+                        style =
+                            KmiTypography.cardTitle.copy(
+                                fontWeight =
+                                    FontWeight.SemiBold
+                            ),
+                        color =
+                            MaterialTheme
+                                .colorScheme
+                                .onSurface,
+                        textAlign = TextAlign.Start,
+                        maxLines = 2,
+                        overflow =
+                            androidx.compose.ui.text.style
+                                .TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f)
+                    )
 
-                        Spacer(Modifier.width(6.dp))
+                    Spacer(
+                        modifier = Modifier.width(8.dp)
+                    )
 
-                        UserActivityBadge(
-                            label = activityStatusLabel,
-                            color = activityStatusColor
-                        )
-                    } else {
-                        UserActivityBadge(
-                            label = activityStatusLabel,
-                            color = activityStatusColor
-                        )
+                    UserAvatar(
+                        displayName = displayName,
+                        beltColor = beltColor
+                    )
+                }
 
-                        Spacer(Modifier.width(6.dp))
+                // תפקיד + סטטוס פעילות.
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement =
+                        Arrangement.Start,
+                    verticalAlignment =
+                        Alignment.CenterVertically
+                ) {
+                    UserRoleBadge(
+                        label = roleLabel,
+                        isCoach = user.isCoach
+                    )
 
-                        UserRoleBadge(
-                            label = roleLabel,
-                            isCoach = user.isCoach
-                        )
-                    }
+                    Spacer(
+                        modifier = Modifier.width(6.dp)
+                    )
+
+                    UserActivityBadge(
+                        label = activityStatusLabel,
+                        color = activityStatusColor
+                    )
                 }
 
                 val ageText = user.age?.toString() ?: adminTr(isEnglish, "לא ידוע", "Unknown")
@@ -4435,8 +4587,11 @@ private fun UserRowCard(
                         "$beltText  •  Age: $ageText  •  Region: $regionText"
                     ),
                     style = KmiTypography.secondary,
-                    color = Color(0xFF9CA3AF),
-                    textAlign = textAlign,
+                    color =
+                        MaterialTheme
+                            .colorScheme
+                            .onSurfaceVariant,
+                    textAlign = TextAlign.Start,
                     maxLines = 3,
                     overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
                     modifier = Modifier.fillMaxWidth()
@@ -4449,8 +4604,11 @@ private fun UserRowCard(
                         "Branches and groups:\n$assignmentsText"
                     ),
                     style = KmiTypography.secondary,
-                    color = Color(0xFF9CA3AF),
-                    textAlign = textAlign,
+                    color =
+                        MaterialTheme
+                            .colorScheme
+                            .onSurfaceVariant,
+                    textAlign = TextAlign.Start,
                     maxLines = 6,
                     overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
                     modifier = Modifier.fillMaxWidth()
@@ -4466,8 +4624,9 @@ private fun UserRowCard(
                         "App tenure: $appTenureText"
                     ),
                     style = KmiTypography.caption,
-                    color = Color(0xFF7DD3FC),
-                    textAlign = textAlign,
+                    color =
+                        MaterialTheme.colorScheme.primary,
+                    textAlign = TextAlign.Start,
                     maxLines = 2,
                     overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
                     modifier = Modifier.fillMaxWidth()
@@ -4480,22 +4639,13 @@ private fun UserRowCard(
                         "App opens: ${user.appOpenCount} • Last use: $lastSeenText"
                     ),
                     style = KmiTypography.caption,
-                    color = Color(0xFF67E8F9),
-                    textAlign = textAlign,
+                    color =
+                        MaterialTheme.colorScheme.secondary,
+                    textAlign = TextAlign.Start,
                     maxLines = 3,
                     overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
                     modifier = Modifier.fillMaxWidth()
                 )
-            }
-
-            if (!isEnglish) {
-                Spacer(Modifier.width(10.dp))
-                UserAvatar(
-                    displayName = displayName,
-                    beltColor = beltColor
-                )
-                Spacer(Modifier.width(10.dp))
-                UserBeltAccent(beltColor)
             }
         }
     }
@@ -4552,15 +4702,18 @@ private fun UserAvatar(
 ) {
     Box(
         modifier = Modifier
-            .size(38.dp)
+            .size(34.dp)
             .clip(CircleShape)
             .background(
                 Brush.radialGradient(
-                    listOf(
-                        beltColor.copy(alpha = 0.95f),
-                        beltColor.copy(alpha = 0.75f),
-                        Color(0xFF0F172A)
-                    )
+                    colors =
+                        listOf(
+                            beltColor.copy(alpha = 0.95f),
+                            beltColor.copy(alpha = 0.75f),
+                            MaterialTheme
+                                .colorScheme
+                                .surface
+                        )
                 )
             ),
         contentAlignment = Alignment.Center
@@ -4588,26 +4741,33 @@ private fun UserRoleBadge(
     label: String,
     isCoach: Boolean
 ) {
+    val badgeColor =
+        if (isCoach) {
+            MaterialTheme.colorScheme.secondary
+        } else {
+            MaterialTheme.colorScheme.primary
+        }
+
     Box(
         modifier = Modifier
-            .clip(RoundedCornerShape(999.dp))
-            .background(
-                if (isCoach) Color(0xFF7C3AED).copy(alpha = 0.18f)
-                else Color(0xFF0EA5E9).copy(alpha = 0.18f)
+            .clip(
+                RoundedCornerShape(999.dp)
             )
-            .padding(horizontal = 10.dp, vertical = 4.dp)
+            .background(
+                badgeColor.copy(alpha = 0.16f)
+            )
+            .padding(
+                horizontal = 10.dp,
+                vertical = 4.dp
+            )
     ) {
         Text(
             text = label,
-            style = KmiTypography.caption.copy(
-                fontWeight = FontWeight.Bold
-            ),
-            color =
-                if (isCoach) {
-                    Color(0xFFC4B5FD)
-                } else {
-                    Color(0xFFBAE6FD)
-                },
+            style =
+                KmiTypography.caption.copy(
+                    fontWeight = FontWeight.Bold
+                ),
+            color = badgeColor,
             maxLines = 1
         )
     }

@@ -55,18 +55,19 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import il.yuval.ui.theme.kmiScreenBackgroundBrush
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.size
+import il.kmi.app.ui.KmiLanguageDirection
 import il.kmi.app.ui.KmiTopBar
 import il.kmi.app.ui.KmiIconSize
 import il.kmi.app.ui.KmiTypography
+import il.kmi.app.ui.pdf.KmiPdfDirection
 import il.kmi.shared.localization.AppLanguage
 import il.kmi.app.privacy.DemoPrivacy
 import il.kmi.app.privacy.TraineeDisplayNameMapper
@@ -349,40 +350,11 @@ fun ContactUsScreen(
     val sendText =
         if (effectiveEnglish) "Send Request" else "שלח פנייה"
 
-    val isDarkMode = isSystemInDarkTheme()
-
-    val screenGradientColors =
-        if (isDarkMode) {
-            listOf(
-                Color(0xFF090D18),
-                Color(0xFF101827),
-                Color(0xFF13263A),
-                Color(0xFF123B58),
-                Color(0xFF062B4A)
-            )
-        } else {
-            listOf(
-                Color(0xFFF8FBFF),
-                Color(0xFFEAF4FF),
-                Color(0xFFB7DDF7),
-                Color(0xFF1F78B4),
-                Color(0xFF062B4A)
-            )
-        }
-
     val cardContainerColor =
-        if (isDarkMode) {
-            MaterialTheme.colorScheme.surface
-        } else {
-            Color(0xFFEAF2FF)
-        }
+        MaterialTheme.colorScheme.surface
 
     val innerContainerColor =
-        if (isDarkMode) {
-            MaterialTheme.colorScheme.surfaceVariant
-        } else {
-            Color.White
-        }
+        MaterialTheme.colorScheme.surfaceVariant
 
     val isFormValid =
         fullName.isNotBlank() &&
@@ -390,429 +362,462 @@ fun ContactUsScreen(
                 subject.isNotBlank() &&
                 message.isNotBlank()
 
-    Scaffold(
-        topBar = {
-            KmiTopBar(
-                title = title,
-                centerTitle = true,
+    KmiLanguageDirection(
+        isEnglish = effectiveEnglish
+    ) {
+        Scaffold(
+            topBar = {
+                KmiTopBar(
+                    title = title,
+                    centerTitle = true,
 
-                // מציג את אייקון סרגל הצד מהטופ־בר הגלובלי
-                showMenu = true,
-                onBack = onClose,
+                    // מציג את אייקון סרגל הצד מהטופ־בר הגלובלי
+                    showMenu = true,
+                    onBack = onClose,
 
 // מפעיל את אייקון הבית בסרגל האייקונים הצדדי
-                onHome = onHome,
+                    onHome = onHome,
 
-                // מאפשר לחיצה על תוצאת חיפוש, אם המסך שמעל מעביר ניווט לתרגיל
-                onOpenExercise = onOpenExercise,
+                    // מאפשר לחיצה על תוצאת חיפוש, אם המסך שמעל מעביר ניווט לתרגיל
+                    onOpenExercise = onOpenExercise,
 
-                showBottomActions = true,
+                    showBottomActions = true,
 
-                // מציג את מצב המשתמש הגלובלי: מתאמן / מאמן
-                showRoleBadge = true,
-                showModePill = true,
+                    // מציג את מצב המשתמש הגלובלי: מתאמן / מאמן
+                    showRoleBadge = true,
+                    showModePill = true,
 
-                // חובה להיות false כדי שאייקון החיפוש בסרגל הצדדי יעבוד
-                lockSearch = false,
+                    // חובה להיות false כדי שאייקון החיפוש בסרגל הצדדי יעבוד
+                    lockSearch = false,
 
-                // הבית לא נעול במסך צור קשר
-                lockHome = false,
+                    // הבית לא נעול במסך צור קשר
+                    lockHome = false,
 
-                // שלא יופיעו אייקוני בית/חיפוש בכותרת העליונה עצמה,
-                // אלא רק בסרגל האייקונים הצדדי כמו בשאר המסכים
-                showTopHome = false,
-                showTopSearch = false,
-                showTopShare = true,
+                    // שלא יופיעו אייקוני בית/חיפוש בכותרת העליונה עצמה,
+                    // אלא רק בסרגל האייקונים הצדדי כמו בשאר המסכים
+                    showTopHome = false,
+                    showTopSearch = false,
+                    showTopShare = true,
 
-                onShare = {
-                    shareContactUsPdf(
-                        context = ctx,
-                        fullName = fullName,
-                        phone = phone,
-                        email = email,
-                        subject = subject,
-                        message = message,
-                        isEnglish = effectiveEnglish
-                    )
-                }
-            )
-        },
-        containerColor = Color.Transparent,
-        snackbarHost = { SnackbarHost(hostState = snackbarHostState) }
-    ) { innerPadding ->
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(
-                    Brush.verticalGradient(
-                        colors = screenGradientColors
-                    )
+                    onShare = {
+                        shareContactUsPdf(
+                            context = ctx,
+                            fullName = fullName,
+                            phone =
+                                if (demoPrivacyEnabled) {
+                                    ""
+                                } else {
+                                    phone
+                                },
+                            email =
+                                if (demoPrivacyEnabled) {
+                                    ""
+                                } else {
+                                    email
+                                },
+                            subject = subject,
+                            message = message,
+                            isEnglish = effectiveEnglish
+                        )
+                    }
                 )
-        ) {
-            Column(
+            },
+            containerColor = Color.Transparent,
+            snackbarHost = { SnackbarHost(hostState = snackbarHostState) }
+        ) { innerPadding ->
+            Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(innerPadding)
+                    .background(
+                        brush = kmiScreenBackgroundBrush()
+                    )
             ) {
-                // ✅ רק התוכן שמתחת ל־KmiTopBar הגלובלי נגלל
                 Column(
                     modifier = Modifier
-                        .fillMaxWidth()
-                        .weight(1f)
-                        .navigationBarsPadding()
-                        .verticalScroll(rememberScrollState())
-                        .padding(horizontal = 16.dp, vertical = 14.dp),
-                    verticalArrangement = Arrangement.spacedBy(16.dp),
-                    horizontalAlignment = if (effectiveEnglish) Alignment.Start else Alignment.End
+                        .fillMaxSize()
+                        .padding(innerPadding)
                 ) {
-                    AnimatedVisibility(
-                        visible = true,
-                        enter = fadeIn() + slideInVertically { it / 4 }
-                    ) {
-                        Card(
-                            modifier = Modifier.fillMaxWidth(),
-                            shape = RoundedCornerShape(24.dp),
-                            colors = CardDefaults.cardColors(
-                                containerColor = cardContainerColor,
-                                contentColor = MaterialTheme.colorScheme.onSurface
+                    // ✅ רק התוכן שמתחת ל־KmiTopBar הגלובלי נגלל
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .weight(1f)
+                            .navigationBarsPadding()
+                            .verticalScroll(rememberScrollState())
+                            .padding(
+                                horizontal = 16.dp,
+                                vertical = 14.dp
                             ),
-                            elevation = CardDefaults.cardElevation(
-                                defaultElevation = 8.dp,
-                                pressedElevation = 3.dp
-                            )
+                        verticalArrangement =
+                            Arrangement.spacedBy(16.dp),
+                        horizontalAlignment =
+                            Alignment.Start
+                    ) {
+                        AnimatedVisibility(
+                            visible = true,
+                            enter = fadeIn() + slideInVertically { it / 4 }
                         ) {
-                            Column(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(horizontal = 14.dp, vertical = 10.dp),
-                                verticalArrangement = Arrangement.spacedBy(8.dp),
-                                horizontalAlignment = if (effectiveEnglish) Alignment.Start else Alignment.End
-                            ) {
-                                Text(
-                                    text = subtitle,
-                                    style = KmiTypography.cardTitle.copy(
-                                        fontWeight = FontWeight.ExtraBold
-                                    ),
-                                    color = MaterialTheme.colorScheme.onSurface,
-                                    textAlign =
-                                        if (effectiveEnglish) {
-                                            TextAlign.Start
-                                        } else {
-                                            TextAlign.Right
-                                        },
-                                    modifier = Modifier.fillMaxWidth()
-                                )
-
-                                HorizontalDivider(
-                                    color = MaterialTheme.colorScheme.outline.copy(
-                                        alpha = 0.28f
-                                    )
-                                )
-
-                                Surface(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    shape = RoundedCornerShape(16.dp),
-                                    color = innerContainerColor,
+                            Card(
+                                modifier = Modifier.fillMaxWidth(),
+                                shape = RoundedCornerShape(24.dp),
+                                colors = CardDefaults.cardColors(
+                                    containerColor = cardContainerColor,
                                     contentColor = MaterialTheme.colorScheme.onSurface
+                                ),
+                                elevation = CardDefaults.cardElevation(
+                                    defaultElevation = 1.dp,
+                                    pressedElevation = 0.dp
+                                )
+                            ) {
+                                Column(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(
+                                            horizontal = 14.dp,
+                                            vertical = 10.dp
+                                        ),
+                                    verticalArrangement =
+                                        Arrangement.spacedBy(8.dp),
+                                    horizontalAlignment =
+                                        Alignment.Start
                                 ) {
-                                    Box(
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .padding(horizontal = 12.dp, vertical = 10.dp)
-                                    ) {
-                                        Icon(
-                                            imageVector = Icons.Default.SupportAgent,
-                                            contentDescription = null,
-                                            tint = MaterialTheme.colorScheme.primary,
-                                            modifier = Modifier
-                                                .align(
-                                                    if (effectiveEnglish) {
-                                                        Alignment.CenterStart
-                                                    } else {
-                                                        Alignment.CenterEnd
-                                                    }
-                                                )
-                                                .size(KmiIconSize.medium)
-                                        )
-
-                                        Text(
-                                            text = if (effectiveEnglish) {
-                                                "KAMI representative will contact you soon."
-                                            } else {
-                                                "נציג מטעם ק.מ.י יחזור אליכם בהקדם."
-                                            },
-                                            style = KmiTypography.body.copy(
-                                                fontWeight = FontWeight.Bold
+                                    Text(
+                                        text = subtitle,
+                                        style =
+                                            KmiTypography.cardTitle.copy(
+                                                fontWeight =
+                                                    FontWeight.ExtraBold
                                             ),
-                                            color = MaterialTheme.colorScheme.onSurface,
-                                            textAlign = if (effectiveEnglish) TextAlign.Start else TextAlign.Right,
+                                        color =
+                                            MaterialTheme.colorScheme.onSurface,
+                                        textAlign = TextAlign.Start,
+                                        modifier = Modifier.fillMaxWidth()
+                                    )
+
+                                    HorizontalDivider(
+                                        color = MaterialTheme.colorScheme.outline.copy(
+                                            alpha = 0.28f
+                                        )
+                                    )
+
+                                    Surface(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        shape = RoundedCornerShape(16.dp),
+                                        color = innerContainerColor,
+                                        contentColor = MaterialTheme.colorScheme.onSurface
+                                    ) {
+                                        Box(
                                             modifier = Modifier
                                                 .fillMaxWidth()
-                                                .padding(
-                                                    start = if (effectiveEnglish) 34.dp else 0.dp,
-                                                    end = if (effectiveEnglish) 0.dp else 34.dp
-                                                )
-                                        )
-                                    }
-                                }
-                            }
-                        }
-                    }
-
-                    AnimatedVisibility(
-                    visible = true,
-                    enter = fadeIn() + slideInVertically { it / 4 }
-                ) {
-                        Card(
-                            modifier = Modifier.fillMaxWidth(),
-                            shape = MaterialTheme.shapes.extraLarge,
-                            colors = CardDefaults.cardColors(
-                                containerColor = cardContainerColor,
-                                contentColor = MaterialTheme.colorScheme.onSurface
-                            ),
-                            elevation = CardDefaults.cardElevation(
-                            defaultElevation = 10.dp,
-                            pressedElevation = 4.dp
-                        )
-                    ) {
-                        Column(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = 18.dp, vertical = 16.dp),
-                            verticalArrangement = Arrangement.spacedBy(12.dp)
-                        ) {
-                            OutlinedTextField(
-                                value = fullName,
-                                onValueChange = { fullName = it },
-                                modifier = Modifier.fillMaxWidth(),
-                                singleLine = true,
-                                label = { ContactFieldLabel(if (effectiveEnglish) "Full Name" else "שם מלא") },
-                                leadingIcon = {
-                                    Icon(
-                                        imageVector = Icons.Default.Person,
-                                        contentDescription = null,
-                                        modifier = Modifier.size(KmiIconSize.medium)
-                                    )
-                                },
-                                textStyle = KmiTypography.body.copy(
-                                    textAlign = if (effectiveEnglish) TextAlign.Start else TextAlign.End
-                                ),
-                                colors = contactFieldColors()
-                            )
-
-                            OutlinedTextField(
-                                value = phone,
-                                onValueChange = { phone = it },
-                                modifier = Modifier.fillMaxWidth(),
-                                singleLine = true,
-                                label = { ContactFieldLabel(if (effectiveEnglish) "Phone Number" else "טלפון") },
-                                leadingIcon = {
-                                    Icon(
-                                        imageVector = Icons.Default.Phone,
-                                        contentDescription = null,
-                                        modifier = Modifier.size(
-                                            KmiIconSize.medium
-                                        )
-                                    )
-                                },
-                                keyboardOptions = KeyboardOptions(
-                                    keyboardType = KeyboardType.Phone
-                                ),
-                                textStyle = KmiTypography.body.copy(
-                                    textAlign = if (effectiveEnglish) TextAlign.Start else TextAlign.End
-                                ),
-                                colors = contactFieldColors()
-                            )
-
-                            OutlinedTextField(
-                                value = email,
-                                onValueChange = { email = it },
-                                modifier = Modifier.fillMaxWidth(),
-                                singleLine = true,
-                                label = { ContactFieldLabel(if (effectiveEnglish) "Email" else "אימייל") },
-                                leadingIcon = {
-                                    Icon(
-                                        imageVector = Icons.Default.Email,
-                                        contentDescription = null,
-                                        modifier = Modifier.size(
-                                            KmiIconSize.medium
-                                        )
-                                    )
-                                },
-                                keyboardOptions = KeyboardOptions(
-                                    keyboardType = KeyboardType.Email
-                                ),
-                                textStyle = KmiTypography.body.copy(
-                                    textAlign = if (effectiveEnglish) TextAlign.Start else TextAlign.End
-                                ),
-                                colors = contactFieldColors()
-                            )
-
-                            OutlinedTextField(
-                                value = subject,
-                                onValueChange = { subject = it },
-                                modifier = Modifier.fillMaxWidth(),
-                                singleLine = true,
-                                label = {
-                                    ContactFieldLabel(
-                                        text =
-                                            if (effectiveEnglish) {
-                                                "Subject"
-                                            } else {
-                                                "נושא הפנייה"
-                                            }
-                                    )
-                                },
-                                leadingIcon = {
-                                    Icon(
-                                        imageVector =
-                                            Icons.AutoMirrored.Filled.Message,
-                                        contentDescription = null,
-                                        modifier = Modifier.size(
-                                            KmiIconSize.medium
-                                        )
-                                    )
-                                },
-                                textStyle = KmiTypography.body.copy(
-                                    textAlign = if (effectiveEnglish) TextAlign.Start else TextAlign.End
-                                ),
-                                colors = contactFieldColors()
-                            )
-
-                            OutlinedTextField(
-                                value = message,
-                                onValueChange = { message = it },
-                                modifier = Modifier.fillMaxWidth(),
-                                minLines = 4,
-                                label = {
-                                    ContactFieldLabel(
-                                        text =
-                                            if (effectiveEnglish) {
-                                                "Message"
-                                            } else {
-                                                "הודעה"
-                                            }
-                                    )
-                                },
-                                textStyle = KmiTypography.body.copy(
-                                    textAlign = if (effectiveEnglish) TextAlign.Start else TextAlign.End
-                                ),
-                                colors = contactFieldColors()
-                            )
-
-                            Spacer(Modifier.height(6.dp))
-
-                            Button(
-                                onClick = {
-                                    if (isSubmitting) return@Button
-
-                                    scope.launch {
-                                        isSubmitting = true
-
-                                        val cleanFullName =
-                                            if (
-                                                demoPrivacyEnabled &&
-                                                realFullName.isNotBlank()
-                                            ) {
-                                                realFullName.trim()
-                                            } else {
-                                                fullName.trim()
-                                            }
-
-                                        val cleanPhone =
-                                            phone.trim()
-
-                                        val cleanEmail =
-                                            email.trim()
-                                        val cleanSubject = subject.trim()
-                                        val cleanMessage = message.trim()
-
-                                        runCatching {
-                                            persistContactRequestToFirestore(
-                                                fullName = cleanFullName,
-                                                phone = cleanPhone,
-                                                email = cleanEmail,
-                                                subject = cleanSubject,
-                                                message = cleanMessage
-                                            )
-                                        }.onSuccess {
-                                            onSubmit(
-                                                cleanFullName,
-                                                cleanPhone,
-                                                cleanEmail,
-                                                cleanSubject,
-                                                cleanMessage
+                                                .padding(horizontal = 12.dp, vertical = 10.dp)
+                                        ) {
+                                            Icon(
+                                                imageVector =
+                                                    Icons.Default.SupportAgent,
+                                                contentDescription = null,
+                                                tint =
+                                                    MaterialTheme
+                                                        .colorScheme
+                                                        .primary,
+                                                modifier = Modifier
+                                                    .align(
+                                                        Alignment.CenterStart
+                                                    )
+                                                    .size(
+                                                        KmiIconSize.medium
+                                                    )
                                             )
 
-                                            snackbarHostState.showSnackbar(
-                                                if (effectiveEnglish)
-                                                    "Your request was sent successfully"
-                                                else
-                                                    "הפנייה נשלחה בהצלחה"
-                                            )
-
-                                            fullName = ""
-                                            phone = ""
-                                            email = ""
-                                            subject = ""
-                                            message = ""
-                                        }.onFailure {
-                                            snackbarHostState.showSnackbar(
-                                                if (effectiveEnglish)
-                                                    "Sending failed. Please try again."
-                                                else
-                                                    "שליחת הפנייה נכשלה. נסה שוב."
+                                            Text(
+                                                text =
+                                                    if (effectiveEnglish) {
+                                                        "KAMI representative will contact you soon."
+                                                    } else {
+                                                        "נציג מטעם ק.מ.י יחזור אליכם בהקדם."
+                                                    },
+                                                style =
+                                                    KmiTypography.body.copy(
+                                                        fontWeight =
+                                                            FontWeight.Bold
+                                                    ),
+                                                color =
+                                                    MaterialTheme
+                                                        .colorScheme
+                                                        .onSurface,
+                                                textAlign = TextAlign.Start,
+                                                modifier = Modifier
+                                                    .fillMaxWidth()
+                                                    .padding(
+                                                        start = 34.dp
+                                                    )
                                             )
                                         }
-
-                                        isSubmitting = false
                                     }
-                                },
-                                enabled = isFormValid && !isSubmitting,
-                                modifier = Modifier.fillMaxWidth(),
-                                elevation = ButtonDefaults.buttonElevation(
-                                    defaultElevation = 6.dp,
-                                    pressedElevation = 2.dp
-                                ),
-                                colors = ButtonDefaults.buttonColors(
-                                    containerColor = Color(0xFF7C5CE6),
-                                    contentColor = Color.White,
-                                    disabledContainerColor =
-                                        MaterialTheme.colorScheme.surfaceVariant,
-                                    disabledContentColor =
-                                        MaterialTheme.colorScheme.onSurfaceVariant.copy(
-                                            alpha = 0.62f
-                                        )
-                                ),
-                                shape = MaterialTheme.shapes.extraLarge
-                            ) {
-                                androidx.compose.foundation.layout.Row(
-                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.AutoMirrored.Filled.Send,
-                                        contentDescription = null,
-                                        modifier = Modifier.size(KmiIconSize.medium)
-                                    )
-                                    Text(
-                                        text = if (isSubmitting) {
-                                            if (effectiveEnglish) "Sending..." else "שולח..."
-                                        } else {
-                                            sendText
-                                        },
-                                        style = KmiTypography.action,
-                                        modifier = Modifier.padding(vertical = 4.dp)
-                                    )
                                 }
                             }
                         }
-                    }
-                } // ✅ סוף התוכן הנגלל
-                } // ✅ סוף המסך עם TopBar קבוע
-            }
-        }
-    }
+
+                        AnimatedVisibility(
+                            visible = true,
+                            enter = fadeIn() + slideInVertically { it / 4 }
+                        ) {
+                            Card(
+                                modifier = Modifier.fillMaxWidth(),
+                                shape = MaterialTheme.shapes.extraLarge,
+                                colors = CardDefaults.cardColors(
+                                    containerColor = cardContainerColor,
+                                    contentColor = MaterialTheme.colorScheme.onSurface
+                                ),
+                                elevation = CardDefaults.cardElevation(
+                                    defaultElevation = 1.dp,
+                                    pressedElevation = 0.dp
+                                )
+                            ) {
+                                Column(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(
+                                            horizontal = 18.dp,
+                                            vertical = 16.dp
+                                        ),
+                                    verticalArrangement =
+                                        Arrangement.spacedBy(12.dp)
+                                ) {
+                                    OutlinedTextField(
+                                        value = fullName,
+                                        onValueChange = { fullName = it },
+                                        modifier = Modifier.fillMaxWidth(),
+                                        singleLine = true,
+                                        label = { ContactFieldLabel(if (effectiveEnglish) "Full Name" else "שם מלא") },
+                                        leadingIcon = {
+                                            Icon(
+                                                imageVector = Icons.Default.Person,
+                                                contentDescription = null,
+                                                modifier = Modifier.size(KmiIconSize.medium)
+                                            )
+                                        },
+                                        textStyle = KmiTypography.body.copy(
+                                            textAlign = TextAlign.Start
+                                        ),
+                                        colors = contactFieldColors()
+                                    )
+
+                                    OutlinedTextField(
+                                        value = phone,
+                                        onValueChange = { phone = it },
+                                        modifier = Modifier.fillMaxWidth(),
+                                        singleLine = true,
+                                        label = { ContactFieldLabel(if (effectiveEnglish) "Phone Number" else "טלפון") },
+                                        leadingIcon = {
+                                            Icon(
+                                                imageVector = Icons.Default.Phone,
+                                                contentDescription = null,
+                                                modifier = Modifier.size(
+                                                    KmiIconSize.medium
+                                                )
+                                            )
+                                        },
+                                        keyboardOptions = KeyboardOptions(
+                                            keyboardType = KeyboardType.Phone
+                                        ),
+                                        textStyle = KmiTypography.body.copy(
+                                            textAlign = TextAlign.Start
+                                        ),
+                                        colors = contactFieldColors()
+                                    )
+
+                                    OutlinedTextField(
+                                        value = email,
+                                        onValueChange = { email = it },
+                                        modifier = Modifier.fillMaxWidth(),
+                                        singleLine = true,
+                                        label = { ContactFieldLabel(if (effectiveEnglish) "Email" else "אימייל") },
+                                        leadingIcon = {
+                                            Icon(
+                                                imageVector = Icons.Default.Email,
+                                                contentDescription = null,
+                                                modifier = Modifier.size(
+                                                    KmiIconSize.medium
+                                                )
+                                            )
+                                        },
+                                        keyboardOptions = KeyboardOptions(
+                                            keyboardType = KeyboardType.Email
+                                        ),
+                                        textStyle = KmiTypography.body.copy(
+                                            textAlign = TextAlign.Start
+                                        ),
+                                        colors = contactFieldColors()
+                                    )
+
+                                    OutlinedTextField(
+                                        value = subject,
+                                        onValueChange = { subject = it },
+                                        modifier = Modifier.fillMaxWidth(),
+                                        singleLine = true,
+                                        label = {
+                                            ContactFieldLabel(
+                                                text =
+                                                    if (effectiveEnglish) {
+                                                        "Subject"
+                                                    } else {
+                                                        "נושא הפנייה"
+                                                    }
+                                            )
+                                        },
+                                        leadingIcon = {
+                                            Icon(
+                                                imageVector =
+                                                    Icons.AutoMirrored.Filled.Message,
+                                                contentDescription = null,
+                                                modifier = Modifier.size(
+                                                    KmiIconSize.medium
+                                                )
+                                            )
+                                        },
+                                        textStyle = KmiTypography.body.copy(
+                                            textAlign = TextAlign.Start
+                                        ),
+                                        colors = contactFieldColors()
+                                    )
+
+                                    OutlinedTextField(
+                                        value = message,
+                                        onValueChange = { message = it },
+                                        modifier = Modifier.fillMaxWidth(),
+                                        minLines = 4,
+                                        label = {
+                                            ContactFieldLabel(
+                                                text =
+                                                    if (effectiveEnglish) {
+                                                        "Message"
+                                                    } else {
+                                                        "הודעה"
+                                                    }
+                                            )
+                                        },
+                                        textStyle = KmiTypography.body.copy(
+                                            textAlign = TextAlign.Start
+                                        ),
+                                        colors = contactFieldColors()
+                                    )
+
+                                    Spacer(Modifier.height(6.dp))
+
+                                    Button(
+                                        onClick = {
+                                            if (isSubmitting) return@Button
+
+                                            scope.launch {
+                                                isSubmitting = true
+
+                                                val cleanFullName =
+                                                    if (
+                                                        demoPrivacyEnabled &&
+                                                        realFullName.isNotBlank()
+                                                    ) {
+                                                        realFullName.trim()
+                                                    } else {
+                                                        fullName.trim()
+                                                    }
+
+                                                val cleanPhone =
+                                                    phone.trim()
+
+                                                val cleanEmail =
+                                                    email.trim()
+                                                val cleanSubject = subject.trim()
+                                                val cleanMessage = message.trim()
+
+                                                runCatching {
+                                                    persistContactRequestToFirestore(
+                                                        fullName = cleanFullName,
+                                                        phone = cleanPhone,
+                                                        email = cleanEmail,
+                                                        subject = cleanSubject,
+                                                        message = cleanMessage
+                                                    )
+                                                }.onSuccess {
+                                                    onSubmit(
+                                                        cleanFullName,
+                                                        cleanPhone,
+                                                        cleanEmail,
+                                                        cleanSubject,
+                                                        cleanMessage
+                                                    )
+
+                                                    snackbarHostState.showSnackbar(
+                                                        if (effectiveEnglish)
+                                                            "Your request was sent successfully"
+                                                        else
+                                                            "הפנייה נשלחה בהצלחה"
+                                                    )
+
+                                                    fullName = ""
+                                                    phone = ""
+                                                    email = ""
+                                                    subject = ""
+                                                    message = ""
+                                                }.onFailure {
+                                                    snackbarHostState.showSnackbar(
+                                                        if (effectiveEnglish)
+                                                            "Sending failed. Please try again."
+                                                        else
+                                                            "שליחת הפנייה נכשלה. נסה שוב."
+                                                    )
+                                                }
+
+                                                isSubmitting = false
+                                            }
+                                        },
+                                        enabled = isFormValid && !isSubmitting,
+                                        modifier = Modifier.fillMaxWidth(),
+                                        elevation = ButtonDefaults.buttonElevation(
+                                            defaultElevation = 1.dp,
+                                            pressedElevation = 0.dp
+                                        ),
+                                        colors = ButtonDefaults.buttonColors(
+                                            containerColor =
+                                                MaterialTheme.colorScheme.primary,
+                                            contentColor =
+                                                MaterialTheme.colorScheme.onPrimary,
+                                            disabledContainerColor =
+                                                MaterialTheme.colorScheme.surfaceVariant,
+                                            disabledContentColor =
+                                                MaterialTheme.colorScheme.onSurfaceVariant.copy(
+                                                    alpha = 0.62f
+                                                )
+                                        ),
+                                        shape = MaterialTheme.shapes.extraLarge
+                                    ) {
+                                        androidx.compose.foundation.layout.Row(
+                                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Icon(
+                                                imageVector = Icons.AutoMirrored.Filled.Send,
+                                                contentDescription = null,
+                                                modifier = Modifier.size(KmiIconSize.medium)
+                                            )
+                                            Text(
+                                                text = if (isSubmitting) {
+                                                    if (effectiveEnglish) "Sending..." else "שולח..."
+                                                } else {
+                                                    sendText
+                                                },
+                                                style = KmiTypography.action,
+                                                modifier = Modifier.padding(vertical = 4.dp)
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        } // סוף כרטיס הטופס
+                    } // סוף התוכן הנגלל
+                } // סוף העמודה הראשית
+            } // סוף רקע המסך
+        } // סוף Scaffold
+    } // סוף KmiLanguageDirection
 }
 
 @Composable
@@ -1014,11 +1019,9 @@ private fun createContactUsPdf(
         color: Int = textDark,
         typeface: Typeface = regularTypeface,
         align: Paint.Align =
-            if (isEnglish) {
-                Paint.Align.LEFT
-            } else {
-                Paint.Align.RIGHT
-            }
+            KmiPdfDirection.textAlign(
+                isEnglish = isEnglish
+            )
     ): Paint {
         return Paint(
             Paint.ANTI_ALIAS_FLAG
@@ -1042,7 +1045,6 @@ private fun createContactUsPdf(
         val rectPaint =
             Paint(Paint.ANTI_ALIAS_FLAG).apply {
                 this.color = color
-                style = Paint.Style.FILL
             }
 
         canvas.drawRoundRect(
@@ -1069,7 +1071,6 @@ private fun createContactUsPdf(
             Paint(Paint.ANTI_ALIAS_FLAG).apply {
                 this.color = color
                 style = Paint.Style.STROKE
-                strokeWidth = 1f
             }
 
         canvas.drawRoundRect(
@@ -1084,13 +1085,17 @@ private fun createContactUsPdf(
     }
 
     var pageNumber = 0
-    var page: PdfDocument.Page? = null
-    var canvas: android.graphics.Canvas? = null
+    lateinit var currentPage: PdfDocument.Page
+    lateinit var pageCanvas: android.graphics.Canvas
+    var hasActivePage = false
     var y = 0f
 
+    fun currentCanvas(): android.graphics.Canvas =
+        pageCanvas
+
     fun newPage() {
-        page?.let {
-            document.finishPage(it)
+        if (hasActivePage) {
+            document.finishPage(currentPage)
         }
 
         pageNumber++
@@ -1102,15 +1107,15 @@ private fun createContactUsPdf(
                 pageNumber
             ).create()
 
-        page =
+        currentPage =
             document.startPage(
                 pageInfo
             )
 
-        canvas =
-            page!!.canvas
+        pageCanvas = currentPage.canvas
+        hasActivePage = true
 
-        canvas!!.drawColor(
+        pageCanvas.drawColor(
             android.graphics.Color.WHITE
         )
 
@@ -1125,7 +1130,6 @@ private fun createContactUsPdf(
                 Paint.ANTI_ALIAS_FLAG
             ).apply {
                 color = navy
-                style = Paint.Style.FILL
             }
 
         val accent1 =
@@ -1138,7 +1142,6 @@ private fun createContactUsPdf(
                         103,
                         158
                     )
-                style = Paint.Style.FILL
             }
 
         val accent2 =
@@ -1151,10 +1154,9 @@ private fun createContactUsPdf(
                         183,
                         220
                     )
-                style = Paint.Style.FILL
             }
 
-        canvas!!.drawPath(
+        currentCanvas().drawPath(
             android.graphics.Path().apply {
                 moveTo(
                     pageWidth.toFloat(),
@@ -1177,7 +1179,7 @@ private fun createContactUsPdf(
             navyPaint
         )
 
-        canvas!!.drawPath(
+        currentCanvas().drawPath(
             android.graphics.Path().apply {
                 moveTo(
                     208f,
@@ -1200,7 +1202,7 @@ private fun createContactUsPdf(
             accent1
         )
 
-        canvas!!.drawPath(
+        currentCanvas().drawPath(
             android.graphics.Path().apply {
                 moveTo(
                     230f,
@@ -1228,14 +1230,14 @@ private fun createContactUsPdf(
         val logoY = 58f
         val logoRadius = 42f
 
-        canvas!!.drawCircle(
+        currentCanvas().drawCircle(
             logoX,
             logoY,
             logoRadius,
             navyPaint
         )
 
-        canvas!!.drawCircle(
+        currentCanvas().drawCircle(
             logoX,
             logoY,
             logoRadius - 4f,
@@ -1247,7 +1249,7 @@ private fun createContactUsPdf(
             }
         )
 
-        canvas!!.drawText(
+        currentCanvas().drawText(
             "KAMI",
             logoX,
             logoY + logoRadius * 0.22f,
@@ -1262,7 +1264,7 @@ private fun createContactUsPdf(
         val headerX =
             pageWidth - 34f
 
-        canvas!!.drawText(
+        currentCanvas().drawText(
             if (isEnglish) {
                 "Contact Us"
             } else {
@@ -1279,7 +1281,7 @@ private fun createContactUsPdf(
             )
         )
 
-        canvas!!.drawText(
+        currentCanvas().drawText(
             if (isEnglish) {
                 "KAMI Contact Request"
             } else {
@@ -1304,7 +1306,7 @@ private fun createContactUsPdf(
                 Date()
             )
 
-        canvas!!.drawText(
+        currentCanvas().drawText(
             if (isEnglish) {
                 "Generated: $generatedDate"
             } else {
@@ -1344,7 +1346,6 @@ private fun createContactUsPdf(
 
         ensureSpace(62f)
 
-        val left = margin
         val right =
             pageWidth.toFloat() - margin
 
@@ -1352,8 +1353,8 @@ private fun createContactUsPdf(
         val bottom = y + 50f
 
         drawRoundedRect(
-            canvas = canvas!!,
-            left = left,
+            canvas = currentCanvas(),
+            left = margin,
             top = top,
             right = right,
             bottom = bottom,
@@ -1361,8 +1362,8 @@ private fun createContactUsPdf(
         )
 
         drawRoundedBorder(
-            canvas = canvas!!,
-            left = left,
+            canvas = currentCanvas(),
+            left = margin,
             top = top,
             right = right,
             bottom = bottom,
@@ -1370,13 +1371,14 @@ private fun createContactUsPdf(
         )
 
         val textX =
-            if (isEnglish) {
-                left + 12f
-            } else {
-                right - 12f
-            }
+            KmiPdfDirection.startPaddingX(
+                isEnglish = isEnglish,
+                left = margin,
+                right = right,
+                padding = 12f
+            )
 
-        canvas!!.drawText(
+        currentCanvas().drawText(
             label,
             textX,
             top + 17f,
@@ -1387,7 +1389,7 @@ private fun createContactUsPdf(
             )
         )
 
-        canvas!!.drawText(
+        currentCanvas().drawText(
             value,
             textX,
             top + 37f,
@@ -1449,15 +1451,15 @@ private fun createContactUsPdf(
         lines.forEach { line ->
             ensureSpace(18f)
 
-            canvas!!.drawText(
+            currentCanvas().drawText(
                 line,
-                if (isEnglish) {
-                    margin + 12f
-                } else {
-                    pageWidth.toFloat() -
-                            margin -
-                            12f
-                },
+                KmiPdfDirection.startPaddingX(
+                    isEnglish = isEnglish,
+                    left = margin,
+                    right =
+                        pageWidth.toFloat() - margin,
+                    padding = 12f
+                ),
                 y,
                 paint(
                     size = 10.5f,
@@ -1471,17 +1473,18 @@ private fun createContactUsPdf(
 
     newPage()
 
-    canvas!!.drawText(
+    currentCanvas().drawText(
         if (isEnglish) {
             "Request details"
         } else {
             "פרטי הפנייה"
         },
-        if (isEnglish) {
-            margin
-        } else {
-            pageWidth.toFloat() - margin
-        },
+        KmiPdfDirection.startX(
+            isEnglish = isEnglish,
+            left = margin,
+            right =
+                pageWidth.toFloat() - margin
+        ),
         y,
         paint(
             size = 16f,
@@ -1534,17 +1537,18 @@ private fun createContactUsPdf(
 
     ensureSpace(80f)
 
-    canvas!!.drawText(
+    currentCanvas().drawText(
         if (isEnglish) {
             "Message"
         } else {
             "הודעה"
         },
-        if (isEnglish) {
-            margin
-        } else {
-            pageWidth.toFloat() - margin
-        },
+        KmiPdfDirection.startX(
+            isEnglish = isEnglish,
+            left = margin,
+            right =
+                pageWidth.toFloat() - margin
+        ),
         y,
         paint(
             size = 13f,
@@ -1565,8 +1569,8 @@ private fun createContactUsPdf(
             }
     )
 
-    page?.let {
-        document.finishPage(it)
+    if (hasActivePage) {
+        document.finishPage(currentPage)
     }
 
     val pdfDirectory =
@@ -1578,8 +1582,8 @@ private fun createContactUsPdf(
         }
 
     /*
-     * שם קבוע:
-     * הפקה חדשה מחליפה את הקובץ הקודם.
+     * שם קבוע לפי השפה:
+     * הפקה חדשה באותה שפה מחליפה את הקובץ הקודם.
      */
     val fileName =
         if (isEnglish) {
@@ -1594,13 +1598,16 @@ private fun createContactUsPdf(
             fileName
         )
 
-    FileOutputStream(
-        pdfFile
-    ).use {
-        document.writeTo(it)
+    try {
+        FileOutputStream(
+            pdfFile,
+            false
+        ).use { outputStream ->
+            document.writeTo(outputStream)
+        }
+    } finally {
+        document.close()
     }
-
-    document.close()
 
     return pdfFile
 }

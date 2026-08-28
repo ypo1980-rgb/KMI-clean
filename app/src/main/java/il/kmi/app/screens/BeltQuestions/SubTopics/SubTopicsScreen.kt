@@ -77,6 +77,8 @@ import il.kmi.app.ui.KmiIconSize
 import il.kmi.app.ui.KmiTopBar
 import il.kmi.app.ui.KmiTypography
 import il.kmi.app.ui.QuickMenuTriggerMode
+import il.kmi.app.subscription.KmiAccess
+import il.yuval.ui.theme.kmiScreenBackgroundBrush
 import il.kmi.app.ui.dialogs.ExerciseExplanationDialog
 import il.kmi.app.ui.dialogs.ExerciseNoteEditorDialog
 import java.io.File
@@ -802,10 +804,6 @@ private fun visibleGreenDefenseSubTopics(
             ).distinctBy { normalizeUiNestedTitle(it) }
 }
 
-private val catalogScreenGradientTop = Color(0xFFF8FBFF)
-private val catalogScreenGradientMid = Color(0xFFB7DDF7)
-private val catalogScreenGradientBottom = Color(0xFF062B4A)
-
 /**
  * מסך שמציג את כל תתי־הנושאים של נושא מסוים בחגורה מסוימת.
  * כל כפתור = תת־נושא. למטה כתוב כמה תרגילים יש בו.
@@ -1115,8 +1113,40 @@ fun SubTopicsScreen(
         openedLocalNestedGroupTitle = null
     }
 
-// ⛔ כרגע חוסמים גישה עד שהמנויים עובדים
-    val hasAccess = false
+    val userAccessPreferences =
+        remember(context) {
+            context.getSharedPreferences(
+                "kmi_user",
+                Context.MODE_PRIVATE
+            )
+        }
+
+    val subscriptionPreferences =
+        remember(context) {
+            context.getSharedPreferences(
+                "kmi_subs",
+                Context.MODE_PRIVATE
+            )
+        }
+
+    val legacyAccessPreferences =
+        remember(context) {
+            context.getSharedPreferences(
+                "kmi_prefs",
+                Context.MODE_PRIVATE
+            )
+        }
+
+    val hasAccess =
+        KmiAccess.hasFullAccess(
+            userAccessPreferences
+        ) ||
+                KmiAccess.hasFullAccess(
+                    subscriptionPreferences
+                ) ||
+                KmiAccess.hasFullAccess(
+                    legacyAccessPreferences
+                )
 
     data class OpenedExerciseRequest(
         val belt: Belt,
@@ -1226,6 +1256,7 @@ fun SubTopicsScreen(
                 onHome = onHome,
                 showTopHome = false,
                 showTopSearch = false,
+                showTopShare = true,
                 showBottomActions = true,
                 lockSearch = false,
                 onSearch = null,
@@ -1320,13 +1351,7 @@ fun SubTopicsScreen(
                 .fillMaxSize()
                 .padding(padding)
                 .background(
-                    brush = Brush.verticalGradient(
-                        colors = listOf(
-                            catalogScreenGradientTop,
-                            catalogScreenGradientMid,
-                            catalogScreenGradientBottom
-                        )
-                    )
+                    brush = kmiScreenBackgroundBrush()
                 )
         ) {
             if (isHardFlow && hardBeltGroups.isNotEmpty()) {
@@ -2438,31 +2463,60 @@ private fun createSubjectExercisesPdf(
     drawFooter()
     document.finishPage(page)
 
-    val dir = File(
-        context.cacheDir,
-        "pdfs"
-    ).apply {
-        mkdirs()
+    val dir =
+        File(
+            context.cacheDir,
+            "shared_pdfs"
+        )
+
+    check(
+        dir.exists() ||
+                dir.mkdirs()
+    ) {
+        "Unable to create PDF sharing directory"
     }
 
-    val safeBeltId = belt.id
-        .lowercase()
-        .replace(Regex("[^a-z0-9_-]"), "_")
+    val safeBeltId =
+        belt.id
+            .lowercase()
+            .replace(
+                Regex("[^a-z0-9_-]"),
+                "_"
+            )
+
+    val safeTopic =
+        topic
+            .trim()
+            .replace(
+                Regex("""[\\/:*?"<>|]"""),
+                "-"
+            )
+            .ifBlank {
+                if (isEnglish) {
+                    "Subject"
+                } else {
+                    "נושא"
+                }
+            }
 
     val fileName =
         if (isEnglish) {
-            "subject_${safeBeltId}.pdf"
+            "Exercises - $safeTopic - $safeBeltId.pdf"
         } else {
-            "subject_${safeBeltId}_he.pdf"
+            "תרגילים - $safeTopic - $safeBeltId.pdf"
         }
 
-    val file = File(
-        dir,
-        fileName
-    )
+    val file =
+        File(
+            dir,
+            fileName
+        )
 
     try {
-        FileOutputStream(file, false).use { output ->
+        FileOutputStream(
+            file,
+            false
+        ).use { output ->
             document.writeTo(output)
         }
     } finally {
@@ -3847,20 +3901,17 @@ private fun HardBeltInlineHeaderForSubTopics(
         )
 
     val hintTextColor =
-        if (isDarkMode) {
-            Color.White.copy(alpha = 0.72f)
-        } else {
-            Color(0xFF5B6472)
-        }
+        MaterialTheme.colorScheme.onSurfaceVariant
 
     Surface(
         modifier = modifier,
         shape = RoundedCornerShape(22.dp),
-        color = if (isDarkMode) {
-            Color(0xFF111827)
-        } else {
-            belt.lightColor
-        },
+        color =
+            if (isDarkMode) {
+                MaterialTheme.colorScheme.surface
+            } else {
+                belt.lightColor
+            },
         tonalElevation = 0.dp,
         shadowElevation = 0.dp,
         border = if (isDarkMode) {
@@ -3894,23 +3945,13 @@ private fun HardBeltInlineHeaderForSubTopics(
                                     FontWeight.ExtraBold
                             ),
                         color = beltContentColor,
-                        textAlign = TextAlign.End,
-                        modifier = Modifier.weight(1f),
-                        maxLines = 1,
-                        overflow =
-                            TextOverflow.Ellipsis
-                    )
-
-                    Text(
-                        text = title,
-                        style =
-                            KmiTypography.screenTitle.copy(
-                                fontWeight =
-                                    FontWeight.ExtraBold
-                            ),
-                        color = beltContentColor,
-                        textAlign = TextAlign.End,
-                        modifier = Modifier.weight(1f),
+                        textAlign =
+                            if (isEnglish) {
+                                TextAlign.Start
+                            } else {
+                                TextAlign.End
+                            },
+                        modifier = Modifier.fillMaxWidth(),
                         maxLines = 1,
                         overflow =
                             TextOverflow.Ellipsis
@@ -4024,20 +4065,17 @@ private fun HardBeltStickyHeaderForSubTopics(
         )
 
     val hintTextColor =
-        if (isDarkMode) {
-            Color.White.copy(alpha = 0.72f)
-        } else {
-            Color(0xFF5B6472)
-        }
+        MaterialTheme.colorScheme.onSurfaceVariant
 
     Surface(
         modifier = modifier,
         shape = RoundedCornerShape(22.dp),
-        color = if (isDarkMode) {
-            Color(0xFF111827)
-        } else {
-            belt.lightColor
-        },
+        color =
+            if (isDarkMode) {
+                MaterialTheme.colorScheme.surface
+            } else {
+                belt.lightColor
+            },
         tonalElevation = 0.dp,
         shadowElevation = 0.dp,
         border = if (isDarkMode) {
@@ -4193,64 +4231,41 @@ private fun HardExerciseLegacyRow(
                 AppLanguage.ENGLISH
 
     val rowBgColor =
-        if (isDarkMode) {
-            Color(0xFF1E293B)
+        MaterialTheme.colorScheme.surface
+
+    val rowTextColor =
+        if (excluded) {
+            MaterialTheme.colorScheme.onSurfaceVariant.copy(
+                alpha = 0.55f
+            )
         } else {
-            Color.White
+            MaterialTheme.colorScheme.onSurface
         }
-
-    val rowTextColor = when {
-        excluded && isDarkMode ->
-            Color.White.copy(alpha = 0.45f)
-
-        excluded ->
-            Color.Gray
-
-        isDarkMode ->
-            Color(0xFFF8FAFC)
-
-        else ->
-            Color(0xFF263238)
-    }
 
     val exerciseNumberBackground =
         if (isDarkMode) {
-            Color.White.copy(alpha = 0.14f)
+            MaterialTheme.colorScheme.surfaceVariant
         } else {
             belt.color.copy(alpha = 0.14f)
         }
 
     val exerciseNumberTextColor =
-        if (isDarkMode) {
-            Color.White
-        } else {
-            Color(0xFF1F2937)
-        }
+        MaterialTheme.colorScheme.onSurface
 
     Surface(
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(16.dp)),
         color = rowBgColor,
-        tonalElevation =
-            if (isDarkMode) {
-                0.dp
-            } else {
-                1.dp
-            },
-        shadowElevation =
-            if (isDarkMode) {
-                0.dp
-            } else {
-                1.dp
-            },
+        tonalElevation = 0.dp,
+        shadowElevation = 0.dp,
         border = BorderStroke(
             width = 1.dp,
             color =
                 if (isDarkMode) {
                     belt.color.copy(alpha = 0.55f)
                 } else {
-                    Color.Transparent
+                    MaterialTheme.colorScheme.outlineVariant
                 }
         )
     ) {
@@ -4332,9 +4347,11 @@ private fun HardExerciseLegacyRow(
                                 HardLegacyMetaBadge(
                                     text = "Excluded",
                                     containerColor =
-                                        Color(0xFFE5E7EB),
+                                        MaterialTheme.colorScheme
+                                            .surfaceVariant,
                                     contentColor =
-                                        Color(0xFF6B7280)
+                                        MaterialTheme.colorScheme
+                                            .onSurfaceVariant
                                 )
                             }
 
@@ -4432,9 +4449,11 @@ private fun HardExerciseLegacyRow(
                                 HardLegacyMetaBadge(
                                     text = "מוחרג",
                                     containerColor =
-                                        Color(0xFFE5E7EB),
+                                        MaterialTheme.colorScheme
+                                            .surfaceVariant,
                                     contentColor =
-                                        Color(0xFF6B7280)
+                                        MaterialTheme.colorScheme
+                                            .onSurfaceVariant
                                 )
 
                                 Spacer(Modifier.width(5.dp))
@@ -4605,7 +4624,19 @@ private fun SubTopicItemFloatingActions(
         ) {
             DropdownMenu(
                 expanded = expanded,
-                onDismissRequest = { expanded = false },
+                onDismissRequest = {
+                    expanded = false
+                },
+                shape = RoundedCornerShape(18.dp),
+                containerColor =
+                    MaterialTheme.colorScheme.surface,
+                tonalElevation = 0.dp,
+                shadowElevation = 0.dp,
+                border = BorderStroke(
+                    width = 1.dp,
+                    color =
+                        MaterialTheme.colorScheme.outlineVariant
+                ),
                 modifier = Modifier.background(
                     color =
                         MaterialTheme.colorScheme.surface,
@@ -4723,17 +4754,21 @@ private fun HardMasterToggle(
     mastered: Boolean?,
     onClick: () -> Unit
 ) {
-    val bg = when (mastered) {
-        true -> Color(0xFF2E7D32)
-        false -> Color(0xFFC62828)
-        null -> Color.White
-    }
+    val bg =
+        when (mastered) {
+            true -> Color(0xFF2E7D32)
+            false -> Color(0xFFC62828)
+            null ->
+                MaterialTheme.colorScheme.surfaceVariant
+        }
 
-    val border = when (mastered) {
-        true -> Color(0xFF1B5E20)
-        false -> Color(0xFF8E1B1B)
-        null -> Color(0xFFCBD5E1)
-    }
+    val border =
+        when (mastered) {
+            true -> Color(0xFF1B5E20)
+            false -> Color(0xFF8E1B1B)
+            null ->
+                MaterialTheme.colorScheme.outline
+        }
 
     Surface(
         modifier = Modifier
@@ -4755,25 +4790,35 @@ private fun HardMasterToggle(
             contentAlignment = Alignment.Center
         ) {
             when (mastered) {
-                true -> Icon(
-                    imageVector = Icons.Filled.Check,
-                    contentDescription = "יודע",
-                    tint = Color.White,
-                    modifier = Modifier.size(
-    KmiIconSize.small
-)
-                )
+                true -> {
+                    Icon(
+                        imageVector = Icons.Filled.Check,
+                        contentDescription = "יודע",
+                        tint = Color.White,
+                        modifier =
+                            Modifier.size(
+                                KmiIconSize.small
+                            )
+                    )
+                }
 
-                false -> Icon(
-                    imageVector = Icons.Filled.Close,
-                    contentDescription = "לא יודע",
-                    tint = Color.White,
-                    modifier = Modifier.size(
-    KmiIconSize.small
-)
-                )
+                false -> {
+                    Icon(
+                        imageVector = Icons.Filled.Close,
+                        contentDescription = "לא יודע",
+                        tint = Color.White,
+                        modifier =
+                            Modifier.size(
+                                KmiIconSize.small
+                            )
+                    )
+                }
 
-                null -> Spacer(Modifier.size(1.dp))
+                null -> {
+                    Spacer(
+                        modifier = Modifier.size(1.dp)
+                    )
+                }
             }
         }
     }

@@ -8,13 +8,7 @@ import android.graphics.pdf.PdfDocument
 import androidx.core.content.FileProvider
 import java.io.File
 import java.io.FileOutputStream
-import androidx.compose.animation.core.LinearEasing
-import androidx.compose.animation.core.animateFloat
-import androidx.compose.animation.core.infiniteRepeatable
-import androidx.compose.animation.core.rememberInfiniteTransition
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -30,7 +24,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
@@ -40,7 +33,7 @@ import androidx.compose.material.icons.filled.Groups
 import androidx.compose.material.icons.filled.Paid
 import androidx.compose.material.icons.filled.PersonOff
 import androidx.compose.material.icons.filled.Search
-import androidx.compose.material.icons.filled.TrendingUp
+import androidx.compose.material.icons.automirrored.filled.TrendingUp
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -66,7 +59,6 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
@@ -80,17 +72,18 @@ import com.google.firebase.ktx.Firebase
 import il.kmi.app.ui.KmiPremiumDropdown
 import il.kmi.app.ui.KmiTopBar
 import il.kmi.app.ui.KmiTypography
+import il.kmi.app.ui.loading.KmiLoadingRings
 import il.kmi.app.privacy.TraineeDisplayNameMapper
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
-import androidx.compose.runtime.CompositionLocalProvider
-import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.platform.LocalLayoutDirection
-import androidx.compose.ui.unit.LayoutDirection
+import androidx.compose.ui.text.style.TextOverflow
 import il.kmi.app.ui.KmiIconSize
+import il.kmi.app.ui.KmiLanguageDirection
+import il.kmi.app.ui.pdf.KmiPdfDirection
+import il.yuval.ui.theme.kmiScreenBackgroundBrush
 
 
 //=====================================================================
@@ -100,225 +93,12 @@ private fun PaymentsPremiumLoading(
     text: String,
     modifier: Modifier = Modifier
 ) {
-    val transition =
-        rememberInfiniteTransition(
-            label = "paymentsPremiumLoading"
-        )
-
-    /*
-     * שלוש טבעות עצמאיות:
-     * החיצונית והפנימית מסתובבות בכיוון אחד,
-     * האמצעית בכיוון ההפוך.
-     */
-    val outerRotation by
-    transition.animateFloat(
-        initialValue = 0f,
-        targetValue = 360f,
-        animationSpec =
-            infiniteRepeatable(
-                animation =
-                    tween(
-                        durationMillis = 1_350,
-                        easing = LinearEasing
-                    )
-            ),
-        label = "paymentsOuterRing"
+    KmiLoadingRings(
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(vertical = 12.dp),
+        text = text
     )
-
-    val middleRotation by
-    transition.animateFloat(
-        initialValue = 360f,
-        targetValue = 0f,
-        animationSpec =
-            infiniteRepeatable(
-                animation =
-                    tween(
-                        durationMillis = 1_650,
-                        easing = LinearEasing
-                    )
-            ),
-        label = "paymentsMiddleRing"
-    )
-
-    val innerRotation by
-    transition.animateFloat(
-        initialValue = 0f,
-        targetValue = 360f,
-        animationSpec =
-            infiniteRepeatable(
-                animation =
-                    tween(
-                        durationMillis = 2_050,
-                        easing = LinearEasing
-                    )
-            ),
-        label = "paymentsInnerRing"
-    )
-
-    Column(
-        modifier =
-            modifier
-                .fillMaxWidth()
-                .padding(
-                    vertical = 12.dp
-                ),
-        horizontalAlignment =
-            Alignment.CenterHorizontally,
-        verticalArrangement =
-            Arrangement.spacedBy(12.dp)
-    ) {
-        Box(
-            modifier = Modifier.size(82.dp),
-            contentAlignment =
-                Alignment.Center
-        ) {
-            /*
-             * טבעת חיצונית
-             */
-            Box(
-                modifier =
-                    Modifier
-                        .size(76.dp)
-                        .graphicsLayer {
-                            rotationZ =
-                                outerRotation
-                        }
-                        .border(
-                            width = 5.dp,
-                            brush =
-                                Brush.sweepGradient(
-                                    colors =
-                                        listOf(
-                                            Color.Transparent,
-                                            Color(0xFFA78BFA),
-                                            Color(0xFF38BDF8),
-                                            Color.Transparent
-                                        )
-                                ),
-                            shape = CircleShape
-                        )
-            )
-
-            /*
-             * טבעת אמצעית
-             */
-            Box(
-                modifier =
-                    Modifier
-                        .size(62.dp)
-                        .graphicsLayer {
-                            rotationZ =
-                                middleRotation
-                        }
-                        .border(
-                            width = 4.dp,
-                            brush =
-                                Brush.sweepGradient(
-                                    colors =
-                                        listOf(
-                                            Color.Transparent,
-                                            Color(0xFF38BDF8),
-                                            Color(0xFFA78BFA),
-                                            Color.Transparent
-                                        )
-                                ),
-                            shape = CircleShape
-                        )
-            )
-
-            /*
-             * טבעת פנימית
-             */
-            Box(
-                modifier =
-                    Modifier
-                        .size(48.dp)
-                        .graphicsLayer {
-                            rotationZ =
-                                innerRotation
-                        }
-                        .border(
-                            width = 3.dp,
-                            brush =
-                                Brush.sweepGradient(
-                                    colors =
-                                        listOf(
-                                            Color.Transparent,
-                                            Color(0xFFF59E0B),
-                                            Color(0xFF22C55E),
-                                            Color.Transparent
-                                        )
-                                ),
-                            shape = CircleShape
-                        )
-            )
-
-            /*
-             * מרכז נקי המתאים ל-Light / Dark.
-             */
-            Surface(
-                modifier =
-                    Modifier.size(25.dp),
-                shape = CircleShape,
-                color =
-                    MaterialTheme
-                        .colorScheme
-                        .surface,
-                tonalElevation = 0.dp,
-                shadowElevation = 0.dp,
-                border =
-                    androidx.compose.foundation
-                        .BorderStroke(
-                            width = 1.dp,
-                            color =
-                                MaterialTheme
-                                    .colorScheme
-                                    .primary
-                                    .copy(
-                                        alpha = 0.32f
-                                    )
-                        )
-            ) {
-                Box(
-                    modifier =
-                        Modifier.fillMaxSize(),
-                    contentAlignment =
-                        Alignment.Center
-                ) {
-                    Text(
-                        text = "✓",
-                        style =
-                            KmiTypography.caption,
-                        color =
-                            MaterialTheme
-                                .colorScheme
-                                .primary,
-                        fontWeight =
-                            FontWeight.Black,
-                        textAlign =
-                            TextAlign.Center
-                    )
-                }
-            }
-        }
-
-        Text(
-            text = text,
-            color =
-                MaterialTheme
-                    .colorScheme
-                    .onSurfaceVariant,
-            style =
-                KmiTypography.secondary.copy(
-                    fontWeight =
-                        FontWeight.Bold
-                ),
-            textAlign =
-                TextAlign.Center,
-            modifier =
-                Modifier.fillMaxWidth()
-        )
-    }
 }
 
 private fun paymentNowDateText(): String {
@@ -397,6 +177,30 @@ private fun PaymentReportItem.demoSafeName(
         } else {
             "מתאמן ללא שם"
         }
+    }
+}
+
+private fun PaymentReportItem.demoSafePhone(
+    isEnglish: Boolean,
+    demoIndex: Int? = null
+): String {
+    val mappedName =
+        demoSafeName(
+            isEnglish = isEnglish,
+            demoIndex = demoIndex
+        )
+
+    val isDemoDisplay =
+        mappedName.trim() != fullName.trim()
+
+    return if (isDemoDisplay) {
+        if (isEnglish) {
+            "Hidden in demo"
+        } else {
+            "מוסתר בהדגמה"
+        }
+    } else {
+        phone.trim()
     }
 }
 
@@ -675,13 +479,23 @@ private suspend fun loadRealPaymentsReportItems(): List<PaymentReportItem> {
                 ?: userDoc.getString("authUid")
                 ?: userDoc.id
 
-            val paymentDoc = bundle.allDocs
-                .asSequence()
-                .flatMap { doc -> doc.paymentIdentityKeys().asSequence() }
-                .mapNotNull { key -> paymentDocsByTraineeId[key] }
-                .firstOrNull()
-                ?: paymentDocsByTraineeId[traineeId]
-                ?: paymentDocsByTraineeId[userDoc.id]
+            val paymentDoc =
+                bundle.allDocs
+                    .asSequence()
+                    .flatMap { document ->
+                        document
+                            .paymentIdentityKeys()
+                            .asSequence()
+                    }
+                    .firstNotNullOfOrNull { key ->
+                        paymentDocsByTraineeId[key]
+                    }
+                    ?: paymentDocsByTraineeId[
+                        traineeId
+                    ]
+                    ?: paymentDocsByTraineeId[
+                        userDoc.id
+                    ]
 
             val requiredAmount = paymentDoc?.paymentRequiredAmountFromAny()
                 ?: userDoc.paymentRequiredAmountFromAny()
@@ -742,17 +556,17 @@ private suspend fun saveManualMembershipPaymentToFirestore(
         requiredAmount = item.requiredAmount
     )
 
-    val paymentDate = paymentNowDateText()
+    val paymentDate =
+        paymentNowDateText()
 
-    val cleanMethod = method
-
-    val updatedItem = item.copy(
-        paidAmount = newPaidAmount,
-        status = newStatus,
-        paymentMethod = cleanMethod,
-        paymentDate = paymentDate,
-        notes = notes
-    )
+    val updatedItem =
+        item.copy(
+            paidAmount = newPaidAmount,
+            status = newStatus,
+            paymentMethod = method,
+            paymentDate = paymentDate,
+            notes = notes
+        )
 
     val data = mapOf(
         "traineeId" to updatedItem.traineeId,
@@ -762,8 +576,14 @@ private suspend fun saveManualMembershipPaymentToFirestore(
         "phone" to updatedItem.phone,
         "requiredAmount" to updatedItem.requiredAmount,
         "paidAmount" to updatedItem.paidAmount,
-        "status" to paymentStatusToFirestore(updatedItem.status),
-        "paymentMethod" to paymentMethodToFirestore(cleanMethod),
+        "status" to
+                paymentStatusToFirestore(
+                    updatedItem.status
+                ),
+        "paymentMethod" to
+                paymentMethodToFirestore(
+                    method
+                ),
         "paymentDate" to updatedItem.paymentDate,
         "paymentYear" to paymentCurrentYear(),
         "lastPaymentAmount" to amountToAdd,
@@ -787,8 +607,14 @@ private suspend fun saveManualMembershipPaymentToFirestore(
         "amount" to amountToAdd,
         "paidAmountAfterUpdate" to updatedItem.paidAmount,
         "requiredAmount" to updatedItem.requiredAmount,
-        "statusAfterUpdate" to paymentStatusToFirestore(updatedItem.status),
-        "paymentMethod" to paymentMethodToFirestore(cleanMethod),
+        "statusAfterUpdate" to
+                paymentStatusToFirestore(
+                    updatedItem.status
+                ),
+        "paymentMethod" to
+                paymentMethodToFirestore(
+                    method
+                ),
         "paymentDate" to updatedItem.paymentDate,
         "paymentYear" to paymentCurrentYear(),
         "notes" to notes,
@@ -854,27 +680,29 @@ fun PaymentsReportScreen(
         }
     }
 
-    val title = if (isEnglish) "Payments Report" else "דו\"ח תשלומים"
-    val paidText = if (isEnglish) "Paid" else "שילמו"
-    val unpaidText = if (isEnglish) "Not paid" else "לא שילמו"
+    val title =
+        if (isEnglish) {
+            "Payments Report"
+        } else {
+            "דו\"ח תשלומים"
+        }
 
-    val screenLayoutDirection =
-        if (isEnglish) LayoutDirection.Ltr else LayoutDirection.Rtl
+    val paidText =
+        if (isEnglish) {
+            "Paid"
+        } else {
+            "שילמו"
+        }
 
-    val screenTextAlign =
-        if (isEnglish) TextAlign.Left else TextAlign.Right
+    val unpaidText =
+        if (isEnglish) {
+            "Not paid"
+        } else {
+            "לא שילמו"
+        }
 
-    val screenHorizontalAlign =
-        if (isEnglish) Alignment.Start else Alignment.End
-
-    val reportBackgroundColors = listOf(
-        MaterialTheme.colorScheme.background,
-        MaterialTheme.colorScheme.surface,
-        MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.72f),
-        MaterialTheme.colorScheme.background
-    )
-
-    val reportPanelColor = MaterialTheme.colorScheme.surface
+    val reportPanelColor =
+        MaterialTheme.colorScheme.surface
     val reportTitleColor = MaterialTheme.colorScheme.onSurface
     val reportSecondaryTextColor = MaterialTheme.colorScheme.onSurfaceVariant
     val reportAccentTextColor = MaterialTheme.colorScheme.primary
@@ -937,504 +765,525 @@ fun PaymentsReportScreen(
 
     val collectionPercent =
         if (totalRequired > 0.0) {
-            ((totalPaid / totalRequired) * 100.0).coerceIn(0.0, 100.0)
+            ((totalPaid / totalRequired) * 100.0)
+                .coerceIn(0.0, 100.0)
         } else {
             0.0
         }
 
-    Scaffold(
-        containerColor = Color.Transparent,
-        topBar = {
-            KmiTopBar(
-                title = title,
-                onHome = onClose,
-                showTopHome = false,
-                showTopShare = false,
-                lockSearch = false,
-                showBottomActions = true,
-                currentLang = if (isEnglish) "en" else "he",
-                onShare = {
-                    if (filteredItems.isNotEmpty()) {
-                        val pdfFile = createPaymentsReportPdf(
-                            context = context,
-                            items = filteredItems,
-                            totalRequired = totalRequired,
-                            totalPaid = totalPaid,
-                            paidCount = paidCount,
-                            unpaidCount = unpaidCount,
-                            collectionPercent = collectionPercent,
-                            selectedBranch = selectedBranch,
-                            isEnglish = isEnglish
-                        )
-
-                        val uri = FileProvider.getUriForFile(
-                            context,
-                            "${context.packageName}.fileprovider",
-                            pdfFile
-                        )
-
-                        val sendIntent = Intent(Intent.ACTION_SEND).apply {
-                            type = "application/pdf"
-                            putExtra(
-                                Intent.EXTRA_SUBJECT,
-                                if (isEnglish) "Payments report" else "דו״ח תשלומים"
+    KmiLanguageDirection(
+        isEnglish = isEnglish
+    ) {
+        Scaffold(
+            containerColor = Color.Transparent,
+            topBar = {
+                KmiTopBar(
+                    title = title,
+                    onHome = onClose,
+                    showTopHome = false,
+                    showTopShare = true,
+                    lockSearch = false,
+                    showBottomActions = true,
+                    currentLang = if (isEnglish) "en" else "he",
+                    onShare = {
+                        if (filteredItems.isNotEmpty()) {
+                            val pdfFile = createPaymentsReportPdf(
+                                context = context,
+                                items = filteredItems,
+                                totalRequired = totalRequired,
+                                totalPaid = totalPaid,
+                                paidCount = paidCount,
+                                unpaidCount = unpaidCount,
+                                collectionPercent = collectionPercent,
+                                selectedBranch = selectedBranch,
+                                isEnglish = isEnglish
                             )
-                            putExtra(Intent.EXTRA_STREAM, uri)
-                            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+
+                            val uri = FileProvider.getUriForFile(
+                                context,
+                                "${context.packageName}.fileprovider",
+                                pdfFile
+                            )
+
+                            val sendIntent = Intent(Intent.ACTION_SEND).apply {
+                                type = "application/pdf"
+                                putExtra(
+                                    Intent.EXTRA_SUBJECT,
+                                    if (isEnglish) "Payments report" else "דו״ח תשלומים"
+                                )
+                                putExtra(Intent.EXTRA_STREAM, uri)
+                                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                            }
+
+                            context.startActivity(
+                                Intent.createChooser(
+                                    sendIntent,
+                                    if (isEnglish) "Share PDF" else "שיתוף PDF"
+                                )
+                            )
                         }
-
-                        context.startActivity(
-                            Intent.createChooser(
-                                sendIntent,
-                                if (isEnglish) "Share PDF" else "שיתוף PDF"
-                            )
-                        )
                     }
-                }
-            )
-        }
-    ) { innerPadding ->
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(
-                    Brush.verticalGradient(
-                        colors = reportBackgroundColors
-                    )
                 )
-        ) {
-            Column(
+            }
+        ) { innerPadding ->
+            Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(innerPadding)
-                    .navigationBarsPadding()
-                    .verticalScroll(rememberScrollState())
-                    .padding(horizontal = 16.dp, vertical = 14.dp)
+                    .background(
+                        brush = kmiScreenBackgroundBrush()
+                    )
             ) {
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(30.dp),
-                    colors =
-                        CardDefaults.cardColors(
-                            containerColor =
-                                reportPanelColor
-                        ),
-                    elevation =
-                        CardDefaults.cardElevation(
-                            defaultElevation = 0.dp
-                        )
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(innerPadding)
+                        .navigationBarsPadding()
+                        .verticalScroll(rememberScrollState())
+                        .padding(horizontal = 16.dp, vertical = 14.dp)
                 ) {
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 14.dp, vertical = 10.dp),
-                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(30.dp),
+                        colors =
+                            CardDefaults.cardColors(
+                                containerColor =
+                                    reportPanelColor
+                            ),
+                        elevation =
+                            CardDefaults.cardElevation(
+                                defaultElevation = 0.dp
+                            )
                     ) {
-                        CompositionLocalProvider(
-                            LocalLayoutDirection provides screenLayoutDirection
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 14.dp, vertical = 10.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
                             Column(
                                 modifier = Modifier.fillMaxWidth(),
-                                horizontalAlignment = screenHorizontalAlign,
-                                verticalArrangement = Arrangement.spacedBy(3.dp)
+                                horizontalAlignment = Alignment.Start,
+                                verticalArrangement =
+                                    Arrangement.spacedBy(3.dp)
                             ) {
                                 Text(
-                                    text = if (isEnglish) {
-                                        "Premium payments dashboard"
-                                    } else {
-                                        "דשבורד תשלומים פרימיום"
-                                    },
+                                    text =
+                                        if (isEnglish) {
+                                            "Premium payments dashboard"
+                                        } else {
+                                            "דשבורד תשלומים פרימיום"
+                                        },
                                     style =
                                         KmiTypography.sectionTitle,
                                     color = reportTitleColor,
-                                    fontWeight = FontWeight.ExtraBold,
-                                    textAlign = screenTextAlign,
+                                    fontWeight =
+                                        FontWeight.ExtraBold,
+                                    textAlign = TextAlign.Start,
                                     modifier = Modifier.fillMaxWidth(),
-                                    maxLines = 1
+                                    maxLines = 1,
+                                    overflow =
+                                        TextOverflow.Ellipsis
                                 )
 
-                                Text(
-                                    text = if (isEnglish) {
-                                        "For trainees, coaches and managers"
-                                    } else {
-                                        "למתאמנים, למאמנים ולמנהלים"
-                                    },
-                                    style =
-                                        KmiTypography.secondary,
-                                    color = reportSecondaryTextColor,
-                                    textAlign = screenTextAlign,
-                                    modifier = Modifier.fillMaxWidth(),
-                                    maxLines = 1
-                                )
-
-                                Text(
-                                    text = if (isEnglish) {
-                                        "Collected ₪${"%.0f".format(totalPaid)} of ₪${"%.0f".format(totalRequired)}"
-                                    } else {
-                                        "נגבה ₪${"%.0f".format(totalPaid)} מתוך ₪${"%.0f".format(totalRequired)}"
-                                    },
-                                    style =
-                                        KmiTypography.secondary,
-                                    color = reportAccentTextColor,
-                                    fontWeight = FontWeight.Bold,
-                                    textAlign = screenTextAlign,
-                                    modifier = Modifier.fillMaxWidth(),
-                                    maxLines = 1
-                                )
-                            }
-                        }
-
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(12.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            SummaryCard(
-                                modifier =
-                                    Modifier
-                                        .weight(1f)
-                                        .heightIn(
-                                            min = 96.dp
-                                        ),
-                                title = if (isEnglish) "Collection" else "אחוז גבייה",
-                                value = "${"%.0f".format(collectionPercent)}%",
-                                icon = Icons.Default.TrendingUp,
-                                selected = false,
-                                baseColor = Color(0xFF1DA1F2),
-                                selectedColor = Color(0xFF0284C7),
-                                onClick = {}
-                            )
-
-                            SummaryCard(
-                                modifier =
-                                    Modifier
-                                        .weight(1f)
-                                        .heightIn(
-                                            min = 96.dp
-                                        ),
-                                title = if (isEnglish) "Trainees" else "מתאמנים",
-                                value = items.size.toString(),
-                                icon = Icons.Default.Groups,
-                                selected = filter == "ALL",
-                                baseColor = Color(0xFF8B5CF6),
-                                selectedColor = Color(0xFF7C3AED),
-                                onClick = {
-                                    filter = "ALL"
-                                }
-                            )
-                        }
-
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(12.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            SummaryCard(
-                                modifier =
-                                    Modifier
-                                        .weight(1f)
-                                        .heightIn(
-                                            min = 96.dp
-                                        ),
-                                title = unpaidText,
-                                value = unpaidCount.toString(),
-                                icon = Icons.Default.PersonOff,
-                                selected = filter == "UNPAID",
-                                baseColor = Color(0xFFFF7A59),
-                                selectedColor = Color(0xFFFF5A36),
-                                onClick = {
-                                    filter = "UNPAID"
-                                }
-                            )
-
-                            SummaryCard(
-                                modifier =
-                                    Modifier
-                                        .weight(1f)
-                                        .heightIn(
-                                            min = 96.dp
-                                        ),
-                                title = paidText,
-                                value = paidCount.toString(),
-                                icon = Icons.Default.Paid,
-                                selected = filter == "PAID",
-                                baseColor = Color(0xFF22C55E),
-                                selectedColor = Color(0xFF16A34A),
-                                onClick = {
-                                    filter = "PAID"
-                                }
-                            )
-                        }
-                    }
-                }
-
-                Spacer(Modifier.height(8.dp))
-
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(28.dp),
-                    colors = CardDefaults.cardColors(
-                        containerColor = reportPanelColor
-                    )
-                ) {
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(16.dp),
-                        verticalArrangement = Arrangement.spacedBy(12.dp)
-                    ) {
-                        Text(
-                            text = if (isEnglish) "Search & filters" else "חיפוש וסינון",
-                            color = reportTitleColor,
-                            style =
-                                KmiTypography.cardTitle,
-                            fontWeight = FontWeight.ExtraBold,
-                            modifier = Modifier.fillMaxWidth(),
-                            textAlign = if (isEnglish) TextAlign.Left else TextAlign.Right
-                        )
-
-                        BranchDropdown(
-                            isEnglish = isEnglish,
-                            selectedBranch = selectedBranch,
-                            branchOptions = branchOptions,
-                            onBranchSelected = { selectedBranch = it }
-                        )
-
-                        OutlinedTextField(
-                            value = query,
-                            onValueChange = { query = it },
-                            modifier =
-                                Modifier
-                                    .fillMaxWidth()
-                                    .heightIn(
-                                        min = 52.dp
-                                    ),
-                            singleLine = true,
-                            label = {
                                 Text(
                                     text =
                                         if (isEnglish) {
-                                            "Search by name / phone / branch"
+                                            "For trainees, coaches and managers"
                                         } else {
-                                            "חיפוש לפי שם / טלפון / סניף"
+                                            "למתאמנים, למאמנים ולמנהלים"
                                         },
                                     style =
-                                        KmiTypography.caption,
-                                    maxLines = 1
-                                )
-                            },
-                            leadingIcon = {
-                                Icon(
-                                    imageVector = Icons.Default.Search,
-                                    contentDescription = null,
-                                    modifier = Modifier.size(KmiIconSize.small)
-                                )
-                            },
-                            textStyle =
-                                KmiTypography.secondary.copy(
-                                    textAlign =
-                                        if (isEnglish) {
-                                            TextAlign.Start
-                                        } else {
-                                            TextAlign.End
-                                        },
-                                    color = reportTitleColor
-                                ),
-                            colors = reportFieldColors()
-                        )
-
-                        FilterRow(
-                            isEnglish = isEnglish,
-                            selected = filter,
-                            onSelect = { filter = it }
-                        )
-
-                        Text(
-                            text = if (isEnglish)
-                                "Results: ${filteredItems.size}"
-                            else
-                                "תוצאות: ${filteredItems.size}",
-                            color = reportSecondaryTextColor,
-                            style =
-                                KmiTypography.caption,
-                            textAlign = if (isEnglish) TextAlign.Start else TextAlign.End,
-                            modifier = Modifier.fillMaxWidth()
-                        )
-                    }
-                }
-
-                Spacer(Modifier.height(12.dp))
-
-                Column(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalArrangement = Arrangement.spacedBy(10.dp)
-                ) {
-                    when {
-                        isLoadingPayments -> {
-                            Card(
-                                modifier =
-                                    Modifier.fillMaxWidth(),
-                                shape =
-                                    RoundedCornerShape(24.dp),
-                                colors =
-                                    CardDefaults.cardColors(
-                                        containerColor =
-                                            reportPanelColor
-                                    ),
-                                elevation =
-                                    CardDefaults.cardElevation(
-                                        defaultElevation = 0.dp
-                                    )
-                            ) {
-                                PaymentsPremiumLoading(
-                                    text =
-                                        if (isEnglish) {
-                                            "Loading payment data..."
-                                        } else {
-                                            "טוען נתוני תשלום..."
-                                        },
-                                    modifier =
-                                        Modifier.padding(
-                                            horizontal = 12.dp,
-                                            vertical = 8.dp
-                                        )
-                                )
-                            }
-                        }
-
-                        paymentsError != null -> {
-                            Card(
-                                modifier = Modifier.fillMaxWidth(),
-                                shape = RoundedCornerShape(24.dp),
-                                colors = CardDefaults.cardColors(
-                                    containerColor = MaterialTheme.colorScheme.errorContainer
-                                )
-                            ) {
-                                Text(
-                                    text = if (isEnglish) {
-                                        "Failed loading payments: $paymentsError"
-                                    } else {
-                                        "טעינת התשלומים נכשלה: $paymentsError"
-                                    },
+                                        KmiTypography.secondary,
                                     color =
-                                        MaterialTheme
-                                            .colorScheme
-                                            .onErrorContainer,
-                                    style =
-                                        KmiTypography.body.copy(
-                                            fontWeight =
-                                                FontWeight.Bold
-                                        ),
-                                    modifier =
-                                        Modifier.padding(16.dp),
-                                    textAlign = if (isEnglish) TextAlign.Start else TextAlign.End
+                                        reportSecondaryTextColor,
+                                    textAlign = TextAlign.Start,
+                                    modifier = Modifier.fillMaxWidth(),
+                                    maxLines = 1,
+                                    overflow =
+                                        TextOverflow.Ellipsis
                                 )
-                            }
-                        }
 
-                        filteredItems.isEmpty() -> {
-                            Card(
-                                modifier = Modifier.fillMaxWidth(),
-                                shape = RoundedCornerShape(24.dp),
-                                colors = CardDefaults.cardColors(
-                                    containerColor = reportPanelColor
-                                )
-                            ) {
                                 Text(
-                                    text = if (isEnglish) {
-                                        "No trainees matched the current filters."
-                                    } else {
-                                        "לא נמצאו מתאמנים בהתאם לסינון הנוכחי."
-                                    },
-                                    color = reportTitleColor,
+                                    text =
+                                        if (isEnglish) {
+                                            "Collected ₪${"%.0f".format(totalPaid)} of ₪${
+                                                "%.0f".format(
+                                                    totalRequired
+                                                )
+                                            }"
+                                        } else {
+                                            "נגבה ₪${"%.0f".format(totalPaid)} מתוך ₪${
+                                                "%.0f".format(
+                                                    totalRequired
+                                                )
+                                            }"
+                                        },
                                     style =
-                                        KmiTypography.body.copy(
-                                            fontWeight =
-                                                FontWeight.Bold
-                                        ),
-                                    modifier =
-                                        Modifier.padding(16.dp),
-                                    textAlign = if (isEnglish) TextAlign.Start else TextAlign.End
+                                        KmiTypography.secondary,
+                                    color =
+                                        reportAccentTextColor,
+                                    fontWeight = FontWeight.Bold,
+                                    textAlign = TextAlign.Start,
+                                    modifier = Modifier.fillMaxWidth(),
+                                    maxLines = 1,
+                                    overflow =
+                                        TextOverflow.Ellipsis
                                 )
                             }
-                        }
 
-                        else -> {
-                            filteredItems.forEachIndexed {
-                                    index,
-                                    item ->
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                SummaryCard(
+                                    modifier =
+                                        Modifier
+                                            .weight(1f)
+                                            .heightIn(
+                                                min = 96.dp
+                                            ),
+                                    title = if (isEnglish) "Collection" else "אחוז גבייה",
+                                    value = "${"%.0f".format(collectionPercent)}%",
+                                    icon =
+                                        Icons.AutoMirrored.Filled.TrendingUp,
+                                    selected = false,
+                                    baseColor = Color(0xFF1DA1F2),
+                                    selectedColor = Color(0xFF0284C7),
+                                    onClick = {}
+                                )
 
-                                PaymentReportRow(
-                                    item = item,
-                                    demoIndex = index + 1,
-                                    isEnglish = isEnglish,
-                                    onManualUpdate = {
-                                        manualDialogItem = item
+                                SummaryCard(
+                                    modifier =
+                                        Modifier
+                                            .weight(1f)
+                                            .heightIn(
+                                                min = 96.dp
+                                            ),
+                                    title = if (isEnglish) "Trainees" else "מתאמנים",
+                                    value = items.size.toString(),
+                                    icon = Icons.Default.Groups,
+                                    selected = filter == "ALL",
+                                    baseColor = Color(0xFF8B5CF6),
+                                    selectedColor = Color(0xFF7C3AED),
+                                    onClick = {
+                                        filter = "ALL"
+                                    }
+                                )
+                            }
+
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                SummaryCard(
+                                    modifier =
+                                        Modifier
+                                            .weight(1f)
+                                            .heightIn(
+                                                min = 96.dp
+                                            ),
+                                    title = unpaidText,
+                                    value = unpaidCount.toString(),
+                                    icon = Icons.Default.PersonOff,
+                                    selected = filter == "UNPAID",
+                                    baseColor = Color(0xFFFF7A59),
+                                    selectedColor = Color(0xFFFF5A36),
+                                    onClick = {
+                                        filter = "UNPAID"
+                                    }
+                                )
+
+                                SummaryCard(
+                                    modifier =
+                                        Modifier
+                                            .weight(1f)
+                                            .heightIn(
+                                                min = 96.dp
+                                            ),
+                                    title = paidText,
+                                    value = paidCount.toString(),
+                                    icon = Icons.Default.Paid,
+                                    selected = filter == "PAID",
+                                    baseColor = Color(0xFF22C55E),
+                                    selectedColor = Color(0xFF16A34A),
+                                    onClick = {
+                                        filter = "PAID"
                                     }
                                 )
                             }
                         }
                     }
 
-                    Spacer(Modifier.height(16.dp))
+                    Spacer(Modifier.height(8.dp))
+
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(28.dp),
+                        colors = CardDefaults.cardColors(
+                            containerColor = reportPanelColor
+                        )
+                    ) {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(16.dp),
+                            verticalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
+                            Text(
+                                text = if (isEnglish) "Search & filters" else "חיפוש וסינון",
+                                color = reportTitleColor,
+                                style =
+                                    KmiTypography.cardTitle,
+                                fontWeight = FontWeight.ExtraBold,
+                                modifier = Modifier.fillMaxWidth(),
+                                textAlign = if (isEnglish) TextAlign.Left else TextAlign.Right
+                            )
+
+                            BranchDropdown(
+                                isEnglish = isEnglish,
+                                selectedBranch = selectedBranch,
+                                branchOptions = branchOptions,
+                                onBranchSelected = { selectedBranch = it }
+                            )
+
+                            OutlinedTextField(
+                                value = query,
+                                onValueChange = { query = it },
+                                modifier =
+                                    Modifier
+                                        .fillMaxWidth()
+                                        .heightIn(
+                                            min = 52.dp
+                                        ),
+                                singleLine = true,
+                                label = {
+                                    Text(
+                                        text =
+                                            if (isEnglish) {
+                                                "Search by name / phone / branch"
+                                            } else {
+                                                "חיפוש לפי שם / טלפון / סניף"
+                                            },
+                                        style =
+                                            KmiTypography.caption,
+                                        maxLines = 1
+                                    )
+                                },
+                                leadingIcon = {
+                                    Icon(
+                                        imageVector = Icons.Default.Search,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(KmiIconSize.small)
+                                    )
+                                },
+                                textStyle =
+                                    KmiTypography.secondary.copy(
+                                        textAlign =
+                                            if (isEnglish) {
+                                                TextAlign.Start
+                                            } else {
+                                                TextAlign.End
+                                            },
+                                        color = reportTitleColor
+                                    ),
+                                colors = reportFieldColors()
+                            )
+
+                            FilterRow(
+                                isEnglish = isEnglish,
+                                selected = filter,
+                                onSelect = { filter = it }
+                            )
+
+                            Text(
+                                text = if (isEnglish)
+                                    "Results: ${filteredItems.size}"
+                                else
+                                    "תוצאות: ${filteredItems.size}",
+                                color = reportSecondaryTextColor,
+                                style =
+                                    KmiTypography.caption,
+                                textAlign = if (isEnglish) TextAlign.Start else TextAlign.End,
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                        }
+                    }
+
+                    Spacer(Modifier.height(12.dp))
+
+                    Column(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        when {
+                            isLoadingPayments -> {
+                                Card(
+                                    modifier =
+                                        Modifier.fillMaxWidth(),
+                                    shape =
+                                        RoundedCornerShape(24.dp),
+                                    colors =
+                                        CardDefaults.cardColors(
+                                            containerColor =
+                                                reportPanelColor
+                                        ),
+                                    elevation =
+                                        CardDefaults.cardElevation(
+                                            defaultElevation = 0.dp
+                                        )
+                                ) {
+                                    PaymentsPremiumLoading(
+                                        text =
+                                            if (isEnglish) {
+                                                "Loading payment data..."
+                                            } else {
+                                                "טוען נתוני תשלום..."
+                                            },
+                                        modifier =
+                                            Modifier.padding(
+                                                horizontal = 12.dp,
+                                                vertical = 8.dp
+                                            )
+                                    )
+                                }
+                            }
+
+                            paymentsError != null -> {
+                                Card(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    shape = RoundedCornerShape(24.dp),
+                                    colors = CardDefaults.cardColors(
+                                        containerColor = MaterialTheme.colorScheme.errorContainer
+                                    )
+                                ) {
+                                    Text(
+                                        text = if (isEnglish) {
+                                            "Failed loading payments: $paymentsError"
+                                        } else {
+                                            "טעינת התשלומים נכשלה: $paymentsError"
+                                        },
+                                        color =
+                                            MaterialTheme
+                                                .colorScheme
+                                                .onErrorContainer,
+                                        style =
+                                            KmiTypography.body.copy(
+                                                fontWeight =
+                                                    FontWeight.Bold
+                                            ),
+                                        modifier =
+                                            Modifier.padding(16.dp),
+                                        textAlign = if (isEnglish) TextAlign.Start else TextAlign.End
+                                    )
+                                }
+                            }
+
+                            filteredItems.isEmpty() -> {
+                                Card(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    shape = RoundedCornerShape(24.dp),
+                                    colors = CardDefaults.cardColors(
+                                        containerColor = reportPanelColor
+                                    )
+                                ) {
+                                    Text(
+                                        text = if (isEnglish) {
+                                            "No trainees matched the current filters."
+                                        } else {
+                                            "לא נמצאו מתאמנים בהתאם לסינון הנוכחי."
+                                        },
+                                        color = reportTitleColor,
+                                        style =
+                                            KmiTypography.body.copy(
+                                                fontWeight =
+                                                    FontWeight.Bold
+                                            ),
+                                        modifier =
+                                            Modifier.padding(16.dp),
+                                        textAlign = if (isEnglish) TextAlign.Start else TextAlign.End
+                                    )
+                                }
+                            }
+
+                            else -> {
+                                filteredItems.forEachIndexed { index,
+                                                               item ->
+
+                                    PaymentReportRow(
+                                        item = item,
+                                        demoIndex = index + 1,
+                                        isEnglish = isEnglish,
+                                        onManualUpdate = {
+                                            manualDialogItem = item
+                                        }
+                                    )
+                                }
+                            }
+                        }
+
+                        Spacer(Modifier.height(16.dp))
+                    }
+                }
+
+                manualDialogItem?.let { selected ->
+                    val selectedDemoIndex =
+                        filteredItems
+                            .indexOfFirst { item ->
+                                item.traineeId ==
+                                        selected.traineeId
+                            }
+                            .takeIf { index ->
+                                index >= 0
+                            }
+                            ?.plus(1)
+
+                    ManualPaymentDialog(
+                        isEnglish = isEnglish,
+                        item = selected,
+                        demoIndex = selectedDemoIndex,
+                        onDismiss = {
+                            manualDialogItem = null
+                        },
+                        onSave = { amount, method, notes ->
+                            screenScope.launch {
+                                runCatching {
+                                    saveManualMembershipPaymentToFirestore(
+                                        item = selected,
+                                        amountToAdd = amount,
+                                        method = method,
+                                        notes = notes
+                                    )
+                                }.onSuccess { updatedItem ->
+                                    items = items.map { current ->
+                                        if (current.traineeId == selected.traineeId) {
+                                            updatedItem
+                                        } else {
+                                            current
+                                        }
+                                    }
+
+                                    onSaveManualPayment(
+                                        selected.traineeId,
+                                        amount,
+                                        method,
+                                        notes
+                                    )
+
+                                    manualDialogItem = null
+                                }.onFailure { error ->
+                                    paymentsError =
+                                        error.localizedMessage ?: "Failed saving payment"
+                                    manualDialogItem = null
+                                }
+                            }
+                        }
+                    )
                 }
             }
-
-            manualDialogItem?.let { selected ->
-                val selectedDemoIndex =
-                    filteredItems
-                        .indexOfFirst { item ->
-                            item.traineeId ==
-                                    selected.traineeId
-                        }
-                        .takeIf { index ->
-                            index >= 0
-                        }
-                        ?.plus(1)
-
-                ManualPaymentDialog(
-                    isEnglish = isEnglish,
-                    item = selected,
-                    demoIndex = selectedDemoIndex,
-                    onDismiss = {
-                        manualDialogItem = null
-                    },
-                    onSave = { amount, method, notes ->
-                        screenScope.launch {
-                            runCatching {
-                                saveManualMembershipPaymentToFirestore(
-                                    item = selected,
-                                    amountToAdd = amount,
-                                    method = method,
-                                    notes = notes
-                                )
-                            }.onSuccess { updatedItem ->
-                                items = items.map { current ->
-                                    if (current.traineeId == selected.traineeId) {
-                                        updatedItem
-                                    } else {
-                                        current
-                                    }
-                                }
-
-                                onSaveManualPayment(
-                                    selected.traineeId,
-                                    amount,
-                                    method,
-                                    notes
-                                )
-
-                                manualDialogItem = null
-                            }.onFailure { error ->
-                                paymentsError = error.localizedMessage ?: "Failed saving payment"
-                                manualDialogItem = null
-                            }
-                        }
-                    }
-                )
-            }
-        }
-    }
+        } // סוף Scaffold
+    } // סוף KmiLanguageDirection
 }
 
 @Composable
@@ -1587,11 +1436,9 @@ private fun FilterChipSimple(
         shape = RoundedCornerShape(16.dp),
         color =
             if (selected) {
-                Color(0xFF7B57D1)
+                MaterialTheme.colorScheme.primary
             } else {
-                MaterialTheme
-                    .colorScheme
-                    .surfaceVariant
+                MaterialTheme.colorScheme.surfaceVariant
             },
         tonalElevation = 0.dp,
         shadowElevation = 0.dp,
@@ -1600,11 +1447,9 @@ private fun FilterChipSimple(
                 width = 1.dp,
                 color =
                     if (selected) {
-                        Color(0xFF7B57D1)
+                        MaterialTheme.colorScheme.primary
                     } else {
-                        MaterialTheme
-                            .colorScheme
-                            .outlineVariant
+                        MaterialTheme.colorScheme.outlineVariant
                     }
             )
     ) {
@@ -1681,126 +1526,107 @@ private fun PaymentReportRow(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 12.dp, vertical = 10.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
+                .padding(
+                    horizontal = 12.dp,
+                    vertical = 10.dp
+                ),
+            verticalArrangement =
+                Arrangement.spacedBy(8.dp)
         ) {
-            val rowLayoutDirection =
-                if (isEnglish) {
-                    LayoutDirection.Ltr
-                } else {
-                    LayoutDirection.Rtl
-                }
-
-            val rowTextAlign =
-                if (isEnglish) {
-                    TextAlign.Start
-                } else {
-                    TextAlign.End
-                }
-
-            val rowHorizontalAlignment =
-                if (isEnglish) {
-                    Alignment.Start
-                } else {
-                    Alignment.End
-                }
-
-            CompositionLocalProvider(
-                LocalLayoutDirection provides
-                        rowLayoutDirection
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.Top
             ) {
-                Row(
-                    modifier =
-                        Modifier.fillMaxWidth(),
-                    verticalAlignment =
-                        Alignment.Top
+                Column(
+                    modifier = Modifier.weight(1f),
+                    horizontalAlignment = Alignment.Start
                 ) {
-                    Column(
+                    Text(
+                        text =
+                            item.demoSafeName(
+                                isEnglish = isEnglish,
+                                demoIndex = demoIndex
+                            ),
+                        color = cardPrimaryTextColor,
+                        style =
+                            KmiTypography.cardTitle,
+                        fontWeight =
+                            FontWeight.ExtraBold,
+                        textAlign =
+                            TextAlign.Start,
                         modifier =
-                            Modifier.weight(1f),
-                        horizontalAlignment =
-                            rowHorizontalAlignment
-                    ) {
-                        Text(
-                            text =
-                                item.demoSafeName(
-                                    isEnglish = isEnglish,
-                                    demoIndex = demoIndex
-                                ),
-                            color = cardPrimaryTextColor,
-                            style =
-                                KmiTypography.cardTitle,
-                            fontWeight =
-                                FontWeight.ExtraBold,
-                            textAlign =
-                                rowTextAlign,
-                            modifier =
-                                Modifier.fillMaxWidth(),
-                            maxLines = 2
-                        )
-
-                        Spacer(
-                            Modifier.height(3.dp)
-                        )
-
-                        Text(
-                            text =
-                                listOf(
-                                    item.branchName,
-                                    item.phone
-                                )
-                                    .filter {
-                                        it.isNotBlank()
-                                    }
-                                    .joinToString(" • "),
-                            color =
-                                cardSecondaryTextColor,
-                            style =
-                                KmiTypography.caption,
-                            textAlign =
-                                rowTextAlign,
-                            modifier =
-                                Modifier.fillMaxWidth(),
-                            maxLines = 1
-                        )
-                    }
-
-                    Spacer(
-                        Modifier.width(8.dp)
+                            Modifier.fillMaxWidth(),
+                        maxLines = 2,
+                        overflow =
+                            TextOverflow.Ellipsis
                     )
 
-                    Surface(
-                        shape =
-                            RoundedCornerShape(14.dp),
+                    Spacer(
+                        Modifier.height(3.dp)
+                    )
+
+                    Text(
+                        text =
+                            listOf(
+                                item.branchName,
+                                item.demoSafePhone(
+                                    isEnglish = isEnglish,
+                                    demoIndex = demoIndex
+                                )
+                            )
+                                .filter {
+                                    it.isNotBlank()
+                                }
+                                .joinToString(" • "),
                         color =
-                            statusColor(item.status)
-                                .copy(alpha = 0.18f),
-                        tonalElevation = 0.dp,
-                        shadowElevation = 0.dp
-                    ) {
-                        Text(
-                            text =
-                                statusLabel(
-                                    item.status,
-                                    isEnglish
-                                ),
-                            color =
-                                statusColor(
-                                    item.status
-                                ),
-                            modifier =
-                                Modifier.padding(
-                                    horizontal = 9.dp,
-                                    vertical = 5.dp
-                                ),
-                            style =
-                                KmiTypography.caption,
-                            fontWeight =
-                                FontWeight.Bold,
-                            textAlign =
-                                TextAlign.Center
-                        )
-                    }
+                            cardSecondaryTextColor,
+                        style =
+                            KmiTypography.caption,
+                        textAlign =
+                            TextAlign.Start,
+                        modifier =
+                            Modifier.fillMaxWidth(),
+                        maxLines = 1,
+                        overflow =
+                            TextOverflow.Ellipsis
+                    )
+                }
+
+                Spacer(
+                    Modifier.width(8.dp)
+                )
+
+                Surface(
+                    shape =
+                        RoundedCornerShape(14.dp),
+                    color =
+                        statusColor(item.status)
+                            .copy(alpha = 0.18f),
+                    tonalElevation = 0.dp,
+                    shadowElevation = 0.dp
+                ) {
+                    Text(
+                        text =
+                            statusLabel(
+                                item.status,
+                                isEnglish
+                            ),
+                        color =
+                            statusColor(
+                                item.status
+                            ),
+                        modifier =
+                            Modifier.padding(
+                                horizontal = 9.dp,
+                                vertical = 5.dp
+                            ),
+                        style =
+                            KmiTypography.caption,
+                        fontWeight =
+                            FontWeight.Bold,
+                        textAlign =
+                            TextAlign.Center
+                    )
                 }
             }
 
@@ -1821,26 +1647,23 @@ private fun PaymentReportRow(
                 style =
                     KmiTypography.secondary,
                 fontWeight = FontWeight.Bold,
-                textAlign = if (isEnglish) TextAlign.Start else TextAlign.End,
+                textAlign = TextAlign.Start,
                 modifier = Modifier.fillMaxWidth()
             )
 
             if (item.paymentDate.isNotBlank()) {
                 Text(
-                    text = if (isEnglish)
-                        "Last update: ${item.paymentDate}"
-                    else
-                        "עדכון אחרון: ${item.paymentDate}",
+                    text =
+                        if (isEnglish) {
+                            "Last update: ${item.paymentDate}"
+                        } else {
+                            "עדכון אחרון: ${item.paymentDate}"
+                        },
                     color =
                         cardSecondaryTextColor,
                     style =
                         KmiTypography.caption,
-                    textAlign =
-                        if (isEnglish) {
-                            TextAlign.Start
-                        } else {
-                            TextAlign.End
-                        },
+                    textAlign = TextAlign.Start,
                     modifier = Modifier.fillMaxWidth()
                 )
             }
@@ -1850,21 +1673,40 @@ private fun PaymentReportRow(
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(18.dp),
                 colors = ButtonDefaults.buttonColors(
-                    containerColor = Color(0xFF7B57D1),
-                    contentColor = Color.White
-                )
+                    containerColor =
+                        MaterialTheme.colorScheme.primary,
+                    contentColor =
+                        MaterialTheme.colorScheme.onPrimary
+                ),
+                elevation =
+                    ButtonDefaults.buttonElevation(
+                        defaultElevation = 0.dp,
+                        pressedElevation = 0.dp,
+                        focusedElevation = 0.dp,
+                        hoveredElevation = 0.dp,
+                        disabledElevation = 0.dp
+                    )
             ) {
                 Icon(
                     imageVector = Icons.Default.AddCard,
                     contentDescription = null,
                     modifier = Modifier.size(KmiIconSize.medium)
                 )
-                Spacer(Modifier.height(0.dp).width(8.dp))
+                Spacer(
+                    modifier = Modifier.width(8.dp)
+                )
                 Text(
-                    text = if (isEnglish) "Add Membership Payment" else "הוסף דמי חבר",
-                    style =
-                        KmiTypography.action,
-                    fontWeight = FontWeight.Bold
+                    text =
+                        if (isEnglish) {
+                            "Add Membership Payment"
+                        } else {
+                            "הוסף דמי חבר"
+                        },
+                    style = KmiTypography.action,
+                    fontWeight = FontWeight.Bold,
+                    maxLines = 1,
+                    overflow =
+                        TextOverflow.Ellipsis
                 )
             }
         }
@@ -2170,12 +2012,16 @@ private fun createPaymentsReportPdf(
     val boldTypeface =
         Typeface.create(Typeface.SANS_SERIF, Typeface.BOLD)
 
-    val textPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        typeface = regularTypeface
-        textSize = 10.5f
-        color = textDark
-        textAlign = if (isEnglish) Paint.Align.LEFT else Paint.Align.RIGHT
-    }
+    val textPaint =
+        Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            typeface = regularTypeface
+            textSize = 10.5f
+            color = textDark
+            textAlign =
+                KmiPdfDirection.textAlign(
+                    isEnglish = isEnglish
+                )
+        }
 
     val titlePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         typeface = boldTypeface
@@ -2220,7 +2066,24 @@ private fun createPaymentsReportPdf(
     var canvas = page.canvas
     var y = 174f
 
-    fun textX(): Float = if (isEnglish) margin else pageWidth - margin
+    fun textX(): Float =
+        KmiPdfDirection.startX(
+            isEnglish = isEnglish,
+            left = margin,
+            right = pageWidth.toFloat() - margin
+        )
+
+    fun columnXs(
+        vararg paddings: Float
+    ): List<Float> =
+        paddings.map { padding ->
+            KmiPdfDirection.startPaddingX(
+                isEnglish = isEnglish,
+                left = margin,
+                right = pageWidth.toFloat() - margin,
+                padding = padding
+            )
+        }
 
     fun statusPdfColor(status: PaymentStatus): Int {
         return when (status) {
@@ -2320,13 +2183,21 @@ private fun createPaymentsReportPdf(
         )
 
         titlePaint.textAlign =
-            if (isEnglish) Paint.Align.LEFT else Paint.Align.RIGHT
+            KmiPdfDirection.textAlign(
+                isEnglish = isEnglish
+            )
 
         subtitlePaint.textAlign =
-            if (isEnglish) Paint.Align.LEFT else Paint.Align.RIGHT
+            KmiPdfDirection.textAlign(
+                isEnglish = isEnglish
+            )
 
         val headerTextX =
-            if (isEnglish) 308f else headerTextRight
+            KmiPdfDirection.startX(
+                isEnglish = isEnglish,
+                left = 308f,
+                right = headerTextRight
+            )
 
         canvas.drawText(
             tr(
@@ -2449,27 +2320,20 @@ private fun createPaymentsReportPdf(
             bg
         )
 
-        headerPaint.textAlign = if (isEnglish) Paint.Align.LEFT else Paint.Align.RIGHT
+        headerPaint.textAlign =
+            KmiPdfDirection.textAlign(
+                isEnglish = isEnglish
+            )
 
-        val cols = if (isEnglish) {
-            listOf(
-                margin + 14f,
-                margin + 168f,
-                margin + 250f,
-                margin + 324f,
-                margin + 394f,
-                margin + 462f
+        val cols =
+            columnXs(
+                14f,
+                168f,
+                250f,
+                324f,
+                394f,
+                462f
             )
-        } else {
-            listOf(
-                pageWidth - margin - 14f,
-                pageWidth - margin - 168f,
-                pageWidth - margin - 250f,
-                pageWidth - margin - 324f,
-                pageWidth - margin - 394f,
-                pageWidth - margin - 462f
-            )
-        }
 
         listOf(
             tr("שם", "Name"),
@@ -2510,33 +2374,43 @@ private fun createPaymentsReportPdf(
             color = statusPdfColor(item.status)
         }
 
-        val dotX = if (isEnglish) margin + 7f else pageWidth - margin - 7f
-        canvas.drawCircle(dotX, y - 3f, 4f, dot)
+        val dotX =
+            KmiPdfDirection.startPaddingX(
+                isEnglish = isEnglish,
+                left = margin,
+                right = pageWidth.toFloat() - margin,
+                padding = 7f
+            )
 
-        textPaint.textAlign = if (isEnglish) Paint.Align.LEFT else Paint.Align.RIGHT
-        textPaint.color = android.graphics.Color.rgb(15, 23, 42)
-        textPaint.typeface = Typeface.create(Typeface.SANS_SERIF, Typeface.NORMAL)
+        canvas.drawCircle(
+            dotX,
+            y - 3f,
+            4f,
+            dot
+        )
+
+        textPaint.textAlign =
+            KmiPdfDirection.textAlign(
+                isEnglish = isEnglish
+            )
+        textPaint.color =
+            android.graphics.Color.rgb(
+                15,
+                23,
+                42
+            )
+        textPaint.typeface = regularTypeface
         textPaint.textSize = 10f
 
-        val cols = if (isEnglish) {
-            listOf(
-                margin + 16f,
-                margin + 168f,
-                margin + 250f,
-                margin + 324f,
-                margin + 394f,
-                margin + 462f
+        val cols =
+            columnXs(
+                16f,
+                168f,
+                250f,
+                324f,
+                394f,
+                462f
             )
-        } else {
-            listOf(
-                pageWidth - margin - 16f,
-                pageWidth - margin - 168f,
-                pageWidth - margin - 250f,
-                pageWidth - margin - 324f,
-                pageWidth - margin - 394f,
-                pageWidth - margin - 462f
-            )
-        }
 
         val values = listOf(
             item
@@ -2550,8 +2424,16 @@ private fun createPaymentsReportPdf(
                 .take(12),
             "₪${"%.0f".format(item.requiredAmount)}",
             "₪${"%.0f".format(item.paidAmount)}",
-            statusLabel(item.status, isEnglish).take(12),
-            item.phone.ifBlank { "—" }.take(13)
+            statusLabel(
+                item.status,
+                isEnglish
+            ).take(12),
+            item.demoSafePhone(
+                isEnglish = isEnglish,
+                demoIndex = index + 1
+            )
+                .ifBlank { "—" }
+                .take(13)
         )
 
         values.forEachIndexed { colIndex, value ->
@@ -2563,7 +2445,10 @@ private fun createPaymentsReportPdf(
 
     drawHeader()
 
-    sectionPaint.textAlign = if (isEnglish) Paint.Align.LEFT else Paint.Align.RIGHT
+    sectionPaint.textAlign =
+        KmiPdfDirection.textAlign(
+            isEnglish = isEnglish
+        )
     canvas.drawText(
         tr("סיכום גבייה", "Collection Summary"),
         textX(),
@@ -2573,14 +2458,51 @@ private fun createPaymentsReportPdf(
 
     y += 14f
 
-    drawSummaryTile(0, tr("גבייה", "Collection"), "${"%.0f".format(collectionPercent)}%")
-    drawSummaryTile(1, tr("נגבה", "Collected"), "₪${"%.0f".format(totalPaid)}")
-    drawSummaryTile(2, tr("שילמו", "Paid"), paidCount.toString())
-    drawSummaryTile(3, tr("לא שילמו", "Unpaid"), unpaidCount.toString())
+    drawSummaryTile(
+        index = 0,
+        label = tr(
+            "גבייה",
+            "Collection"
+        ),
+        value =
+            "${"%.0f".format(collectionPercent)}%"
+    )
+
+    drawSummaryTile(
+        index = 1,
+        label = tr(
+            "נגבה / נדרש",
+            "Paid / Required"
+        ),
+        value =
+            "₪${"%.0f".format(totalPaid)}/" +
+                    "₪${"%.0f".format(totalRequired)}"
+    )
+
+    drawSummaryTile(
+        index = 2,
+        label = tr(
+            "שילמו",
+            "Paid"
+        ),
+        value = paidCount.toString()
+    )
+
+    drawSummaryTile(
+        index = 3,
+        label = tr(
+            "לא שילמו",
+            "Unpaid"
+        ),
+        value = unpaidCount.toString()
+    )
 
     y += 82f
 
-    sectionPaint.textAlign = if (isEnglish) Paint.Align.LEFT else Paint.Align.RIGHT
+    sectionPaint.textAlign =
+        KmiPdfDirection.textAlign(
+            isEnglish = isEnglish
+        )
     canvas.drawText(
         tr("פירוט מתאמנים", "Trainee Details"),
         textX(),
@@ -2602,21 +2524,20 @@ private fun createPaymentsReportPdf(
         File(
             context.cacheDir,
             "shared_pdfs"
-        ).apply {
-            mkdirs()
-        }
+        )
 
-    val reportDate =
-        SimpleDateFormat(
-            "dd-MM-yyyy",
-            Locale.getDefault()
-        ).format(Date())
+    check(
+        dir.exists() ||
+                dir.mkdirs()
+    ) {
+        "Unable to create PDF sharing directory"
+    }
 
     val reportFileName =
         if (isEnglish) {
-            "Payments_Report_$reportDate.pdf"
+            "Payments Report.pdf"
         } else {
-            "דוח_תשלומים_$reportDate.pdf"
+            "דוח תשלומים.pdf"
         }
 
     val file =
@@ -2625,13 +2546,16 @@ private fun createPaymentsReportPdf(
             reportFileName
         )
 
-    FileOutputStream(
-        file,
-        false
-    ).use { output ->
-        document.writeTo(output)
+    try {
+        FileOutputStream(
+            file,
+            false
+        ).use { output ->
+            document.writeTo(output)
+        }
+    } finally {
+        document.close()
     }
 
-    document.close()
     return file
 }
