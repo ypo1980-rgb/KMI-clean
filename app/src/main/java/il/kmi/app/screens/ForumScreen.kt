@@ -3,8 +3,15 @@ package il.kmi.app.screens
 
 import android.content.Intent
 import android.content.SharedPreferences
+import android.graphics.Paint
+import android.graphics.pdf.PdfDocument
 import android.net.Uri
 import android.widget.Toast
+import androidx.core.content.FileProvider
+import il.kmi.app.ui.pdf.KmiPdfFooter
+import il.kmi.app.ui.pdf.KmiPdfHeader
+import java.io.File
+import java.io.FileOutputStream
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
@@ -135,11 +142,13 @@ private data class ForumParticipantUi(
 private fun forumDisplayPersonName(
     realName: String?,
     stableKey: String?,
+    demoIndex: Int?,
     isEnglish: Boolean
 ): String {
     return TraineeDisplayNameMapper.displayName(
         realName = realName,
         stableKey = stableKey,
+        demoIndex = demoIndex,
         isEnglish = isEnglish
     ).ifBlank {
         forumTr(
@@ -155,6 +164,519 @@ private fun forumTr(isEnglish: Boolean, he: String, en: String): String =
 
 private fun forumTextAlign(isEnglish: Boolean): TextAlign =
     if (isEnglish) TextAlign.Left else TextAlign.Right
+
+private fun createForumPdf(
+    context: android.content.Context,
+    branch: String,
+    groupKey: String,
+    messages: List<ForumUiMessage>,
+    participants: List<ForumParticipantUi>,
+    isEnglish: Boolean
+): File {
+    val pageWidth = 595
+    val pageHeight = 842
+
+    val contentLeft = 36f
+    val contentRight = pageWidth - 36f
+    val contentWidth = contentRight - contentLeft
+
+    val contentBottom =
+        pageHeight -
+                KmiPdfFooter.CONTENT_BOTTOM_PADDING
+
+    val document = PdfDocument()
+
+    val titleColor =
+        android.graphics.Color.rgb(15, 23, 42)
+
+    val secondaryTextColor =
+        android.graphics.Color.rgb(71, 85, 105)
+
+    val rowBackground =
+        android.graphics.Color.rgb(248, 250, 252)
+
+    val rowBorder =
+        android.graphics.Color.rgb(203, 213, 225)
+
+    val authorPaint =
+        Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = titleColor
+            textSize = 11.5f
+            typeface = android.graphics.Typeface.create(
+                android.graphics.Typeface.SANS_SERIF,
+                android.graphics.Typeface.BOLD
+            )
+            textAlign =
+                if (isEnglish) {
+                    Paint.Align.LEFT
+                } else {
+                    Paint.Align.RIGHT
+                }
+        }
+
+    val messagePaint =
+        Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = titleColor
+            textSize = 10.5f
+            typeface = android.graphics.Typeface.create(
+                android.graphics.Typeface.SANS_SERIF,
+                android.graphics.Typeface.NORMAL
+            )
+            textAlign =
+                if (isEnglish) {
+                    Paint.Align.LEFT
+                } else {
+                    Paint.Align.RIGHT
+                }
+        }
+
+    val datePaint =
+        Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = secondaryTextColor
+            textSize = 8.5f
+            typeface = android.graphics.Typeface.create(
+                android.graphics.Typeface.SANS_SERIF,
+                android.graphics.Typeface.NORMAL
+            )
+            textAlign =
+                if (isEnglish) {
+                    Paint.Align.RIGHT
+                } else {
+                    Paint.Align.LEFT
+                }
+        }
+
+    val emptyPaint =
+        Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = secondaryTextColor
+            textSize = 12f
+            typeface = android.graphics.Typeface.create(
+                android.graphics.Typeface.SANS_SERIF,
+                android.graphics.Typeface.BOLD
+            )
+            textAlign = Paint.Align.CENTER
+        }
+
+    val fillPaint =
+        Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = rowBackground
+            style = Paint.Style.FILL
+        }
+
+    val borderPaint =
+        Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = rowBorder
+            style = Paint.Style.STROKE
+            strokeWidth = 1f
+        }
+
+    val dateFormatter =
+        SimpleDateFormat(
+            if (isEnglish) {
+                "dd/MM/yyyy HH:mm"
+            } else {
+                "dd/MM/yyyy HH:mm"
+            },
+            Locale.getDefault()
+        )
+
+    fun cleanText(value: String): String {
+        return value
+            .replace("\r", " ")
+            .replace("\n", " ")
+            .replace(Regex("\\s+"), " ")
+            .trim()
+    }
+
+    fun wrapText(
+        value: String,
+        paint: Paint,
+        maxWidth: Float
+    ): List<String> {
+        val clean = cleanText(value)
+
+        if (clean.isBlank()) {
+            return emptyList()
+        }
+
+        val words = clean.split(" ")
+        val lines = mutableListOf<String>()
+        var currentLine = ""
+
+        words.forEach { word ->
+            val candidate =
+                if (currentLine.isBlank()) {
+                    word
+                } else {
+                    "$currentLine $word"
+                }
+
+            if (
+                currentLine.isNotBlank() &&
+                paint.measureText(candidate) > maxWidth
+            ) {
+                lines += currentLine
+                currentLine = word
+            } else {
+                currentLine = candidate
+            }
+        }
+
+        if (currentLine.isNotBlank()) {
+            lines += currentLine
+        }
+
+        return lines
+    }
+
+    fun participantIndexFor(
+        message: ForumUiMessage
+    ): Int? {
+        val index =
+            participants.indexOfFirst { participant ->
+                (
+                        !message.authorUid.isNullOrBlank() &&
+                                participant.id == message.authorUid
+                        ) ||
+                        (
+                                message.authorEmail.isNotBlank() &&
+                                        participant.id.equals(
+                                            message.authorEmail,
+                                            ignoreCase = true
+                                        )
+                                ) ||
+                        (
+                                message.authorName.isNotBlank() &&
+                                        participant.name.trim().equals(
+                                            message.authorName.trim(),
+                                            ignoreCase = true
+                                        )
+                                )
+            }
+
+        return index.takeIf { it >= 0 }
+    }
+
+    fun authorNameFor(
+        message: ForumUiMessage
+    ): String {
+        val participant =
+            participants.getOrNull(
+                participantIndexFor(message) ?: -1
+            )
+
+        val realName =
+            message.authorName
+                .ifBlank {
+                    participant?.name.orEmpty()
+                }
+                .ifBlank {
+                    message.authorEmail
+                }
+
+        return TraineeDisplayNameMapper.displayName(
+            realName = realName,
+            stableKey =
+                message.authorUid
+                    ?.takeIf { it.isNotBlank() }
+                    ?: message.authorEmail
+                        .takeIf { it.isNotBlank() }
+                    ?: message.id,
+            demoIndex = participantIndexFor(message),
+            isEnglish = isEnglish
+        ).ifBlank {
+            if (isEnglish) {
+                "Participant"
+            } else {
+                "משתתף"
+            }
+        }
+    }
+
+    var pageNumber = 0
+    var hasActivePage = false
+    lateinit var page: PdfDocument.Page
+    lateinit var canvas: android.graphics.Canvas
+    var y = KmiPdfHeader.CONTENT_TOP
+
+    fun drawHeader() {
+        KmiPdfHeader.draw(
+            context = context,
+            canvas = canvas,
+            pageWidth = pageWidth,
+            isEnglish = isEnglish,
+            titleHebrew = "דו״ח פורום הסניף",
+            titleEnglish = "Branch Forum Report",
+            subtitleHebrew =
+                listOf(branch, groupKey)
+                    .filter { it.isNotBlank() }
+                    .joinToString(" · "),
+            subtitleEnglish =
+                listOf(branch, groupKey)
+                    .filter { it.isNotBlank() }
+                    .joinToString(" · ")
+        )
+    }
+
+    fun drawFooter() {
+        KmiPdfFooter.draw(
+            canvas = canvas,
+            pageWidth = pageWidth,
+            pageHeight = pageHeight,
+            pageNumber = pageNumber,
+            totalPages = null,
+            isEnglish = isEnglish
+        )
+    }
+
+    fun startPage() {
+        if (hasActivePage) {
+            drawFooter()
+            document.finishPage(page)
+        }
+
+        pageNumber++
+
+        page =
+            document.startPage(
+                PdfDocument.PageInfo.Builder(
+                    pageWidth,
+                    pageHeight,
+                    pageNumber
+                ).create()
+            )
+
+        canvas = page.canvas
+        hasActivePage = true
+
+        drawHeader()
+
+        y = KmiPdfHeader.CONTENT_TOP
+    }
+
+    fun ensureSpace(requiredHeight: Float) {
+        if (y + requiredHeight > contentBottom) {
+            startPage()
+        }
+    }
+
+    startPage()
+
+    if (messages.isEmpty()) {
+        canvas.drawText(
+            if (isEnglish) {
+                "There are no messages in this forum room."
+            } else {
+                "אין הודעות בחדר הפורום שנבחר."
+            },
+            pageWidth / 2f,
+            y + 42f,
+            emptyPaint
+        )
+    } else {
+        /*
+         * רשימת המסך מוצגת ב-reverseLayout.
+         * ב-PDF ההודעות מסודרות מהישנה לחדשה.
+         */
+        messages
+            .sortedBy { it.createdAtMillis }
+            .forEach { message ->
+                val authorName = authorNameFor(message)
+
+                val messageText =
+                    message.text.ifBlank {
+                        when (message.mediaType) {
+                            "image" ->
+                                if (isEnglish) {
+                                    "Attached image"
+                                } else {
+                                    "תמונה מצורפת"
+                                }
+
+                            "video" ->
+                                if (isEnglish) {
+                                    "Attached video"
+                                } else {
+                                    "סרטון מצורף"
+                                }
+
+                            else ->
+                                if (isEnglish) {
+                                    "Message without text"
+                                } else {
+                                    "הודעה ללא טקסט"
+                                }
+                        }
+                    }
+
+                val lines =
+                    wrapText(
+                        value = messageText,
+                        paint = messagePaint,
+                        maxWidth = contentWidth - 32f
+                    )
+
+                val rowHeight =
+                    56f +
+                            lines.size.coerceAtLeast(1) * 15f
+
+                ensureSpace(rowHeight + 10f)
+
+                val rowTop = y
+                val rowBottom = y + rowHeight
+
+                canvas.drawRoundRect(
+                    contentLeft,
+                    rowTop,
+                    contentRight,
+                    rowBottom,
+                    12f,
+                    12f,
+                    fillPaint
+                )
+
+                canvas.drawRoundRect(
+                    contentLeft,
+                    rowTop,
+                    contentRight,
+                    rowBottom,
+                    12f,
+                    12f,
+                    borderPaint
+                )
+
+                val textX =
+                    if (isEnglish) {
+                        contentLeft + 16f
+                    } else {
+                        contentRight - 16f
+                    }
+
+                val dateX =
+                    if (isEnglish) {
+                        contentRight - 16f
+                    } else {
+                        contentLeft + 16f
+                    }
+
+                canvas.drawText(
+                    authorName,
+                    textX,
+                    rowTop + 22f,
+                    authorPaint
+                )
+
+                canvas.drawText(
+                    dateFormatter.format(
+                        Date(message.createdAtMillis)
+                    ),
+                    dateX,
+                    rowTop + 22f,
+                    datePaint
+                )
+
+                var lineY = rowTop + 43f
+
+                lines
+                    .ifEmpty { listOf("—") }
+                    .forEach { line ->
+                        canvas.drawText(
+                            line,
+                            textX,
+                            lineY,
+                            messagePaint
+                        )
+
+                        lineY += 15f
+                    }
+
+                y = rowBottom + 10f
+            }
+    }
+
+    drawFooter()
+    document.finishPage(page)
+
+    val directory =
+        File(
+            context.cacheDir,
+            "pdfs"
+        ).apply {
+            mkdirs()
+        }
+
+    val fileName =
+        if (isEnglish) {
+            "Branch Forum.pdf"
+        } else {
+            "פורום הסניף.pdf"
+        }
+
+    val file =
+        File(
+            directory,
+            fileName
+        )
+
+    FileOutputStream(
+        file,
+        false
+    ).use { output ->
+        document.writeTo(output)
+    }
+
+    document.close()
+
+    return file
+}
+
+private fun shareForumPdf(
+    context: android.content.Context,
+    pdfFile: File,
+    isEnglish: Boolean
+) {
+    val uri =
+        FileProvider.getUriForFile(
+            context,
+            "${context.packageName}.fileprovider",
+            pdfFile
+        )
+
+    val intent =
+        Intent(Intent.ACTION_SEND).apply {
+            type = "application/pdf"
+
+            putExtra(
+                Intent.EXTRA_SUBJECT,
+                if (isEnglish) {
+                    "Branch Forum"
+                } else {
+                    "פורום הסניף"
+                }
+            )
+
+            putExtra(
+                Intent.EXTRA_STREAM,
+                uri
+            )
+
+            addFlags(
+                Intent.FLAG_GRANT_READ_URI_PERMISSION
+            )
+        }
+
+    context.startActivity(
+        Intent.createChooser(
+            intent,
+            if (isEnglish) {
+                "Share PDF"
+            } else {
+                "שיתוף PDF"
+            }
+        )
+    )
+}
+
 
 @Composable
 private fun ForumPremiumLoadingRings(
@@ -1967,12 +2489,42 @@ fun ForumScreen(
             il.kmi.app.ui.KmiTopBar(
                 title = forumTr(isEnglish, "פורום הסניף", "Branch Forum"),
                 onPickSearchResult = { key -> pickedKey = key },
-                onHome = onGoHome,          // 👈 כאן התיקון – הבית באמת הולך הביתה
+                onHome = onGoHome,
                 onSearch = { },
                 showTopHome = false,
                 showTopSearch = false,
                 lockSearch = false,
                 showBottomActions = true,
+                showBottomShare = true,
+                onShare = {
+                    runCatching {
+                        val pdfFile =
+                            createForumPdf(
+                                context = ctx,
+                                branch = branch,
+                                groupKey = groupKey,
+                                messages = messages,
+                                participants = participantsByUsers,
+                                isEnglish = isEnglish
+                            )
+
+                        shareForumPdf(
+                            context = ctx,
+                            pdfFile = pdfFile,
+                            isEnglish = isEnglish
+                        )
+                    }.onFailure {
+                        Toast.makeText(
+                            ctx,
+                            forumTr(
+                                isEnglish,
+                                "לא ניתן ליצור את קובץ ה־PDF",
+                                "Unable to create the PDF file"
+                            ),
+                            Toast.LENGTH_SHORT
+                        ).show()
+                    }
+                },
                 onOpenAi = { showAiDialog = true }
             )
         },
@@ -2431,6 +2983,32 @@ fun ForumScreen(
                                                     msg.authorEmail
                                                 }
 
+                                        val messageAuthorDemoIndex =
+                                            participantsByUsers
+                                                .indexOfFirst { participant ->
+                                                    (
+                                                            !msg.authorUid.isNullOrBlank() &&
+                                                                    participant.id == msg.authorUid
+                                                            ) ||
+                                                            (
+                                                                    msg.authorEmail.isNotBlank() &&
+                                                                            participant.id.equals(
+                                                                                msg.authorEmail,
+                                                                                ignoreCase = true
+                                                                            )
+                                                                    ) ||
+                                                            (
+                                                                    realMessageAuthorName.isNotBlank() &&
+                                                                            participant.name.trim().equals(
+                                                                                realMessageAuthorName.trim(),
+                                                                                ignoreCase = true
+                                                                            )
+                                                                    )
+                                                }
+                                                .takeIf { index ->
+                                                    index >= 0
+                                                }
+
                                         val messageAuthorName =
                                             forumDisplayPersonName(
                                                 realName =
@@ -2445,6 +3023,8 @@ fun ForumScreen(
                                                                 it.isNotBlank()
                                                             }
                                                         ?: msg.id,
+                                                demoIndex =
+                                                    messageAuthorDemoIndex,
                                                 isEnglish =
                                                     isEnglish
                                             )
@@ -3551,13 +4131,15 @@ private fun ForumPremiumControlCard(
                             .padding(horizontal = 11.dp, vertical = 7.dp),
                         verticalArrangement = Arrangement.spacedBy(4.dp)
                     ) {
-                        participants.forEach { participant ->
+                        participants.forEachIndexed { index, participant ->
                             val participantDisplayName =
                                 forumDisplayPersonName(
                                     realName =
                                         participant.name,
                                     stableKey =
                                         participant.id,
+                                    demoIndex =
+                                        index,
                                     isEnglish =
                                         isEnglish
                                 )

@@ -83,7 +83,10 @@ import androidx.compose.ui.text.style.TextOverflow
 import il.kmi.app.ui.KmiIconSize
 import il.kmi.app.ui.KmiLanguageDirection
 import il.kmi.app.ui.pdf.KmiPdfDirection
+import il.kmi.app.ui.pdf.KmiPdfHeader
+import il.kmi.app.ui.pdf.KmiPdfFooter
 import il.yuval.ui.theme.kmiScreenBackgroundBrush
+import il.yuval.ui.theme.kmiSectionHeaderBrush
 
 
 //=====================================================================
@@ -839,10 +842,77 @@ fun PaymentsReportScreen(
                         .padding(innerPadding)
                         .navigationBarsPadding()
                         .verticalScroll(rememberScrollState())
-                        .padding(horizontal = 16.dp, vertical = 14.dp)
                 ) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .background(
+                                brush = kmiSectionHeaderBrush()
+                            )
+                            .padding(vertical = 4.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .heightIn(min = 52.dp)
+                                .padding(
+                                    start = 16.dp,
+                                    top = 2.dp,
+                                    end = 16.dp,
+                                    bottom = 5.dp
+                                ),
+                            horizontalAlignment =
+                                Alignment.CenterHorizontally,
+                            verticalArrangement =
+                                Arrangement.Center
+                        ) {
+                            Text(
+                                text =
+                                    if (isEnglish) {
+                                        "Premium payments dashboard"
+                                    } else {
+                                        "דשבורד תשלומים פרימיום"
+                                    },
+                                style =
+                                    KmiTypography.secondary.copy(
+                                        fontWeight = FontWeight.Bold
+                                    ),
+                                color = Color.White,
+                                textAlign = TextAlign.Center,
+                                modifier = Modifier.fillMaxWidth(),
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+
+                            Spacer(Modifier.height(1.dp))
+
+                            Text(
+                                text =
+                                    if (isEnglish) {
+                                        "For trainees, coaches and managers"
+                                    } else {
+                                        "למתאמנים, למאמנים ולמנהלים"
+                                    },
+                                style = KmiTypography.caption,
+                                color =
+                                    Color.White.copy(
+                                        alpha = 0.92f
+                                    ),
+                                textAlign = TextAlign.Center,
+                                modifier = Modifier.fillMaxWidth(),
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
+                    }
+
+                    Spacer(Modifier.height(14.dp))
+
                     Card(
-                        modifier = Modifier.fillMaxWidth(),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp),
                         shape = RoundedCornerShape(30.dp),
                         colors =
                             CardDefaults.cardColors(
@@ -866,43 +936,6 @@ fun PaymentsReportScreen(
                                 verticalArrangement =
                                     Arrangement.spacedBy(3.dp)
                             ) {
-                                Text(
-                                    text =
-                                        if (isEnglish) {
-                                            "Premium payments dashboard"
-                                        } else {
-                                            "דשבורד תשלומים פרימיום"
-                                        },
-                                    style =
-                                        KmiTypography.sectionTitle,
-                                    color = reportTitleColor,
-                                    fontWeight =
-                                        FontWeight.ExtraBold,
-                                    textAlign = TextAlign.Start,
-                                    modifier = Modifier.fillMaxWidth(),
-                                    maxLines = 1,
-                                    overflow =
-                                        TextOverflow.Ellipsis
-                                )
-
-                                Text(
-                                    text =
-                                        if (isEnglish) {
-                                            "For trainees, coaches and managers"
-                                        } else {
-                                            "למתאמנים, למאמנים ולמנהלים"
-                                        },
-                                    style =
-                                        KmiTypography.secondary,
-                                    color =
-                                        reportSecondaryTextColor,
-                                    textAlign = TextAlign.Start,
-                                    modifier = Modifier.fillMaxWidth(),
-                                    maxLines = 1,
-                                    overflow =
-                                        TextOverflow.Ellipsis
-                                )
-
                                 Text(
                                     text =
                                         if (isEnglish) {
@@ -2000,11 +2033,7 @@ private fun createPaymentsReportPdf(
 
     val document = PdfDocument()
 
-    val navy = android.graphics.Color.rgb(2, 43, 74)
-    val mediumBlue = android.graphics.Color.rgb(36, 103, 158)
-    val lightHeaderBlue = android.graphics.Color.rgb(128, 183, 220)
     val textDark = android.graphics.Color.rgb(15, 23, 42)
-    val textMuted = android.graphics.Color.rgb(100, 116, 139)
 
     val regularTypeface =
         Typeface.create(Typeface.SANS_SERIF, Typeface.NORMAL)
@@ -2023,20 +2052,6 @@ private fun createPaymentsReportPdf(
                 )
         }
 
-    val titlePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        typeface = boldTypeface
-        textSize = 29f
-        color = android.graphics.Color.WHITE
-        textAlign = Paint.Align.RIGHT
-    }
-
-    val subtitlePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        typeface = regularTypeface
-        textSize = 14f
-        color = android.graphics.Color.WHITE
-        textAlign = Paint.Align.RIGHT
-    }
-
     val sectionPaint = Paint(textPaint).apply {
         typeface = boldTypeface
         textSize = 15f
@@ -2049,22 +2064,30 @@ private fun createPaymentsReportPdf(
         color = android.graphics.Color.WHITE
     }
 
-    val smallPaint = Paint(textPaint).apply {
-        textSize = 9.2f
-        color = textMuted
-    }
+    /*
+     * העמוד הראשון מכיל גם את כרטיסי הסיכום ולכן נכנסות בו
+     * עד 14 שורות. בכל עמוד המשך נכנסות עד 18 שורות.
+     */
+    val firstPageRows = 14
+    val continuationPageRows = 18
 
-    val linePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = android.graphics.Color.rgb(226, 232, 240)
-        strokeWidth = 1f
-    }
+    val totalPages =
+        if (items.size <= firstPageRows) {
+            1
+        } else {
+            1 +
+                    kotlin.math.ceil(
+                        (items.size - firstPageRows) /
+                                continuationPageRows.toDouble()
+                    ).toInt()
+        }
 
     var pageNumber = 1
     var page = document.startPage(
         PdfDocument.PageInfo.Builder(pageWidth, pageHeight, pageNumber).create()
     )
     var canvas = page.canvas
-    var y = 174f
+    var y = KmiPdfHeader.CONTENT_TOP
 
     fun textX(): Float =
         KmiPdfDirection.startX(
@@ -2093,156 +2116,40 @@ private fun createPaymentsReportPdf(
         }
     }
 
-    fun drawKmiLogo(
-        targetCanvas: android.graphics.Canvas,
-        cx: Float,
-        cy: Float,
-        radius: Float
-    ) {
-        val outerPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = navy
-            style = Paint.Style.FILL
-        }
-
-        val innerPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = android.graphics.Color.WHITE
-            style = Paint.Style.FILL
-        }
-
-        val logoTextPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = navy
-            typeface = boldTypeface
-            textSize = radius * 0.62f
-            textAlign = Paint.Align.CENTER
-        }
-
-        targetCanvas.drawCircle(cx, cy, radius, outerPaint)
-        targetCanvas.drawCircle(cx, cy, radius - 4f, innerPaint)
-
-        targetCanvas.drawText(
-            "KAMI",
-            cx,
-            cy + radius * 0.22f,
-            logoTextPaint
-        )
-    }
-
     fun drawHeader() {
-        canvas.drawColor(android.graphics.Color.WHITE)
-
-        val headerBottom = 122f
-        val headerTextRight = 435f
-
-        canvas.drawPath(
-            android.graphics.Path().apply {
-                moveTo(pageWidth.toFloat(), 0f)
-                lineTo(pageWidth.toFloat(), headerBottom)
-                lineTo(178f, headerBottom)
-                lineTo(238f, 0f)
-                close()
-            },
-            Paint(Paint.ANTI_ALIAS_FLAG).apply {
-                color = navy
-                style = Paint.Style.FILL
-            }
+        KmiPdfHeader.draw(
+            context = context,
+            canvas = canvas,
+            pageWidth = pageWidth,
+            isEnglish = isEnglish,
+            titleHebrew = "דו״ח תשלומים",
+            titleEnglish = "Payments Report",
+            subtitleHebrew =
+                "סניף: ${
+                    selectedBranch.ifBlank {
+                        "כל הסניפים"
+                    }
+                }",
+            subtitleEnglish =
+                "Branch: ${
+                    selectedBranch.ifBlank {
+                        "All branches"
+                    }
+                }",
+            generatedDate = paymentNowDateText()
         )
 
-        canvas.drawPath(
-            android.graphics.Path().apply {
-                moveTo(208f, headerBottom)
-                lineTo(224f, headerBottom)
-                lineTo(284f, 0f)
-                lineTo(268f, 0f)
-                close()
-            },
-            Paint(Paint.ANTI_ALIAS_FLAG).apply {
-                color = mediumBlue
-                style = Paint.Style.FILL
-            }
-        )
-
-        canvas.drawPath(
-            android.graphics.Path().apply {
-                moveTo(230f, headerBottom)
-                lineTo(238f, headerBottom)
-                lineTo(298f, 0f)
-                lineTo(290f, 0f)
-                close()
-            },
-            Paint(Paint.ANTI_ALIAS_FLAG).apply {
-                color = lightHeaderBlue
-                style = Paint.Style.FILL
-            }
-        )
-
-        drawKmiLogo(
-            targetCanvas = canvas,
-            cx = 78f,
-            cy = 58f,
-            radius = 42f
-        )
-
-        titlePaint.textAlign =
-            KmiPdfDirection.textAlign(
-                isEnglish = isEnglish
-            )
-
-        subtitlePaint.textAlign =
-            KmiPdfDirection.textAlign(
-                isEnglish = isEnglish
-            )
-
-        val headerTextX =
-            KmiPdfDirection.startX(
-                isEnglish = isEnglish,
-                left = 308f,
-                right = headerTextRight
-            )
-
-        canvas.drawText(
-            tr(
-                "דו״ח תשלומים",
-                "Payments Report"
-            ),
-            headerTextX,
-            52f,
-            titlePaint
-        )
-
-        canvas.drawText(
-            "${tr("סניף", "Branch")}: ${
-                selectedBranch.ifBlank {
-                    tr("כל הסניפים", "All branches")
-                }
-            }",
-            headerTextX,
-            78f,
-            subtitlePaint
-        )
-
-        smallPaint.color = textMuted
-        smallPaint.textAlign = Paint.Align.RIGHT
-
-        canvas.drawText(
-            tr("תאריך הפקה:", "Generated:") + " " +
-                    paymentNowDateText(),
-            pageWidth - 34f,
-            142f,
-            smallPaint
-        )
-
-        y = 174f
+        y = KmiPdfHeader.CONTENT_TOP
     }
 
     fun drawFooter() {
-        smallPaint.color = textMuted
-        smallPaint.textAlign = Paint.Align.CENTER
-        canvas.drawLine(margin, pageHeight - 42f, pageWidth - margin, pageHeight - 42f, linePaint)
-        canvas.drawText(
-            tr("עמוד $pageNumber · KAMI", "Page $pageNumber · KAMI"),
-            pageWidth / 2f,
-            pageHeight - 24f,
-            smallPaint
+        KmiPdfFooter.draw(
+            canvas = canvas,
+            pageWidth = pageWidth,
+            pageHeight = pageHeight,
+            pageNumber = pageNumber,
+            totalPages = totalPages,
+            isEnglish = isEnglish
         )
     }
 
@@ -2255,13 +2162,16 @@ private fun createPaymentsReportPdf(
             PdfDocument.PageInfo.Builder(pageWidth, pageHeight, pageNumber).create()
         )
         canvas = page.canvas
-        y = margin
+        y = KmiPdfHeader.CONTENT_TOP
 
         drawHeader()
     }
 
     fun ensureSpace(height: Float) {
-        if (y + height > pageHeight - 58f) {
+        if (
+            y + height >
+            pageHeight - KmiPdfFooter.CONTENT_BOTTOM_PADDING
+        ) {
             newPage()
         }
     }

@@ -5,15 +5,11 @@ import android.content.Intent
 import android.content.SharedPreferences
 import android.graphics.Canvas
 import android.graphics.Paint
-import android.graphics.Path
 import android.graphics.Typeface
 import android.graphics.pdf.PdfDocument
 import androidx.core.content.FileProvider
 import java.io.File
 import java.io.FileOutputStream
-import java.text.SimpleDateFormat
-import java.util.Date
-import java.util.Locale
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
@@ -86,6 +82,8 @@ import il.kmi.app.domain.TopicsBySubjectRegistry
 import il.kmi.app.ui.KmiTopBar
 import il.kmi.app.ui.LocalAppIconScale
 import il.kmi.app.ui.loading.KmiLoadingRings
+import il.kmi.app.ui.pdf.KmiPdfHeader
+import il.kmi.app.ui.pdf.KmiPdfFooter
 import il.yuval.ui.theme.kmiScreenBackgroundBrush
 import il.yuval.ui.theme.kmiSectionHeaderBrush
 import kotlinx.coroutines.yield
@@ -412,9 +410,6 @@ private fun createSubjectTopicsPdf(
 
     val document = PdfDocument()
 
-    val navy = android.graphics.Color.rgb(2, 43, 74)
-    val mediumBlue = android.graphics.Color.rgb(36, 103, 158)
-    val lightHeaderBlue = android.graphics.Color.rgb(128, 183, 220)
     val lightBlue = android.graphics.Color.rgb(234, 246, 255)
     val softBlue = android.graphics.Color.rgb(244, 250, 255)
     val borderBlue = android.graphics.Color.rgb(191, 213, 232)
@@ -441,17 +436,6 @@ private fun createSubjectTopicsPdf(
         }
     }
 
-    val titlePaint = paint(
-        size = 29f,
-        color = android.graphics.Color.WHITE,
-        typeface = boldTypeface
-    )
-
-    val subtitlePaint = paint(
-        size = 14f,
-        color = android.graphics.Color.WHITE
-    )
-
     val sectionPaint = paint(
         size = 17f,
         color = android.graphics.Color.rgb(12, 78, 130),
@@ -467,11 +451,6 @@ private fun createSubjectTopicsPdf(
     val itemCountPaint = paint(
         size = 10f,
         color = android.graphics.Color.rgb(12, 78, 130)
-    )
-
-    val smallPaint = paint(
-        size = 9f,
-        color = textMuted
     )
 
     fun drawRoundRect(
@@ -502,139 +481,18 @@ private fun createSubjectTopicsPdf(
         )
     }
 
-    fun drawKmiLogo(
-        canvas: Canvas,
-        cx: Float,
-        cy: Float,
-        radius: Float
+    fun drawHeader(
+        canvas: Canvas
     ) {
-        val outerPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = navy
-        }
-
-        val innerPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = android.graphics.Color.WHITE
-        }
-
-        val logoTextPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = navy
-            typeface = boldTypeface
-            textSize = radius * 0.62f
-            textAlign = Paint.Align.CENTER
-        }
-
-        canvas.drawCircle(cx, cy, radius, outerPaint)
-        canvas.drawCircle(cx, cy, radius - 4f, innerPaint)
-
-        canvas.drawText(
-            "KAMI",
-            cx,
-            cy + radius * 0.22f,
-            logoTextPaint
-        )
-    }
-
-    fun drawHeader(canvas: Canvas) {
-        canvas.drawColor(android.graphics.Color.WHITE)
-
-        val headerBottom = 122f
-        val headerTextRight = 435f
-
-        canvas.drawPath(
-            Path().apply {
-                moveTo(pageWidth.toFloat(), 0f)
-                lineTo(pageWidth.toFloat(), headerBottom)
-                lineTo(178f, headerBottom)
-                lineTo(238f, 0f)
-                close()
-            },
-            Paint(Paint.ANTI_ALIAS_FLAG).apply {
-                color = navy
-            }
-        )
-
-        canvas.drawPath(
-            Path().apply {
-                moveTo(208f, headerBottom)
-                lineTo(224f, headerBottom)
-                lineTo(284f, 0f)
-                lineTo(268f, 0f)
-                close()
-            },
-            Paint(Paint.ANTI_ALIAS_FLAG).apply {
-                color = mediumBlue
-            }
-        )
-
-        canvas.drawPath(
-            Path().apply {
-                moveTo(230f, headerBottom)
-                lineTo(238f, headerBottom)
-                lineTo(298f, 0f)
-                lineTo(290f, 0f)
-                close()
-            },
-            Paint(Paint.ANTI_ALIAS_FLAG).apply {
-                color = lightHeaderBlue
-            }
-        )
-
-        drawKmiLogo(
+        KmiPdfHeader.draw(
+            context = context,
             canvas = canvas,
-            cx = 78f,
-            cy = 58f,
-            radius = 42f
-        )
-
-        titlePaint.textAlign =
-            if (isEnglish) Paint.Align.LEFT else Paint.Align.RIGHT
-
-        subtitlePaint.textAlign =
-            if (isEnglish) Paint.Align.LEFT else Paint.Align.RIGHT
-
-        val headerTextX =
-            if (isEnglish) 308f else headerTextRight
-
-        canvas.drawText(
-            tr(
-                "תרגילים לפי נושא",
-                "Exercises by Topic"
-            ),
-            headerTextX,
-            52f,
-            titlePaint
-        )
-
-        canvas.drawText(
-            tr(
-                "כל נושאי התרגול והספירות",
-                "All practice topics and counts"
-            ),
-            headerTextX,
-            78f,
-            subtitlePaint
-        )
-
-        smallPaint.textAlign =
-            if (isEnglish) {
-                Paint.Align.LEFT
-            } else {
-                Paint.Align.RIGHT
-            }
-
-        canvas.drawText(
-            tr("תאריך הפקה:", "Generated:") + " " +
-                    SimpleDateFormat(
-                        "dd/MM/yyyy",
-                        Locale.getDefault()
-                    ).format(Date()),
-            if (isEnglish) {
-                34f
-            } else {
-                pageWidth - 34f
-            },
-            142f,
-            smallPaint
+            pageWidth = pageWidth,
+            isEnglish = isEnglish,
+            titleHebrew = "תרגילים לפי נושא",
+            titleEnglish = "Exercises by Topic",
+            subtitleHebrew = "כל נושאי התרגול והספירות",
+            subtitleEnglish = "All practice topics and counts"
         )
     }
 
@@ -643,58 +501,13 @@ private fun createSubjectTopicsPdf(
         pageNumber: Int,
         totalPages: Int
     ) {
-        val footerY = 804f
-
-        canvas.drawLine(
-            0f,
-            footerY,
-            pageWidth.toFloat(),
-            footerY,
-            Paint(Paint.ANTI_ALIAS_FLAG).apply {
-                color = navy
-                strokeWidth = 2f
-            }
-        )
-
-        drawKmiLogo(
+        KmiPdfFooter.draw(
             canvas = canvas,
-            cx = 38f,
-            cy = footerY + 22f,
-            radius = 13f
-        )
-
-        smallPaint.textAlign = Paint.Align.LEFT
-        canvas.drawText(
-            "Together We Protect",
-            62f,
-            footerY + 25f,
-            smallPaint
-        )
-
-        smallPaint.textAlign = Paint.Align.CENTER
-        canvas.drawText(
-            tr(
-                "עמוד $pageNumber מתוך $totalPages",
-                "Page $pageNumber of $totalPages"
-            ),
-            pageWidth / 2f,
-            footerY + 25f,
-            smallPaint
-        )
-
-        smallPaint.textAlign = Paint.Align.RIGHT
-        canvas.drawText(
-            "Krav Maga Israel",
-            pageWidth - 66f,
-            footerY + 18f,
-            smallPaint
-        )
-
-        canvas.drawText(
-            "www.kmi.org.il",
-            pageWidth - 66f,
-            footerY + 31f,
-            smallPaint
+            pageWidth = pageWidth,
+            pageHeight = pageHeight,
+            pageNumber = pageNumber,
+            totalPages = totalPages,
+            isEnglish = isEnglish
         )
     }
 
@@ -837,7 +650,7 @@ private fun createSubjectTopicsPdf(
     }
 
     val firstPageCapacity = 8
-    val nextPageCapacity = 10
+    val nextPageCapacity = 9
 
     val totalPages =
         if (items.size <= firstPageCapacity) {
@@ -865,7 +678,7 @@ private fun createSubjectTopicsPdf(
 
         drawHeader(canvas)
 
-        var y = 164f
+        var y = KmiPdfHeader.CONTENT_TOP
 
         if (pageNumber == 1) {
             y = drawSummary(

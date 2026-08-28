@@ -57,6 +57,8 @@ import il.kmi.app.ui.KmiLanguageDirection
 import il.kmi.app.ui.KmiTypography
 import il.kmi.app.ui.loading.KmiLoadingRings
 import il.kmi.app.ui.pdf.KmiPdfDirection
+import il.kmi.app.ui.pdf.KmiPdfHeader
+import il.kmi.app.ui.pdf.KmiPdfFooter
 import il.yuval.ui.theme.kmiScreenBackgroundBrush
 
 //=====================================================================
@@ -1373,15 +1375,19 @@ private fun createAdminUsersPdf(
 
     val contentLeft = 34f
     val contentRight = pageWidth - 34f
-    val contentBottom = pageHeight - 58f
+    val contentBottom =
+        pageHeight - KmiPdfFooter.CONTENT_BOTTOM_PADDING
 
     val document = android.graphics.pdf.PdfDocument()
 
-    val navy = android.graphics.Color.rgb(2, 43, 74)
-    val mediumBlue = android.graphics.Color.rgb(36, 103, 158)
-    val lightBlue = android.graphics.Color.rgb(128, 183, 220)
-    val darkText = android.graphics.Color.rgb(15, 23, 42)
-    val mutedText = android.graphics.Color.rgb(100, 116, 139)
+    val mediumBlue =
+        android.graphics.Color.rgb(36, 103, 158)
+
+    val darkText =
+        android.graphics.Color.rgb(15, 23, 42)
+
+    val mutedText =
+        android.graphics.Color.rgb(100, 116, 139)
     val cardFill = android.graphics.Color.rgb(248, 250, 252)
     val cardBorder = android.graphics.Color.rgb(203, 213, 225)
     val successGreen = android.graphics.Color.rgb(22, 163, 74)
@@ -1398,32 +1404,6 @@ private fun createAdminUsersPdf(
         android.graphics.Typeface.SANS_SERIF,
         android.graphics.Typeface.BOLD
     )
-
-    val headerTitlePaint = android.graphics.Paint(
-        android.graphics.Paint.ANTI_ALIAS_FLAG
-    ).apply {
-        color = android.graphics.Color.WHITE
-        textSize = 25f
-        typeface = boldTypeface
-        textAlign = if (isEnglish) {
-            android.graphics.Paint.Align.LEFT
-        } else {
-            android.graphics.Paint.Align.RIGHT
-        }
-    }
-
-    val headerSubtitlePaint = android.graphics.Paint(
-        android.graphics.Paint.ANTI_ALIAS_FLAG
-    ).apply {
-        color = android.graphics.Color.WHITE
-        textSize = 12f
-        typeface = regularTypeface
-        textAlign = if (isEnglish) {
-            android.graphics.Paint.Align.LEFT
-        } else {
-            android.graphics.Paint.Align.RIGHT
-        }
-    }
 
     val sectionPaint = android.graphics.Paint(
         android.graphics.Paint.ANTI_ALIAS_FLAG
@@ -1594,149 +1574,6 @@ private fun createAdminUsersPdf(
     }
 
     fun drawHeader() {
-        canvas.drawColor(android.graphics.Color.WHITE)
-
-        val headerBottom = 122f
-
-        val navyPaint = android.graphics.Paint(
-            android.graphics.Paint.ANTI_ALIAS_FLAG
-        ).apply {
-            color = navy
-            style = android.graphics.Paint.Style.FILL
-        }
-
-        val mediumStripePaint = android.graphics.Paint(
-            android.graphics.Paint.ANTI_ALIAS_FLAG
-        ).apply {
-            color = mediumBlue
-            style = android.graphics.Paint.Style.FILL
-        }
-
-        val lightStripePaint = android.graphics.Paint(
-            android.graphics.Paint.ANTI_ALIAS_FLAG
-        ).apply {
-            color = lightBlue
-            style = android.graphics.Paint.Style.FILL
-        }
-
-        canvas.drawPath(
-            android.graphics.Path().apply {
-                moveTo(pageWidth.toFloat(), 0f)
-                lineTo(pageWidth.toFloat(), headerBottom)
-                lineTo(178f, headerBottom)
-                lineTo(238f, 0f)
-                close()
-            },
-            navyPaint
-        )
-
-        canvas.drawPath(
-            android.graphics.Path().apply {
-                moveTo(208f, headerBottom)
-                lineTo(224f, headerBottom)
-                lineTo(284f, 0f)
-                lineTo(268f, 0f)
-                close()
-            },
-            mediumStripePaint
-        )
-
-        canvas.drawPath(
-            android.graphics.Path().apply {
-                moveTo(230f, headerBottom)
-                lineTo(238f, headerBottom)
-                lineTo(298f, 0f)
-                lineTo(290f, 0f)
-                close()
-            },
-            lightStripePaint
-        )
-
-        val logoCenterX = 78f
-        val logoCenterY = 58f
-        val logoRadius = 42f
-
-        val logoOuterPaint = android.graphics.Paint(
-            android.graphics.Paint.ANTI_ALIAS_FLAG
-        ).apply {
-            color = navy
-            style = android.graphics.Paint.Style.FILL
-        }
-
-        val logoInnerPaint = android.graphics.Paint(
-            android.graphics.Paint.ANTI_ALIAS_FLAG
-        ).apply {
-            color = android.graphics.Color.WHITE
-            style = android.graphics.Paint.Style.FILL
-        }
-
-        val logoTextPaint = android.graphics.Paint(
-            android.graphics.Paint.ANTI_ALIAS_FLAG
-        ).apply {
-            color = navy
-            textSize = logoRadius * 0.62f
-            typeface = boldTypeface
-            textAlign = android.graphics.Paint.Align.CENTER
-        }
-
-        canvas.drawCircle(
-            logoCenterX,
-            logoCenterY,
-            logoRadius,
-            logoOuterPaint
-        )
-
-        canvas.drawCircle(
-            logoCenterX,
-            logoCenterY,
-            logoRadius - 4f,
-            logoInnerPaint
-        )
-
-        canvas.drawText(
-            "KAMI",
-            logoCenterX,
-            logoCenterY + logoRadius * 0.22f,
-            logoTextPaint
-        )
-
-        headerTitlePaint.textAlign =
-            KmiPdfDirection.textAlign(
-                isEnglish = isEnglish
-            )
-
-        headerSubtitlePaint.textAlign =
-            KmiPdfDirection.textAlign(
-                isEnglish = isEnglish
-            )
-
-        val headerTextX =
-            KmiPdfDirection.startX(
-                isEnglish = isEnglish,
-                left = 308f,
-                right = pageWidth.toFloat() - 34f
-            )
-
-        canvas.drawText(
-            tr(
-                "דו״ח ניהול משתמשים",
-                "User Management Report"
-            ),
-            headerTextX,
-            50f,
-            headerTitlePaint
-        )
-
-        canvas.drawText(
-            tr(
-                "משתמשים, שימושים וחלוקה לפי חגורות",
-                "Users, activity and belt distribution"
-            ),
-            headerTextX,
-            77f,
-            headerSubtitlePaint
-        )
-
         val generatedDate =
             java.text.SimpleDateFormat(
                 "dd/MM/yyyy HH:mm",
@@ -1745,47 +1582,31 @@ private fun createAdminUsersPdf(
                 java.util.Date()
             )
 
-        smallPaint.textAlign = android.graphics.Paint.Align.RIGHT
-
-        canvas.drawText(
-            tr(
-                "תאריך הפקה: $generatedDate",
-                "Generated: $generatedDate"
-            ),
-            pageWidth - 34f,
-            142f,
-            smallPaint
+        KmiPdfHeader.draw(
+            context = context,
+            canvas = canvas,
+            pageWidth = pageWidth,
+            isEnglish = isEnglish,
+            titleHebrew = "דו״ח ניהול משתמשים",
+            titleEnglish = "User Management Report",
+            subtitleHebrew =
+                "משתמשים, שימושים וחלוקה לפי חגורות",
+            subtitleEnglish =
+                "Users, activity and belt distribution",
+            generatedDate = generatedDate
         )
 
-        y = 174f
+        y = KmiPdfHeader.CONTENT_TOP
     }
 
     fun drawFooter() {
-        val dividerPaint = android.graphics.Paint(
-            android.graphics.Paint.ANTI_ALIAS_FLAG
-        ).apply {
-            color = cardBorder
-            strokeWidth = 1f
-        }
-
-        canvas.drawLine(
-            contentLeft,
-            pageHeight - 42f,
-            contentRight,
-            pageHeight - 42f,
-            dividerPaint
-        )
-
-        smallPaint.textAlign = android.graphics.Paint.Align.CENTER
-
-        canvas.drawText(
-            tr(
-                "עמוד $pageNumber · KAMI",
-                "Page $pageNumber · KAMI"
-            ),
-            pageWidth / 2f,
-            pageHeight - 24f,
-            smallPaint
+        KmiPdfFooter.draw(
+            canvas = canvas,
+            pageWidth = pageWidth,
+            pageHeight = pageHeight,
+            pageNumber = pageNumber,
+            totalPages = null,
+            isEnglish = isEnglish
         )
     }
 

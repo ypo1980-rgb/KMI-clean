@@ -63,6 +63,8 @@ import il.kmi.shared.localization.AppLanguageManager
 import il.kmi.app.ui.KmiIconSize
 import il.kmi.app.ui.KmiTopBar
 import il.kmi.app.ui.KmiTypography
+import il.kmi.app.ui.pdf.KmiPdfHeader
+import il.kmi.app.ui.pdf.KmiPdfFooter
 import il.kmi.app.R
 import il.kmi.app.KmiCalendarSync
 import il.kmi.app.hasCalendarPermission
@@ -934,6 +936,7 @@ fun MyProfileScreen(
                                 fullName
                             }
                         },
+                demoIndex = 0,
                 isEnglish = isEnglish
             ).ifBlank {
                 profileTr(
@@ -1597,7 +1600,7 @@ fun MyProfileScreen(
                     },
                     showTopHome = false,
                     showTopSearch = false,
-                    showTopShare = false,
+                    showTopShare = true,
                     showBottomActions = true,
                     lockSearch = false,
                     lockHome = false,
@@ -2504,7 +2507,6 @@ private fun createProfilePdf(
     )
     val canvas = page.canvas
 
-    val navy = android.graphics.Color.rgb(2, 43, 74)
     val blue = android.graphics.Color.rgb(12, 78, 130)
     val lightBlue = android.graphics.Color.rgb(234, 246, 255)
     val softBlue = android.graphics.Color.rgb(244, 250, 255)
@@ -2526,17 +2528,10 @@ private fun createProfilePdf(
         textAlign = align
     }
 
-    val titlePaint = paint(29f, android.graphics.Color.WHITE, bold)
-    val subTitlePaint = paint(14f, android.graphics.Color.WHITE, regular)
     val sectionPaint = paint(17f, blue, bold)
     val labelPaint = paint(10.5f, blue, bold)
     val valuePaint = paint(13f, textDark, regular)
     val boldValuePaint = paint(13f, textDark, bold)
-    val smallPaint = paint(9f, android.graphics.Color.rgb(80, 100, 120), regular)
-
-    fun rightX() = pageWidth - margin
-    fun leftX() = margin
-    fun mainX() = if (isEnglish) leftX() else rightX()
 
     fun drawRoundRect(
         left: Float,
@@ -2555,99 +2550,28 @@ private fun createProfilePdf(
         canvas.drawRoundRect(left, top, right, bottom, radius, radius, p)
     }
 
-    fun drawKmiLogo(cx: Float, cy: Float, radius: Float) {
-        val outer = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = navy }
-        val inner = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = android.graphics.Color.WHITE }
-        val text = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = navy
-            typeface = bold
-            textSize = radius * 0.62f
-            textAlign = Paint.Align.CENTER
-        }
-
-        canvas.drawCircle(cx, cy, radius, outer)
-        canvas.drawCircle(cx, cy, radius - 4f, inner)
-        canvas.drawText("KAMI", cx, cy + radius * 0.22f, text)
-    }
-
     fun drawHeader() {
-        canvas.drawColor(android.graphics.Color.WHITE)
-
-        val diagonal = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = navy }
-        val accent1 = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = android.graphics.Color.rgb(36, 103, 158) }
-        val accent2 = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = android.graphics.Color.rgb(128, 183, 220) }
-
-        val path = android.graphics.Path().apply {
-            moveTo(pageWidth.toFloat(), 0f)
-            lineTo(pageWidth.toFloat(), 122f)
-            lineTo(178f, 122f)
-            lineTo(238f, 0f)
-            close()
-        }
-        canvas.drawPath(path, diagonal)
-
-        canvas.drawPath(android.graphics.Path().apply {
-            moveTo(208f, 122f)
-            lineTo(224f, 122f)
-            lineTo(284f, 0f)
-            lineTo(268f, 0f)
-            close()
-        }, accent1)
-
-        canvas.drawPath(android.graphics.Path().apply {
-            moveTo(230f, 122f)
-            lineTo(238f, 122f)
-            lineTo(298f, 0f)
-            lineTo(290f, 0f)
-            close()
-        }, accent2)
-
-        drawKmiLogo(78f, 58f, 42f)
-
-        titlePaint.textAlign = Paint.Align.RIGHT
-        subTitlePaint.textAlign = Paint.Align.RIGHT
-
-        canvas.drawText(tr("הפרופיל שלי", "My Profile"), pageWidth - 34f, 52f, titlePaint)
-        canvas.drawText(tr("כרטיס אישי למתאמן", "Personal trainee card"), pageWidth - 34f, 78f, subTitlePaint)
-
-        smallPaint.textAlign = Paint.Align.RIGHT
-        canvas.drawText(
-            tr("תאריך הפקה:", "Generated:") + " " +
-                    java.text.SimpleDateFormat("dd/MM/yyyy", java.util.Locale.getDefault()).format(java.util.Date()),
-            pageWidth - 34f,
-            142f,
-            smallPaint
+        KmiPdfHeader.draw(
+            context = context,
+            canvas = canvas,
+            pageWidth = pageWidth,
+            isEnglish = isEnglish,
+            titleHebrew = "הפרופיל שלי",
+            titleEnglish = "My Profile",
+            subtitleHebrew = "כרטיס אישי למתאמן",
+            subtitleEnglish = "Personal trainee card"
         )
     }
 
     fun drawFooter() {
-        val footerY = 804f
-
-        val line = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = navy
-            strokeWidth = 2f
-        }
-
-        canvas.drawLine(0f, footerY, pageWidth.toFloat(), footerY, line)
-
-        drawKmiLogo(38f, footerY + 22f, 13f)
-
-        smallPaint.textAlign = Paint.Align.LEFT
-        canvas.drawText("Together We Protect", 62f, footerY + 25f, smallPaint)
-
-        smallPaint.textAlign = Paint.Align.CENTER
-        canvas.drawText(tr("עמוד 1 מתוך 1", "Page 1 of 1"), pageWidth / 2f, footerY + 25f, smallPaint)
-
-        smallPaint.textAlign = Paint.Align.RIGHT
-        canvas.drawText("Krav Maga Israel", pageWidth - 66f, footerY + 18f, smallPaint)
-        canvas.drawText("www.kmi.org.il", pageWidth - 66f, footerY + 31f, smallPaint)
-
-        val flag = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = android.graphics.Color.rgb(20, 85, 200)
-        }
-
-        canvas.drawRect(pageWidth - 48f, footerY + 14f, pageWidth - 20f, footerY + 18f, flag)
-        canvas.drawRect(pageWidth - 48f, footerY + 28f, pageWidth - 20f, footerY + 32f, flag)
+        KmiPdfFooter.draw(
+            canvas = canvas,
+            pageWidth = pageWidth,
+            pageHeight = pageHeight,
+            pageNumber = 1,
+            totalPages = 1,
+            isEnglish = isEnglish
+        )
     }
 
     fun drawPersonalDetails(top: Float): Float {
@@ -2768,7 +2692,7 @@ private fun createProfilePdf(
 
     drawHeader()
 
-    var y = 136f
+    var y = KmiPdfHeader.CONTENT_TOP
     y = drawPersonalDetails(y)
     drawBranches(y)
 
@@ -2801,15 +2725,10 @@ private fun createProfilePdf(
             fileName
         )
 
-    /*
-     * אם נשאר קובץ קודם מאותו דוח,
-     * מוחקים אותו לפני יצירת הקובץ החדש.
-     */
-    if (file.exists()) {
-        file.delete()
-    }
-
-    FileOutputStream(file).use { output ->
+    FileOutputStream(
+        file,
+        false
+    ).use { output ->
         document.writeTo(output)
     }
 

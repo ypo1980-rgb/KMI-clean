@@ -33,6 +33,8 @@ import il.kmi.shared.localization.AppLanguageManager
 import il.kmi.app.ui.KmiIconSize
 import il.kmi.app.ui.KmiTopBar
 import il.kmi.app.ui.KmiTypography
+import il.kmi.app.ui.pdf.KmiPdfFooter
+import il.kmi.app.ui.pdf.KmiPdfHeader
 
 //================================================================
 
@@ -612,127 +614,123 @@ private fun createWeakPointsPdf(
 
     val document = PdfDocument()
 
-    val navy = android.graphics.Color.rgb(2, 43, 74)
     val blue = android.graphics.Color.rgb(12, 78, 130)
     val lightBlue = android.graphics.Color.rgb(234, 246, 255)
     val softBlue = android.graphics.Color.rgb(244, 250, 255)
     val borderBlue = android.graphics.Color.rgb(191, 213, 232)
     val textDark = android.graphics.Color.rgb(15, 23, 42)
-    val textMuted = android.graphics.Color.rgb(80, 100, 120)
     val warningBg = android.graphics.Color.rgb(255, 243, 224)
     val warningBorder = android.graphics.Color.rgb(255, 183, 77)
 
-    val regular = Typeface.create(Typeface.SANS_SERIF, Typeface.NORMAL)
-    val bold = Typeface.create(Typeface.SANS_SERIF, Typeface.BOLD)
+    val regular =
+        Typeface.create(
+            Typeface.SANS_SERIF,
+            Typeface.NORMAL
+        )
 
-    fun paint(size: Float, color: Int = textDark, typeface: Typeface = regular, align: Paint.Align = Paint.Align.RIGHT) =
-        Paint(Paint.ANTI_ALIAS_FLAG).apply {
+    val bold =
+        Typeface.create(
+            Typeface.SANS_SERIF,
+            Typeface.BOLD
+        )
+
+    fun paint(
+        size: Float,
+        color: Int = textDark,
+        typeface: Typeface = regular,
+        align: Paint.Align = Paint.Align.RIGHT
+    ): Paint {
+        return Paint(Paint.ANTI_ALIAS_FLAG).apply {
             textSize = size
             this.color = color
             this.typeface = typeface
             textAlign = align
         }
+    }
 
-    val titlePaint = paint(29f, android.graphics.Color.WHITE, bold)
-    val subTitlePaint = paint(14f, android.graphics.Color.WHITE)
     val sectionPaint = paint(17f, blue, bold)
     val labelPaint = paint(10.5f, blue, bold)
     val valuePaint = paint(12.5f)
     val boldValuePaint = paint(13f, textDark, bold)
-    val smallPaint = paint(9f, textMuted)
 
-    fun drawLogo(canvas: android.graphics.Canvas, cx: Float, cy: Float, r: Float) {
-        canvas.drawCircle(cx, cy, r, Paint(Paint.ANTI_ALIAS_FLAG).apply { color = navy })
-        canvas.drawCircle(cx, cy, r - 4f, Paint(Paint.ANTI_ALIAS_FLAG).apply { color = android.graphics.Color.WHITE })
-        canvas.drawText("KAMI", cx, cy + r * 0.22f, Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = navy
-            typeface = bold
-            textSize = r * 0.62f
-            textAlign = Paint.Align.CENTER
-        })
-    }
-
-    fun drawRound(canvas: android.graphics.Canvas, l: Float, t: Float, r: Float, b: Float, c: Int, stroke: Boolean = false) {
-        canvas.drawRoundRect(l, t, r, b, 12f, 12f, Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = c
-            style = if (stroke) Paint.Style.STROKE else Paint.Style.FILL
-            strokeWidth = 1.2f
-        })
-    }
-
-    fun drawHeader(canvas: android.graphics.Canvas) {
-        canvas.drawColor(android.graphics.Color.WHITE)
-
-        canvas.drawPath(android.graphics.Path().apply {
-            moveTo(pageWidth.toFloat(), 0f)
-            lineTo(pageWidth.toFloat(), 122f)
-            lineTo(178f, 122f)
-            lineTo(238f, 0f)
-            close()
-        }, Paint(Paint.ANTI_ALIAS_FLAG).apply { color = navy })
-
-        canvas.drawPath(android.graphics.Path().apply {
-            moveTo(208f, 122f)
-            lineTo(224f, 122f)
-            lineTo(284f, 0f)
-            lineTo(268f, 0f)
-            close()
-        }, Paint(Paint.ANTI_ALIAS_FLAG).apply { color = android.graphics.Color.rgb(36, 103, 158) })
-
-        canvas.drawPath(android.graphics.Path().apply {
-            moveTo(230f, 122f)
-            lineTo(238f, 122f)
-            lineTo(298f, 0f)
-            lineTo(290f, 0f)
-            close()
-        }, Paint(Paint.ANTI_ALIAS_FLAG).apply { color = android.graphics.Color.rgb(128, 183, 220) })
-
-        drawLogo(canvas, 78f, 58f, 42f)
-
-        canvas.drawText(tr("נקודות תורפה", "Weak Points"), pageWidth - 34f, 52f, titlePaint)
-        canvas.drawText(tr("כרטיס מידע מקצועי למתאמן", "Professional trainee reference card"), pageWidth - 34f, 78f, subTitlePaint)
-
-        smallPaint.textAlign = Paint.Align.RIGHT
-        canvas.drawText(
-            tr("תאריך הפקה:", "Generated:") + " " +
-                    java.text.SimpleDateFormat("dd/MM/yyyy", java.util.Locale.getDefault()).format(java.util.Date()),
-            pageWidth - 34f,
-            142f,
-            smallPaint
+    fun drawRound(
+        canvas: android.graphics.Canvas,
+        left: Float,
+        top: Float,
+        right: Float,
+        bottom: Float,
+        color: Int,
+        stroke: Boolean = false
+    ) {
+        canvas.drawRoundRect(
+            left,
+            top,
+            right,
+            bottom,
+            12f,
+            12f,
+            Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                this.color = color
+                style =
+                    if (stroke) {
+                        Paint.Style.STROKE
+                    } else {
+                        Paint.Style.FILL
+                    }
+                strokeWidth = 1.2f
+            }
         )
     }
 
-    fun drawFooter(canvas: android.graphics.Canvas, pageNumber: Int, totalPages: Int) {
-        val footerY = 804f
-        canvas.drawLine(0f, footerY, pageWidth.toFloat(), footerY, Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = navy
-            strokeWidth = 2f
-        })
-
-        drawLogo(canvas, 38f, footerY + 22f, 13f)
-
-        smallPaint.textAlign = Paint.Align.LEFT
-        canvas.drawText("Together We Protect", 62f, footerY + 25f, smallPaint)
-
-        smallPaint.textAlign = Paint.Align.CENTER
-        canvas.drawText(
-            tr("עמוד $pageNumber מתוך $totalPages", "Page $pageNumber of $totalPages"),
-            pageWidth / 2f,
-            footerY + 25f,
-            smallPaint
+    fun drawHeader(
+        canvas: android.graphics.Canvas
+    ) {
+        KmiPdfHeader.draw(
+            context = context,
+            canvas = canvas,
+            pageWidth = pageWidth,
+            isEnglish = isEnglish,
+            titleHebrew = "נקודות תורפה",
+            titleEnglish = "Weak Points",
+            subtitleHebrew = "כרטיס מידע מקצועי למתאמן",
+            subtitleEnglish = "Professional Trainee Reference Card"
         )
+    }
 
-        smallPaint.textAlign = Paint.Align.RIGHT
-        canvas.drawText("Krav Maga Israel", pageWidth - 66f, footerY + 18f, smallPaint)
-        canvas.drawText("www.kmi.org.il", pageWidth - 66f, footerY + 31f, smallPaint)
+    fun drawFooter(
+        canvas: android.graphics.Canvas,
+        pageNumber: Int,
+        totalPages: Int
+    ) {
+        KmiPdfFooter.draw(
+            canvas = canvas,
+            pageWidth = pageWidth,
+            pageHeight = pageHeight,
+            pageNumber = pageNumber,
+            totalPages = totalPages,
+            isEnglish = isEnglish
+        )
     }
 
     val firstPageCapacity = 5
-    val nextPageCapacity = 7
+    val nextPageCapacity = 6
+
+    val remainingItems =
+        (items.size - firstPageCapacity)
+            .coerceAtLeast(0)
+
+    val additionalPages =
+        if (remainingItems == 0) {
+            0
+        } else {
+            kotlin.math.ceil(
+                remainingItems /
+                        nextPageCapacity.toDouble()
+            ).toInt()
+        }
+
     val totalPages =
-        1 + kotlin.math.ceil(
-            (items.size - firstPageCapacity) / nextPageCapacity.toDouble()
-        ).toInt()
+        1 + additionalPages
 
     var pageNumber = 1
     var itemIndex = 0
@@ -745,7 +743,8 @@ private fun createWeakPointsPdf(
 
         drawHeader(canvas)
 
-        var y = 136f
+        var y =
+            KmiPdfHeader.CONTENT_TOP
 
         if (pageNumber == 1) {
             drawRound(canvas, margin, y, pageWidth - margin, y + 82f, warningBg)

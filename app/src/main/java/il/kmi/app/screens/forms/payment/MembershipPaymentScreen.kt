@@ -96,6 +96,8 @@ import java.time.format.DateTimeFormatter
 import il.kmi.app.ui.KmiLanguageDirection
 import il.kmi.app.ui.loading.KmiLoadingRings
 import il.kmi.app.ui.pdf.KmiPdfDirection
+import il.kmi.app.ui.pdf.KmiPdfHeader
+import il.kmi.app.ui.pdf.KmiPdfFooter
 import il.yuval.ui.theme.kmiScreenBackgroundBrush
 import java.io.File
 import java.io.FileOutputStream
@@ -263,27 +265,6 @@ private fun createMembershipPaymentPdf(
                 right = contentRight
             )
 
-        val navy =
-            android.graphics.Color.rgb(
-                2,
-                43,
-                74
-            )
-
-        val mediumBlue =
-            android.graphics.Color.rgb(
-                36,
-                103,
-                158
-            )
-
-        val lightHeaderBlue =
-            android.graphics.Color.rgb(
-                128,
-                183,
-                220
-            )
-
         val regularTypeface =
             Typeface.create(
                 Typeface.SANS_SERIF,
@@ -295,30 +276,6 @@ private fun createMembershipPaymentPdf(
                 Typeface.SANS_SERIF,
                 Typeface.BOLD
             )
-
-        val titlePaint =
-            Paint(Paint.ANTI_ALIAS_FLAG).apply {
-                color =
-                    android.graphics.Color.WHITE
-                textSize = 27f
-                typeface = boldTypeface
-                textAlign =
-                    KmiPdfDirection.textAlign(
-                        isEnglish = isEnglish
-                    )
-            }
-
-        val subtitlePaint =
-            Paint(Paint.ANTI_ALIAS_FLAG).apply {
-                color =
-                    android.graphics.Color.WHITE
-                textSize = 13.5f
-                typeface = regularTypeface
-                textAlign =
-                    KmiPdfDirection.textAlign(
-                        isEnglish = isEnglish
-                    )
-            }
 
         val sectionPaint =
             Paint(Paint.ANTI_ALIAS_FLAG).apply {
@@ -394,171 +351,7 @@ private fun createMembershipPaymentPdf(
             }
         }
 
-        fun drawKmiLogo(
-            targetCanvas: android.graphics.Canvas,
-            centerX: Float,
-            centerY: Float,
-            radius: Float
-        ) {
-            val outerPaint =
-                Paint(Paint.ANTI_ALIAS_FLAG).apply {
-                    color = navy
-                    style = Paint.Style.FILL
-                }
-
-            val innerPaint =
-                Paint(Paint.ANTI_ALIAS_FLAG).apply {
-                    color =
-                        android.graphics.Color.WHITE
-                    style = Paint.Style.FILL
-                }
-
-            val logoTextPaint =
-                Paint(Paint.ANTI_ALIAS_FLAG).apply {
-                    color = navy
-                    typeface = boldTypeface
-                    textSize = radius * 0.62f
-                    textAlign = Paint.Align.CENTER
-                }
-
-            targetCanvas.drawCircle(
-                centerX,
-                centerY,
-                radius,
-                outerPaint
-            )
-
-            targetCanvas.drawCircle(
-                centerX,
-                centerY,
-                radius - 4f,
-                innerPaint
-            )
-
-            targetCanvas.drawText(
-                "KAMI",
-                centerX,
-                centerY + radius * 0.22f,
-                logoTextPaint
-            )
-        }
-
         fun drawGlobalPdfHeader() {
-            val headerBottom = 122f
-
-            canvas.drawPath(
-                android.graphics.Path().apply {
-                    moveTo(
-                        pageWidth.toFloat(),
-                        0f
-                    )
-                    lineTo(
-                        pageWidth.toFloat(),
-                        headerBottom
-                    )
-                    lineTo(
-                        178f,
-                        headerBottom
-                    )
-                    lineTo(
-                        238f,
-                        0f
-                    )
-                    close()
-                },
-                Paint(Paint.ANTI_ALIAS_FLAG).apply {
-                    color = navy
-                    style = Paint.Style.FILL
-                }
-            )
-
-            canvas.drawPath(
-                android.graphics.Path().apply {
-                    moveTo(
-                        208f,
-                        headerBottom
-                    )
-                    lineTo(
-                        224f,
-                        headerBottom
-                    )
-                    lineTo(
-                        284f,
-                        0f
-                    )
-                    lineTo(
-                        268f,
-                        0f
-                    )
-                    close()
-                },
-                Paint(Paint.ANTI_ALIAS_FLAG).apply {
-                    color = mediumBlue
-                    style = Paint.Style.FILL
-                }
-            )
-
-            canvas.drawPath(
-                android.graphics.Path().apply {
-                    moveTo(
-                        230f,
-                        headerBottom
-                    )
-                    lineTo(
-                        238f,
-                        headerBottom
-                    )
-                    lineTo(
-                        298f,
-                        0f
-                    )
-                    lineTo(
-                        290f,
-                        0f
-                    )
-                    close()
-                },
-                Paint(Paint.ANTI_ALIAS_FLAG).apply {
-                    color = lightHeaderBlue
-                    style = Paint.Style.FILL
-                }
-            )
-
-            drawKmiLogo(
-                targetCanvas = canvas,
-                centerX = 78f,
-                centerY = 58f,
-                radius = 42f
-            )
-
-            titlePaint.textAlign =
-                KmiPdfDirection.textAlign(
-                    isEnglish = isEnglish
-                )
-
-            subtitlePaint.textAlign =
-                KmiPdfDirection.textAlign(
-                    isEnglish = isEnglish
-                )
-
-            val headerTextX =
-                KmiPdfDirection.startX(
-                    isEnglish = isEnglish,
-                    left = 308f,
-                    right = 435f
-                )
-
-            canvas.drawText(
-                tr(
-                    hebrew = "טופס תשלום דמי חבר",
-                    english =
-                        "Membership Payment Form"
-                ),
-                headerTextX,
-                50f,
-                titlePaint
-            )
-
             val traineeName =
                 listOf(
                     formData.traineeFirstName,
@@ -575,46 +368,15 @@ private fun createMembershipPaymentPdf(
                         )
                     }
 
-            canvas.drawText(
-                traineeName,
-                headerTextX,
-                77f,
-                subtitlePaint
-            )
-
-            val generatedDatePaint =
-                Paint(Paint.ANTI_ALIAS_FLAG).apply {
-                    color =
-                        android.graphics.Color.rgb(
-                            100,
-                            116,
-                            139
-                        )
-                    textSize = 9.2f
-                    typeface = regularTypeface
-                    textAlign =
-                        KmiPdfDirection.textAlign(
-                            isEnglish = isEnglish
-                        )
-                }
-
-            val generatedDate =
-                LocalDate.now().format(
-                    DateTimeFormatter.ofPattern(
-                        "dd/MM/yyyy"
-                    )
-                )
-
-            canvas.drawText(
-                "${
-                    tr(
-                        hebrew = "תאריך הפקה",
-                        english = "Generated"
-                    )
-                }: $generatedDate",
-                startX(),
-                144f,
-                generatedDatePaint
+            KmiPdfHeader.draw(
+                context = context,
+                canvas = canvas,
+                pageWidth = pageWidth,
+                isEnglish = isEnglish,
+                titleHebrew = "טופס תשלום דמי חבר",
+                titleEnglish = "Membership Payment Form",
+                subtitleHebrew = traineeName,
+                subtitleEnglish = traineeName
             )
         }
 
@@ -677,7 +439,7 @@ private fun createMembershipPaymentPdf(
 
         drawGlobalPdfHeader()
 
-        var y = 184f
+        var y = KmiPdfHeader.CONTENT_TOP
 
         y = drawSection(
             title = tr(
@@ -834,8 +596,19 @@ private fun createMembershipPaymentPdf(
                 english = "This document summarizes the form and is not a payment confirmation."
             ),
             pageWidth / 2f,
-            pageHeight - 42f,
+            pageHeight -
+                    KmiPdfFooter.CONTENT_BOTTOM_PADDING -
+                    8f,
             footerPaint
+        )
+
+        KmiPdfFooter.draw(
+            canvas = canvas,
+            pageWidth = pageWidth,
+            pageHeight = pageHeight,
+            pageNumber = 1,
+            totalPages = 1,
+            isEnglish = isEnglish
         )
 
         document.finishPage(page)
@@ -850,14 +623,23 @@ private fun createMembershipPaymentPdf(
                 }
             }
 
+        val pdfFileName =
+            if (isEnglish) {
+                "KAMI Membership Payment Form.pdf"
+            } else {
+                "טופס תשלום דמי חבר קמי.pdf"
+            }
+
         val pdfFile =
             File(
                 pdfDirectory,
-                "טופס_תשלום_דמי_חבר_קמי.pdf"
+                pdfFileName
             )
 
-        FileOutputStream(pdfFile).use {
-                outputStream ->
+        FileOutputStream(
+            pdfFile,
+            false
+        ).use { outputStream ->
             document.writeTo(outputStream)
         }
 

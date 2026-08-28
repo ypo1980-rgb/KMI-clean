@@ -68,6 +68,8 @@ import il.kmi.app.ui.KmiTopBar
 import il.kmi.app.ui.KmiIconSize
 import il.kmi.app.ui.KmiTypography
 import il.kmi.app.ui.pdf.KmiPdfDirection
+import il.kmi.app.ui.pdf.KmiPdfHeader
+import il.kmi.app.ui.pdf.KmiPdfFooter
 import il.kmi.shared.localization.AppLanguage
 import il.kmi.app.privacy.DemoPrivacy
 import il.kmi.app.privacy.TraineeDisplayNameMapper
@@ -79,9 +81,6 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
 import java.io.File
 import java.io.FileOutputStream
-import java.text.SimpleDateFormat
-import java.util.Date
-import java.util.Locale
 
 //===================================================================
 
@@ -960,13 +959,6 @@ private fun createContactUsPdf(
 
     val document = PdfDocument()
 
-    val navy =
-        android.graphics.Color.rgb(
-            2,
-            43,
-            74
-        )
-
     val blue =
         android.graphics.Color.rgb(
             36,
@@ -1093,10 +1085,26 @@ private fun createContactUsPdf(
     fun currentCanvas(): android.graphics.Canvas =
         pageCanvas
 
-    fun newPage() {
-        if (hasActivePage) {
-            document.finishPage(currentPage)
+    fun finishActivePage() {
+        if (!hasActivePage) {
+            return
         }
+
+        KmiPdfFooter.draw(
+            canvas = currentCanvas(),
+            pageWidth = pageWidth,
+            pageHeight = pageHeight,
+            pageNumber = pageNumber,
+            totalPages = null,
+            isEnglish = isEnglish
+        )
+
+        document.finishPage(currentPage)
+        hasActivePage = false
+    }
+
+    fun newPage() {
+        finishActivePage()
 
         pageNumber++
 
@@ -1115,214 +1123,18 @@ private fun createContactUsPdf(
         pageCanvas = currentPage.canvas
         hasActivePage = true
 
-        pageCanvas.drawColor(
-            android.graphics.Color.WHITE
+        KmiPdfHeader.draw(
+            context = context,
+            canvas = currentCanvas(),
+            pageWidth = pageWidth,
+            isEnglish = isEnglish,
+            titleHebrew = "צור קשר",
+            titleEnglish = "Contact Us",
+            subtitleHebrew = "פנייה לעמותת ק.מ.י",
+            subtitleEnglish = "KAMI Contact Request"
         )
 
-        // =========================================================
-        // Header — זהה ל-PDF של הסטטיסטיקה / מסך הבית
-        // =========================================================
-
-        val headerBottom = 122f
-
-        val navyPaint =
-            Paint(
-                Paint.ANTI_ALIAS_FLAG
-            ).apply {
-                color = navy
-            }
-
-        val accent1 =
-            Paint(
-                Paint.ANTI_ALIAS_FLAG
-            ).apply {
-                color =
-                    android.graphics.Color.rgb(
-                        36,
-                        103,
-                        158
-                    )
-            }
-
-        val accent2 =
-            Paint(
-                Paint.ANTI_ALIAS_FLAG
-            ).apply {
-                color =
-                    android.graphics.Color.rgb(
-                        128,
-                        183,
-                        220
-                    )
-            }
-
-        currentCanvas().drawPath(
-            android.graphics.Path().apply {
-                moveTo(
-                    pageWidth.toFloat(),
-                    0f
-                )
-                lineTo(
-                    pageWidth.toFloat(),
-                    headerBottom
-                )
-                lineTo(
-                    178f,
-                    headerBottom
-                )
-                lineTo(
-                    238f,
-                    0f
-                )
-                close()
-            },
-            navyPaint
-        )
-
-        currentCanvas().drawPath(
-            android.graphics.Path().apply {
-                moveTo(
-                    208f,
-                    headerBottom
-                )
-                lineTo(
-                    224f,
-                    headerBottom
-                )
-                lineTo(
-                    284f,
-                    0f
-                )
-                lineTo(
-                    268f,
-                    0f
-                )
-                close()
-            },
-            accent1
-        )
-
-        currentCanvas().drawPath(
-            android.graphics.Path().apply {
-                moveTo(
-                    230f,
-                    headerBottom
-                )
-                lineTo(
-                    238f,
-                    headerBottom
-                )
-                lineTo(
-                    298f,
-                    0f
-                )
-                lineTo(
-                    290f,
-                    0f
-                )
-                close()
-            },
-            accent2
-        )
-
-        // לוגו KAMI
-        val logoX = 78f
-        val logoY = 58f
-        val logoRadius = 42f
-
-        currentCanvas().drawCircle(
-            logoX,
-            logoY,
-            logoRadius,
-            navyPaint
-        )
-
-        currentCanvas().drawCircle(
-            logoX,
-            logoY,
-            logoRadius - 4f,
-            Paint(
-                Paint.ANTI_ALIAS_FLAG
-            ).apply {
-                color =
-                    android.graphics.Color.WHITE
-            }
-        )
-
-        currentCanvas().drawText(
-            "KAMI",
-            logoX,
-            logoY + logoRadius * 0.22f,
-            paint(
-                size = logoRadius * 0.62f,
-                color = navy,
-                typeface = boldTypeface,
-                align = Paint.Align.CENTER
-            )
-        )
-
-        val headerX =
-            pageWidth - 34f
-
-        currentCanvas().drawText(
-            if (isEnglish) {
-                "Contact Us"
-            } else {
-                "צור קשר"
-            },
-            headerX,
-            52f,
-            paint(
-                size = 25f,
-                color =
-                    android.graphics.Color.WHITE,
-                typeface = boldTypeface,
-                align = Paint.Align.RIGHT
-            )
-        )
-
-        currentCanvas().drawText(
-            if (isEnglish) {
-                "KAMI Contact Request"
-            } else {
-                "פנייה לעמותת ק.מ.י"
-            },
-            headerX,
-            78f,
-            paint(
-                size = 11f,
-                color =
-                    android.graphics.Color.WHITE,
-                typeface = regularTypeface,
-                align = Paint.Align.RIGHT
-            )
-        )
-
-        val generatedDate =
-            SimpleDateFormat(
-                "dd/MM/yyyy",
-                Locale.getDefault()
-            ).format(
-                Date()
-            )
-
-        currentCanvas().drawText(
-            if (isEnglish) {
-                "Generated: $generatedDate"
-            } else {
-                "תאריך הפקה: $generatedDate"
-            },
-            headerX,
-            142f,
-            paint(
-                size = 8.5f,
-                color = textMuted,
-                typeface = regularTypeface,
-                align = Paint.Align.RIGHT
-            )
-        )
-
-        y = 170f
+        y = KmiPdfHeader.CONTENT_TOP
     }
 
     fun ensureSpace(
@@ -1330,7 +1142,8 @@ private fun createContactUsPdf(
     ) {
         if (
             y + requiredHeight >
-            pageHeight - 35f
+            pageHeight -
+            KmiPdfFooter.CONTENT_BOTTOM_PADDING
         ) {
             newPage()
         }
@@ -1569,9 +1382,7 @@ private fun createContactUsPdf(
             }
     )
 
-    if (hasActivePage) {
-        document.finishPage(currentPage)
-    }
+    finishActivePage()
 
     val pdfDirectory =
         File(

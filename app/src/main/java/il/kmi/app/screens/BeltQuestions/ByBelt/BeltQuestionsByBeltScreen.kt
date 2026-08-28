@@ -98,12 +98,12 @@ import il.kmi.app.ui.KmiLanguageDirection
 import il.kmi.app.ui.KmiTopBar
 import il.kmi.app.ui.LocalAppIconScale
 import il.kmi.app.ui.pdf.KmiPdfDirection
+import il.kmi.app.ui.pdf.KmiPdfHeader
+import il.kmi.app.ui.pdf.KmiPdfFooter
 import il.yuval.ui.theme.kmiScreenBackgroundBrush
+import il.yuval.ui.theme.kmiSectionHeaderBrush
 import java.io.File
 import java.io.FileOutputStream
-import java.text.SimpleDateFormat
-import java.util.Date
-import java.util.Locale
 import kotlin.math.abs
 import kotlin.math.min
 
@@ -485,16 +485,21 @@ private fun createBeltTopicsPdf(
     val pageWidth = 595
     val pageHeight = 842
     val horizontalMargin = 30f
-    val contentBottom = 790f
+    val contentBottom =
+        pageHeight - KmiPdfFooter.CONTENT_BOTTOM_PADDING
 
-    val navy = android.graphics.Color.rgb(6, 43, 74)
-    val blue = android.graphics.Color.rgb(31, 120, 180)
-    val lightBlue = android.graphics.Color.rgb(234, 244, 255)
+    val navy =
+        android.graphics.Color.rgb(6, 43, 74)
+
+    val blue =
+        android.graphics.Color.rgb(31, 120, 180)
+
+    val lightBlue =
+        android.graphics.Color.rgb(234, 244, 255)
     val softBlue = android.graphics.Color.rgb(247, 251, 255)
     val borderBlue = android.graphics.Color.rgb(190, 215, 235)
     val textDark = android.graphics.Color.rgb(31, 41, 55)
     val textMuted = android.graphics.Color.rgb(92, 110, 128)
-    val white = android.graphics.Color.WHITE
 
     val beltAccent = belt.color.toArgb()
 
@@ -529,54 +534,6 @@ private fun createBeltTopicsPdf(
         }
     }
 
-    fun drawKmiLogo(
-        targetCanvas: Canvas,
-        cx: Float,
-        cy: Float,
-        radius: Float
-    ) {
-        val outer =
-            Paint(Paint.ANTI_ALIAS_FLAG).apply {
-                color = navy
-                style = Paint.Style.FILL
-            }
-
-        val inner =
-            Paint(Paint.ANTI_ALIAS_FLAG).apply {
-                color = white
-                style = Paint.Style.FILL
-            }
-
-        val logoText =
-            Paint(Paint.ANTI_ALIAS_FLAG).apply {
-                color = navy
-                typeface = boldTypeface
-                textSize = radius * 0.62f
-                textAlign = Paint.Align.CENTER
-            }
-
-        targetCanvas.drawCircle(
-            cx,
-            cy,
-            radius,
-            outer
-        )
-
-        targetCanvas.drawCircle(
-            cx,
-            cy,
-            radius - 4f,
-            inner
-        )
-
-        targetCanvas.drawText(
-            "KAMI",
-            cx,
-            cy + radius * 0.22f,
-            logoText
-        )
-    }
-
     val document = PdfDocument()
 
     var currentPage: PdfDocument.Page? = null
@@ -586,56 +543,13 @@ private fun createBeltTopicsPdf(
 
     fun finishCurrentPage() {
         currentPage?.let { page ->
-            val currentCanvas = page.canvas
-
-            val footerPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-                color = navy
-                strokeWidth = 1.5f
-            }
-
-            currentCanvas.drawLine(
-                horizontalMargin,
-                805f,
-                pageWidth - horizontalMargin,
-                805f,
-                footerPaint
-            )
-
-            currentCanvas.drawText(
-                "K.A.M.I",
-                horizontalMargin,
-                827f,
-                textPaint(
-                    size = 10f,
-                    color = navy,
-                    bold = true,
-                    alignment = Paint.Align.LEFT
-                )
-            )
-
-            currentCanvas.drawText(
-                translated(
-                    "עמוד $pageNumber",
-                    "Page $pageNumber"
-                ),
-                pageWidth / 2f,
-                827f,
-                textPaint(
-                    size = 9f,
-                    color = textMuted,
-                    alignment = Paint.Align.CENTER
-                )
-            )
-
-            currentCanvas.drawText(
-                "Krav Maga Israel",
-                pageWidth - horizontalMargin,
-                827f,
-                textPaint(
-                    size = 9f,
-                    color = textMuted,
-                    alignment = Paint.Align.RIGHT
-                )
+            KmiPdfFooter.draw(
+                canvas = page.canvas,
+                pageWidth = pageWidth,
+                pageHeight = pageHeight,
+                pageNumber = pageNumber,
+                totalPages = null,
+                isEnglish = isEnglish
             )
 
             document.finishPage(page)
@@ -664,180 +578,22 @@ private fun createBeltTopicsPdf(
         canvas = page.canvas
 
         val currentCanvas = page.canvas
-        currentCanvas.drawColor(white)
 
-        /*
-      * כותרת PDF בסגנון האחיד של דוח מסך הבית:
-      * לוגו KAMI + אזור כחול אלכסוני + פסי אקסנט.
-      */
-        val diagonal =
-            Paint(Paint.ANTI_ALIAS_FLAG).apply {
-                color = navy
-                style = Paint.Style.FILL
-            }
-
-        val accent1 =
-            Paint(Paint.ANTI_ALIAS_FLAG).apply {
-                color = android.graphics.Color.rgb(
-                    36,
-                    103,
-                    158
-                )
-                style = Paint.Style.FILL
-            }
-
-        val accent2 =
-            Paint(Paint.ANTI_ALIAS_FLAG).apply {
-                color = android.graphics.Color.rgb(
-                    128,
-                    183,
-                    220
-                )
-                style = Paint.Style.FILL
-            }
-
-        /*
-         * השטח הכחול העליון.
-         */
-        val diagonalPath =
-            android.graphics.Path().apply {
-                moveTo(
-                    pageWidth.toFloat(),
-                    0f
-                )
-                lineTo(
-                    pageWidth.toFloat(),
-                    122f
-                )
-                lineTo(
-                    178f,
-                    122f
-                )
-                lineTo(
-                    238f,
-                    0f
-                )
-                close()
-            }
-
-        currentCanvas.drawPath(
-            diagonalPath,
-            diagonal
-        )
-
-        /*
-         * פס כחול בינוני.
-         */
-        currentCanvas.drawPath(
-            android.graphics.Path().apply {
-                moveTo(208f, 122f)
-                lineTo(224f, 122f)
-                lineTo(284f, 0f)
-                lineTo(268f, 0f)
-                close()
-            },
-            accent1
-        )
-
-        /*
-         * פס כחול בהיר.
-         */
-        currentCanvas.drawPath(
-            android.graphics.Path().apply {
-                moveTo(230f, 122f)
-                lineTo(238f, 122f)
-                lineTo(298f, 0f)
-                lineTo(290f, 0f)
-                close()
-            },
-            accent2
-        )
-
-        /*
-         * לוגו KAMI משמאל.
-         */
-        drawKmiLogo(
-            targetCanvas = currentCanvas,
-            cx = 78f,
-            cy = 58f,
-            radius = 42f
-        )
-
-        /*
-         * כיווניות ומיקום הכותרת נלקחים ממנגנון
-         * הכיוונים הגלובלי של קובצי ה־PDF.
-         *
-         * שני המצבים נשארים בתוך אזור הכותרת הכחול
-         * ואינם חופפים ללוגו שנמצא משמאל.
-         */
-        val headerAlignment =
-            KmiPdfDirection.textAlign(
-                isEnglish = isEnglish
-            )
-
-        val headerX =
-            KmiPdfDirection.startX(
-                isEnglish = isEnglish,
-                left = 308f,
-                right = 435f
-            )
-
-        currentCanvas.drawText(
-            translated(
-                "תרגילים לפי חגורה",
-                "Exercises by Belt"
-            ),
-            headerX,
-            50f,
-            textPaint(
-                size = 24f,
-                color = white,
-                bold = true,
-                alignment = headerAlignment
-            )
-        )
-
-        currentCanvas.drawText(
+        val beltTitle =
             beltTitleForUi(
-                belt,
-                lang
-            ),
-            headerX,
-            76f,
-            textPaint(
-                size = 13f,
-                color = android.graphics.Color.rgb(
-                    220,
-                    235,
-                    247
-                ),
-                bold = true,
-                alignment = headerAlignment
+                belt = belt,
+                lang = lang
             )
-        )
 
-        val generatedDate =
-            SimpleDateFormat(
-                "dd/MM/yyyy",
-                Locale.getDefault()
-            ).format(Date())
-
-        currentCanvas.drawText(
-            translated(
-                "הופק בתאריך $generatedDate",
-                "Generated on $generatedDate"
-            ),
-            headerX,
-            96f,
-            textPaint(
-                size = 9f,
-                color = android.graphics.Color.rgb(
-                    210,
-                    230,
-                    245
-                ),
-                alignment = headerAlignment
-            )
+        KmiPdfHeader.draw(
+            context = context,
+            canvas = currentCanvas,
+            pageWidth = pageWidth,
+            isEnglish = isEnglish,
+            titleHebrew = "תרגילים לפי חגורה",
+            titleEnglish = "Exercises by Belt",
+            subtitleHebrew = beltTitle,
+            subtitleEnglish = beltTitle
         )
 
         /*
@@ -847,8 +603,11 @@ private fun createBeltTopicsPdf(
          */
         if (pageNumber == 1) {
 
-            val summaryTop = 138f
-            val summaryBottom = 198f
+            val summaryTop =
+                KmiPdfHeader.CONTENT_TOP
+
+            val summaryBottom =
+                summaryTop + 60f
 
             val summaryBackground =
                 Paint(Paint.ANTI_ALIAS_FLAG).apply {
@@ -938,10 +697,9 @@ private fun createBeltTopicsPdf(
         } else {
 
             /*
-             * בעמודי ההמשך אין צורך לחזור על כרטיס הסיכום,
-             * וכך נשאר יותר מקום לרשימת התרגילים.
+             * בעמודי ההמשך אין צורך לחזור על כרטיס הסיכום.
              */
-            currentY = 142f
+            currentY = KmiPdfHeader.CONTENT_TOP
         }
     }
 
@@ -1982,9 +1740,7 @@ private fun BeltQuestionsModeSwitcher(
         modifier = Modifier
             .fillMaxWidth(0.88f)
             .padding(bottom = 6.dp),
-        color =
-            Color(0xFF062B4A)
-                .copy(alpha = 0.78f),
+        color = Color.Transparent,
         contentColor = Color.White,
         shadowElevation = 0.dp,
         tonalElevation = 0.dp,
@@ -2000,7 +1756,11 @@ private fun BeltQuestionsModeSwitcher(
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(48.dp)
+                .heightIn(min = 48.dp)
+                .background(
+                    brush = kmiSectionHeaderBrush(),
+                    shape = RoundedCornerShape(18.dp)
+                )
         ) {
             Box(
                 modifier = Modifier

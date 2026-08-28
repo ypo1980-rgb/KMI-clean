@@ -112,6 +112,8 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
 import il.kmi.app.ui.KmiTopBar
 import il.kmi.app.ui.KmiTypography
+import il.kmi.app.ui.pdf.KmiPdfHeader
+import il.kmi.app.ui.pdf.KmiPdfFooter
 import androidx.compose.ui.graphics.luminance
 
 
@@ -461,10 +463,12 @@ object InternalExamPdf {
             val leftMargin = 40f
             val rightMargin = (pageW - 40).toFloat()
 
-            val footerH = 44f
+            val contentTop =
+                KmiPdfHeader.CONTENT_TOP
 
-            val contentTop = 164f
-            val contentBottom = (pageH - 40).toFloat() - footerH
+            val contentBottom =
+                pageH -
+                        KmiPdfFooter.CONTENT_BOTTOM_PADDING
 
             fun pdfTr(he: String, en: String): String =
                 if (isEnglish) en else he
@@ -519,20 +523,6 @@ object InternalExamPdf {
                     p >= 50 -> "#F59E0B".toColorInt() // amber
                     else -> "#EF4444".toColorInt() // red
                 }
-            }
-
-            val headerTitle = Paint().apply {
-                isAntiAlias = true
-                color = AColor.WHITE
-                textSize = 29f
-                typeface = Typeface.create("sans-serif-medium", Typeface.BOLD)
-            }
-
-            val headerSub = Paint().apply {
-                isAntiAlias = true
-                color = AColor.WHITE
-                textSize = 14f
-                typeface = Typeface.create("sans-serif", Typeface.NORMAL)
             }
 
             val cardBg = Paint().apply {
@@ -603,14 +593,12 @@ object InternalExamPdf {
                 strokeWidth = 1.2f
             }
 
-            val footerPaint = Paint().apply {
-                isAntiAlias = true
-                color = "#64748B".toColorInt()
-                textSize = 10.5f
-                typeface = Typeface.create("sans-serif", Typeface.NORMAL)
-            }
-
-            fun drawRight(canvas: android.graphics.Canvas, text: String, y: Float, paint: Paint) {
+            fun drawRight(
+                canvas: android.graphics.Canvas,
+                text: String,
+                y: Float,
+                paint: Paint
+            ) {
                 val w = paint.measureText(text)
                 canvas.drawText(text, rightMargin - w, y, paint)
             }
@@ -626,185 +614,40 @@ object InternalExamPdf {
             fun drawHeader(
                 canvas: android.graphics.Canvas
             ) {
-                canvas.drawColor(AColor.WHITE)
-
-                val navy = AColor.rgb(2, 43, 74)
-                val mediumBlue = AColor.rgb(36, 103, 158)
-                val lightHeaderBlue = AColor.rgb(128, 183, 220)
-                val mutedText = AColor.rgb(80, 100, 120)
-
-                val headerBottom = 122f
-
-                val navyHeaderPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-                    color = navy
-                    style = Paint.Style.FILL
-                }
-
-                val mediumStripePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-                    color = mediumBlue
-                    style = Paint.Style.FILL
-                }
-
-                val lightStripePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-                    color = lightHeaderBlue
-                    style = Paint.Style.FILL
-                }
-
-                canvas.drawPath(
-                    android.graphics.Path().apply {
-                        moveTo(pageW.toFloat(), 0f)
-                        lineTo(pageW.toFloat(), headerBottom)
-                        lineTo(178f, headerBottom)
-                        lineTo(238f, 0f)
-                        close()
-                    },
-                    navyHeaderPaint
-                )
-
-                canvas.drawPath(
-                    android.graphics.Path().apply {
-                        moveTo(208f, headerBottom)
-                        lineTo(224f, headerBottom)
-                        lineTo(284f, 0f)
-                        lineTo(268f, 0f)
-                        close()
-                    },
-                    mediumStripePaint
-                )
-
-                canvas.drawPath(
-                    android.graphics.Path().apply {
-                        moveTo(230f, headerBottom)
-                        lineTo(238f, headerBottom)
-                        lineTo(298f, 0f)
-                        lineTo(290f, 0f)
-                        close()
-                    },
-                    lightStripePaint
-                )
-
-                val logoCenterX = 78f
-                val logoCenterY = 58f
-                val logoRadius = 42f
-
-                val logoOuterPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-                    color = navy
-                    style = Paint.Style.FILL
-                }
-
-                val logoInnerPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-                    color = AColor.WHITE
-                    style = Paint.Style.FILL
-                }
-
-                val logoTextPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-                    color = navy
-                    textSize = logoRadius * 0.62f
-                    typeface = Typeface.create(
-                        Typeface.SANS_SERIF,
-                        Typeface.BOLD
+                val generatedDate =
+                    session.date.format(
+                        DateTimeFormatter.ofPattern(
+                            "dd/MM/yyyy"
+                        )
                     )
-                    textAlign = Paint.Align.CENTER
-                }
 
-                canvas.drawCircle(
-                    logoCenterX,
-                    logoCenterY,
-                    logoRadius,
-                    logoOuterPaint
-                )
-
-                canvas.drawCircle(
-                    logoCenterX,
-                    logoCenterY,
-                    logoRadius - 4f,
-                    logoInnerPaint
-                )
-
-                canvas.drawText(
-                    "KAMI",
-                    logoCenterX,
-                    logoCenterY + logoRadius * 0.22f,
-                    logoTextPaint
-                )
-
-                headerTitle.textAlign = if (isEnglish) {
-                    Paint.Align.LEFT
-                } else {
-                    Paint.Align.RIGHT
-                }
-
-                headerSub.textAlign = if (isEnglish) {
-                    Paint.Align.LEFT
-                } else {
-                    Paint.Align.RIGHT
-                }
-
-                val headerTextX = if (isEnglish) {
-                    308f
-                } else {
-                    pageW - 34f
-                }
-
-                canvas.drawText(
-                    pdfTr(
-                        "דו״ח מבחן פנימי",
-                        "Internal Exam Report"
-                    ),
-                    headerTextX,
-                    52f,
-                    headerTitle
-                )
-
-                canvas.drawText(
-                    pdfTr(
+                KmiPdfHeader.draw(
+                    context = context,
+                    canvas = canvas,
+                    pageWidth = pageW,
+                    isEnglish = isEnglish,
+                    titleHebrew = "דו״ח מבחן פנימי",
+                    titleEnglish = "Internal Exam Report",
+                    subtitleHebrew =
                         "חגורה: ${pdfBeltName(session.belt)}",
-                        "Belt: ${pdfBeltName(session.belt)}"
-                    ),
-                    headerTextX,
-                    78f,
-                    headerSub
-                )
-
-                val generatedDatePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-                    color = mutedText
-                    textSize = 9f
-                    typeface = Typeface.create(
-                        Typeface.SANS_SERIF,
-                        Typeface.NORMAL
-                    )
-                    textAlign = Paint.Align.RIGHT
-                }
-
-                val generatedDate = session.date.format(
-                    DateTimeFormatter.ofPattern("dd/MM/yyyy")
-                )
-
-                canvas.drawText(
-                    pdfTr(
-                        "תאריך הפקה: $generatedDate",
-                        "Generated: $generatedDate"
-                    ),
-                    pageW - 34f,
-                    142f,
-                    generatedDatePaint
+                    subtitleEnglish =
+                        "Belt: ${pdfBeltName(session.belt)}",
+                    generatedDate = generatedDate
                 )
             }
 
-            fun drawFooter(canvas: android.graphics.Canvas, pageNumber: Int) {
-                val y = (pageH - 18).toFloat()
-                val left = pdfTr(
-                    "נוצר ע\"י K.A.M.I",
-                    "Generated by K.A.M.I"
+            fun drawFooter(
+                canvas: android.graphics.Canvas,
+                pageNumber: Int
+            ) {
+                KmiPdfFooter.draw(
+                    canvas = canvas,
+                    pageWidth = pageW,
+                    pageHeight = pageH,
+                    pageNumber = pageNumber,
+                    totalPages = null,
+                    isEnglish = isEnglish
                 )
-
-                val right = pdfTr(
-                    "עמוד $pageNumber",
-                    "Page $pageNumber"
-                )
-
-                canvas.drawText(left, leftMargin, y, footerPaint)
-                drawRight(canvas, right, y, footerPaint)
             }
 
             fun drawKpiCards(canvas: android.graphics.Canvas, startY: Float): Float {
@@ -1304,7 +1147,6 @@ fun InternalExamScreen(
     onResultUpdate: (String, Boolean) -> Unit = { _, _ -> },
     onBeltChange: (Belt) -> Unit,
     onBack: () -> Unit,
-    @Suppress("UNUSED_PARAMETER")
     onExportPdf: (
         InternalExamSession
     ) -> Unit = {},
@@ -1413,7 +1255,44 @@ fun InternalExamScreen(
                 showTopHome = false,
                 showTopSearch = true,
                 showSettings = true,
-                showTopShare = false,
+                showTopShare = true,
+                onShare = {
+                    val activeName =
+                        traineeName.trim()
+
+                    if (activeName.isBlank()) {
+                        Toast.makeText(
+                            ctx,
+                            examTr(
+                                isEnglish,
+                                "נא לבחור או להזין שם נבחן לפני שיתוף",
+                                "Please select or enter a trainee name before sharing"
+                            ),
+                            Toast.LENGTH_SHORT
+                        ).show()
+                    } else if (marksMap.isEmpty()) {
+                        Toast.makeText(
+                            ctx,
+                            examTr(
+                                isEnglish,
+                                "אין ציונים ליצירת קובץ PDF",
+                                "There are no scores for creating a PDF"
+                            ),
+                            Toast.LENGTH_SHORT
+                        ).show()
+                    } else {
+                        val pdfSession =
+                            buildInternalExamSessionForUi(
+                                traineeName = activeName,
+                                belt = belt,
+                                marksMap = marksMap
+                            )
+
+                        onExportPdf(
+                            pdfSession
+                        )
+                    }
+                },
                 centerTitle = true,
                 onHome = onBack,
                 onPickSearchResult = {}
@@ -3806,7 +3685,52 @@ fun InternalExamEntryScreen(
 
                     scope.launch {
                         recentTrainees = loadRecentTrainees(ctx)
-                        recentCompletedResults = loadRecentCompletedExamResults(limit = 20)
+                        recentCompletedResults =
+                            loadRecentCompletedExamResults(
+                                limit = 20
+                            )
+                    }
+                },
+                onExportPdf = { pdfSession ->
+                    val demoIndex =
+                        recentTrainees
+                            .indexOfFirst {
+                                it.trim().equals(
+                                    pdfSession
+                                        .traineeName
+                                        .trim(),
+                                    ignoreCase = true
+                                )
+                            }
+                            .takeIf {
+                                it >= 0
+                            }
+                            ?.plus(1)
+
+                    val uri =
+                        InternalExamPdf.createPdf(
+                            context = ctx,
+                            session = pdfSession,
+                            isEnglish = isEnglish,
+                            demoIndex = demoIndex
+                        )
+
+                    if (uri != null) {
+                        InternalExamPdf.sharePdf(
+                            context = ctx,
+                            uri = uri,
+                            isEnglish = isEnglish
+                        )
+                    } else {
+                        Toast.makeText(
+                            ctx,
+                            examTr(
+                                isEnglish,
+                                "שגיאה ביצירת קובץ PDF",
+                                "Error creating PDF"
+                            ),
+                            Toast.LENGTH_SHORT
+                        ).show()
                     }
                 },
                 sharedMarksMap = marksMap,

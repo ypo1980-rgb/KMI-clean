@@ -88,7 +88,6 @@ import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import il.kmi.app.favorites.FavoritesStore
 import android.app.Activity
-import android.graphics.Path
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.material.icons.filled.History
@@ -107,6 +106,8 @@ import il.kmi.app.training.TrainingCatalog
 import il.kmi.app.screens.registration.CoachBranchAssignmentsCodec
 import il.kmi.app.ui.KmiTopBar
 import il.kmi.app.ui.KmiTypography
+import il.kmi.app.ui.pdf.KmiPdfHeader
+import il.kmi.app.ui.pdf.KmiPdfFooter
 import il.kmi.shared.domain.content.ExerciseTitlesEn
 import il.yuval.ui.theme.kmiScreenBackgroundBrush
 import il.yuval.ui.theme.kmiSectionHeaderBrush
@@ -5963,13 +5964,10 @@ private fun createHomePdf(
         textAlign = align
     }
 
-    val titlePaint = paint(29f, android.graphics.Color.WHITE, bold)
-    val subTitlePaint = paint(14f, android.graphics.Color.WHITE, regular)
     val sectionPaint = paint(17f, blue, bold)
     val labelPaint = paint(10.5f, blue, bold)
     val valuePaint = paint(12.5f, textDark, regular)
     val boldValuePaint = paint(13f, textDark, bold)
-    val smallPaint = paint(9f, textMuted, regular)
 
     fun drawRoundRect(
         left: Float,
@@ -5989,128 +5987,16 @@ private fun createHomePdf(
         canvas.drawRoundRect(left, top, right, bottom, radius, radius, p)
     }
 
-    fun drawKmiLogo(cx: Float, cy: Float, radius: Float) {
-        val outer = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = navy }
-        val inner = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = android.graphics.Color.WHITE }
-        val text = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = navy
-            typeface = bold
-            textSize = radius * 0.62f
-            textAlign = Paint.Align.CENTER
-        }
-
-        canvas.drawCircle(cx, cy, radius, outer)
-        canvas.drawCircle(cx, cy, radius - 4f, inner)
-        canvas.drawText("KAMI", cx, cy + radius * 0.22f, text)
-    }
-
     fun drawHeader() {
-        canvas.drawColor(android.graphics.Color.WHITE)
-
-        val diagonal = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = navy }
-        val accent1 = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = android.graphics.Color.rgb(36, 103, 158)
-        }
-        val accent2 = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = android.graphics.Color.rgb(128, 183, 220)
-        }
-
-        val path = Path().apply {
-            moveTo(pageWidth.toFloat(), 0f)
-            lineTo(pageWidth.toFloat(), 122f)
-            lineTo(178f, 122f)
-            lineTo(238f, 0f)
-            close()
-        }
-        canvas.drawPath(path, diagonal)
-
-        canvas.drawPath(Path().apply {
-            moveTo(208f, 122f)
-            lineTo(224f, 122f)
-            lineTo(284f, 0f)
-            lineTo(268f, 0f)
-            close()
-        }, accent1)
-
-        canvas.drawPath(Path().apply {
-            moveTo(230f, 122f)
-            lineTo(238f, 122f)
-            lineTo(298f, 0f)
-            lineTo(290f, 0f)
-            close()
-        }, accent2)
-
-        drawKmiLogo(78f, 58f, 42f)
-
-        val headerTextAlign =
-            if (isEnglish) {
-                Paint.Align.LEFT
-            } else {
-                Paint.Align.RIGHT
-            }
-
-        val headerTextX =
-            if (isEnglish) {
-                156f
-            } else {
-                pageWidth - 34f
-            }
-
-        titlePaint.textAlign =
-            headerTextAlign
-
-        subTitlePaint.textAlign =
-            headerTextAlign
-
-        canvas.drawText(
-            tr(
-                "מסך הבית",
-                "Home"
-            ),
-            headerTextX,
-            52f,
-            titlePaint
-        )
-
-        canvas.drawText(
-            tr(
-                "דו״ח אימונים לשבוע הקרוב",
-                "Upcoming Weekly Trainings"
-            ),
-            headerTextX,
-            78f,
-            subTitlePaint
-        )
-
-        val reportLocale =
-            if (isEnglish) {
-                Locale.ENGLISH
-            } else {
-                Locale(
-                    "he",
-                    "IL"
-                )
-            }
-
-        val reportDate =
-            SimpleDateFormat(
-                "dd/MM/yyyy",
-                reportLocale
-            ).format(
-                Date()
-            )
-
-        smallPaint.textAlign =
-            headerTextAlign
-
-        canvas.drawText(
-            tr(
-                "תאריך הפקה: $reportDate",
-                "Generated: $reportDate"
-            ),
-            headerTextX,
-            142f,
-            smallPaint
+        KmiPdfHeader.draw(
+            context = context,
+            canvas = canvas,
+            pageWidth = pageWidth,
+            isEnglish = isEnglish,
+            titleHebrew = "מסך הבית",
+            titleEnglish = "Home",
+            subtitleHebrew = "דו״ח אימונים לשבוע הקרוב",
+            subtitleEnglish = "Upcoming Weekly Trainings"
         )
     }
 
@@ -6118,42 +6004,14 @@ private fun createHomePdf(
         currentPage: Int,
         totalPages: Int
     ) {
-        val footerY = 804f
-
-        val line = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = navy
-            strokeWidth = 2f
-        }
-
-        canvas.drawLine(0f, footerY, pageWidth.toFloat(), footerY, line)
-
-        drawKmiLogo(38f, footerY + 22f, 13f)
-
-        smallPaint.textAlign = Paint.Align.LEFT
-        canvas.drawText("Together We Protect", 62f, footerY + 25f, smallPaint)
-
-        smallPaint.textAlign = Paint.Align.CENTER
-        canvas.drawText(
-            if (isEnglish) {
-                "Page $currentPage of $totalPages"
-            } else {
-                "עמוד $currentPage מתוך $totalPages"
-            },
-            pageWidth / 2f,
-            footerY + 25f,
-            smallPaint
+        KmiPdfFooter.draw(
+            canvas = canvas,
+            pageWidth = pageWidth,
+            pageHeight = pageHeight,
+            pageNumber = currentPage,
+            totalPages = totalPages,
+            isEnglish = isEnglish
         )
-
-        smallPaint.textAlign = Paint.Align.RIGHT
-        canvas.drawText("Krav Maga Israel", pageWidth - 66f, footerY + 18f, smallPaint)
-        canvas.drawText("www.kmi.org.il", pageWidth - 66f, footerY + 31f, smallPaint)
-
-        val flag = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = android.graphics.Color.rgb(20, 85, 200)
-        }
-
-        canvas.drawRect(pageWidth - 48f, footerY + 14f, pageWidth - 20f, footerY + 18f, flag)
-        canvas.drawRect(pageWidth - 48f, footerY + 28f, pageWidth - 20f, footerY + 32f, flag)
     }
 
     fun drawSummary(top: Float): Float {
@@ -6478,26 +6336,53 @@ private fun createHomePdf(
    * ולכן נכנסים בו פחות אימונים.
    * בעמודי ההמשך יש יותר מקום.
    */
-    val firstPageTrainingCapacity = 4
-    val continuationPageTrainingCapacity = 6
-
+    /*
+     * סימולציה של חלוקת הכרטיסים לעמודים.
+     * אימון מבוטל גבוה יותר מאימון רגיל.
+     */
     val totalPages =
         if (trainings.isEmpty()) {
             1
         } else {
-            val remainingAfterFirst =
-                (trainings.size - firstPageTrainingCapacity)
-                    .coerceAtLeast(0)
+            var calculatedPages = 1
 
-            1 +
-                    if (remainingAfterFirst == 0) {
-                        0
+            /*
+             * בעמוד הראשון:
+             * כותרת גלובלית + סיכום + כותרת פירוט.
+             */
+            var calculatedY =
+                KmiPdfHeader.CONTENT_TOP +
+                        100f +
+                        24f
+
+            trainings.forEach { training ->
+                val requiredHeight =
+                    if (training.cancelledByHoliday) {
+                        124f
                     } else {
-                        (
-                                remainingAfterFirst +
-                                        continuationPageTrainingCapacity - 1
-                                ) / continuationPageTrainingCapacity
+                        108f
                     }
+
+                if (
+                    calculatedY + requiredHeight >=
+                    pageHeight -
+                    KmiPdfFooter.CONTENT_BOTTOM_PADDING
+                ) {
+                    calculatedPages++
+
+                    /*
+                     * בעמוד המשך:
+                     * כותרת גלובלית + כותרת המשך.
+                     */
+                    calculatedY =
+                        KmiPdfHeader.CONTENT_TOP +
+                                28f
+                }
+
+                calculatedY += requiredHeight
+            }
+
+            calculatedPages
         }
 
     fun startNewPage() {
@@ -6518,7 +6403,7 @@ private fun createHomePdf(
 
     drawHeader()
 
-    var y = 136f
+    var y = KmiPdfHeader.CONTENT_TOP
     y = drawSummary(y)
 
     sectionPaint.textAlign = Paint.Align.CENTER
@@ -6554,7 +6439,11 @@ private fun createHomePdf(
              * אין מספיק מקום לכרטיס הבא:
              * סוגרים את העמוד ומתחילים עמוד חדש.
              */
-            if (y + requiredHeight >= 792f) {
+            if (
+                y + requiredHeight >=
+                pageHeight -
+                KmiPdfFooter.CONTENT_BOTTOM_PADDING
+            ) {
                 drawFooter(
                     currentPage = pageNumber,
                     totalPages = totalPages
@@ -6564,7 +6453,7 @@ private fun createHomePdf(
 
                 startNewPage()
 
-                y = 168f
+                y = KmiPdfHeader.CONTENT_TOP
 
                 sectionPaint.textAlign =
                     Paint.Align.CENTER

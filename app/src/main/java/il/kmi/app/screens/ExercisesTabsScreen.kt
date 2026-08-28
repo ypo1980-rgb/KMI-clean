@@ -54,6 +54,8 @@ import android.app.Activity
 import androidx.compose.foundation.BorderStroke
 import androidx.core.content.edit
 import il.kmi.app.ui.ext.color
+import il.kmi.app.ui.pdf.KmiPdfHeader
+import il.kmi.app.ui.pdf.KmiPdfFooter
 import il.kmi.shared.localization.AppLanguage
 import il.kmi.shared.localization.AppLanguageManager
 
@@ -96,13 +98,13 @@ private fun createExerciseCardsPdf(
 
     val contentLeft = 36f
     val contentRight = pageWidth - 36f
-    val contentBottom = pageHeight - 58f
+    val contentBottom =
+        pageHeight -
+                KmiPdfFooter.CONTENT_BOTTOM_PADDING
 
     val document = android.graphics.pdf.PdfDocument()
 
-    val navy = android.graphics.Color.rgb(2, 43, 74)
     val mediumBlue = android.graphics.Color.rgb(36, 103, 158)
-    val lightHeaderBlue = android.graphics.Color.rgb(128, 183, 220)
     val darkText = android.graphics.Color.rgb(15, 23, 42)
     val mutedText = android.graphics.Color.rgb(100, 116, 139)
     val rowBackground = android.graphics.Color.rgb(248, 250, 252)
@@ -117,32 +119,6 @@ private fun createExerciseCardsPdf(
         android.graphics.Typeface.SANS_SERIF,
         android.graphics.Typeface.BOLD
     )
-
-    val titlePaint = android.graphics.Paint(
-        android.graphics.Paint.ANTI_ALIAS_FLAG
-    ).apply {
-        color = android.graphics.Color.WHITE
-        textSize = 26f
-        typeface = boldTypeface
-        textAlign = if (isEnglish) {
-            android.graphics.Paint.Align.LEFT
-        } else {
-            android.graphics.Paint.Align.RIGHT
-        }
-    }
-
-    val subtitlePaint = android.graphics.Paint(
-        android.graphics.Paint.ANTI_ALIAS_FLAG
-    ).apply {
-        color = android.graphics.Color.WHITE
-        textSize = 12.5f
-        typeface = regularTypeface
-        textAlign = if (isEnglish) {
-            android.graphics.Paint.Align.LEFT
-        } else {
-            android.graphics.Paint.Align.RIGHT
-        }
-    }
 
     val sectionPaint = android.graphics.Paint(
         android.graphics.Paint.ANTI_ALIAS_FLAG
@@ -254,201 +230,46 @@ private fun createExerciseCardsPdf(
     }
 
     fun drawHeader() {
-        canvas.drawColor(android.graphics.Color.WHITE)
+        val subtitleHebrew =
+            buildString {
+                append("${belt.heb} · $topicTitle")
 
-        val headerBottom = 122f
+                if (!subTopicTitle.isNullOrBlank()) {
+                    append(" · תת־נושא: $subTopicTitle")
+                }
+            }
 
-        val navyPaint = android.graphics.Paint(
-            android.graphics.Paint.ANTI_ALIAS_FLAG
-        ).apply {
-            color = navy
-            style = android.graphics.Paint.Style.FILL
-        }
+        val subtitleEnglish =
+            buildString {
+                append("${belt.en} · $topicTitle")
 
-        val mediumStripePaint = android.graphics.Paint(
-            android.graphics.Paint.ANTI_ALIAS_FLAG
-        ).apply {
-            color = mediumBlue
-            style = android.graphics.Paint.Style.FILL
-        }
+                if (!subTopicTitle.isNullOrBlank()) {
+                    append(" · Sub-topic: $subTopicTitle")
+                }
+            }
 
-        val lightStripePaint = android.graphics.Paint(
-            android.graphics.Paint.ANTI_ALIAS_FLAG
-        ).apply {
-            color = lightHeaderBlue
-            style = android.graphics.Paint.Style.FILL
-        }
-
-        canvas.drawPath(
-            android.graphics.Path().apply {
-                moveTo(pageWidth.toFloat(), 0f)
-                lineTo(pageWidth.toFloat(), headerBottom)
-                lineTo(178f, headerBottom)
-                lineTo(238f, 0f)
-                close()
-            },
-            navyPaint
+        KmiPdfHeader.draw(
+            context = context,
+            canvas = canvas,
+            pageWidth = pageWidth,
+            isEnglish = isEnglish,
+            titleHebrew = "דו״ח כרטיסיות תרגילים",
+            titleEnglish = "Exercise Cards Report",
+            subtitleHebrew = subtitleHebrew,
+            subtitleEnglish = subtitleEnglish
         )
 
-        canvas.drawPath(
-            android.graphics.Path().apply {
-                moveTo(208f, headerBottom)
-                lineTo(224f, headerBottom)
-                lineTo(284f, 0f)
-                lineTo(268f, 0f)
-                close()
-            },
-            mediumStripePaint
-        )
-
-        canvas.drawPath(
-            android.graphics.Path().apply {
-                moveTo(230f, headerBottom)
-                lineTo(238f, headerBottom)
-                lineTo(298f, 0f)
-                lineTo(290f, 0f)
-                close()
-            },
-            lightStripePaint
-        )
-
-        val logoCenterX = 78f
-        val logoCenterY = 58f
-        val logoRadius = 42f
-
-        val logoOuterPaint = android.graphics.Paint(
-            android.graphics.Paint.ANTI_ALIAS_FLAG
-        ).apply {
-            color = navy
-            style = android.graphics.Paint.Style.FILL
-        }
-
-        val logoInnerPaint = android.graphics.Paint(
-            android.graphics.Paint.ANTI_ALIAS_FLAG
-        ).apply {
-            color = android.graphics.Color.WHITE
-            style = android.graphics.Paint.Style.FILL
-        }
-
-        val logoTextPaint = android.graphics.Paint(
-            android.graphics.Paint.ANTI_ALIAS_FLAG
-        ).apply {
-            color = navy
-            textSize = logoRadius * 0.62f
-            typeface = boldTypeface
-            textAlign = android.graphics.Paint.Align.CENTER
-        }
-
-        canvas.drawCircle(
-            logoCenterX,
-            logoCenterY,
-            logoRadius,
-            logoOuterPaint
-        )
-
-        canvas.drawCircle(
-            logoCenterX,
-            logoCenterY,
-            logoRadius - 4f,
-            logoInnerPaint
-        )
-
-        canvas.drawText(
-            "KAMI",
-            logoCenterX,
-            logoCenterY + logoRadius * 0.22f,
-            logoTextPaint
-        )
-
-        val headerTextX = if (isEnglish) {
-            308f
-        } else {
-            pageWidth - 34f
-        }
-
-        canvas.drawText(
-            if (isEnglish) {
-                "Exercise Cards Report"
-            } else {
-                "דו״ח כרטיסיות תרגילים"
-            },
-            headerTextX,
-            50f,
-            titlePaint
-        )
-
-        canvas.drawText(
-            if (isEnglish) {
-                "${beltLabel()} · $topicTitle"
-            } else {
-                "${beltLabel()} · $topicTitle"
-            },
-            headerTextX,
-            76f,
-            subtitlePaint
-        )
-
-        if (!subTopicTitle.isNullOrBlank()) {
-            canvas.drawText(
-                if (isEnglish) {
-                    "Sub-topic: $subTopicTitle"
-                } else {
-                    "תת־נושא: $subTopicTitle"
-                },
-                headerTextX,
-                98f,
-                subtitlePaint
-            )
-        }
-
-        val generatedDate = java.text.SimpleDateFormat(
-            "dd/MM/yyyy",
-            java.util.Locale.getDefault()
-        ).format(java.util.Date())
-
-        smallPaint.textAlign = android.graphics.Paint.Align.RIGHT
-
-        canvas.drawText(
-            if (isEnglish) {
-                "Generated: $generatedDate"
-            } else {
-                "תאריך הפקה: $generatedDate"
-            },
-            pageWidth - 34f,
-            142f,
-            smallPaint
-        )
-
-        y = 174f
+        y = KmiPdfHeader.CONTENT_TOP
     }
 
     fun drawFooter() {
-        val dividerPaint = android.graphics.Paint(
-            android.graphics.Paint.ANTI_ALIAS_FLAG
-        ).apply {
-            color = rowBorder
-            strokeWidth = 1f
-        }
-
-        canvas.drawLine(
-            contentLeft,
-            pageHeight - 42f,
-            contentRight,
-            pageHeight - 42f,
-            dividerPaint
-        )
-
-        smallPaint.textAlign = android.graphics.Paint.Align.CENTER
-
-        canvas.drawText(
-            if (isEnglish) {
-                "Page $pageNumber · KAMI"
-            } else {
-                "עמוד $pageNumber · KAMI"
-            },
-            pageWidth / 2f,
-            pageHeight - 24f,
-            smallPaint
+        KmiPdfFooter.draw(
+            canvas = canvas,
+            pageWidth = pageWidth,
+            pageHeight = pageHeight,
+            pageNumber = pageNumber,
+            totalPages = null,
+            isEnglish = isEnglish
         )
     }
 
@@ -677,17 +498,24 @@ private fun createExerciseCardsPdf(
         mkdirs()
     }
 
-    val safeBeltId = belt.id
-        .lowercase()
-        .replace(Regex("[^a-z0-9_-]"), "_")
+    val fileName =
+        if (isEnglish) {
+            "Exercise Cards Report.pdf"
+        } else {
+            "דוח כרטיסיות תרגילים.pdf"
+        }
 
-    val outputFile = java.io.File(
-        outputDirectory,
-        "exercise_cards_${safeBeltId}_${System.currentTimeMillis()}.pdf"
-    )
+    val outputFile =
+        java.io.File(
+            outputDirectory,
+            fileName
+        )
 
     try {
-        java.io.FileOutputStream(outputFile).use { output ->
+        java.io.FileOutputStream(
+            outputFile,
+            false
+        ).use { output ->
             document.writeTo(output)
         }
     } finally {
@@ -1461,7 +1289,7 @@ fun ExercisesTabsScreen(
                 onHome = onHome,
                 centerTitle = true,
                 showTopHome = false,
-                showTopShare = false,
+                showTopShare = true,
                 showBottomActions = true,
                 lockSearch = false,
                 onShare = onExportPdf,
@@ -1656,7 +1484,7 @@ fun ExercisesTabsScreen(
                         horizontal = 3.dp,
                         vertical = 6.dp
                     )
-                    .heightIn(min = 70.dp),
+                    .height(104.dp),
                 shape = shape,
                 color = Color.Transparent,
                 tonalElevation = 0.dp,

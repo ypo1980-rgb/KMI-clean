@@ -68,6 +68,8 @@ import com.google.firebase.firestore.Query
 import com.google.firebase.firestore.ktx.firestore
 import com.google.firebase.ktx.Firebase
 import il.kmi.app.ui.KmiTypography
+import il.kmi.app.ui.pdf.KmiPdfHeader
+import il.kmi.app.ui.pdf.KmiPdfFooter
 import java.text.SimpleDateFormat
 import java.util.Locale
 import java.util.concurrent.TimeUnit
@@ -138,13 +140,12 @@ private fun createAdminDiagnosticsPdf(
 
     val contentLeft = 36f
     val contentRight = pageWidth - 36f
-    val contentBottom = pageHeight - 58f
+    val contentBottom =
+        pageHeight -
+                KmiPdfFooter.CONTENT_BOTTOM_PADDING
 
     val document = android.graphics.pdf.PdfDocument()
 
-    val navy = android.graphics.Color.rgb(2, 43, 74)
-    val mediumBlue = android.graphics.Color.rgb(36, 103, 158)
-    val lightHeaderBlue = android.graphics.Color.rgb(128, 183, 220)
     val darkText = android.graphics.Color.rgb(15, 23, 42)
     val mutedText = android.graphics.Color.rgb(100, 116, 139)
     val lightCard = android.graphics.Color.rgb(248, 250, 252)
@@ -163,32 +164,6 @@ private fun createAdminDiagnosticsPdf(
         android.graphics.Typeface.SANS_SERIF,
         android.graphics.Typeface.BOLD
     )
-
-    val titlePaint = android.graphics.Paint(
-        android.graphics.Paint.ANTI_ALIAS_FLAG
-    ).apply {
-        color = android.graphics.Color.WHITE
-        textSize = 25f
-        typeface = boldTypeface
-        textAlign = if (isEnglish) {
-            android.graphics.Paint.Align.LEFT
-        } else {
-            android.graphics.Paint.Align.RIGHT
-        }
-    }
-
-    val subtitlePaint = android.graphics.Paint(
-        android.graphics.Paint.ANTI_ALIAS_FLAG
-    ).apply {
-        color = android.graphics.Color.WHITE
-        textSize = 12f
-        typeface = regularTypeface
-        textAlign = if (isEnglish) {
-            android.graphics.Paint.Align.LEFT
-        } else {
-            android.graphics.Paint.Align.RIGHT
-        }
-    }
 
     val sectionPaint = android.graphics.Paint(
         android.graphics.Paint.ANTI_ALIAS_FLAG
@@ -329,148 +304,6 @@ private fun createAdminDiagnosticsPdf(
     }
 
     fun drawHeader() {
-        canvas.drawColor(android.graphics.Color.WHITE)
-
-        val headerBottom = 122f
-
-        val navyPaint = android.graphics.Paint(
-            android.graphics.Paint.ANTI_ALIAS_FLAG
-        ).apply {
-            color = navy
-            style = android.graphics.Paint.Style.FILL
-        }
-
-        val mediumStripePaint = android.graphics.Paint(
-            android.graphics.Paint.ANTI_ALIAS_FLAG
-        ).apply {
-            color = mediumBlue
-            style = android.graphics.Paint.Style.FILL
-        }
-
-        val lightStripePaint = android.graphics.Paint(
-            android.graphics.Paint.ANTI_ALIAS_FLAG
-        ).apply {
-            color = lightHeaderBlue
-            style = android.graphics.Paint.Style.FILL
-        }
-
-        canvas.drawPath(
-            android.graphics.Path().apply {
-                moveTo(pageWidth.toFloat(), 0f)
-                lineTo(pageWidth.toFloat(), headerBottom)
-                lineTo(178f, headerBottom)
-                lineTo(238f, 0f)
-                close()
-            },
-            navyPaint
-        )
-
-        canvas.drawPath(
-            android.graphics.Path().apply {
-                moveTo(208f, headerBottom)
-                lineTo(224f, headerBottom)
-                lineTo(284f, 0f)
-                lineTo(268f, 0f)
-                close()
-            },
-            mediumStripePaint
-        )
-
-        canvas.drawPath(
-            android.graphics.Path().apply {
-                moveTo(230f, headerBottom)
-                lineTo(238f, headerBottom)
-                lineTo(298f, 0f)
-                lineTo(290f, 0f)
-                close()
-            },
-            lightStripePaint
-        )
-
-        val logoCenterX = 78f
-        val logoCenterY = 58f
-        val logoRadius = 42f
-
-        val logoOuterPaint = android.graphics.Paint(
-            android.graphics.Paint.ANTI_ALIAS_FLAG
-        ).apply {
-            color = navy
-            style = android.graphics.Paint.Style.FILL
-        }
-
-        val logoInnerPaint = android.graphics.Paint(
-            android.graphics.Paint.ANTI_ALIAS_FLAG
-        ).apply {
-            color = android.graphics.Color.WHITE
-            style = android.graphics.Paint.Style.FILL
-        }
-
-        val logoTextPaint = android.graphics.Paint(
-            android.graphics.Paint.ANTI_ALIAS_FLAG
-        ).apply {
-            color = navy
-            textSize = logoRadius * 0.62f
-            typeface = boldTypeface
-            textAlign = android.graphics.Paint.Align.CENTER
-        }
-
-        canvas.drawCircle(
-            logoCenterX,
-            logoCenterY,
-            logoRadius,
-            logoOuterPaint
-        )
-
-        canvas.drawCircle(
-            logoCenterX,
-            logoCenterY,
-            logoRadius - 4f,
-            logoInnerPaint
-        )
-
-        canvas.drawText(
-            "KAMI",
-            logoCenterX,
-            logoCenterY + logoRadius * 0.22f,
-            logoTextPaint
-        )
-
-        titlePaint.textAlign = if (isEnglish) {
-            android.graphics.Paint.Align.LEFT
-        } else {
-            android.graphics.Paint.Align.RIGHT
-        }
-
-        subtitlePaint.textAlign = if (isEnglish) {
-            android.graphics.Paint.Align.LEFT
-        } else {
-            android.graphics.Paint.Align.RIGHT
-        }
-
-        val headerTextX = if (isEnglish) {
-            308f
-        } else {
-            pageWidth - 34f
-        }
-
-        canvas.drawText(
-            if (isEnglish) {
-                "Diagnostics Report"
-            } else {
-                "דו״ח בקרה ולוגים"
-            },
-            headerTextX,
-            50f,
-            titlePaint
-        )
-
-        canvas.drawText(
-            "$rangeTitle · $typeTitle",
-            headerTextX,
-            77f,
-            subtitlePaint
-        )
-
         val generatedDate =
             SimpleDateFormat(
                 "dd/MM/yyyy HH:mm",
@@ -479,49 +312,31 @@ private fun createAdminDiagnosticsPdf(
                 System.currentTimeMillis()
             )
 
-        smallPaint.textAlign = android.graphics.Paint.Align.RIGHT
-
-        canvas.drawText(
-            if (isEnglish) {
-                "Generated: $generatedDate"
-            } else {
-                "תאריך הפקה: $generatedDate"
-            },
-            pageWidth - 34f,
-            142f,
-            smallPaint
+        KmiPdfHeader.draw(
+            context = context,
+            canvas = canvas,
+            pageWidth = pageWidth,
+            isEnglish = isEnglish,
+            titleHebrew = "דו״ח בקרה ולוגים",
+            titleEnglish = "Diagnostics Report",
+            subtitleHebrew =
+                "$rangeTitle · $typeTitle",
+            subtitleEnglish =
+                "$rangeTitle · $typeTitle",
+            generatedDate = generatedDate
         )
 
-        y = 174f
+        y = KmiPdfHeader.CONTENT_TOP
     }
 
     fun drawFooter() {
-        val dividerPaint = android.graphics.Paint(
-            android.graphics.Paint.ANTI_ALIAS_FLAG
-        ).apply {
-            color = cardBorder
-            strokeWidth = 1f
-        }
-
-        canvas.drawLine(
-            contentLeft,
-            pageHeight - 42f,
-            contentRight,
-            pageHeight - 42f,
-            dividerPaint
-        )
-
-        smallPaint.textAlign = android.graphics.Paint.Align.CENTER
-
-        canvas.drawText(
-            if (isEnglish) {
-                "Page $pageNumber · KAMI"
-            } else {
-                "עמוד $pageNumber · KAMI"
-            },
-            pageWidth / 2f,
-            pageHeight - 24f,
-            smallPaint
+        KmiPdfFooter.draw(
+            canvas = canvas,
+            pageWidth = pageWidth,
+            pageHeight = pageHeight,
+            pageNumber = pageNumber,
+            totalPages = null,
+            isEnglish = isEnglish
         )
     }
 
@@ -1026,32 +841,27 @@ private fun createAdminDiagnosticsPdf(
     }
 
     /*
-     * שם קריא לקובץ המשותף.
-     * התאריך והשעה נשמרים כדי שניתן יהיה
-     * להבדיל בין דוחות אבחון מתקופות שונות.
+     * שם קבוע לפי שפת האפליקציה.
+     * יצירת דוח חדש מחליפה את הדוח הקודם.
      */
-    val fileDate =
-        SimpleDateFormat(
-            "dd-MM-yyyy_HH-mm",
-            Locale.getDefault()
-        ).format(
-            System.currentTimeMillis()
-        )
-
     val outputFileName =
         if (isEnglish) {
-            "KAMI Diagnostics - $fileDate.pdf"
+            "Diagnostics Report.pdf"
         } else {
-            "דוח בקרה ולוגים קמי - $fileDate.pdf"
+            "דוח בקרה ולוגים.pdf"
         }
 
-    val outputFile = java.io.File(
-        outputDirectory,
-        outputFileName
-    )
+    val outputFile =
+        java.io.File(
+            outputDirectory,
+            outputFileName
+        )
 
     try {
-        java.io.FileOutputStream(outputFile).use { output ->
+        java.io.FileOutputStream(
+            outputFile,
+            false
+        ).use { output ->
             document.writeTo(output)
         }
     } finally {
@@ -1794,7 +1604,7 @@ fun AdminDiagnosticsScreen(
                 onHome = onHome,
                 showTopHome = false,
                 showTopSearch = false,
-                showTopShare = false,
+                showTopShare = true,
                 showBottomActions = true,
                 lockSearch = false,
                 onShare = onExportDiagnosticsPdf,

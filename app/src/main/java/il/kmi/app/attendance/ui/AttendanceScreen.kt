@@ -48,6 +48,8 @@ import il.kmi.app.ui.KmiIconSize
 import il.kmi.app.ui.KmiPremiumDropdown
 import il.kmi.app.ui.KmiTopBar
 import il.kmi.app.ui.KmiTypography
+import il.kmi.app.ui.pdf.KmiPdfHeader
+import il.kmi.app.ui.pdf.KmiPdfFooter
 import il.yuval.ui.theme.kmiScreenBackgroundBrush
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.outlined.StarBorder
@@ -435,13 +437,11 @@ fun AttendanceScreen(
                 centerTitle = true,
                 onHome = onHomeClick,
                 onShare = {
-                    if (hasRealMembers) {
-                        shareReport(
-                            state.copy(
-                                members = displayMembers
-                            )
+                    shareReport(
+                        state.copy(
+                            members = displayMembers
                         )
-                    }
+                    )
                 },
                 onPickSearchResult = { key -> pickedKey = key },
 
@@ -2526,8 +2526,6 @@ private fun createAttendancePdf(
     val document = PdfDocument()
 
     val navy = android.graphics.Color.rgb(2, 43, 74)
-    val mediumBlue = android.graphics.Color.rgb(36, 103, 158)
-    val lightHeaderBlue = android.graphics.Color.rgb(128, 183, 220)
     val textDark = android.graphics.Color.rgb(15, 23, 42)
     val textMuted = android.graphics.Color.rgb(100, 116, 139)
 
@@ -2556,26 +2554,8 @@ private fun createAttendancePdf(
         color = android.graphics.Color.WHITE
     }
 
-    val pdfHeaderTitlePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        typeface = boldTypeface
-        textSize = 29f
-        color = android.graphics.Color.WHITE
-        textAlign = Paint.Align.RIGHT
-    }
-
-    val pdfHeaderSubtitlePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        typeface = regularTypeface
-        textSize = 14f
-        color = android.graphics.Color.WHITE
-        textAlign = Paint.Align.RIGHT
-    }
-
-    val smallPaint = Paint(paint).apply {
-        textSize = 10f
-        color = textMuted
-    }
-
-    fun tr(he: String, en: String): String = if (isEnglish) en else he
+    fun tr(he: String, en: String): String =
+        if (isEnglish) en else he
 
     val total = state.members.size
     val present = state.members.count { state.statusByMemberId[it.id] == AttendanceStatus.PRESENT }
@@ -2588,177 +2568,33 @@ private fun createAttendancePdf(
         PdfDocument.PageInfo.Builder(pageWidth, pageHeight, pageNumber).create()
     )
     var canvas = page.canvas
-    var y = 174f
-
-    fun drawKmiLogo(
-        targetCanvas: android.graphics.Canvas,
-        cx: Float,
-        cy: Float,
-        radius: Float
-    ) {
-        val outerPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = navy
-            style = Paint.Style.FILL
-        }
-
-        val innerPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = android.graphics.Color.WHITE
-            style = Paint.Style.FILL
-        }
-
-        val logoTextPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = navy
-            typeface = boldTypeface
-            textSize = radius * 0.62f
-            textAlign = Paint.Align.CENTER
-        }
-
-        targetCanvas.drawCircle(
-            cx,
-            cy,
-            radius,
-            outerPaint
-        )
-
-        targetCanvas.drawCircle(
-            cx,
-            cy,
-            radius - 4f,
-            innerPaint
-        )
-
-        targetCanvas.drawText(
-            "KAMI",
-            cx,
-            cy + radius * 0.22f,
-            logoTextPaint
-        )
-    }
+    var y = KmiPdfHeader.CONTENT_TOP
 
     fun drawHeader() {
-        canvas.drawColor(android.graphics.Color.WHITE)
-
-        val headerBottom = 122f
-
-        canvas.drawPath(
-            android.graphics.Path().apply {
-                moveTo(pageWidth.toFloat(), 0f)
-                lineTo(pageWidth.toFloat(), headerBottom)
-                lineTo(178f, headerBottom)
-                lineTo(238f, 0f)
-                close()
-            },
-            Paint(Paint.ANTI_ALIAS_FLAG).apply {
-                color = navy
-                style = Paint.Style.FILL
-            }
+        KmiPdfHeader.draw(
+            context = context,
+            canvas = canvas,
+            pageWidth = pageWidth,
+            isEnglish = isEnglish,
+            titleHebrew = "דו״ח נוכחות",
+            titleEnglish = "Attendance Report",
+            subtitleHebrew =
+                "${state.branch} · ${state.groupKey}",
+            subtitleEnglish =
+                "${state.branch} · ${state.groupKey}"
         )
 
-        canvas.drawPath(
-            android.graphics.Path().apply {
-                moveTo(208f, headerBottom)
-                lineTo(224f, headerBottom)
-                lineTo(284f, 0f)
-                lineTo(268f, 0f)
-                close()
-            },
-            Paint(Paint.ANTI_ALIAS_FLAG).apply {
-                color = mediumBlue
-                style = Paint.Style.FILL
-            }
-        )
-
-        canvas.drawPath(
-            android.graphics.Path().apply {
-                moveTo(230f, headerBottom)
-                lineTo(238f, headerBottom)
-                lineTo(298f, 0f)
-                lineTo(290f, 0f)
-                close()
-            },
-            Paint(Paint.ANTI_ALIAS_FLAG).apply {
-                color = lightHeaderBlue
-                style = Paint.Style.FILL
-            }
-        )
-
-        drawKmiLogo(
-            targetCanvas = canvas,
-            cx = 78f,
-            cy = 58f,
-            radius = 42f
-        )
-
-        pdfHeaderTitlePaint.textAlign =
-            if (isEnglish) {
-                Paint.Align.LEFT
-            } else {
-                Paint.Align.RIGHT
-            }
-
-        pdfHeaderSubtitlePaint.textAlign =
-            if (isEnglish) {
-                Paint.Align.LEFT
-            } else {
-                Paint.Align.RIGHT
-            }
-
-        val headerTitleX = if (isEnglish) {
-            308f
-        } else {
-            pageWidth - 34f
-        }
-
-        val headerSubtitleX = if (isEnglish) {
-            308f
-        } else {
-            pageWidth - 34f
-        }
-
-        canvas.drawText(
-            tr(
-                "דו״ח נוכחות",
-                "Attendance Report"
-            ),
-            headerTitleX,
-            52f,
-            pdfHeaderTitlePaint
-        )
-
-        canvas.drawText(
-            "${state.branch} · ${state.groupKey}",
-            headerSubtitleX,
-            78f,
-            pdfHeaderSubtitlePaint
-        )
-
-        smallPaint.color = textMuted
-        smallPaint.textAlign = Paint.Align.RIGHT
-
-        canvas.drawText(
-            tr("תאריך הפקה:", "Generated:") + " " +
-                    java.text.SimpleDateFormat(
-                        "dd/MM/yyyy",
-                        Locale.getDefault()
-                    ).format(
-                        java.util.Date()
-                    ).format(java.util.Date()),
-            pageWidth - 34f,
-            142f,
-            smallPaint
-        )
-
-        y = 174f
+        y = KmiPdfHeader.CONTENT_TOP
     }
 
     fun drawFooter() {
-        smallPaint.color = textMuted
-        smallPaint.textAlign = Paint.Align.CENTER
-        canvas.drawText(
-            tr("עמוד $pageNumber · KAMI", "Page $pageNumber · KAMI"),
-            pageWidth / 2f,
-            pageHeight - 24f,
-            smallPaint
+        KmiPdfFooter.draw(
+            canvas = canvas,
+            pageWidth = pageWidth,
+            pageHeight = pageHeight,
+            pageNumber = pageNumber,
+            totalPages = null,
+            isEnglish = isEnglish
         )
     }
 
@@ -2770,12 +2606,15 @@ private fun createAttendancePdf(
             PdfDocument.PageInfo.Builder(pageWidth, pageHeight, pageNumber).create()
         )
         canvas = page.canvas
-        y = margin
+        y = KmiPdfHeader.CONTENT_TOP
         drawHeader()
     }
 
     fun ensureSpace(height: Float) {
-        if (y + height > pageHeight - 58f) {
+        if (
+            y + height >
+            pageHeight - KmiPdfFooter.CONTENT_BOTTOM_PADDING
+        ) {
             newPage()
         }
     }
@@ -2969,15 +2808,13 @@ private fun createAttendancePdf(
         )
 
     /*
-     * אם אותו דוח כבר הופק בעבר,
-     * הקובץ החדש מחליף אותו במקום
-     * ליצור עותק נוסף עם timestamp.
+     * כתיבה עם append = false דורסת דוח קודם
+     * בעל אותו שם ללא צורך במחיקה ידנית.
      */
-    if (file.exists()) {
-        file.delete()
-    }
-
-    FileOutputStream(file).use { out ->
+    FileOutputStream(
+        file,
+        false
+    ).use { out ->
         document.writeTo(out)
     }
 

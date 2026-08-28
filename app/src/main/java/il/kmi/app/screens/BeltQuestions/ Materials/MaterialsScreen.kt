@@ -51,7 +51,6 @@ import android.content.SharedPreferences
 import android.graphics.Canvas
 import android.graphics.Color as AndroidColor
 import android.graphics.Paint
-import android.graphics.Path
 import android.graphics.RectF
 import android.graphics.Typeface
 import android.graphics.pdf.PdfDocument
@@ -85,6 +84,8 @@ import il.kmi.shared.domain.content.ExerciseIdentityRegistry
 import il.kmi.app.subscription.KmiAccess
 import il.kmi.app.progress.UserProgressRepository
 import il.kmi.app.ui.KmiTopBar
+import il.kmi.app.ui.pdf.KmiPdfHeader
+import il.kmi.app.ui.pdf.KmiPdfFooter
 import il.yuval.ui.theme.kmiScreenBackgroundBrush
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -4132,8 +4133,6 @@ private fun createMaterialsPdf(
         textAlign = align
     }
 
-    val titlePaint = paint(29f, AndroidColor.WHITE, bold)
-    val subTitlePaint = paint(14f, AndroidColor.WHITE, regular)
     val sectionPaint = paint(17f, blue, bold)
     val labelPaint = paint(10.5f, blue, bold)
     val valuePaint = paint(12.5f, textDark, regular)
@@ -4159,124 +4158,37 @@ private fun createMaterialsPdf(
         canvas.drawRoundRect(left, top, right, bottom, radius, radius, p)
     }
 
-    fun drawKmiLogo(canvas: Canvas, cx: Float, cy: Float, radius: Float) {
-        val outer = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = navy }
-        val inner = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = AndroidColor.WHITE }
-        val text = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = navy
-            typeface = bold
-            textSize = radius * 0.62f
-            textAlign = Paint.Align.CENTER
-        }
+    fun drawHeader(
+        canvas: Canvas
+    ) {
+        val pdfSubTitle =
+            "$topicTitle — $beltTitle"
 
-        canvas.drawCircle(cx, cy, radius, outer)
-        canvas.drawCircle(cx, cy, radius - 4f, inner)
-        canvas.drawText("KAMI", cx, cy + radius * 0.22f, text)
-    }
-
-    fun drawHeader(canvas: Canvas) {
-        canvas.drawColor(AndroidColor.WHITE)
-
-        canvas.drawPath(Path().apply {
-            moveTo(pageWidth.toFloat(), 0f)
-            lineTo(pageWidth.toFloat(), 122f)
-            lineTo(178f, 122f)
-            lineTo(238f, 0f)
-            close()
-        }, Paint(Paint.ANTI_ALIAS_FLAG).apply { color = navy })
-
-        canvas.drawPath(Path().apply {
-            moveTo(208f, 122f)
-            lineTo(224f, 122f)
-            lineTo(284f, 0f)
-            lineTo(268f, 0f)
-            close()
-        }, Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = AndroidColor.rgb(36, 103, 158)
-        })
-
-        canvas.drawPath(Path().apply {
-            moveTo(230f, 122f)
-            lineTo(238f, 122f)
-            lineTo(298f, 0f)
-            lineTo(290f, 0f)
-            close()
-        }, Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = AndroidColor.rgb(128, 183, 220)
-        })
-
-        drawKmiLogo(canvas, 78f, 58f, 42f)
-
-        titlePaint.textAlign = Paint.Align.RIGHT
-        subTitlePaint.textAlign = Paint.Align.RIGHT
-
-        titlePaint.textAlign =
-            if (isEnglish) Paint.Align.LEFT else Paint.Align.RIGHT
-
-        subTitlePaint.textAlign =
-            if (isEnglish) Paint.Align.LEFT else Paint.Align.RIGHT
-
-        val headerX =
-            if (isEnglish) margin else pageWidth - margin
-
-        canvas.drawText(
-            tr("תרגילים לפי חגורה", "Belt exercises"),
-            headerX,
-            52f,
-            titlePaint
-        )
-
-        val pdfSubTitle = "$topicTitle — $beltTitle"
-
-        canvas.drawText(
-            pdfSubTitle.take(55),
-            headerX,
-            78f,
-            subTitlePaint
-        )
-
-        smallPaint.textAlign = Paint.Align.RIGHT
-        canvas.drawText(
-            tr("תאריך הפקה:", "Generated:") + " " +
-                    SimpleDateFormat(
-                        "dd/MM/yyyy",
-                        Locale.getDefault()
-                    ).format(Date()),
-            pageWidth - 34f,
-            142f,
-            smallPaint
+        KmiPdfHeader.draw(
+            context = context,
+            canvas = canvas,
+            pageWidth = pageWidth,
+            isEnglish = isEnglish,
+            titleHebrew = "תרגילים לפי חגורה",
+            titleEnglish = "Exercises by Belt",
+            subtitleHebrew = pdfSubTitle.take(55),
+            subtitleEnglish = pdfSubTitle.take(55)
         )
     }
 
-    fun drawFooter(canvas: Canvas, pageNumber: Int, totalPages: Int) {
-        val footerY = 804f
-
-        canvas.drawLine(
-            0f,
-            footerY,
-            pageWidth.toFloat(),
-            footerY,
-            Paint(Paint.ANTI_ALIAS_FLAG).apply {
-                color = navy
-                strokeWidth = 2f
-            })
-
-        drawKmiLogo(canvas, 38f, footerY + 22f, 13f)
-
-        smallPaint.textAlign = Paint.Align.LEFT
-        canvas.drawText("Together We Protect", 62f, footerY + 25f, smallPaint)
-
-        smallPaint.textAlign = Paint.Align.CENTER
-        canvas.drawText(
-            tr("עמוד $pageNumber מתוך $totalPages", "Page $pageNumber of $totalPages"),
-            pageWidth / 2f,
-            footerY + 25f,
-            smallPaint
+    fun drawFooter(
+        canvas: Canvas,
+        pageNumber: Int,
+        totalPages: Int
+    ) {
+        KmiPdfFooter.draw(
+            canvas = canvas,
+            pageWidth = pageWidth,
+            pageHeight = pageHeight,
+            pageNumber = pageNumber,
+            totalPages = totalPages,
+            isEnglish = isEnglish
         )
-
-        smallPaint.textAlign = Paint.Align.RIGHT
-        canvas.drawText("Krav Maga Israel", pageWidth - 66f, footerY + 18f, smallPaint)
-        canvas.drawText("www.kmi.org.il", pageWidth - 66f, footerY + 31f, smallPaint)
     }
 
     fun drawSummary(
@@ -4739,7 +4651,7 @@ private fun createMaterialsPdf(
     }
 
     val firstPageCapacity = 6
-    val nextPageCapacity = 8
+    val nextPageCapacity = 7
 
     val totalPages = if (items.size <= firstPageCapacity) {
         1
@@ -4758,7 +4670,7 @@ private fun createMaterialsPdf(
 
         drawHeader(canvas)
 
-        var y = 136f
+        var y = KmiPdfHeader.CONTENT_TOP
 
         if (pageNumber == 1) {
             y = drawSummary(canvas, y)
