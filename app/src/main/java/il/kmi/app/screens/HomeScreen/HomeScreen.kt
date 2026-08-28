@@ -51,6 +51,7 @@ import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import il.kmi.app.R
 import il.kmi.app.training.TrainingData
@@ -94,7 +95,6 @@ import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.rounded.NearMe
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
-import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -108,6 +108,8 @@ import il.kmi.app.screens.registration.CoachBranchAssignmentsCodec
 import il.kmi.app.ui.KmiTopBar
 import il.kmi.app.ui.KmiTypography
 import il.kmi.shared.domain.content.ExerciseTitlesEn
+import il.yuval.ui.theme.kmiScreenBackgroundBrush
+import il.yuval.ui.theme.kmiSectionHeaderBrush
 import kotlinx.coroutines.delay
 import org.json.JSONArray
 import java.text.SimpleDateFormat
@@ -419,17 +421,21 @@ fun HomeScreen(
     }
 
     val backgroundBrush =
-        Brush.verticalGradient(
-            colors = listOf(
-                MaterialTheme.colorScheme.background,
-                MaterialTheme.colorScheme.surfaceVariant,
-                MaterialTheme.colorScheme.primaryContainer,
-                MaterialTheme.colorScheme.background
-            )
-        )
+        kmiScreenBackgroundBrush()
 
-    Scaffold(
-        topBar = {
+    val screenLayoutDirection =
+        if (isEnglish) {
+            LayoutDirection.Ltr
+        } else {
+            LayoutDirection.Rtl
+        }
+
+    CompositionLocalProvider(
+        LocalLayoutDirection provides
+                screenLayoutDirection
+    ) {
+        Scaffold(
+            topBar = {
 
             val contextLang = LocalContext.current
             val langManager = remember { AppLanguageManager(contextLang) }
@@ -438,9 +444,14 @@ fun HomeScreen(
                 title = if (langManager.getCurrentLanguage() == AppLanguage.ENGLISH) "Home" else "מסך הבית",
                 onHome = { /* no-op במסך הבית */ },
                 lockHome = true,
-                homeDisabledToast = "אתה כבר במסך הבית 🙂",
+                homeDisabledToast =
+                    if (isEnglish) {
+                        "You are already on the home screen 🙂"
+                    } else {
+                        "אתה כבר במסך הבית 🙂"
+                    },
                 showTopHome = false,
-                showTopShare = false,
+                showTopShare = true,
 
                 currentLang =
                     if (langManager.getCurrentLanguage() == AppLanguage.ENGLISH) "en" else "he",
@@ -1890,13 +1901,8 @@ fun HomeScreen(
                     modifier = Modifier
                         .fillMaxWidth()
                         .background(
-                            Brush.horizontalGradient(
-                                colors = listOf(
-                                    Color(0xFF062B4A).copy(alpha = 0.92f),
-                                    Color(0xFF0F5E9C).copy(alpha = 0.86f),
-                                    Color(0xFF062B4A).copy(alpha = 0.92f)
-                                )
-                            )
+                            brush =
+                                kmiSectionHeaderBrush()
                         )
                         .padding(vertical = 4.dp)
                 ) {
@@ -1915,13 +1921,25 @@ fun HomeScreen(
                         .fillMaxWidth()
                         .height(4.dp)
                         .background(
-                            Brush.verticalGradient(
-                                listOf(
-                                    Color(0xCCFFFFFF),
-                                    Color(0x66FFFFFF),
-                                    Color.Transparent
+                            brush =
+                                Brush.verticalGradient(
+                                    colors =
+                                        listOf(
+                                            MaterialTheme
+                                                .colorScheme
+                                                .outlineVariant
+                                                .copy(
+                                                    alpha = 0.86f
+                                                ),
+                                            MaterialTheme
+                                                .colorScheme
+                                                .outlineVariant
+                                                .copy(
+                                                    alpha = 0.38f
+                                                ),
+                                            Color.Transparent
+                                        )
                                 )
-                            )
                         )
                 )
 
@@ -2879,13 +2897,25 @@ fun HomeScreen(
                                 .fillMaxWidth()
                                 .height(4.dp)
                                 .background(
-                                    Brush.verticalGradient(
-                                        listOf(
-                                            Color(0xCCFFFFFF),
-                                            Color(0x66FFFFFF),
-                                            Color.Transparent
+                                    brush =
+                                        Brush.verticalGradient(
+                                            colors =
+                                                listOf(
+                                                    MaterialTheme
+                                                        .colorScheme
+                                                        .outlineVariant
+                                                        .copy(
+                                                            alpha = 0.86f
+                                                        ),
+                                                    MaterialTheme
+                                                        .colorScheme
+                                                        .outlineVariant
+                                                        .copy(
+                                                            alpha = 0.38f
+                                                        ),
+                                                    Color.Transparent
+                                                )
                                         )
-                                    )
                                 )
                         )
                         Spacer(Modifier.height(6.dp))
@@ -3515,11 +3545,17 @@ fun HomeScreen(
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(horizontal = 4.dp)
-                        .clip(RoundedCornerShape(30.dp))
-                        .background(backgroundBrush),
-                    shape = RoundedCornerShape(30.dp),
-                    containerColor = Color.Transparent,
-                    tonalElevation = 14.dp,
+                        .clip(
+                            RoundedCornerShape(30.dp)
+                        )
+                        .background(
+                            backgroundBrush
+                        ),
+                    shape =
+                        RoundedCornerShape(30.dp),
+                    containerColor =
+                        Color.Transparent,
+                    tonalElevation = 0.dp,
                     title = {
                         Column(
                             modifier = Modifier.fillMaxWidth(),
@@ -3751,12 +3787,22 @@ fun HomeScreen(
                                                                 shadowElevation = 0.dp
                                                             ) {
                                                                 Icon(
-                                                                    imageVector = Icons.Filled.Person,
-                                                                    contentDescription = null,
-                                                                    tint = noticeAccent,
-                                                                    modifier = Modifier
-                                                                        .size(30.dp)
-                                                                        .padding(6.dp)
+                                                                    imageVector =
+                                                                        Icons.Filled.Person,
+                                                                    contentDescription =
+                                                                        null,
+                                                                    tint =
+                                                                        noticeAccent,
+                                                                    modifier =
+                                                                        Modifier
+                                                                            .size(
+                                                                                30.dp *
+                                                                                        LocalAppIconScale.current
+                                                                            )
+                                                                            .padding(
+                                                                                6.dp *
+                                                                                        LocalAppIconScale.current
+                                                                            )
                                                                 )
                                                             }
 
@@ -3797,12 +3843,22 @@ fun HomeScreen(
                                                                 shadowElevation = 0.dp
                                                             ) {
                                                                 Icon(
-                                                                    imageVector = Icons.Filled.Person,
-                                                                    contentDescription = null,
-                                                                    tint = noticeAccent,
-                                                                    modifier = Modifier
-                                                                        .size(30.dp)
-                                                                        .padding(6.dp)
+                                                                    imageVector =
+                                                                        Icons.Filled.Person,
+                                                                    contentDescription =
+                                                                        null,
+                                                                    tint =
+                                                                        noticeAccent,
+                                                                    modifier =
+                                                                        Modifier
+                                                                            .size(
+                                                                                30.dp *
+                                                                                        LocalAppIconScale.current
+                                                                            )
+                                                                            .padding(
+                                                                                6.dp *
+                                                                                        LocalAppIconScale.current
+                                                                            )
                                                                 )
                                                             }
                                                         }
@@ -4122,13 +4178,16 @@ fun HomeScreen(
     }
 
     // 🔊 דיאלוג העוזר הקולי – מחוץ ל-Box כדי להיות מעל כל המסך
-    if (showAiDialog) {
-        AiAssistantDialog(
-            onDismiss = { showAiDialog = false },
-            onOpenDrawer = {
-                onOpenDrawer()
-            }
-        )
+        if (showAiDialog) {
+            AiAssistantDialog(
+                onDismiss = {
+                    showAiDialog = false
+                },
+                onOpenDrawer = {
+                    onOpenDrawer()
+                }
+            )
+        }
     }
 }
 
@@ -5185,7 +5244,10 @@ private fun TrainingCardCompact(
                         x = (-10).dp,
                         y = (-10).dp
                     )
-                    .size(46.dp)
+                    .size(
+                        46.dp *
+                                LocalAppIconScale.current
+                    )
                     .zIndex(3f),
                 shape = CircleShape,
                 color =
@@ -5252,19 +5314,23 @@ private fun NavigationChip(
             ?.trim()
             .orEmpty()
 
+    /*
+     * משמש רק להתאמת שקיפות המסגרת והאייקון.
+     * רקע הכרטיס עצמו נשאר גלובלי.
+     */
     val isDarkNavigationCard =
-        MaterialTheme.colorScheme.background
+        MaterialTheme
+            .colorScheme
+            .background
             .luminance() < 0.5f
 
     /*
-     * גוון גרניט מותאם למצב בהיר וכהה.
+     * רקע גלובלי לכרטיס הניווט.
      */
     val graniteCardColor =
-        if (isDarkNavigationCard) {
-            Color(0xFF2B2930)
-        } else {
-            Color(0xFFE8E5E1)
-        }
+        MaterialTheme
+            .colorScheme
+            .surfaceVariant
 
     fun open(choice: NavChoice) {
         if (safeAddress.isBlank()) return
@@ -5430,28 +5496,31 @@ private fun NavPickerDialog(
         return if (isEnglish) en else he
     }
 
-    val isDarkMode =
-        MaterialTheme.colorScheme.background
-            .luminance() < 0.5f
-
-    val uiScale = LocalAppIconScale.current
+    val uiScale =
+        LocalAppIconScale.current
 
     /*
-     * אותו גוון גרניט של כרטיס הניווט.
+     * משמש רק להתאמת שקיפות המסגרת.
+     * צבעי הרקע נשארים גלובליים.
+     */
+    val isDarkMode =
+        MaterialTheme
+            .colorScheme
+            .background
+            .luminance() < 0.5f
+
+    /*
+     * צבעי משטח גלובליים לדיאלוג הניווט.
      */
     val graniteCardColor =
-        if (isDarkMode) {
-            Color(0xFF2B2930)
-        } else {
-            Color(0xFFE8E5E1)
-        }
+        MaterialTheme
+            .colorScheme
+            .surfaceVariant
 
     val innerCardColor =
-        if (isDarkMode) {
-            Color(0xFF343238)
-        } else {
-            Color(0xFFF0EEEB)
-        }
+        MaterialTheme
+            .colorScheme
+            .surface
 
     Dialog(
         onDismissRequest = onDismiss
@@ -5973,25 +6042,73 @@ private fun createHomePdf(
 
         drawKmiLogo(78f, 58f, 42f)
 
-        titlePaint.textAlign = Paint.Align.RIGHT
-        subTitlePaint.textAlign = Paint.Align.RIGHT
+        val headerTextAlign =
+            if (isEnglish) {
+                Paint.Align.LEFT
+            } else {
+                Paint.Align.RIGHT
+            }
 
-        canvas.drawText(tr("מסך הבית", "Home"), pageWidth - 34f, 52f, titlePaint)
+        val headerTextX =
+            if (isEnglish) {
+                156f
+            } else {
+                pageWidth - 34f
+            }
+
+        titlePaint.textAlign =
+            headerTextAlign
+
+        subTitlePaint.textAlign =
+            headerTextAlign
+
         canvas.drawText(
-            tr("דו״ח אימונים לשבוע הקרוב", "Upcoming weekly trainings"),
-            pageWidth - 34f,
+            tr(
+                "מסך הבית",
+                "Home"
+            ),
+            headerTextX,
+            52f,
+            titlePaint
+        )
+
+        canvas.drawText(
+            tr(
+                "דו״ח אימונים לשבוע הקרוב",
+                "Upcoming Weekly Trainings"
+            ),
+            headerTextX,
             78f,
             subTitlePaint
         )
 
-        smallPaint.textAlign = Paint.Align.RIGHT
+        val reportLocale =
+            if (isEnglish) {
+                Locale.ENGLISH
+            } else {
+                Locale(
+                    "he",
+                    "IL"
+                )
+            }
+
+        val reportDate =
+            SimpleDateFormat(
+                "dd/MM/yyyy",
+                reportLocale
+            ).format(
+                Date()
+            )
+
+        smallPaint.textAlign =
+            headerTextAlign
+
         canvas.drawText(
-            tr("תאריך הפקה:", "Generated:") + " " +
-                    SimpleDateFormat(
-                        "dd/MM/yyyy",
-                        Locale.getDefault()
-                    ).format(Date()),
-            pageWidth - 34f,
+            tr(
+                "תאריך הפקה: $reportDate",
+                "Generated: $reportDate"
+            ),
+            headerTextX,
             142f,
             smallPaint
         )
@@ -6058,26 +6175,72 @@ private fun createHomePdf(
             stroke = true
         )
 
-        sectionPaint.textAlign = Paint.Align.RIGHT
+        val summaryTextAlign =
+            if (isEnglish) {
+                Paint.Align.LEFT
+            } else {
+                Paint.Align.RIGHT
+            }
+
+        val summaryTextX =
+            if (isEnglish) {
+                margin + 22f
+            } else {
+                pageWidth - margin - 22f
+            }
+
+        val summaryValueAlign =
+            if (isEnglish) {
+                Paint.Align.RIGHT
+            } else {
+                Paint.Align.LEFT
+            }
+
+        val summaryValueX =
+            if (isEnglish) {
+                pageWidth - margin - 28f
+            } else {
+                margin + 28f
+            }
+
+        sectionPaint.textAlign =
+            summaryTextAlign
+
         canvas.drawText(
-            tr("אימונים לשבוע הקרוב", "Upcoming trainings"),
-            pageWidth - margin - 22f,
+            tr(
+                "אימונים לשבוע הקרוב",
+                "Upcoming Trainings"
+            ),
+            summaryTextX,
             top + 32f,
             sectionPaint
         )
 
-        labelPaint.textAlign = Paint.Align.RIGHT
+        labelPaint.textAlign =
+            summaryTextAlign
+
         canvas.drawText(
-            tr("מספר אימונים מוצגים:", "Displayed trainings:"),
-            pageWidth - margin - 22f,
+            tr(
+                "מספר אימונים מוצגים:",
+                "Displayed trainings:"
+            ),
+            summaryTextX,
             top + 58f,
             labelPaint
         )
 
-        boldValuePaint.textAlign = Paint.Align.LEFT
+        boldValuePaint.textAlign =
+            summaryValueAlign
+
         boldValuePaint.textSize = 24f
         boldValuePaint.color = navy
-        canvas.drawText("${trainings.size}", margin + 28f, top + 56f, boldValuePaint)
+
+        canvas.drawText(
+            "${trainings.size}",
+            summaryValueX,
+            top + 56f,
+            boldValuePaint
+        )
 
         boldValuePaint.textSize = 13f
         boldValuePaint.color = textDark
@@ -6161,40 +6324,108 @@ private fun createHomePdf(
 
         canvas.drawLine(mid, top + 22f, mid, bottom - 20f, divider)
 
-        sectionPaint.textAlign = Paint.Align.RIGHT
+        val cardTextAlign =
+            if (isEnglish) {
+                Paint.Align.LEFT
+            } else {
+                Paint.Align.RIGHT
+            }
+
+        val primaryColumnX =
+            if (isEnglish) {
+                margin + 22f
+            } else {
+                right - 22f
+            }
+
+        val secondaryColumnX =
+            if (isEnglish) {
+                mid + 22f
+            } else {
+                mid - 22f
+            }
+
+        sectionPaint.textAlign =
+            cardTextAlign
+
         sectionPaint.textSize = 13.5f
+
         canvas.drawText(
-            training.place.ifBlank { tr("מיקום לא הוגדר", "Location not set") }.take(34),
-            right - 22f,
+            training.place
+                .ifBlank {
+                    tr(
+                        "מיקום לא הוגדר",
+                        "Location not set"
+                    )
+                }
+                .take(34),
+            primaryColumnX,
             top + 30f,
             sectionPaint
         )
+
         sectionPaint.textSize = 17f
 
-        labelPaint.textAlign = Paint.Align.RIGHT
-        valuePaint.textAlign = Paint.Align.RIGHT
-        boldValuePaint.textAlign = Paint.Align.RIGHT
+        labelPaint.textAlign =
+            cardTextAlign
 
-        canvas.drawText(tr("תאריך ושעה:", "Date and time:"), right - 22f, top + 58f, labelPaint)
+        valuePaint.textAlign =
+            cardTextAlign
+
+        boldValuePaint.textAlign =
+            cardTextAlign
+
+        canvas.drawText(
+            tr(
+                "תאריך ושעה:",
+                "Date and time:"
+            ),
+            primaryColumnX,
+            top + 58f,
+            labelPaint
+        )
+
         canvas.drawText(
             "${training.day} ${training.date} · ${training.time}",
-            right - 22f,
+            primaryColumnX,
             top + 76f,
             boldValuePaint
         )
 
-        canvas.drawText(tr("כתובת:", "Address:"), mid - 22f, top + 30f, labelPaint)
         canvas.drawText(
-            training.address.ifBlank { "—" }.take(30),
-            mid - 22f,
+            tr(
+                "כתובת:",
+                "Address:"
+            ),
+            secondaryColumnX,
+            top + 30f,
+            labelPaint
+        )
+
+        canvas.drawText(
+            training.address
+                .ifBlank { "—" }
+                .take(30),
+            secondaryColumnX,
             top + 48f,
             valuePaint
         )
 
-        canvas.drawText(tr("מאמן:", "Coach:"), mid - 22f, top + 72f, labelPaint)
         canvas.drawText(
-            training.coach.ifBlank { "—" }.take(22),
-            mid - 22f,
+            tr(
+                "מאמן:",
+                "Coach:"
+            ),
+            secondaryColumnX,
+            top + 72f,
+            labelPaint
+        )
+
+        canvas.drawText(
+            training.coach
+                .ifBlank { "—" }
+                .take(22),
+            secondaryColumnX,
             top + 90f,
             boldValuePaint
         )
@@ -6387,11 +6618,10 @@ private fun createHomePdf(
             fileName
         )
 
-    if (file.exists()) {
-        file.delete()
-    }
-
-    FileOutputStream(file).use { output ->
+    FileOutputStream(
+        file,
+        false
+    ).use { output ->
         document.writeTo(output)
     }
 

@@ -19,6 +19,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.isImeVisible
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -31,6 +32,7 @@ import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ChevronLeft
+import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.Search
@@ -69,9 +71,9 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import il.kmi.app.domain.ContentRepo
 import il.kmi.app.ui.KmiIconSize
+import il.kmi.app.ui.KmiTypography
 import il.kmi.shared.domain.Belt
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
@@ -254,6 +256,7 @@ fun GlobalExerciseSearchDialog(
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
+                    .imePadding()
                     .navigationBarsPadding()
                     .padding(
                         horizontal = 18.dp,
@@ -306,8 +309,9 @@ fun GlobalExerciseSearchDialog(
                             .fillMaxWidth()
                             .padding(horizontal = 8.dp),
                         color = MaterialTheme.colorScheme.error,
-                        style = MaterialTheme.typography.bodyMedium,
-                        fontWeight = FontWeight.Bold,
+                        style = KmiTypography.body.copy(
+                            fontWeight = FontWeight.Bold
+                        ),
                         textAlign = textAlign
                     )
                 }
@@ -344,7 +348,12 @@ private fun SearchHeader(
 
     val microphoneScale by microphoneTransition.animateFloat(
         initialValue = 1f,
-        targetValue = if (isListening) 1.16f else 1f,
+        targetValue =
+            if (isListening) {
+                1.16f
+            } else {
+                1f
+            },
         animationSpec = infiniteRepeatable(
             animation = tween(durationMillis = 650),
             repeatMode = RepeatMode.Reverse
@@ -354,7 +363,12 @@ private fun SearchHeader(
 
     val microphoneAlpha by microphoneTransition.animateFloat(
         initialValue = 1f,
-        targetValue = if (isListening) 0.68f else 1f,
+        targetValue =
+            if (isListening) {
+                0.68f
+            } else {
+                1f
+            },
         animationSpec = infiniteRepeatable(
             animation = tween(durationMillis = 650),
             repeatMode = RepeatMode.Reverse
@@ -369,9 +383,11 @@ private fun SearchHeader(
             .background(
                 Brush.horizontalGradient(
                     colors = listOf(
-                        Color(0xFF10294A),
-                        Color(0xFF173B68),
-                        Color(0xFF6250C7)
+                        MaterialTheme.colorScheme.primary,
+                        MaterialTheme.colorScheme.primary
+                            .copy(alpha = 0.88f),
+                        MaterialTheme.colorScheme.secondary
+                            .copy(alpha = 0.82f)
                     )
                 )
             )
@@ -384,7 +400,7 @@ private fun SearchHeader(
             onClick = onClose,
             modifier = Modifier
                 .align(Alignment.TopEnd)
-                .size(30.dp)
+                .size(KmiIconSize.medium)
         ) {
             Icon(
                 imageVector = Icons.Filled.Close,
@@ -394,8 +410,11 @@ private fun SearchHeader(
                     } else {
                         "סגור חיפוש"
                     },
-                tint = Color.White.copy(alpha = 0.9f),
-                modifier = Modifier.size(18.dp)
+                tint = MaterialTheme.colorScheme.onPrimary
+                    .copy(alpha = 0.92f),
+                modifier = Modifier.size(
+                    KmiIconSize.small
+                )
             )
         }
 
@@ -406,97 +425,119 @@ private fun SearchHeader(
                     start = 30.dp,
                     end = 30.dp
                 ),
-            horizontalAlignment = Alignment.CenterHorizontally
+            horizontalAlignment =
+                Alignment.CenterHorizontally
         ) {
             Text(
-                text = if (isEnglish) {
-                    "Search exercise"
-                } else {
-                    "חיפוש תרגיל"
-                },
+                text =
+                    if (isEnglish) {
+                        "Search exercise"
+                    } else {
+                        "חיפוש תרגיל"
+                    },
                 modifier = Modifier.fillMaxWidth(),
-                color = Color.White,
-                style = MaterialTheme.typography.titleLarge,
-                fontWeight = FontWeight.Black,
+                color = MaterialTheme.colorScheme.onPrimary,
+                style = KmiTypography.screenTitle.copy(
+                    fontWeight = FontWeight.Black
+                ),
                 textAlign = textAlign
             )
 
-            Spacer(modifier = Modifier.height(4.dp))
+            Spacer(
+                modifier = Modifier.height(4.dp)
+            )
 
             Text(
-                text = if (isEnglish) {
-                    "Type or say a word to search all exercises."
-                } else {
-                    "הקלד או אמור מילה כדי לחפש בכל התרגילים."
-                },
+                text =
+                    if (isEnglish) {
+                        "Type or say a word to search all exercises."
+                    } else {
+                        "הקלד או אמור מילה כדי לחפש בכל התרגילים."
+                    },
                 modifier = Modifier.fillMaxWidth(),
-                color = Color.White.copy(alpha = 0.82f),
-                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onPrimary
+                    .copy(alpha = 0.82f),
+                style = KmiTypography.body,
                 textAlign = textAlign
             )
 
-            Spacer(modifier = Modifier.height(8.dp))
+            Spacer(
+                modifier = Modifier.height(8.dp)
+            )
 
             Surface(
                 onClick = onMicrophoneClick,
                 modifier = Modifier
-                    .size(40.dp)
+                    .size(KmiIconSize.large)
                     .graphicsLayer {
                         scaleX = microphoneScale
                         scaleY = microphoneScale
                         alpha = microphoneAlpha
                     },
                 shape = CircleShape,
-                color = if (isListening) {
-                    Color(0xFFE53935)
-                } else {
-                    Color.White.copy(alpha = 0.18f)
-                },
+                color =
+                    if (isListening) {
+                        MaterialTheme.colorScheme.error
+                    } else {
+                        MaterialTheme.colorScheme.onPrimary
+                            .copy(alpha = 0.18f)
+                    },
+                tonalElevation = 0.dp,
+                shadowElevation = 0.dp,
                 border = BorderStroke(
                     width = 1.dp,
-                    color = Color.White.copy(alpha = 0.42f)
+                    color = MaterialTheme.colorScheme.onPrimary
+                        .copy(alpha = 0.42f)
                 )
             ) {
                 Box(
                     contentAlignment = Alignment.Center
                 ) {
                     Icon(
-                        imageVector = if (isListening) {
-                            Icons.Default.Stop
-                        } else {
-                            Icons.Default.Mic
-                        },
-                        contentDescription = if (isListening) {
-                            if (isEnglish) {
-                                "Stop listening"
+                        imageVector =
+                            if (isListening) {
+                                Icons.Default.Stop
                             } else {
-                                "עצור האזנה"
-                            }
-                        } else {
-                            if (isEnglish) {
-                                "Search by voice"
+                                Icons.Default.Mic
+                            },
+                        contentDescription =
+                            if (isListening) {
+                                if (isEnglish) {
+                                    "Stop listening"
+                                } else {
+                                    "עצור האזנה"
+                                }
                             } else {
-                                "חיפוש קולי"
-                            }
-                        },
-                        tint = Color.White,
-                        modifier = Modifier.size(21.dp)
+                                if (isEnglish) {
+                                    "Search by voice"
+                                } else {
+                                    "חיפוש קולי"
+                                }
+                            },
+                        tint = MaterialTheme.colorScheme.onPrimary,
+                        modifier = Modifier.size(
+                            KmiIconSize.medium
+                        )
                     )
                 }
             }
 
             if (isListening) {
-                Spacer(modifier = Modifier.height(10.dp))
+                Spacer(
+                    modifier = Modifier.height(10.dp)
+                )
 
                 Text(
-                    text = if (isEnglish) {
-                        "Listening…"
-                    } else {
-                        "מאזין…"
-                    },
-                    color = Color(0xFFFFCDD2),
-                    style = MaterialTheme.typography.labelLarge,
-                    fontWeight = FontWeight.Bold
+                    text =
+                        if (isEnglish) {
+                            "Listening…"
+                        } else {
+                            "מאזין…"
+                        },
+                    color = MaterialTheme.colorScheme.onPrimary,
+                    style = KmiTypography.action.copy(
+                        fontWeight = FontWeight.Bold
+                    )
                 )
             }
         }
@@ -523,7 +564,7 @@ private fun SearchInput(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(24.dp),
         color = MaterialTheme.colorScheme.surface,
-        shadowElevation = 8.dp,
+        shadowElevation = 0.dp,
         tonalElevation = 0.dp,
         border = BorderStroke(
             width = 1.dp,
@@ -553,7 +594,7 @@ private fun SearchInput(
                 onGo = { onDone() },
                 onSend = { onDone() }
             ),
-            textStyle = MaterialTheme.typography.bodyMedium.copy(
+            textStyle = KmiTypography.body.copy(
                 fontWeight = FontWeight.SemiBold,
                 textAlign = textAlign
             ),
@@ -561,14 +602,17 @@ private fun SearchInput(
                 Text(
                     text = label,
                     modifier = Modifier.fillMaxWidth(),
-                    textAlign = textAlign,
-                    fontWeight = FontWeight.SemiBold
+                    style = KmiTypography.caption.copy(
+                        fontWeight = FontWeight.SemiBold
+                    ),
+                    textAlign = textAlign
                 )
             },
             placeholder = {
                 Text(
                     text = label,
                     modifier = Modifier.fillMaxWidth(),
+                    style = KmiTypography.body,
                     textAlign = textAlign,
                     color = MaterialTheme.colorScheme
                         .onSurfaceVariant
@@ -578,7 +622,7 @@ private fun SearchInput(
                 Icon(
                     imageVector = Icons.Filled.Search,
                     contentDescription = label,
-                    tint = Color(0xFF10B981),
+                    tint = MaterialTheme.colorScheme.primary,
                     modifier = Modifier.size(
                         KmiIconSize.medium
                     )
@@ -589,7 +633,10 @@ private fun SearchInput(
                     IconButton(
                         onClick = {
                             onQueryChange("")
-                        }
+                        },
+                        modifier = Modifier.size(
+                            KmiIconSize.medium
+                        )
                     ) {
                         Icon(
                             imageVector = Icons.Filled.Close,
@@ -599,7 +646,10 @@ private fun SearchInput(
                                 } else {
                                     "נקה"
                                 },
-                            tint = MaterialTheme.colorScheme.primary
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(
+                                KmiIconSize.small
+                            )
                         )
                     }
                 }
@@ -648,9 +698,9 @@ private fun SearchContent(
                     .padding(horizontal = 8.dp),
                 textAlign = textAlign,
                 color = MaterialTheme.colorScheme.onSurface,
-                fontSize = 16.sp,
-                lineHeight = 21.sp,
-                fontWeight = FontWeight.Bold
+                style = KmiTypography.body.copy(
+                    fontWeight = FontWeight.Bold
+                )
             )
         }
 
@@ -677,7 +727,9 @@ private fun SearchContent(
                     textAlign = textAlign,
                     color = MaterialTheme.colorScheme
                         .onErrorContainer,
-                    fontWeight = FontWeight.Bold
+                    style = KmiTypography.body.copy(
+                        fontWeight = FontWeight.Bold
+                    )
                 )
             }
         }
@@ -730,7 +782,8 @@ private fun SearchResultRow(
 ) {
     val titleColor = resultTitleColor(
         id = result.id,
-        subtitle = result.subtitle
+        subtitle = result.subtitle,
+        defaultColor = MaterialTheme.colorScheme.onSurface
     )
 
     Row(
@@ -744,10 +797,17 @@ private fun SearchResultRow(
         verticalAlignment = Alignment.CenterVertically
     ) {
         Icon(
-            imageVector = Icons.Filled.ChevronLeft,
+            imageVector =
+                if (isEnglish) {
+                    Icons.Filled.ChevronRight
+                } else {
+                    Icons.Filled.ChevronLeft
+                },
             contentDescription = null,
             tint = MaterialTheme.colorScheme.primary,
-            modifier = Modifier.size(KmiIconSize.tiny)
+            modifier = Modifier.size(
+                KmiIconSize.tiny
+            )
         )
 
         Spacer(Modifier.width(8.dp))
@@ -765,9 +825,9 @@ private fun SearchResultRow(
                 text = result.title,
                 modifier = Modifier.fillMaxWidth(),
                 textAlign = textAlign,
-                fontWeight = FontWeight.Bold,
-                fontSize = 14.sp,
-                lineHeight = 18.sp,
+                style = KmiTypography.body.copy(
+                    fontWeight = FontWeight.Bold
+                ),
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
                 color = titleColor
@@ -777,12 +837,12 @@ private fun SearchResultRow(
                 Spacer(Modifier.height(2.dp))
 
                 Text(
-                    text = result.subtitle.orEmpty(),
+                    text = result.subtitle,
                     modifier = Modifier.fillMaxWidth(),
                     textAlign = textAlign,
-                    fontSize = 12.sp,
-                    lineHeight = 15.sp,
-                    fontWeight = FontWeight.Bold,
+                    style = KmiTypography.caption.copy(
+                        fontWeight = FontWeight.Bold
+                    ),
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                     color = MaterialTheme.colorScheme
@@ -941,46 +1001,83 @@ private fun searchExercisesWithHebrewVariants(
 
 private fun resultTitleColor(
     id: String,
-    subtitle: String?
+    subtitle: String?,
+    defaultColor: Color
 ): Color {
     val resolvedBelt = runCatching {
         ContentRepo.resolveItemKey(id)?.belt
     }.getOrNull()
 
-    return when (resolvedBelt) {
+    if (resolvedBelt != null) {
+        return searchResultBeltColor(
+            belt = resolvedBelt,
+            defaultColor = defaultColor
+        )
+    }
+
+    val searchableText =
+        "$subtitle $id".lowercase()
+
+    return when {
+        "צהובה" in searchableText ||
+                "yellow" in searchableText ->
+            searchResultBeltColor(
+                belt = Belt.YELLOW,
+                defaultColor = defaultColor
+            )
+
+        "כתומה" in searchableText ||
+                "orange" in searchableText ->
+            searchResultBeltColor(
+                belt = Belt.ORANGE,
+                defaultColor = defaultColor
+            )
+
+        "ירוקה" in searchableText ||
+                "green" in searchableText ->
+            searchResultBeltColor(
+                belt = Belt.GREEN,
+                defaultColor = defaultColor
+            )
+
+        "כחולה" in searchableText ||
+                "blue" in searchableText ->
+            searchResultBeltColor(
+                belt = Belt.BLUE,
+                defaultColor = defaultColor
+            )
+
+        "חומה" in searchableText ||
+                "brown" in searchableText ->
+            searchResultBeltColor(
+                belt = Belt.BROWN,
+                defaultColor = defaultColor
+            )
+
+        "שחורה" in searchableText ||
+                "black" in searchableText ->
+            searchResultBeltColor(
+                belt = Belt.BLACK,
+                defaultColor = defaultColor
+            )
+
+        else ->
+            defaultColor
+    }
+}
+
+private fun searchResultBeltColor(
+    belt: Belt,
+    defaultColor: Color
+): Color {
+    return when (belt) {
         Belt.YELLOW -> Color(0xFFF59E0B)
         Belt.ORANGE -> Color(0xFFFF9800)
         Belt.GREEN -> Color(0xFF2E7D32)
         Belt.BLUE -> Color(0xFF1E88E5)
         Belt.BROWN -> Color(0xFF6D4C41)
         Belt.BLACK -> Color(0xFF64748B)
-        else -> {
-            val searchableText =
-                "$subtitle $id".lowercase()
 
-            when {
-                "צהובה" in searchableText ||
-                        "yellow" in searchableText ->
-                    Color(0xFFF59E0B)
-
-                "כתומה" in searchableText ||
-                        "orange" in searchableText ->
-                    Color(0xFFFF9800)
-
-                "ירוקה" in searchableText ||
-                        "green" in searchableText ->
-                    Color(0xFF2E7D32)
-
-                "כחולה" in searchableText ||
-                        "blue" in searchableText ->
-                    Color(0xFF1E88E5)
-
-                "חומה" in searchableText ||
-                        "brown" in searchableText ->
-                    Color(0xFF6D4C41)
-
-                else -> Color(0xFF334155)
-            }
-        }
+        else -> defaultColor
     }
 }

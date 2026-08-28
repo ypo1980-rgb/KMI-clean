@@ -68,11 +68,8 @@ fun NavGraphBuilder.registrationNavGraph(
                     restoreState = false
                 }
             },
-            onOpenRecovery = { /* ... */ },
-            vm = vm,
             sp = sp,
-            kmiPrefs = kmiPrefs,
-            onOpenDrawer = { il.kmi.app.ui.DrawerBridge.open() }
+            kmiPrefs = kmiPrefs
         )
     }
 
@@ -87,10 +84,8 @@ fun NavGraphBuilder.registrationNavGraph(
                     restoreState = false
                 }
             },
-            vm = vm,
             sp = sp,
-            kmiPrefs = kmiPrefs,
-            onOpenDrawer = { il.kmi.app.ui.DrawerBridge.open() }
+            kmiPrefs = kmiPrefs
         )
     }
 

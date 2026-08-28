@@ -260,17 +260,24 @@ fun NavGraphBuilder.legacyNavGraph(
             topic = topic,
             onBack = { nav.popBackStack() },
             onSummary = { b, t, sub ->
-                nav.navigate(Route.Summary.make(belt = b, topic = t, subTopic = sub))
+                nav.navigate(
+                    Route.Summary.make(
+                        belt = b,
+                        topic = t,
+                        subTopic = sub
+                    )
+                )
             },
             onPractice = { b, t ->
                 nav.navigate(Route.Practice.make(b, t))
             },
-            onOpenSettings = {
-                nav.navigate(Route.Settings.route)
-            },
             onOpenHome = {
                 nav.navigate(Route.Home.route) {
-                    popUpTo(nav.graph.findStartDestination().id) { saveState = true }
+                    popUpTo(
+                        nav.graph.findStartDestination().id
+                    ) {
+                        saveState = true
+                    }
                     launchSingleTop = true
                     restoreState = true
                 }

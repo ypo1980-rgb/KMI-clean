@@ -594,45 +594,6 @@ fun NavGraphBuilder.trainingNavGraph(
         )
     }
 
-    composable(
-        route = "hard_subject_direct/{beltId}/{subjectId}/{sectionId}",
-        arguments = listOf(
-            navArgument("beltId") { type = NavType.StringType },
-            navArgument("subjectId") { type = NavType.StringType },
-            navArgument("sectionId") { type = NavType.StringType }
-        )
-    ) { entry ->
-        val beltId = entry.arguments?.getString("beltId").orEmpty()
-        val subjectId = Uri.decode(entry.arguments?.getString("subjectId").orEmpty())
-        val rawSectionId = Uri.decode(entry.arguments?.getString("sectionId").orEmpty())
-
-        val belt = Belt.fromId(beltId) ?: Belt.GREEN
-        val sectionId = rawSectionId.takeIf { it.isNotBlank() && it != "_" }
-
-        vm.setSelectedBelt(belt)
-
-        UnifiedSubjectExercisesScreen(
-            subjectId = subjectId,
-            sectionId = sectionId,
-            vm = vm,
-            onOpenSection = { nextSubjectId, nextSectionId ->
-                nav.navigate(
-                    "hard_subject_direct/${belt.id}/${Uri.encode(nextSubjectId)}/${
-                        Uri.encode(
-                            nextSectionId ?: "_"
-                        )
-                    }"
-                ) {
-                    launchSingleTop = true
-                    restoreState = true
-                }
-            },
-            onBack = {
-                nav.popBackStack()
-            }
-        )
-    }
-
     // ---- Materials (מסך התרגילים המעוצב) ----
     composable(
         route = Route.Materials.route,
@@ -667,11 +628,6 @@ fun NavGraphBuilder.trainingNavGraph(
             },
             onPractice = { b, t ->
                 nav.navigate(Route.Practice.make(b, t)) {
-                    launchSingleTop = true
-                }
-            },
-            onOpenSettings = {
-                nav.navigate(Route.Settings.route) {
                     launchSingleTop = true
                 }
             },

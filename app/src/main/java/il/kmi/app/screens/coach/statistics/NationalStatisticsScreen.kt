@@ -3,18 +3,15 @@ package il.kmi.app.screens.coach.statistics
 import android.app.Activity
 import android.content.Context
 import android.content.Intent
+import android.graphics.Canvas as AndroidCanvas
+import android.graphics.Color as AndroidColor
 import android.graphics.Paint
+import android.graphics.Path as AndroidPath
 import android.graphics.Typeface
 import android.graphics.pdf.PdfDocument
 import androidx.core.content.FileProvider
-import androidx.compose.animation.core.LinearEasing
-import androidx.compose.animation.core.animateFloat
-import androidx.compose.animation.core.infiniteRepeatable
-import androidx.compose.animation.core.rememberInfiniteTransition
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -25,6 +22,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -63,17 +61,18 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
+import il.kmi.app.ui.DrawerBridge
+import il.kmi.app.ui.KmiIconSize
 import il.kmi.app.ui.KmiTopBar
 import il.kmi.app.ui.KmiTypography
+import il.kmi.app.ui.loading.KmiLoadingRings
 import il.kmi.shared.localization.AppLanguage
 import il.kmi.shared.localization.AppLanguageManager
 import java.io.File
@@ -81,6 +80,9 @@ import java.io.FileOutputStream
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+
+
+//================================================================================
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -91,7 +93,7 @@ fun NationalStatisticsScreen(
     embedded: Boolean = false,
     shareTrigger: Int = 0,
     onOpenDrawer: () -> Unit = {
-        il.kmi.app.ui.DrawerBridge.open()
+        DrawerBridge.open()
     },
     onOpenHome: () -> Unit = onBack,
     repository: NationalStatisticsRepository =
@@ -307,7 +309,9 @@ fun NationalStatisticsScreen(
 
                     else -> {
                         LazyColumn(
-                            modifier = Modifier.fillMaxSize(),
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .navigationBarsPadding(),
                             contentPadding = PaddingValues(
                                 start = 14.dp,
                                 end = 14.dp,
@@ -897,7 +901,7 @@ private fun NationalPremiumFiltersCard(
                                 tint =
                                     MaterialTheme.colorScheme.primary,
                                 modifier =
-                                    Modifier.size(15.dp)
+                                    Modifier.size(KmiIconSize.small)
                             )
 
                             Spacer(Modifier.width(4.dp))
@@ -1074,7 +1078,8 @@ private fun NationalPremiumFiltersCard(
 
                 if (activeFiltersCount > 0) {
                     TextButton(
-                        onClick = onClearFilters
+                        onClick = onClearFilters,
+                        modifier = Modifier.heightIn(min = 56.dp)
                     ) {
                         Text(
                             text = tr(
@@ -1181,7 +1186,7 @@ private fun <T> NationalFilterSection(
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .heightIn(min = 46.dp)
+                        .heightIn(min = 56.dp)
                         .padding(
                             horizontal = 11.dp,
                             vertical = 7.dp
@@ -1357,7 +1362,7 @@ private fun <T> NationalFilterSection(
                                             tint =
                                                 MaterialTheme.colorScheme.onPrimary,
                                             modifier =
-                                                Modifier.size(16.dp)
+                                                Modifier.size(KmiIconSize.small)
                                         )
                                     }
                                 }
@@ -1834,167 +1839,13 @@ private fun NationalStatisticsLoading(
         verticalArrangement =
             Arrangement.Center
     ) {
-        NationalStatisticsPremiumLoading()
-
-        Spacer(Modifier.height(16.dp))
-
-        Text(
+        KmiLoadingRings(
             text = tr(
                 isEnglish,
                 "טוען נתונים מכל הסניפים...",
                 "Loading data from all branches..."
-            ),
-            modifier = Modifier.fillMaxWidth(),
-            style = KmiTypography.body.copy(
-                fontWeight = FontWeight.Bold
-            ),
-            textAlign = TextAlign.Center,
-            color =
-                MaterialTheme.colorScheme.onSurfaceVariant
-        )
-    }
-}
-
-@Composable
-private fun NationalStatisticsPremiumLoadingRing(
-    size: Dp,
-    width: Dp,
-    rotation: Float,
-    colors: List<Color>
-) {
-    Box(
-        modifier = Modifier
-            .size(size)
-            .graphicsLayer {
-                rotationZ = rotation
-            }
-            .border(
-                width = width,
-                brush = Brush.sweepGradient(colors),
-                shape = CircleShape
-            )
-    )
-}
-
-@Composable
-private fun NationalStatisticsPremiumLoading() {
-    val infiniteTransition = rememberInfiniteTransition(
-        label = "nationalStatisticsLoading"
-    )
-
-    val outerRotation by infiniteTransition.animateFloat(
-        initialValue = 0f,
-        targetValue = 360f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(
-                durationMillis = 1350,
-                easing = LinearEasing
-            )
-        ),
-        label = "nationalStatisticsOuterRotation"
-    )
-
-    val middleRotation by infiniteTransition.animateFloat(
-        initialValue = 360f,
-        targetValue = 0f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(
-                durationMillis = 1650,
-                easing = LinearEasing
-            )
-        ),
-        label = "nationalStatisticsMiddleRotation"
-    )
-
-    val innerRotation by infiniteTransition.animateFloat(
-        initialValue = 0f,
-        targetValue = 360f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(
-                durationMillis = 2050,
-                easing = LinearEasing
-            )
-        ),
-        label = "nationalStatisticsInnerRotation"
-    )
-
-    Box(
-        modifier = Modifier.size(82.dp),
-        contentAlignment = Alignment.Center
-    ) {
-        NationalStatisticsPremiumLoadingRing(
-            size = 76.dp,
-            width = 5.dp,
-            rotation = outerRotation,
-            colors = listOf(
-                Color.Transparent,
-                Color(0xFFA78BFA),
-                Color(0xFF38BDF8),
-                Color.Transparent
             )
         )
-
-        NationalStatisticsPremiumLoadingRing(
-            size = 62.dp,
-            width = 4.dp,
-            rotation = middleRotation,
-            colors = listOf(
-                Color.Transparent,
-                Color(0xFF38BDF8),
-                Color(0xFFA78BFA),
-                Color.Transparent
-            )
-        )
-
-        NationalStatisticsPremiumLoadingRing(
-            size = 48.dp,
-            width = 3.5.dp,
-            rotation = innerRotation,
-            colors = listOf(
-                Color.Transparent,
-                Color(0xFFF59E0B),
-                Color(0xFF22C55E),
-                Color.Transparent
-            )
-        )
-
-        Surface(
-            modifier = Modifier.size(25.dp),
-            shape = CircleShape,
-            color = MaterialTheme.colorScheme.surface,
-            shadowElevation = 0.dp,
-            border = BorderStroke(
-                width = 1.dp,
-                color = MaterialTheme.colorScheme.primary.copy(
-                    alpha = 0.32f
-                )
-            )
-        ) {
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .background(
-                        brush = Brush.radialGradient(
-                            colors = listOf(
-                                MaterialTheme.colorScheme.surface,
-                                MaterialTheme.colorScheme.primaryContainer,
-                                MaterialTheme.colorScheme.surfaceVariant
-                            )
-                        ),
-                        shape = CircleShape
-                    ),
-                contentAlignment = Alignment.Center
-            ) {
-                Text(
-                    text = "✓",
-                    style = KmiTypography.caption.copy(
-                        fontWeight = FontWeight.Black
-                    ),
-                    color = MaterialTheme.colorScheme.primary,
-                    textAlign = TextAlign.Center
-                )
-            }
-        }
     }
 }
 
@@ -2032,7 +1883,8 @@ private fun NationalStatisticsError(
         Spacer(Modifier.height(12.dp))
 
         TextButton(
-            onClick = onRetry
+            onClick = onRetry,
+            modifier = Modifier.heightIn(min = 56.dp)
         ) {
             Text(
                 text = tr(
@@ -2251,42 +2103,42 @@ private fun createNationalStatisticsPdf(
     val document = PdfDocument()
 
     val navy =
-        android.graphics.Color.rgb(
+        AndroidColor.rgb(
             2,
             43,
             74
         )
 
     val blue =
-        android.graphics.Color.rgb(
+        AndroidColor.rgb(
             36,
             103,
             158
         )
 
     val lightBlue =
-        android.graphics.Color.rgb(
+        AndroidColor.rgb(
             234,
             246,
             255
         )
 
     val borderBlue =
-        android.graphics.Color.rgb(
+        AndroidColor.rgb(
             191,
             213,
             232
         )
 
     val textDark =
-        android.graphics.Color.rgb(
+        AndroidColor.rgb(
             15,
             23,
             42
         )
 
     val textMuted =
-        android.graphics.Color.rgb(
+        AndroidColor.rgb(
             80,
             100,
             120
@@ -2368,7 +2220,7 @@ private fun createNationalStatisticsPdf(
     }
 
     fun drawRoundedRect(
-        canvas: android.graphics.Canvas,
+        canvas: AndroidCanvas,
         left: Float,
         top: Float,
         right: Float,
@@ -2394,7 +2246,7 @@ private fun createNationalStatisticsPdf(
     }
 
     fun drawRoundedBorder(
-        canvas: android.graphics.Canvas,
+        canvas: AndroidCanvas,
         left: Float,
         top: Float,
         right: Float,
@@ -2422,7 +2274,7 @@ private fun createNationalStatisticsPdf(
 
     var pageNumber = 0
     var page: PdfDocument.Page? = null
-    var canvas: android.graphics.Canvas? = null
+    var canvas: AndroidCanvas? = null
     var y = 0f
 
     fun newPage() {
@@ -2454,7 +2306,7 @@ private fun createNationalStatisticsPdf(
         val pageCanvas = newPage.canvas
 
         pageCanvas.drawColor(
-            android.graphics.Color.WHITE
+            AndroidColor.WHITE
         )
 
 val headerBottom = 122f
@@ -2472,7 +2324,7 @@ val accent1 =
         Paint.ANTI_ALIAS_FLAG
     ).apply {
         color =
-            android.graphics.Color.rgb(
+            AndroidColor.rgb(
                 36,
                 103,
                 158
@@ -2485,7 +2337,7 @@ val accent2 =
         Paint.ANTI_ALIAS_FLAG
     ).apply {
         color =
-            android.graphics.Color.rgb(
+            AndroidColor.rgb(
                 128,
                 183,
                 220
@@ -2497,7 +2349,7 @@ val accent2 =
  * האלכסון הראשי.
  */
         pageCanvas.drawPath(
-    android.graphics.Path().apply {
+    AndroidPath().apply {
         moveTo(
             pageWidth.toFloat(),
             0f
@@ -2523,7 +2375,7 @@ val accent2 =
  * פס אקסנט ראשון.
  */
         pageCanvas.drawPath(
-    android.graphics.Path().apply {
+    AndroidPath().apply {
         moveTo(
             208f,
             headerBottom
@@ -2549,7 +2401,7 @@ val accent2 =
  * פס אקסנט שני.
  */
         pageCanvas.drawPath(
-    android.graphics.Path().apply {
+    AndroidPath().apply {
         moveTo(
             230f,
             headerBottom
@@ -2593,7 +2445,7 @@ val logoRadius = 42f
         Paint.ANTI_ALIAS_FLAG
     ).apply {
         color =
-            android.graphics.Color.WHITE
+            AndroidColor.WHITE
     }
 )
 
@@ -2626,7 +2478,7 @@ val headerX =
     paint(
         size = 25f,
         color =
-            android.graphics.Color.WHITE,
+            AndroidColor.WHITE,
         typeface = boldTypeface,
         align = Paint.Align.RIGHT
     )
@@ -2646,7 +2498,7 @@ val headerX =
     paint(
         size = 11f,
         color =
-            android.graphics.Color.WHITE,
+            AndroidColor.WHITE,
         typeface = regularTypeface,
         align = Paint.Align.RIGHT
     )
@@ -2665,26 +2517,45 @@ val generatedDate =
     )
 
         pageCanvas.drawText(
-    if (isEnglish) {
-        "Generated: $generatedDate"
-    } else {
-        "תאריך הפקה: $generatedDate"
-    },
-    headerX,
-    142f,
-    paint(
-        size = 8.5f,
-        color = textMuted,
-        typeface = regularTypeface,
-        align = Paint.Align.RIGHT
-    )
-)
+            if (isEnglish) {
+                "Generated: $generatedDate"
+            } else {
+                "תאריך הפקה: $generatedDate"
+            },
+            headerX,
+            142f,
+            paint(
+                size = 8.5f,
+                color = textMuted,
+                typeface = regularTypeface,
+                align = Paint.Align.RIGHT
+            )
+        )
 
-/*
- * מתחילים את תוכן הדוח מתחת לתאריך.
- */
-y = 164f
-}
+        /*
+         * מספר עמוד קבוע בתחתית כל עמוד.
+         */
+        pageCanvas.drawText(
+            if (isEnglish) {
+                "Page $pageNumber"
+            } else {
+                "עמוד $pageNumber"
+            },
+            pageWidth / 2f,
+            pageHeight - 18f,
+            paint(
+                size = 8.5f,
+                color = textMuted,
+                typeface = regularTypeface,
+                align = Paint.Align.CENTER
+            )
+        )
+
+        /*
+         * מתחילים את תוכן הדוח מתחת לתאריך.
+         */
+        y = 164f
+    }
 
     fun ensureSpace(
         requiredHeight: Float
@@ -2702,7 +2573,7 @@ y = 164f
      * newPage() חייב להיקרא לפני כל ציור ראשון,
      * ולכן מצב null כאן הוא מצב לא תקין.
      */
-    fun currentCanvas(): android.graphics.Canvas {
+    fun currentCanvas(): AndroidCanvas {
         return requireNotNull(canvas) {
             "PDF canvas is not initialized"
         }
@@ -3261,7 +3132,7 @@ y = 164f
                                 margin,
                     bottom = cardBottom,
                     color =
-                        android.graphics.Color.rgb(
+                        AndroidColor.rgb(
                             247,
                             250,
                             253
@@ -3362,7 +3233,7 @@ y = 164f
             fileName
         )
 
-    FileOutputStream(pdfFile).use {
+    FileOutputStream(pdfFile, false).use {
         document.writeTo(it)
     }
 

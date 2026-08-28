@@ -75,13 +75,6 @@ fun NavGraphBuilder.materialsNavGraph(
                 }
             },
 
-            onOpenSettings = {
-                nav.navigate(Route.Settings.route) {
-                    launchSingleTop = true
-                    restoreState = true
-                }
-            },
-
             onOpenHome = {
                 nav.navigate(Route.Home.route) {
                     launchSingleTop = true
@@ -155,13 +148,6 @@ fun NavGraphBuilder.materialsNavGraph(
 
             onPractice = { b, t ->
                 nav.navigate(Route.Practice.make(b, t)) {
-                    launchSingleTop = true
-                    restoreState = true
-                }
-            },
-
-            onOpenSettings = {
-                nav.navigate(Route.Settings.route) {
                     launchSingleTop = true
                     restoreState = true
                 }

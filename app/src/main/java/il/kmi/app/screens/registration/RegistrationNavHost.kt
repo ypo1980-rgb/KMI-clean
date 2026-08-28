@@ -131,11 +131,8 @@ fun RegistrationNavHost(
                 onBack = { nav.popBackStack() },
                 // לאחר התחברות מוצלחת – ניגשים הביתה ולא ללנדינג
                 onLoginComplete = { onRegistrationDone() },
-                onOpenRecovery = {},
-                vm = vm,
                 sp = sp,
-                kmiPrefs = kmiPrefs,
-                onOpenDrawer = onOpenDrawer
+                kmiPrefs = kmiPrefs
             )
         }
 
@@ -145,11 +142,8 @@ fun RegistrationNavHost(
                 onBack = { nav.popBackStack() },
                 // גם למאמן – כניסה הביתה לאחר התחברות
                 onLoginComplete = { onRegistrationDone() },
-                onOpenRecovery = {},
-                vm = vm,
                 sp = sp,
-                kmiPrefs = kmiPrefs,
-                onOpenDrawer = onOpenDrawer
+                kmiPrefs = kmiPrefs
             )
         }
     }

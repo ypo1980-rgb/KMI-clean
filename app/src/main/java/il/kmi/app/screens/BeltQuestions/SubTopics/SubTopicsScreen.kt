@@ -1,4 +1,4 @@
-package il.kmi.app.screens.BeltQuestions.SubTopics
+package il.kmi.app.screens.BeltQuestions.subtopics
 
 import android.content.Context
 import android.content.Intent
@@ -38,7 +38,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import il.kmi.shared.domain.Belt
 import il.kmi.app.domain.AppSubTopicRegistry
 import il.kmi.app.domain.ContentRepo
@@ -68,12 +67,15 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.core.content.FileProvider
+import androidx.core.content.edit
 import il.kmi.app.favorites.FavoritesStore
 import il.kmi.app.screens.BeltQuestions.Materials.CoachMaterialProgress
 import il.kmi.app.screens.BeltQuestions.Materials.CoachMaterialStatus
 import il.kmi.app.screens.BeltQuestions.Materials.CoachMaterialStatusSelector
 import il.kmi.app.ui.FloatingQuickMenu
+import il.kmi.app.ui.KmiIconSize
 import il.kmi.app.ui.KmiTopBar
+import il.kmi.app.ui.KmiTypography
 import il.kmi.app.ui.QuickMenuTriggerMode
 import il.kmi.app.ui.dialogs.ExerciseExplanationDialog
 import il.kmi.app.ui.dialogs.ExerciseNoteEditorDialog
@@ -787,11 +789,13 @@ private fun visibleGreenDefenseSubTopics(
         .toSet()
 
     val otherSubs = rawSubs
+        .asSequence()
         .map { it.trim() }
         .filter { it.isNotBlank() }
         .filter { normalizeUiNestedTitle(it) !in nestedLeafTitles }
         .filter { normalizeUiNestedTitle(it) !in nestedGroupTitles }
         .distinctBy { normalizeUiNestedTitle(it) }
+        .toList()
 
     return (
             nestedGroups.map { it.title } + otherSubs
@@ -807,24 +811,14 @@ private val catalogScreenGradientBottom = Color(0xFF062B4A)
  * כל כפתור = תת־נושא. למטה כתוב כמה תרגילים יש בו.
  */
 
-enum class SubTopicsSourceMode {
-    BY_BELT,
-    BY_TOPIC
-}
-
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SubTopicsScreen(
     belt: Belt,
     topic: String,
-    onBack: () -> Unit,
     onHome: () -> Unit,
     onOpenSubTopic: (String) -> Unit,
-    onOpenExercise: (String) -> Unit,
-    onOpenPdfMaterials: (Belt, String) -> Unit,
     vm: KmiViewModel,
-    sourceMode: SubTopicsSourceMode =
-        SubTopicsSourceMode.BY_BELT,
     isCoach: Boolean = false
 ) {
 
@@ -1055,8 +1049,6 @@ fun SubTopicsScreen(
             rawSubs = realSubs
         )
     }
-
-    val buttonSpacing = 12.dp
 
 // ===== QUICK MENU STATE =====
     var quickMenuExpanded by rememberSaveable { mutableStateOf(false) }
@@ -1350,9 +1342,6 @@ fun SubTopicsScreen(
                     },
                     isDarkMode = isDarkMode,
                     isCoach = isCoach,
-                    showExerciseDividers =
-                        sourceMode ==
-                                SubTopicsSourceMode.BY_BELT,
                     vm = vm,
                     onPdfExercisesChanged = { exercises ->
                         hardPdfExercises = exercises
@@ -1400,7 +1389,6 @@ fun SubTopicsScreen(
                                 belt = belt,
                                 itemName = originalName,
                                 displayName = displayName,
-                                accent = MaterialTheme.colorScheme.primary,
                                 onExplain = { _, item -> explain = item },
                                 onOpenExercise = { item ->
                                     openedExerciseRequest = OpenedExerciseRequest(
@@ -1439,8 +1427,18 @@ fun SubTopicsScreen(
                     } else if (isHardFlow) {
 
                         Text(
-                            text = "לא נמצאו תרגילים קשיחים עבור \"$hardTitle\"",
-                            style = MaterialTheme.typography.titleMedium,
+                            text =
+                                if (isEnglish) {
+                                    "No exercises were found for \"$hardTitle\""
+                                } else {
+                                    "לא נמצאו תרגילים קשיחים עבור \"$hardTitle\""
+                                },
+                            style =
+                                KmiTypography.body.copy(
+                                    fontWeight = FontWeight.Bold
+                                ),
+                            color =
+                                MaterialTheme.colorScheme.onSurface,
                             textAlign = TextAlign.Center,
                             modifier = Modifier.fillMaxWidth()
                         )
@@ -1453,7 +1451,6 @@ fun SubTopicsScreen(
                             ExerciseRowWithInfo(
                                 belt = belt,
                                 itemName = itemName,
-                                accent = MaterialTheme.colorScheme.primary,
                                 onExplain = { _, item -> explain = item },
                                 onOpenExercise = { item ->
                                     openedExerciseRequest = OpenedExerciseRequest(
@@ -1493,24 +1490,43 @@ fun SubTopicsScreen(
 
                         activeNestedGroup.leaves.forEach { leaf ->
                             Text(
-                                text = if (isEnglish) ExerciseTitlesEn.getOrSame(leaf.title) else leaf.title,
+                                text =
+                                    if (isEnglish) {
+                                        ExerciseTitlesEn.getOrSame(
+                                            leaf.title
+                                        )
+                                    } else {
+                                        leaf.title
+                                    },
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .padding(start = 8.dp, end = 8.dp, top = 10.dp, bottom = 6.dp),
-                                textAlign = if (isEnglish) TextAlign.Left else TextAlign.Right,
-                                style = MaterialTheme.typography.titleSmall.copy(
-                                    fontSize = 13.sp,
-                                    lineHeight = 16.sp
-                                ),
-                                fontWeight = FontWeight.ExtraBold,
-                                color = belt.color
+                                    .padding(
+                                        start = 8.dp,
+                                        end = 8.dp,
+                                        top = 10.dp,
+                                        bottom = 6.dp
+                                    ),
+                                textAlign =
+                                    if (isEnglish) {
+                                        TextAlign.Left
+                                    } else {
+                                        TextAlign.Right
+                                    },
+                                style =
+                                    KmiTypography.caption.copy(
+                                        fontWeight =
+                                            FontWeight.ExtraBold
+                                    ),
+                                color = belt.color,
+                                maxLines = 2,
+                                overflow =
+                                    TextOverflow.Ellipsis
                             )
 
                             leaf.items.forEach { itemName ->
                                 ExerciseRowWithInfo(
                                     belt = belt,
                                     itemName = itemName,
-                                    accent = MaterialTheme.colorScheme.primary,
                                     onExplain = { _, item -> explain = item },
                                     onOpenExercise = { item ->
                                         openedExerciseRequest = OpenedExerciseRequest(
@@ -1558,8 +1574,18 @@ fun SubTopicsScreen(
 
                         if (items.isEmpty()) {
                             Text(
-                                text = "לא נמצאו תתי־נושאים או תרגילים עבור \"$topicDecoded\"",
-                                style = MaterialTheme.typography.titleMedium,
+                                text =
+                                    if (isEnglish) {
+                                        "No subtopics or exercises were found for \"$topicDecoded\""
+                                    } else {
+                                        "לא נמצאו תתי־נושאים או תרגילים עבור \"$topicDecoded\""
+                                    },
+                                style =
+                                    KmiTypography.body.copy(
+                                        fontWeight = FontWeight.Bold
+                                    ),
+                                color =
+                                    MaterialTheme.colorScheme.onSurface,
                                 textAlign = TextAlign.Center,
                                 modifier = Modifier.fillMaxWidth()
                             )
@@ -1568,7 +1594,6 @@ fun SubTopicsScreen(
                                 ExerciseRowWithInfo(
                                     belt = belt,
                                     itemName = itemName,
-                                    accent = MaterialTheme.colorScheme.primary,
                                     onExplain = { _, item -> explain = item },
                                     onOpenExercise = { item ->
                                         openedExerciseRequest = OpenedExerciseRequest(
@@ -1606,7 +1631,7 @@ fun SubTopicsScreen(
                             val subTitle = subTitleRaw.trim()
 
                             val itemCount by remember(belt, topicDecoded, subTitle) {
-                                mutableStateOf(
+                                mutableIntStateOf(
                                     when {
                                         nestedGreenDefenseGroupFor(
                                             belt = belt,
@@ -1833,13 +1858,16 @@ private fun saveSubTopicExerciseNote(
 ) {
     val clean = text.trim()
 
-    prefs.edit().apply {
+    prefs.edit {
         if (clean.isBlank()) {
             remove(noteKey)
         } else {
-            putString(noteKey, clean)
+            putString(
+                noteKey,
+                clean
+            )
         }
-    }.apply()
+    }
 }
 
 private fun createSubjectExercisesPdf(
@@ -1853,7 +1881,7 @@ private fun createSubjectExercisesPdf(
     val pageHeight = 842
     val horizontalMargin = 36f
     val contentRight = pageWidth - horizontalMargin
-    val contentLeft = horizontalMargin
+    val contentLeft = 36f
     val bottomLimit = pageHeight - 58f
 
     val document = PdfDocument()
@@ -1976,13 +2004,6 @@ private fun createSubjectExercisesPdf(
         Paint.ANTI_ALIAS_FLAG
     ).apply {
         color = mediumBlue
-        style = Paint.Style.FILL
-    }
-
-    val headerBackgroundPaint = Paint(
-        Paint.ANTI_ALIAS_FLAG
-    ).apply {
-        color = navy
         style = Paint.Style.FILL
     }
 
@@ -2428,13 +2449,20 @@ private fun createSubjectExercisesPdf(
         .lowercase()
         .replace(Regex("[^a-z0-9_-]"), "_")
 
+    val fileName =
+        if (isEnglish) {
+            "subject_${safeBeltId}.pdf"
+        } else {
+            "subject_${safeBeltId}_he.pdf"
+        }
+
     val file = File(
         dir,
-        "subject_${safeBeltId}_${System.currentTimeMillis()}.pdf"
+        fileName
     )
 
     try {
-        FileOutputStream(file).use { output ->
+        FileOutputStream(file, false).use { output ->
             document.writeTo(output)
         }
     } finally {
@@ -2501,10 +2529,18 @@ private fun ModernExerciseInfoDialog(
         isEnglish = isEnglish,
         backgroundBrush = Brush.verticalGradient(
             colors = listOf(
-                Color.White,
-                lerp(Color.White, accentColor, 0.12f),
-                lerp(Color.White, accentColor, 0.06f),
-                Color.White
+                MaterialTheme.colorScheme.surface,
+                lerp(
+                    MaterialTheme.colorScheme.surface,
+                    accentColor,
+                    0.12f
+                ),
+                lerp(
+                    MaterialTheme.colorScheme.surface,
+                    accentColor,
+                    0.06f
+                ),
+                MaterialTheme.colorScheme.surface
             )
         ),
         onDismiss = {
@@ -2563,21 +2599,6 @@ private fun ModernExerciseInfoDialog(
 }
 
 @Composable
-private fun SubTopicCategoryCard(
-    belt: Belt,
-    title: String,
-    count: Int,
-    onClick: () -> Unit
-) {
-    HardSubTopicCategoryCard(
-        belt = belt,
-        title = title,
-        count = count,
-        onClick = onClick
-    )
-}
-
-@Composable
 private fun HardSubTopicCategoryCard(
     belt: Belt,
     title: String,
@@ -2585,30 +2606,63 @@ private fun HardSubTopicCategoryCard(
     onClick: () -> Unit
 ) {
     val context = LocalContext.current
-    val langManager = remember(context) { AppLanguageManager(context) }
-    val isEnglish = langManager.getCurrentLanguage() == AppLanguage.ENGLISH
+    val langManager =
+        remember(context) {
+            AppLanguageManager(context)
+        }
 
-    val textAlignByLang = if (isEnglish) TextAlign.Left else TextAlign.Right
-    val horizontalByLang = if (isEnglish) Alignment.Start else Alignment.End
+    val isEnglish =
+        langManager.getCurrentLanguage() ==
+                AppLanguage.ENGLISH
+
+    val textAlignByLang =
+        if (isEnglish) {
+            TextAlign.Left
+        } else {
+            TextAlign.Right
+        }
+
+    val horizontalByLang =
+        if (isEnglish) {
+            Alignment.Start
+        } else {
+            Alignment.End
+        }
+
     val layoutByLang =
-        if (isEnglish) LayoutDirection.Ltr
-        else LayoutDirection.Rtl
+        if (isEnglish) {
+            LayoutDirection.Ltr
+        } else {
+            LayoutDirection.Rtl
+        }
 
     val iconTint = belt.color
-    val borderColor = belt.color.copy(alpha = 0.42f)
+    val borderColor =
+        belt.color.copy(alpha = 0.42f)
+
     val chevronColor = belt.color
-    val subtitleColor = belt.color.copy(alpha = 0.95f)
+    val subtitleColor =
+        belt.color.copy(alpha = 0.95f)
 
     Surface(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(20.dp))
-            .clickable(onClick = onClick),
+            .clip(
+                RoundedCornerShape(20.dp)
+            )
+            .clickable(
+                onClick = onClick
+            ),
         shape = RoundedCornerShape(20.dp),
-        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.92f),
-        tonalElevation = 1.dp,
-        shadowElevation = 2.dp,
-        border = BorderStroke(1.dp, borderColor)
+        color =
+            MaterialTheme.colorScheme.surface
+                .copy(alpha = 0.92f),
+        tonalElevation = 0.dp,
+        shadowElevation = 0.dp,
+        border = BorderStroke(
+            width = 1.dp,
+            color = borderColor
+        )
     ) {
         CompositionLocalProvider(
             LocalLayoutDirection provides
@@ -2617,67 +2671,119 @@ private fun HardSubTopicCategoryCard(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 12.dp, vertical = 12.dp),
-                verticalAlignment = Alignment.CenterVertically
+                    .padding(
+                        horizontal = 12.dp,
+                        vertical = 12.dp
+                    ),
+                verticalAlignment =
+                    Alignment.CenterVertically
             ) {
                 Surface(
-                    modifier = Modifier.size(44.dp),
-                    shape = RoundedCornerShape(22.dp),
+                    modifier = Modifier.size(
+                        KmiIconSize.large
+                    ),
+                    shape =
+                        RoundedCornerShape(22.dp),
                     color = belt.lightColor,
                     tonalElevation = 0.dp,
                     shadowElevation = 0.dp
                 ) {
-                    Box(contentAlignment = Alignment.Center) {
+                    Box(
+                        contentAlignment =
+                            Alignment.Center
+                    ) {
                         Icon(
-                            imageVector = Icons.Outlined.Info,
+                            imageVector =
+                                Icons.Outlined.Info,
                             contentDescription = null,
                             tint = iconTint,
-                            modifier = Modifier.size(20.dp)
+                            modifier = Modifier.size(
+                                KmiIconSize.medium
+                            )
                         )
                     }
                 }
 
-                Spacer(Modifier.width(12.dp))
+                Spacer(
+                    Modifier.width(12.dp)
+                )
 
                 CompositionLocalProvider(
-                    LocalLayoutDirection provides layoutByLang
+                    LocalLayoutDirection provides
+                            layoutByLang
                 ) {
                     Column(
-                        modifier = Modifier.weight(1f),
-                        horizontalAlignment = horizontalByLang
+                        modifier =
+                            Modifier.weight(1f),
+                        horizontalAlignment =
+                            horizontalByLang
                     ) {
                         Text(
                             text = title,
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold,
-                            textAlign = textAlignByLang,
-                            modifier = Modifier.fillMaxWidth()
+                            style =
+                                KmiTypography.body.copy(
+                                    fontWeight =
+                                        FontWeight.Bold
+                                ),
+                            textAlign =
+                                textAlignByLang,
+                            modifier =
+                                Modifier.fillMaxWidth(),
+                            maxLines = 2,
+                            overflow =
+                                TextOverflow.Ellipsis
                         )
 
-                        Spacer(Modifier.height(4.dp))
+                        Spacer(
+                            Modifier.height(4.dp)
+                        )
 
                         Text(
-                            text = if (isEnglish) {
-                                if (count == 1) "1 exercise" else "$count exercises"
-                            } else {
-                                "$count תרגילים"
-                            },
-                            style = MaterialTheme.typography.labelLarge,
+                            text =
+                                if (isEnglish) {
+                                    if (count == 1) {
+                                        "1 exercise"
+                                    } else {
+                                        "$count exercises"
+                                    }
+                                } else {
+                                    "$count תרגילים"
+                                },
+                            style =
+                                KmiTypography.caption.copy(
+                                    fontWeight =
+                                        FontWeight.Bold
+                                ),
                             color = subtitleColor,
-                            fontWeight = FontWeight.Bold,
-                            textAlign = textAlignByLang,
-                            modifier = Modifier.fillMaxWidth()
+                            textAlign =
+                                textAlignByLang,
+                            modifier =
+                                Modifier.fillMaxWidth(),
+                            maxLines = 1,
+                            overflow =
+                                TextOverflow.Ellipsis
                         )
                     }
                 }
 
-                Spacer(Modifier.width(10.dp))
+                Spacer(
+                    Modifier.width(10.dp)
+                )
 
                 Text(
-                    text = "‹",
-                    style = MaterialTheme.typography.headlineSmall,
+                    text =
+                        if (isEnglish) {
+                            "›"
+                        } else {
+                            "‹"
+                        },
+                    style =
+                        KmiTypography.screenTitle.copy(
+                            fontWeight =
+                                FontWeight.Bold
+                        ),
                     color = chevronColor,
-                    fontWeight = FontWeight.Bold
+                    maxLines = 1
                 )
             }
         }
@@ -2692,35 +2798,56 @@ private fun HardGroupStatChip(
     contentColor: Color = Color.White
 ) {
     Surface(
-        modifier = Modifier.widthIn(min = 64.dp),
-        shape = RoundedCornerShape(14.dp),
+        modifier =
+            Modifier.widthIn(min = 64.dp),
+        shape =
+            RoundedCornerShape(14.dp),
         color = containerColor,
-        shadowElevation = 1.dp,
+        shadowElevation = 0.dp,
+        tonalElevation = 0.dp,
         border = BorderStroke(
-            1.dp,
-            contentColor.copy(alpha = 0.14f)
+            width = 1.dp,
+            color =
+                contentColor.copy(
+                    alpha = 0.14f
+                )
         )
     ) {
         Column(
-            modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
-            horizontalAlignment = Alignment.CenterHorizontally
+            modifier = Modifier.padding(
+                horizontal = 12.dp,
+                vertical = 6.dp
+            ),
+            horizontalAlignment =
+                Alignment.CenterHorizontally
         ) {
             Text(
                 text = value,
                 color = contentColor,
-                fontSize = 14.sp,
-                lineHeight = 16.sp,
-                fontWeight = FontWeight.ExtraBold,
-                maxLines = 1
+                style =
+                    KmiTypography.body.copy(
+                        fontWeight =
+                            FontWeight.ExtraBold
+                    ),
+                maxLines = 1,
+                overflow =
+                    TextOverflow.Ellipsis
             )
 
             Text(
                 text = label,
-                color = contentColor.copy(alpha = 0.92f),
-                fontSize = 10.sp,
-                lineHeight = 12.sp,
-                fontWeight = FontWeight.SemiBold,
-                maxLines = 1
+                color =
+                    contentColor.copy(
+                        alpha = 0.92f
+                    ),
+                style =
+                    KmiTypography.caption.copy(
+                        fontWeight =
+                            FontWeight.SemiBold
+                    ),
+                maxLines = 1,
+                overflow =
+                    TextOverflow.Ellipsis
             )
         }
     }
@@ -2733,22 +2860,34 @@ private fun HardLegacyMetaBadge(
     contentColor: Color
 ) {
     Surface(
-        shape = RoundedCornerShape(10.dp),
+        shape =
+            RoundedCornerShape(10.dp),
         color = containerColor,
         border = BorderStroke(
-            1.dp,
-            contentColor.copy(alpha = 0.14f)
+            width = 1.dp,
+            color =
+                contentColor.copy(
+                    alpha = 0.14f
+                )
         ),
-        shadowElevation = 0.dp
+        shadowElevation = 0.dp,
+        tonalElevation = 0.dp
     ) {
         Text(
             text = text,
             color = contentColor,
-            fontSize = 9.sp,
-            lineHeight = 10.5.sp,
-            fontWeight = FontWeight.ExtraBold,
-            modifier = Modifier.padding(horizontal = 7.dp, vertical = 2.dp),
-            maxLines = 1
+            style =
+                KmiTypography.caption.copy(
+                    fontWeight =
+                        FontWeight.ExtraBold
+                ),
+            modifier = Modifier.padding(
+                horizontal = 7.dp,
+                vertical = 2.dp
+            ),
+            maxLines = 1,
+            overflow =
+                TextOverflow.Ellipsis
         )
     }
 }
@@ -2777,7 +2916,6 @@ private fun HardBeltGroupsStickyContent(
     topicKey: String,
     isDarkMode: Boolean,
     isCoach: Boolean,
-    showExerciseDividers: Boolean,
     vm: KmiViewModel,
     onPdfExercisesChanged:
         (List<SubjectPdfExercise>) -> Unit,
@@ -2956,28 +3094,28 @@ private fun HardBeltGroupsStickyContent(
             coachProgressStates[mapKey] =
                 CoachMaterialProgress()
 
-            prefs.edit()
-                .remove(
+            prefs.edit {
+                remove(
                     "${key}_${CoachMaterialStatus.TAUGHT.storageValue}_selected"
                 )
-                .remove(
+                remove(
                     "${key}_${CoachMaterialStatus.TAUGHT.storageValue}_updated_at"
                 )
-                .remove(
+                remove(
                     "${key}_${CoachMaterialStatus.PRACTICED.storageValue}_selected"
                 )
-                .remove(
+                remove(
                     "${key}_${CoachMaterialStatus.PRACTICED.storageValue}_updated_at"
                 )
-                .remove(
+                remove(
                     "${key}_${CoachMaterialStatus.NEEDS_REINFORCEMENT.storageValue}_selected"
                 )
-                .remove(
+                remove(
                     "${key}_${CoachMaterialStatus.NEEDS_REINFORCEMENT.storageValue}_updated_at"
                 )
-                .remove("${key}_status")
-                .remove("${key}_updated_at")
-                .apply()
+                remove("${key}_status")
+                remove("${key}_updated_at")
+            }
 
             return
         }
@@ -3027,48 +3165,46 @@ private fun HardBeltGroupsStickyContent(
         coachProgressStates[mapKey] =
             nextProgress
 
-        val editor = prefs.edit()
+        prefs.edit {
+            listOf(
+                CoachMaterialStatus.TAUGHT,
+                CoachMaterialStatus.PRACTICED,
+                CoachMaterialStatus.NEEDS_REINFORCEMENT
+            ).forEach { selectableStatus ->
 
-        listOf(
-            CoachMaterialStatus.TAUGHT,
-            CoachMaterialStatus.PRACTICED,
-            CoachMaterialStatus.NEEDS_REINFORCEMENT
-        ).forEach { selectableStatus ->
-
-            if (
-                nextSelectedStatuses.contains(
-                    selectableStatus
-                )
-            ) {
-                editor.putBoolean(
-                    "${key}_${selectableStatus.storageValue}_selected",
-                    true
-                )
-
-                editor.putLong(
-                    "${key}_${selectableStatus.storageValue}_updated_at",
-                    nextUpdatedAtByStatus[
+                if (
+                    nextSelectedStatuses.contains(
                         selectableStatus
-                    ] ?: 0L
-                )
-            } else {
-                editor.remove(
-                    "${key}_${selectableStatus.storageValue}_selected"
-                )
+                    )
+                ) {
+                    putBoolean(
+                        "${key}_${selectableStatus.storageValue}_selected",
+                        true
+                    )
 
-                editor.remove(
-                    "${key}_${selectableStatus.storageValue}_updated_at"
-                )
+                    putLong(
+                        "${key}_${selectableStatus.storageValue}_updated_at",
+                        nextUpdatedAtByStatus[
+                            selectableStatus
+                        ] ?: 0L
+                    )
+                } else {
+                    remove(
+                        "${key}_${selectableStatus.storageValue}_selected"
+                    )
+
+                    remove(
+                        "${key}_${selectableStatus.storageValue}_updated_at"
+                    )
+                }
             }
-        }
 
-        /*
-         * המבנה החדש הוא מקור האמת.
-         */
-        editor
-            .remove("${key}_status")
-            .remove("${key}_updated_at")
-            .apply()
+            /*
+    * המבנה החדש הוא מקור האמת.
+    */
+            remove("${key}_status")
+            remove("${key}_updated_at")
+        }
     }
 
     val actionKeyPart = remember(topicKey) {
@@ -3142,13 +3278,24 @@ private fun HardBeltGroupsStickyContent(
     fun saveNoteFor(belt: Belt, itemId: String, value: String) {
         val clean = value.trim()
 
-        prefs.edit().apply {
+        prefs.edit {
             if (clean.isBlank()) {
-                remove(noteKeyFor(belt, itemId))
+                remove(
+                    noteKeyFor(
+                        belt,
+                        itemId
+                    )
+                )
             } else {
-                putString(noteKeyFor(belt, itemId), clean)
+                putString(
+                    noteKeyFor(
+                        belt,
+                        itemId
+                    ),
+                    clean
+                )
             }
-        }.apply()
+        }
     }
 
     fun toggleStringSet(key: String, itemId: String) {
@@ -3162,7 +3309,12 @@ private fun HardBeltGroupsStickyContent(
             current.add(itemId)
         }
 
-        prefs.edit().putStringSet(key, current).apply()
+        prefs.edit {
+            putStringSet(
+                key,
+                current
+            )
+        }
     }
 
     fun setLocalStatus(
@@ -3198,10 +3350,16 @@ private fun HardBeltGroupsStickyContent(
                 }
             }
 
-            prefs.edit()
-                .putStringSet(masteredKey, masteredSet)
-                .putStringSet(unknownKey, unknownSet)
-                .apply()
+            prefs.edit {
+                putStringSet(
+                    masteredKey,
+                    masteredSet
+                )
+                putStringSet(
+                    unknownKey,
+                    unknownSet
+                )
+            }
         }
     }
 
@@ -3242,15 +3400,14 @@ private fun HardBeltGroupsStickyContent(
         topicKey
     ) {
         if (isCoach) {
-            val loaded:
-                    Map<String, CoachMaterialProgress> =
-                buildMap<String, CoachMaterialProgress> {
+            val loaded: Map<String, CoachMaterialProgress> =
+                buildMap {
                     flatRows.forEach { row ->
-                    val statusId =
-                        statusIdFor(
-                            row.belt,
-                            row.rawItem
-                        )
+                        val statusId =
+                            statusIdFor(
+                                row.belt,
+                                row.rawItem
+                            )
 
                         put(
                             coachMapKey(
@@ -3517,15 +3674,13 @@ private fun HardBeltGroupsStickyContent(
 
                     HardBeltInlineHeaderForSubTopics(
                         belt = row.belt,
-                        totalCount = inlineRows.size,
                         knownCount = inlineKnownCount,
                         unknownCount = inlineUnknownCount,
                         favoriteCount = inlineFavoriteCount,
                         excludedCount = inlineExcludedCount,
                         unmarkedCount = inlineUnmarkedCount,
                         isDarkMode = isDarkMode,
-                        isEnglish = isEnglish,
-                        modifier = Modifier.fillMaxWidth()
+                        isEnglish = isEnglish
                     )
 
                     Spacer(Modifier.height(8.dp))
@@ -3654,7 +3809,6 @@ private fun readableBeltColor(
 @Composable
 private fun HardBeltInlineHeaderForSubTopics(
     belt: Belt,
-    totalCount: Int,
     knownCount: Int,
     unknownCount: Int,
     favoriteCount: Int,
@@ -3707,8 +3861,8 @@ private fun HardBeltInlineHeaderForSubTopics(
         } else {
             belt.lightColor
         },
-        tonalElevation = if (isDarkMode) 0.dp else 2.dp,
-        shadowElevation = if (isDarkMode) 0.dp else 4.dp,
+        tonalElevation = 0.dp,
+        shadowElevation = 0.dp,
         border = if (isDarkMode) {
             BorderStroke(
                 width = 1.dp,
@@ -3724,12 +3878,6 @@ private fun HardBeltInlineHeaderForSubTopics(
                 .padding(horizontal = 12.dp, vertical = 10.dp),
             horizontalAlignment = if (isEnglish) Alignment.Start else Alignment.End
         ) {
-            val countText = if (isEnglish) {
-                if (totalCount == 1) "1 exercise" else "$totalCount exercises"
-            } else {
-                "\u200E$totalCount\u200E תרגילים"
-            }
-
             CompositionLocalProvider(
                 LocalLayoutDirection provides
                         LayoutDirection.Ltr
@@ -3739,27 +3887,33 @@ private fun HardBeltInlineHeaderForSubTopics(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        text = countText,
-                        style = MaterialTheme.typography.labelLarge.copy(
-                            fontSize = 15.sp,
-                            lineHeight = 17.sp
-                        ),
+                        text = title,
+                        style =
+                            KmiTypography.screenTitle.copy(
+                                fontWeight =
+                                    FontWeight.ExtraBold
+                            ),
                         color = beltContentColor,
-                        fontWeight = FontWeight.Bold,
-                        textAlign = TextAlign.Start,
-                        modifier = Modifier.weight(1f)
+                        textAlign = TextAlign.End,
+                        modifier = Modifier.weight(1f),
+                        maxLines = 1,
+                        overflow =
+                            TextOverflow.Ellipsis
                     )
 
                     Text(
                         text = title,
-                        style = MaterialTheme.typography.titleMedium.copy(
-                            fontSize = 18.sp,
-                            lineHeight = 21.sp
-                        ),
+                        style =
+                            KmiTypography.screenTitle.copy(
+                                fontWeight =
+                                    FontWeight.ExtraBold
+                            ),
                         color = beltContentColor,
-                        fontWeight = FontWeight.ExtraBold,
                         textAlign = TextAlign.End,
-                        modifier = Modifier.weight(1f)
+                        modifier = Modifier.weight(1f),
+                        maxLines = 1,
+                        overflow =
+                            TextOverflow.Ellipsis
                     )
                 }
             }
@@ -3767,17 +3921,23 @@ private fun HardBeltInlineHeaderForSubTopics(
             Spacer(Modifier.height(8.dp))
 
             Text(
-                text = if (isEnglish) {
-                    "← Swipe sideways to see more stats →"
-                } else {
-                    "→→ הזז לצד כדי לראות עוד נתונים →→"
-                },
+                text =
+                    if (isEnglish) {
+                        "← Swipe sideways to see more stats →"
+                    } else {
+                        "→→ הזז לצד כדי לראות עוד נתונים →→"
+                    },
                 color = hintTextColor,
-                fontSize = 10.sp,
-                lineHeight = 12.sp,
-                fontWeight = FontWeight.SemiBold,
+                style =
+                    KmiTypography.caption.copy(
+                        fontWeight =
+                            FontWeight.SemiBold
+                    ),
                 textAlign = TextAlign.Center,
-                modifier = Modifier.fillMaxWidth()
+                modifier = Modifier.fillMaxWidth(),
+                maxLines = 1,
+                overflow =
+                    TextOverflow.Ellipsis
             )
 
             Row(
@@ -3878,8 +4038,8 @@ private fun HardBeltStickyHeaderForSubTopics(
         } else {
             belt.lightColor
         },
-        tonalElevation = if (isDarkMode) 0.dp else 2.dp,
-        shadowElevation = if (isDarkMode) 0.dp else 6.dp,
+        tonalElevation = 0.dp,
+        shadowElevation = 0.dp,
         border = if (isDarkMode) {
             BorderStroke(
                 width = 1.dp,
@@ -3911,26 +4071,30 @@ private fun HardBeltStickyHeaderForSubTopics(
                 ) {
                     Text(
                         text = countText,
-                        style = MaterialTheme.typography.labelLarge.copy(
-                            fontSize = 15.sp,
-                            lineHeight = 17.sp
-                        ),
+                        style =
+                            KmiTypography.caption.copy(
+                                fontWeight = FontWeight.Bold
+                            ),
                         color = beltContentColor,
-                        fontWeight = FontWeight.Bold,
                         textAlign = TextAlign.Start,
-                        modifier = Modifier.weight(1f)
+                        modifier = Modifier.weight(1f),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
                     )
 
                     Text(
                         text = title,
-                        style = MaterialTheme.typography.titleMedium.copy(
-                            fontSize = 18.sp,
-                            lineHeight = 21.sp
-                        ),
+                        style =
+                            KmiTypography.screenTitle.copy(
+                                fontWeight =
+                                    FontWeight.ExtraBold
+                            ),
                         color = beltContentColor,
-                        fontWeight = FontWeight.ExtraBold,
                         textAlign = TextAlign.End,
-                        modifier = Modifier.weight(1f)
+                        modifier = Modifier.weight(1f),
+                        maxLines = 1,
+                        overflow =
+                            TextOverflow.Ellipsis
                     )
                 }
             }
@@ -3938,17 +4102,21 @@ private fun HardBeltStickyHeaderForSubTopics(
             Spacer(Modifier.height(8.dp))
 
             Text(
-                text = if (isEnglish) {
-                    "← Swipe sideways to see more stats →"
-                } else {
-                    "→→ הזז לצד כדי לראות עוד נתונים →→"
-                },
+                text =
+                    if (isEnglish) {
+                        "← Swipe sideways to see more stats →"
+                    } else {
+                        "→→ הזז לצד כדי לראות עוד נתונים →→"
+                    },
                 color = hintTextColor,
-                fontSize = 10.sp,
-                lineHeight = 12.sp,
-                fontWeight = FontWeight.SemiBold,
+                style =
+                    KmiTypography.caption.copy(
+                        fontWeight = FontWeight.SemiBold
+                    ),
                 textAlign = TextAlign.Center,
-                modifier = Modifier.fillMaxWidth()
+                modifier = Modifier.fillMaxWidth(),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
             )
 
             Row(
@@ -3990,568 +4158,6 @@ private fun HardBeltStickyHeaderForSubTopics(
                 )
             }
         }
-    }
-}
-
-@Composable
-private fun HardBeltGroupCard(
-    belt: Belt,
-    items: List<String>,
-    topicKey: String,
-    isDarkMode: Boolean = false,
-    vm: KmiViewModel,
-    onOpenExercise: (String) -> Unit
-) {
-    val context = LocalContext.current
-    val langManager = remember(context) { AppLanguageManager(context) }
-    val isEnglish = langManager.getCurrentLanguage() == AppLanguage.ENGLISH
-
-    val prefs = remember(context) {
-        context.getSharedPreferences("kmi_settings", Context.MODE_PRIVATE)
-    }
-
-    val actionKeyPart = remember(belt.id, topicKey) {
-        topicKey
-            .replace("\u200F", "")
-            .replace("\u200E", "")
-            .replace("\u00A0", " ")
-            .replace(Regex("\\s+"), " ")
-            .trim()
-    }
-
-    val excludedKey = remember(belt.id, actionKeyPart) {
-        "excluded_${belt.id}_$actionKeyPart"
-    }
-
-    val favKey = remember(belt.id, actionKeyPart) {
-        "fav_${belt.id}_$actionKeyPart"
-    }
-
-    var excludedItems by remember(excludedKey) {
-        mutableStateOf<Set<String>>(
-            prefs.getStringSet(excludedKey, emptySet<String>())
-                ?.toSet()
-                ?: emptySet()
-        )
-    }
-
-    var favorites by remember(favKey) {
-        mutableStateOf<Set<String>>(
-            prefs.getStringSet(favKey, emptySet<String>())
-                ?.toSet()
-                ?: emptySet()
-        )
-    }
-
-    var noteEditorFor by rememberSaveable { mutableStateOf<String?>(null) }
-    var noteDraft by rememberSaveable { mutableStateOf("") }
-    var notesRefreshKey by rememberSaveable { mutableIntStateOf(0) }
-
-    fun noteKeyFor(itemId: String): String {
-        return "note_${belt.id}_${actionKeyPart}_$itemId"
-    }
-
-    fun loadNoteFor(itemId: String): String {
-        return prefs.getString(noteKeyFor(itemId), "").orEmpty()
-    }
-
-    fun saveNoteFor(itemId: String, value: String) {
-        val clean = value.trim()
-
-        prefs.edit().apply {
-            if (clean.isBlank()) {
-                remove(noteKeyFor(itemId))
-            } else {
-                putString(noteKeyFor(itemId), clean)
-            }
-        }.apply()
-
-        notesRefreshKey++
-    }
-
-    fun toggleFavorite(itemId: String) {
-        val next = favorites.toMutableSet()
-
-        if (next.contains(itemId)) {
-            next.remove(itemId)
-        } else {
-            next.add(itemId)
-        }
-
-        favorites = next.toSet()
-        prefs.edit().putStringSet(favKey, next).apply()
-    }
-
-    fun toggleExclude(itemId: String) {
-        val next = excludedItems.toMutableSet()
-
-        if (next.contains(itemId)) {
-            next.remove(itemId)
-        } else {
-            next.add(itemId)
-        }
-
-        excludedItems = next.toSet()
-        prefs.edit().putStringSet(excludedKey, next).apply()
-    }
-
-    val marksVersion by vm.marksVersion.collectAsState()
-    val itemStates = remember(belt.id, topicKey, items) {
-        mutableStateMapOf<String, Boolean?>()
-    }
-
-    fun normalizeStatusPart(s: String): String =
-        s.replace("\u200F", "")
-            .replace("\u200E", "")
-            .replace("\u00A0", " ")
-            .replace("–", "-")
-            .replace("—", "-")
-            .replace(Regex("\\s+"), " ")
-            .trim()
-
-    fun statusIdFor(rawItem: String): String {
-        val cleanItem = normalizeStatusPart(rawItem)
-        val cleanTopic = normalizeStatusPart(topicKey)
-
-        val resolved = ExerciseIdentityRegistry.resolve(
-            belt = belt,
-            hebrewTitle = cleanItem,
-            topicKey = cleanTopic
-        )
-
-        val itemStablePart = cleanItem
-            .lowercase()
-            .replace(Regex("[^\\p{L}\\p{N}]+"), "_")
-            .trim('_')
-            .ifBlank { "item" }
-
-        return "${resolved.id}__$itemStablePart"
-    }
-
-    fun statusKeysFor(rawItem: String): List<String> {
-        val statusId = statusIdFor(rawItem)
-        val baseStatusId = statusId.substringBefore("__")
-
-        val identityKeys = ExerciseIdentityRegistry
-            .allKnown()
-            .firstOrNull { it.id == baseStatusId && it.belt == belt }
-            ?.topicKeys
-            .orEmpty()
-
-        return (
-                identityKeys +
-                        topicKey +
-                        "כללי"
-                )
-            .map { normalizeStatusPart(it) }
-            .filter { it.isNotBlank() }
-            .distinct()
-    }
-
-    fun setLocalStatus(
-        rawItem: String,
-        statusId: String,
-        value: Boolean?
-    ) {
-        statusKeysFor(rawItem).forEach { key ->
-            val masteredKey = "mastered_${belt.id}_${key}"
-            val unknownKey = "unknown_${belt.id}_${key}"
-
-            val masteredSet =
-                (prefs.getStringSet(masteredKey, emptySet<String>()) ?: emptySet()).toMutableSet()
-
-            val unknownSet =
-                (prefs.getStringSet(unknownKey, emptySet<String>()) ?: emptySet()).toMutableSet()
-
-            when (value) {
-                true -> {
-                    masteredSet.add(statusId)
-                    unknownSet.remove(statusId)
-                }
-
-                false -> {
-                    unknownSet.add(statusId)
-                    masteredSet.remove(statusId)
-                }
-
-                null -> {
-                    masteredSet.remove(statusId)
-                    unknownSet.remove(statusId)
-                }
-            }
-
-            prefs.edit()
-                .putStringSet(masteredKey, masteredSet)
-                .putStringSet(unknownKey, unknownSet)
-                .apply()
-        }
-    }
-
-    LaunchedEffect(items, marksVersion, topicKey) {
-        items.forEach { rawItem ->
-            val originalName = rawItem.trim()
-            val statusId = statusIdFor(originalName)
-
-            var valueFromVm: Boolean? = null
-
-            for (key in statusKeysFor(originalName)) {
-                val fromKey: Boolean? =
-                    runCatching {
-                        vm.getItemStatusNullable(
-                            belt = belt,
-                            topic = key,
-                            item = statusId
-                        )
-                    }.getOrNull()
-                        ?: runCatching {
-                            if (
-                                vm.isMastered(
-                                    belt = belt,
-                                    topic = key,
-                                    item = statusId
-                                )
-                            ) true else null
-                        }.getOrNull()
-
-                if (fromKey != null) {
-                    valueFromVm = fromKey
-                    break
-                }
-            }
-
-            if (valueFromVm == null) {
-                for (key in statusKeysFor(originalName)) {
-                    val masteredKey = "mastered_${belt.id}_${key}"
-                    val unknownKey = "unknown_${belt.id}_${key}"
-
-                    val masteredSet =
-                        prefs.getStringSet(masteredKey, emptySet<String>()) ?: emptySet()
-
-                    val unknownSet =
-                        prefs.getStringSet(unknownKey, emptySet<String>()) ?: emptySet()
-
-                    val localValue: Boolean? = when {
-                        masteredSet.contains(statusId) -> true
-                        unknownSet.contains(statusId) -> false
-                        else -> null
-                    }
-
-                    if (localValue != null) {
-                        valueFromVm = localValue
-
-                        vm.setItemStatusNullable(
-                            belt = belt,
-                            topic = key,
-                            item = statusId,
-                            value = localValue
-                        )
-
-                        break
-                    }
-                }
-            }
-
-            itemStates[statusId] = valueFromVm
-        }
-    }
-
-    fun toggleStatus(rawItem: String) {
-        val originalName = rawItem.trim()
-        val statusId = statusIdFor(originalName)
-
-        val nextValue = when (itemStates[statusId]) {
-            null -> true
-            true -> false
-            false -> null
-        }
-
-        itemStates[statusId] = nextValue
-
-        statusKeysFor(originalName).forEach { key ->
-            vm.setItemStatusNullable(
-                belt = belt,
-                topic = key,
-                item = statusId,
-                value = nextValue
-            )
-        }
-
-        setLocalStatus(
-            rawItem = originalName,
-            statusId = statusId,
-            value = nextValue
-        )
-    }
-
-    val title = if (isEnglish) {
-        when (belt) {
-            Belt.YELLOW -> "Yellow Belt"
-            Belt.ORANGE -> "Orange Belt"
-            Belt.GREEN -> "Green Belt"
-            Belt.BLUE -> "Blue Belt"
-            Belt.BROWN -> "Brown Belt"
-            Belt.BLACK -> "Black Belt"
-            else -> belt.en
-        }
-    } else {
-        when (belt) {
-            Belt.YELLOW -> "חגורה צהובה"
-            Belt.ORANGE -> "חגורה כתומה"
-            Belt.GREEN -> "חגורה ירוקה"
-            Belt.BLUE -> "חגורה כחולה"
-            Belt.BROWN -> "חגורה חומה"
-            Belt.BLACK -> "חגורה שחורה"
-            else -> belt.heb
-        }
-    }
-
-    val beltContentColor =
-        readableBeltColor(
-            belt = belt,
-            isDarkMode = isDarkMode
-        )
-
-    val hintTextColor =
-        if (isDarkMode) {
-            Color.White.copy(alpha = 0.72f)
-        } else {
-            Color(0xFF5B6472)
-        }
-
-    val displayItems = remember(items, isEnglish) {
-        items.map { raw ->
-            val original = raw.trim()
-            original to exerciseTitleForUi(
-                raw = original,
-                isEnglish = isEnglish
-            )
-        }.filter { (original, display) ->
-            original.isNotBlank() && display.isNotBlank()
-        }
-    }
-
-    val knownCount = displayItems.count { pair ->
-        val statusId = statusIdFor(pair.first)
-        itemStates[statusId] == true
-    }
-
-    val unknownCount = displayItems.count { pair ->
-        val statusId = statusIdFor(pair.first)
-        itemStates[statusId] == false
-    }
-
-    val unmarkedCount = displayItems.count { pair ->
-        val statusId = statusIdFor(pair.first)
-        itemStates[statusId] == null
-    }
-
-    val favoriteCount = displayItems.count { pair ->
-        val statusId = statusIdFor(pair.first)
-        favorites.contains(statusId)
-    }
-
-    val excludedCount = displayItems.count { pair ->
-        val statusId = statusIdFor(pair.first)
-        excludedItems.contains(statusId)
-    }
-
-    Surface(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(22.dp),
-        color = if (isDarkMode) {
-            Color(0xFF111827)
-        } else {
-            belt.lightColor
-        },
-        tonalElevation = if (isDarkMode) 0.dp else 2.dp,
-        shadowElevation = if (isDarkMode) 0.dp else 3.dp,
-        border = if (isDarkMode) {
-            BorderStroke(
-                width = 1.dp,
-                color = beltContentColor.copy(alpha = 0.45f)
-            )
-        } else {
-            null
-        }
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 12.dp, vertical = 12.dp),
-            horizontalAlignment = if (isEnglish) Alignment.Start else Alignment.End
-        ) {
-            val countText = if (isEnglish) {
-                if (displayItems.size == 1) {
-                    "1 exercise"
-                } else {
-                    "${displayItems.size} exercises"
-                }
-            } else {
-                "\u200E${displayItems.size}\u200E תרגילים"
-            }
-
-            CompositionLocalProvider(
-                LocalLayoutDirection provides
-                        LayoutDirection.Ltr
-            ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        text = countText,
-                        style = MaterialTheme.typography.labelLarge.copy(
-                            fontSize = 15.sp,
-                            lineHeight = 17.sp
-                        ),
-                        color = beltContentColor,
-                        fontWeight = FontWeight.Bold,
-                        textAlign = TextAlign.Start,
-                        modifier = Modifier.weight(1f)
-                    )
-
-                    Text(
-                        text = title,
-                        style = MaterialTheme.typography.titleMedium.copy(
-                            fontSize = 18.sp,
-                            lineHeight = 21.sp
-                        ),
-                        color = beltContentColor,
-                        fontWeight = FontWeight.ExtraBold,
-                        textAlign = TextAlign.End,
-                        modifier = Modifier.weight(1f)
-                    )
-                }
-            }
-
-            Spacer(Modifier.height(8.dp))
-
-            Text(
-                text = if (isEnglish) {
-                    "← Swipe sideways to see more stats →"
-                } else {
-                    "→→ הזז לצד כדי לראות עוד נתונים →→"
-                },
-                color = hintTextColor,
-                fontSize = 10.sp,
-                lineHeight = 12.sp,
-                fontWeight = FontWeight.SemiBold,
-                textAlign = TextAlign.Center,
-                modifier = Modifier.fillMaxWidth()
-            )
-
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .horizontalScroll(rememberScrollState())
-                    .padding(top = 6.dp),
-                horizontalArrangement = Arrangement.spacedBy(7.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                HardGroupStatChip(
-                    value = knownCount.toString(),
-                    label = if (isEnglish) "Known" else "יודע",
-                    containerColor = Color(0xFF7ACB88)
-                )
-
-                HardGroupStatChip(
-                    value = unknownCount.toString(),
-                    label = if (isEnglish) "Unknown" else "לא יודע",
-                    containerColor = Color(0xFFF1A97A)
-                )
-
-                HardGroupStatChip(
-                    value = favoriteCount.toString(),
-                    label = if (isEnglish) "Favorites" else "מועדפים",
-                    containerColor = Color(0xFFE7A3B5)
-                )
-
-                HardGroupStatChip(
-                    value = excludedCount.toString(),
-                    label = if (isEnglish) "Excluded" else "מוחרגים",
-                    containerColor = Color(0xFFE5A3A3)
-                )
-
-                HardGroupStatChip(
-                    value = unmarkedCount.toString(),
-                    label = if (isEnglish) "Unmarked" else "לא סומן",
-                    containerColor = Color(0xFF8596C9)
-                )
-            }
-
-            Spacer(Modifier.height(10.dp))
-
-            displayItems.forEachIndexed { index, pair ->
-                val originalName = pair.first
-                val displayName = pair.second
-                val statusId = statusIdFor(originalName)
-                val mastered = itemStates[statusId]
-
-                val actionId = statusId
-                val noteText = remember(actionId, notesRefreshKey) {
-                    loadNoteFor(actionId)
-                }
-
-                HardExerciseLegacyRow(
-                    exerciseNumber = index + 1,
-                    belt = belt,
-                    itemName = originalName,
-                    displayName = displayName,
-                    mastered = mastered,
-                    isDarkMode = isDarkMode,
-                    excluded = excludedItems.contains(actionId),
-                    isFav = favorites.contains(actionId),
-                    hasNote = noteText.isNotBlank(),
-                    onStatusClick = {
-                        toggleStatus(originalName)
-                    },
-                    onInfoClick = {
-                        onOpenExercise(originalName)
-                    },
-                    onToggleExclude = {
-                        toggleExclude(actionId)
-                    },
-                    onToggleFavorite = {
-                        toggleFavorite(actionId)
-                    },
-                    onEditNote = {
-                        noteEditorFor = actionId
-                        noteDraft = loadNoteFor(actionId)
-                    }
-                )
-
-                if (index != displayItems.lastIndex) {
-                    Spacer(Modifier.height(8.dp))
-                }
-            }
-        }
-    }
-
-    noteEditorFor?.let { itemId ->
-        val editorExerciseTitle =
-            displayItems
-                .firstOrNull { pair ->
-                    statusIdFor(pair.first) == itemId
-                }
-                ?.second
-                .orEmpty()
-
-        ExerciseNoteEditorDialog(
-            exerciseTitle = editorExerciseTitle,
-            noteText = noteDraft,
-            isEnglish = isEnglish,
-            accentColor = belt.color,
-            onNoteChange = { noteDraft = it },
-            onDismiss = {
-                noteEditorFor = null
-            },
-            onSave = {
-                val cleanNote = noteDraft.trim()
-                noteDraft = cleanNote
-                saveNoteFor(itemId, cleanNote)
-                noteEditorFor = null
-            }
-        )
     }
 }
 
@@ -4740,16 +4346,16 @@ private fun HardExerciseLegacyRow(
                         Text(
                             text = displayName.trim(),
                             style =
-                                MaterialTheme.typography.bodySmall.copy(
-                                    fontSize = 11.sp,
-                                    lineHeight = 13.sp
+                                KmiTypography.caption.copy(
+                                    fontWeight =
+                                        FontWeight.ExtraBold
                                 ),
-                            fontWeight = FontWeight.ExtraBold,
                             color = rowTextColor,
                             textAlign = TextAlign.Left,
                             modifier = Modifier.fillMaxWidth(),
                             maxLines = 3,
-                            overflow = TextOverflow.Ellipsis
+                            overflow =
+                                TextOverflow.Ellipsis
                         )
                     }
 
@@ -4758,7 +4364,7 @@ private fun HardExerciseLegacyRow(
                     if (isCoach) {
                         CoachMaterialStatusSelector(
                             progress = coachProgress,
-                            isEnglish = isEnglish,
+                            isEnglish = true,
                             onInfo = onInfoClick,
                             onSelect = onCoachStatusSelect
                         )
@@ -4787,7 +4393,7 @@ private fun HardExerciseLegacyRow(
                     if (isCoach) {
                         CoachMaterialStatusSelector(
                             progress = coachProgress,
-                            isEnglish = isEnglish,
+                            isEnglish = false,
                             onInfo = onInfoClick,
                             onSelect = onCoachStatusSelect
                         )
@@ -4884,16 +4490,16 @@ private fun HardExerciseLegacyRow(
                             text =
                                 "\u200F${displayName.trim()}\u200F",
                             style =
-                                MaterialTheme.typography.bodySmall.copy(
-                                    fontSize = 11.sp,
-                                    lineHeight = 13.sp
+                                KmiTypography.caption.copy(
+                                    fontWeight =
+                                        FontWeight.ExtraBold
                                 ),
-                            fontWeight = FontWeight.ExtraBold,
                             color = rowTextColor,
                             textAlign = TextAlign.Right,
                             modifier = Modifier.fillMaxWidth(),
                             maxLines = 3,
-                            overflow = TextOverflow.Ellipsis
+                            overflow =
+                                TextOverflow.Ellipsis
                         )
                     }
 
@@ -4946,16 +4552,23 @@ private fun SubTopicItemFloatingActions(
 
     Box {
         Surface(
-            onClick = { expanded = true },
+            onClick = {
+                expanded = true
+            },
             shape = CircleShape,
-            color = Color(0xFF60717A),
-            shadowElevation = 3.dp,
+            color =
+                MaterialTheme.colorScheme
+                    .secondaryContainer,
+            shadowElevation = 0.dp,
+            tonalElevation = 0.dp,
             border = BorderStroke(
-                1.dp,
-                Color.White.copy(alpha = 0.22f)
+                width = 1.dp,
+                color =
+                    MaterialTheme.colorScheme
+                        .outlineVariant
             ),
             modifier = Modifier
-                .size(27.dp)
+                .size(KmiIconSize.medium)
                 .graphicsLayer {
                     scaleX = infoScale
                     scaleY = infoScale
@@ -4967,9 +4580,14 @@ private fun SubTopicItemFloatingActions(
             ) {
                 Text(
                     text = "i",
-                    color = Color.White,
-                    style = MaterialTheme.typography.bodyMedium,
-                    fontWeight = FontWeight.ExtraBold,
+                    color =
+                        MaterialTheme.colorScheme
+                            .onSecondaryContainer,
+                    style =
+                        KmiTypography.body.copy(
+                            fontWeight =
+                                FontWeight.ExtraBold
+                        ),
                     modifier = Modifier.graphicsLayer {
                         rotationZ = infoRotation
                     }
@@ -4989,21 +4607,17 @@ private fun SubTopicItemFloatingActions(
                 expanded = expanded,
                 onDismissRequest = { expanded = false },
                 modifier = Modifier.background(
-                    brush = Brush.verticalGradient(
-                        colors = listOf(
-                            Color.White.copy(alpha = 0.99f),
-                            MaterialTheme.colorScheme.primary.copy(alpha = 0.05f),
-                            Color.White.copy(alpha = 0.97f)
-                        )
-                    ),
-                    shape = RoundedCornerShape(18.dp)
+                    color =
+                        MaterialTheme.colorScheme.surface,
+                    shape =
+                        RoundedCornerShape(18.dp)
                 )
             ) {
                 DropdownMenuItem(
                     text = {
                         Text(
                             text = if (isEnglish) "Info" else "מידע",
-                            style = MaterialTheme.typography.labelLarge,
+                            style = KmiTypography.body,
                             textAlign = if (isEnglish) TextAlign.Left else TextAlign.Right,
                             modifier = Modifier.fillMaxWidth()
                         )
@@ -5023,7 +4637,7 @@ private fun SubTopicItemFloatingActions(
                                 isFav -> "הסר ממועדפים"
                                 else -> "הוסף למועדפים"
                             },
-                            style = MaterialTheme.typography.labelLarge,
+                            style = KmiTypography.body,
                             textAlign = if (isEnglish) TextAlign.Left else TextAlign.Right,
                             modifier = Modifier.fillMaxWidth()
                         )
@@ -5056,7 +4670,7 @@ private fun SubTopicItemFloatingActions(
                                 excluded -> "בטל החרגה"
                                 else -> "החרג מהתרגול"
                             },
-                            style = MaterialTheme.typography.labelLarge,
+                            style = KmiTypography.body,
                             textAlign = if (isEnglish) TextAlign.Left else TextAlign.Right,
                             modifier = Modifier.fillMaxWidth()
                         )
@@ -5089,7 +4703,7 @@ private fun SubTopicItemFloatingActions(
                                 hasNote -> "ערוך / מחק הערה"
                                 else -> "הוסף הערה לתרגיל"
                             },
-                            style = MaterialTheme.typography.labelLarge,
+                            style = KmiTypography.body,
                             textAlign = if (isEnglish) TextAlign.Left else TextAlign.Right,
                             modifier = Modifier.fillMaxWidth()
                         )
@@ -5123,13 +4737,18 @@ private fun HardMasterToggle(
 
     Surface(
         modifier = Modifier
-            .size(34.dp)
-            .clickable(onClick = onClick),
+            .size(KmiIconSize.medium)
+            .clickable(
+                onClick = onClick
+            ),
         shape = CircleShape,
         color = bg,
-        border = BorderStroke(1.5.dp, border),
-        tonalElevation = 2.dp,
-        shadowElevation = 4.dp
+        border = BorderStroke(
+            width = 1.dp,
+            color = border
+        ),
+        tonalElevation = 0.dp,
+        shadowElevation = 0.dp
     ) {
         Box(
             modifier = Modifier.fillMaxSize(),
@@ -5140,14 +4759,18 @@ private fun HardMasterToggle(
                     imageVector = Icons.Filled.Check,
                     contentDescription = "יודע",
                     tint = Color.White,
-                    modifier = Modifier.size(21.dp)
+                    modifier = Modifier.size(
+    KmiIconSize.small
+)
                 )
 
                 false -> Icon(
                     imageVector = Icons.Filled.Close,
                     contentDescription = "לא יודע",
                     tint = Color.White,
-                    modifier = Modifier.size(21.dp)
+                    modifier = Modifier.size(
+    KmiIconSize.small
+)
                 )
 
                 null -> Spacer(Modifier.size(1.dp))
@@ -5162,7 +4785,6 @@ private fun ExerciseRowWithInfo(
     belt: Belt,
     itemName: String,
     displayName: String = itemName,
-    accent: Color,
     onExplain: (Belt, String) -> Unit,
     onOpenExercise: (String) -> Unit
 ) {
@@ -5171,23 +4793,18 @@ private fun ExerciseRowWithInfo(
     val isEnglish = langManager.getCurrentLanguage() == AppLanguage.ENGLISH
     val isDarkMode = MaterialTheme.colorScheme.surface.luminance() < 0.5f
 
-    val rowBgColor = if (isDarkMode) {
-        Color(0xFF1E293B)
-    } else {
-        Color.White.copy(alpha = 0.94f)
-    }
+    val rowBgColor =
+        MaterialTheme.colorScheme.surface
 
-    val rowTextColor = if (isDarkMode) {
-        Color(0xFFF8FAFC)
-    } else {
-        Color(0xFF1F2933)
-    }
+    val rowTextColor =
+        MaterialTheme.colorScheme.onSurface
 
-    val infoTint = if (isDarkMode) {
-        belt.color.copy(alpha = 0.95f)
-    } else {
-        Color(0xFF6F55C8)
-    }
+    val infoTint =
+        if (isDarkMode) {
+            belt.color.copy(alpha = 0.95f)
+        } else {
+            MaterialTheme.colorScheme.primary
+        }
 
     Surface(
         modifier = Modifier
@@ -5196,15 +4813,19 @@ private fun ExerciseRowWithInfo(
             .clip(RoundedCornerShape(14.dp)),
         shape = RoundedCornerShape(14.dp),
         color = rowBgColor,
-        tonalElevation = if (isDarkMode) 0.dp else 1.dp,
-        shadowElevation = if (isDarkMode) 0.dp else 1.dp,
+        tonalElevation = 0.dp,
+        shadowElevation = 0.dp,
         border = BorderStroke(
             width = 1.dp,
-            color = if (isDarkMode) {
-                belt.color.copy(alpha = 0.32f)
-            } else {
-                Color.White.copy(alpha = 0.70f)
-            }
+            color =
+                if (isDarkMode) {
+                    belt.color.copy(
+                        alpha = 0.32f
+                    )
+                } else {
+                    MaterialTheme.colorScheme
+                        .outlineVariant
+                }
         )
     ) {
         CompositionLocalProvider(
@@ -5219,14 +4840,29 @@ private fun ExerciseRowWithInfo(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 IconButton(
-                    onClick = { onExplain(belt, itemName) },
-                    modifier = Modifier.size(34.dp)
+                    onClick = {
+                        onExplain(
+                            belt,
+                            itemName
+                        )
+                    },
+                    modifier = Modifier.size(
+                        KmiIconSize.medium
+                    )
                 ) {
                     Icon(
-                        imageVector = Icons.Outlined.Info,
-                        contentDescription = if (isEnglish) "Explanation" else "הסבר",
+                        imageVector =
+                            Icons.Outlined.Info,
+                        contentDescription =
+                            if (isEnglish) {
+                                "Explanation"
+                            } else {
+                                "הסבר"
+                            },
                         tint = infoTint,
-                        modifier = Modifier.size(22.dp)
+                        modifier = Modifier.size(
+                            KmiIconSize.small
+                        )
                     )
                 }
 
@@ -5242,12 +4878,22 @@ private fun ExerciseRowWithInfo(
                 ) {
                     Text(
                         text = displayName,
-                        style = MaterialTheme.typography.titleSmall,
-                        fontWeight = FontWeight.ExtraBold,
+                        style =
+                            KmiTypography.body.copy(
+                                fontWeight =
+                                    FontWeight.ExtraBold
+                            ),
                         color = rowTextColor,
-                        textAlign = if (isEnglish) TextAlign.Start else TextAlign.End,
+                        textAlign =
+                            if (isEnglish) {
+                                TextAlign.Start
+                            } else {
+                                TextAlign.End
+                            },
                         modifier = Modifier.weight(1f),
-                        maxLines = 3
+                        maxLines = 3,
+                        overflow =
+                            TextOverflow.Ellipsis
                     )
                 }
             }

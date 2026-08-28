@@ -86,6 +86,8 @@ import il.kmi.app.domain.DefenseKind
 import il.kmi.app.domain.TopicsBySubjectRegistry
 import il.kmi.app.ui.KmiTopBar
 import il.kmi.app.ui.LocalAppIconScale
+import il.kmi.app.ui.loading.KmiLoadingRings
+import il.yuval.ui.theme.kmiScreenBackgroundBrush
 import kotlinx.coroutines.yield
 import kotlin.math.ceil
 
@@ -320,64 +322,13 @@ private fun HardSubjectLoadingScreen(
         modifier = Modifier
             .fillMaxSize()
             .background(
-                Brush.verticalGradient(
-                    colors = listOf(
-                        MaterialTheme.colorScheme.background,
-                        MaterialTheme.colorScheme.surfaceVariant,
-                        MaterialTheme.colorScheme.primaryContainer,
-                        MaterialTheme.colorScheme.background
-                    )
-                )
+                brush = kmiScreenBackgroundBrush()
             ),
         contentAlignment = Alignment.Center
     ) {
-        Surface(
-            shape = RoundedCornerShape(24.dp),
-            color = MaterialTheme.colorScheme.surface,
-            shadowElevation = 0.dp,
-            tonalElevation = 0.dp,
-            border = BorderStroke(
-                1.dp,
-                MaterialTheme.colorScheme.primary.copy(alpha = 0.35f)
-            )
-        ) {
-            Column(
-                modifier = Modifier.padding(horizontal = 24.dp, vertical = 20.dp),
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                CircularProgressIndicator(
-                    color = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.size(34.dp)
-                )
-
-                Spacer(Modifier.height(12.dp))
-
-                Text(
-                    text = title,
-                    style = KmiTypography.sectionTitle,
-                    color = MaterialTheme.colorScheme.onSurface,
-                    textAlign = TextAlign.Center,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis
-                )
-
-                Spacer(Modifier.height(4.dp))
-
-                Text(
-                    text =
-                        if (rememberIsEnglish()) {
-                            "Loading exercises..."
-                        } else {
-                            "טוען תרגילים..."
-                        },
-                    style = KmiTypography.secondary.copy(
-                        fontWeight = FontWeight.SemiBold
-                    ),
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    textAlign = TextAlign.Center
-                )
-            }
-        }
+        KmiLoadingRings(
+            text = title
+        )
     }
 }
 
@@ -971,7 +922,7 @@ private fun createSubjectTopicsPdf(
     val directory =
         File(
             context.cacheDir,
-            "pdfs"
+            "shared_pdfs"
         ).apply {
             mkdirs()
         }
@@ -997,7 +948,10 @@ private fun createSubjectTopicsPdf(
         file.delete()
     }
 
-    FileOutputStream(file).use { output ->
+    FileOutputStream(
+        file,
+        false
+    ).use { output ->
         document.writeTo(output)
     }
 
@@ -1210,14 +1164,7 @@ fun BeltQuestionsByTopicScreen(
                 .fillMaxSize()
                 .padding(innerPadding)
                 .background(
-                    Brush.verticalGradient(
-                        colors = listOf(
-                            MaterialTheme.colorScheme.background,
-                            MaterialTheme.colorScheme.surfaceVariant,
-                            MaterialTheme.colorScheme.primaryContainer,
-                            MaterialTheme.colorScheme.background
-                        )
-                    )
+                    brush = kmiScreenBackgroundBrush()
                 )
         ) {
 
@@ -1580,22 +1527,18 @@ private fun InlineSubTopicsExpansionCard(
         MaterialTheme.colorScheme.surface.luminance() < 0.5f
 
     val itemTitleColor =
-        if (isDarkMode) {
-            Color.White.copy(alpha = 0.94f)
-        } else {
-            Color(0xFF111827)
-        }
+        MaterialTheme.colorScheme.onSurface
 
     val itemSecondaryColor =
         if (isDarkMode) {
-            Color.White.copy(alpha = 0.72f)
+            MaterialTheme.colorScheme.onSurfaceVariant
         } else {
             accent
         }
 
     val itemArrowColor =
         if (isDarkMode) {
-            Color.White.copy(alpha = 0.82f)
+            MaterialTheme.colorScheme.onSurfaceVariant
         } else {
             accent
         }
@@ -1775,25 +1718,13 @@ private fun SubjectRootCardPremium(
      * במצב בהיר נשמרים צבעי הכרטיסים המקוריים.
      */
     val titleColor =
-        if (isDarkMode) {
-            Color.White.copy(alpha = 0.96f)
-        } else {
-            Color(0xFF18212F)
-        }
+        MaterialTheme.colorScheme.onSurface
 
     val subtitleColor =
-        if (isDarkMode) {
-            Color.White.copy(alpha = 0.78f)
-        } else {
-            Color(0xFF4B5968)
-        }
+        MaterialTheme.colorScheme.onSurfaceVariant
 
     val countColor =
-        if (isDarkMode) {
-            Color.White.copy(alpha = 0.70f)
-        } else {
-            Color(0xFF2F3B4A)
-        }
+        MaterialTheme.colorScheme.onSurfaceVariant
 
     /*
      * החצים והפסים הצבעוניים חייבים להישאר גלויים גם
@@ -2689,11 +2620,10 @@ internal fun TopicsBySubjectCard(
                 shape = RoundedCornerShape(20.dp),
                 tonalElevation = 0.dp,
                 shadowElevation = 0.dp,
-                color = if (isDarkMode) {
-                    Color(0xFF101827).copy(alpha = 0.98f)
-                } else {
-                    MaterialTheme.colorScheme.surface.copy(alpha = 0.97f)
-                },
+                color =
+                    MaterialTheme.colorScheme.surface.copy(
+                        alpha = 0.97f
+                    ),
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(horizontal = 4.dp)
@@ -2717,30 +2647,20 @@ internal fun TopicsBySubjectCard(
                                 bottom = 6.dp
                             ),
                         color =
-                            if (isDarkMode) {
-                                Color.White
-                            } else {
-                                Color(0xFF263238)
-                            }
+                            MaterialTheme.colorScheme.onSurface
                     )
 
                     if (!countsReady) {
-                        Text(
+                        KmiLoadingRings(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 12.dp),
                             text =
                                 if (isEnglish) {
                                     "Loading data..."
                                 } else {
                                     "טוען נתונים…"
-                                },
-                            style = KmiTypography.secondary,
-                            color =
-                                if (isDarkMode) {
-                                    Color.White.copy(alpha = 0.78f)
-                                } else {
-                                    Color(0xFF475569)
-                                },
-                            textAlign = TextAlign.Center,
-                            modifier = Modifier.fillMaxWidth()
+                                }
                         )
                     }
 
@@ -2941,12 +2861,11 @@ internal fun TopicsBySubjectCard(
 
                                 HorizontalDivider(
                                     thickness = 0.8.dp,
-                                    color = if (isDarkMode) {
-                                        Color.White.copy(alpha = 0.08f)
-                                    } else {
-                                        Color(0x14000000)
-                                    },
-                                    modifier = Modifier.padding(horizontal = if (isDarkMode) 8.dp else 6.dp)
+                                    color =
+                                        MaterialTheme.colorScheme.outlineVariant.copy(
+                                            alpha = 0.65f
+                                        ),
+                                    modifier = Modifier.padding(horizontal = 8.dp)
                                 )
                             }
 

@@ -96,6 +96,7 @@ import androidx.core.content.FileProvider
 import il.kmi.app.screens.BeltQuestions.ByTopic.TopicDetails
 import il.kmi.app.ui.KmiTopBar
 import il.kmi.app.ui.LocalAppIconScale
+import il.yuval.ui.theme.kmiScreenBackgroundBrush
 import java.io.File
 import java.io.FileOutputStream
 import java.text.SimpleDateFormat
@@ -1386,11 +1387,10 @@ private fun createBeltTopicsPdf(
             fileName
         )
 
-    if (outputFile.exists()) {
-        outputFile.delete()
-    }
-
-    FileOutputStream(outputFile).use { output ->
+    FileOutputStream(
+        outputFile,
+        false
+    ).use { output ->
         document.writeTo(output)
     }
 
@@ -1718,15 +1718,18 @@ internal fun BeltPangoLayout(
         }
     }
 
+    val currentLanguage =
+        langManager.getCurrentLanguage()
+
+    val screenLayoutDirection =
+        if (currentLanguage == AppLanguage.ENGLISH) {
+            LayoutDirection.Ltr
+        } else {
+            LayoutDirection.Rtl
+        }
+
     val backgroundBrush =
-        Brush.verticalGradient(
-            colors = listOf(
-                MaterialTheme.colorScheme.background,
-                MaterialTheme.colorScheme.surfaceVariant,
-                MaterialTheme.colorScheme.primaryContainer,
-                MaterialTheme.colorScheme.background
-            )
-        )
+        kmiScreenBackgroundBrush()
 
     if (showPracticeMenu) {
         PracticeMenuDialog(
@@ -1752,170 +1755,174 @@ internal fun BeltPangoLayout(
         )
     }
 
-    Scaffold(
-        topBar = {
-            val contextLang = LocalContext.current
-            val topBarLanguageManager = remember {
-                AppLanguageManager(contextLang)
-            }
+    CompositionLocalProvider(
+        LocalLayoutDirection provides screenLayoutDirection
+    ) {
+        Scaffold(
+            topBar = {
+                val contextLang = LocalContext.current
+                val topBarLanguageManager = remember {
+                    AppLanguageManager(contextLang)
+                }
 
-            KmiTopBar(
-                title = beltTitleForUi(
-                    belt = currentBelt,
-                    lang = topBarLanguageManager.getCurrentLanguage()
-                ),
-                onHome = onBackHome,
-                lockSearch = false,
-                showBottomActions = true,
-                centerTitle = true,
-                showTopHome = false,
-                showBackNavigation = false,
-                showTopBeltIcon = true,
-                topBeltIconRes = null,
-                currentLang =
-                    if (
-                        topBarLanguageManager.getCurrentLanguage() ==
-                        AppLanguage.ENGLISH
-                    ) {
-                        "en"
-                    } else {
-                        "he"
-                    },
-                onShare = {
-                    clickSound()
-                    haptic(true)
-
-                    shareBeltTopicsPdf(
-                        context = contextLang,
+                KmiTopBar(
+                    title = beltTitleForUi(
                         belt = currentBelt,
                         lang = topBarLanguageManager.getCurrentLanguage()
-                    )
-                },
-                onToggleLanguage = {
-                    val newLang =
+                    ),
+                    onHome = onBackHome,
+                    lockSearch = false,
+                    showBottomActions = true,
+                    centerTitle = true,
+                    showTopHome = false,
+                    showBackNavigation = false,
+                    showTopBeltIcon = true,
+                    topBeltIconRes = null,
+                    currentLang =
                         if (
                             topBarLanguageManager.getCurrentLanguage() ==
-                            AppLanguage.HEBREW
-                        ) {
                             AppLanguage.ENGLISH
+                        ) {
+                            "en"
                         } else {
-                            AppLanguage.HEBREW
-                        }
-
-                    topBarLanguageManager.setLanguage(newLang)
-                    (contextLang as? Activity)?.recreate()
-                }
-            )
-        }
-    ) { padding ->
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(padding)
-                .background(backgroundBrush)
-        ) {
-            Column(
-                modifier = Modifier
-                    .align(Alignment.TopCenter)
-                    .fillMaxWidth()
-                    .padding(
-                        horizontal = 14.dp,
-                        vertical = 8.dp
-                    ),
-                horizontalAlignment =
-                    Alignment.CenterHorizontally
-            ) {
-                BeltQuestionsModeSwitcher(
-                    onOpenByBelt = {},
-                    onOpenByTopic = {
+                            "he"
+                        },
+                    onShare = {
                         clickSound()
                         haptic(true)
-                        onOpenByTopic()
+
+                        shareBeltTopicsPdf(
+                            context = contextLang,
+                            belt = currentBelt,
+                            lang = topBarLanguageManager.getCurrentLanguage()
+                        )
+                    },
+                    onToggleLanguage = {
+                        val newLang =
+                            if (
+                                topBarLanguageManager.getCurrentLanguage() ==
+                                AppLanguage.HEBREW
+                            ) {
+                                AppLanguage.ENGLISH
+                            } else {
+                                AppLanguage.HEBREW
+                            }
+
+                        topBarLanguageManager.setLanguage(newLang)
+                        (contextLang as? Activity)?.recreate()
                     }
                 )
-
-                Spacer(Modifier.height(4.dp))
-
-                TopicsCardForBelt(
-                    belt = currentBelt,
-                    lang = langManager.getCurrentLanguage(),
-                    accessMode = accessMode,
-                    onOpenSubscription = onOpenSubscription,
-                    onOpenTopic = onOpenTopic,
-                    onOpenSubTopic = onOpenSubTopic,
-                    onOpenDefenseMenu = onOpenDefenseMenu,
-                    haptic = haptic,
-                    clickSound = clickSound
-                )
             }
-
+        ) { padding ->
             Box(
                 modifier = Modifier
-                    .align(Alignment.BottomCenter)
-                    .navigationBarsPadding()
+                    .fillMaxSize()
+                    .padding(padding)
+                    .background(backgroundBrush)
             ) {
-                BeltArcPicker(
-                    belts = belts,
-                    currentIndex = currentIndex,
-                    onIndexChange = { selectedIndex ->
-                        currentIndex = selectedIndex
+                Column(
+                    modifier = Modifier
+                        .align(Alignment.TopCenter)
+                        .fillMaxWidth()
+                        .padding(
+                            horizontal = 14.dp,
+                            vertical = 8.dp
+                        ),
+                    horizontalAlignment =
+                        Alignment.CenterHorizontally
+                ) {
+                    BeltQuestionsModeSwitcher(
+                        onOpenByBelt = {},
+                        onOpenByTopic = {
+                            clickSound()
+                            haptic(true)
+                            onOpenByTopic()
+                        }
+                    )
+
+                    Spacer(Modifier.height(4.dp))
+
+                    TopicsCardForBelt(
+                        belt = currentBelt,
+                        lang = langManager.getCurrentLanguage(),
+                        accessMode = accessMode,
+                        onOpenSubscription = onOpenSubscription,
+                        onOpenTopic = onOpenTopic,
+                        onOpenSubTopic = onOpenSubTopic,
+                        onOpenDefenseMenu = onOpenDefenseMenu,
+                        haptic = haptic,
+                        clickSound = clickSound
+                    )
+                }
+
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.BottomCenter)
+                        .navigationBarsPadding()
+                ) {
+                    BeltArcPicker(
+                        belts = belts,
+                        currentIndex = currentIndex,
+                        onIndexChange = { selectedIndex ->
+                            currentIndex = selectedIndex
+                        },
+                        onCenterTap = onNext,
+                        haptic = haptic,
+                        clickSound = clickSound,
+                        inputEnabled = true,
+                        reverseSwipeDirection = true
+                    )
+                }
+
+                FloatingQuickMenu(
+                    belt = currentBelt,
+                    modifier = Modifier
+                        .align(Alignment.CenterStart)
+                        .zIndex(999f),
+                    expanded = quickMenuExpanded,
+                    onExpandedChange = { expanded ->
+                        quickMenuExpanded = expanded
                     },
-                    onCenterTap = onNext,
-                    haptic = haptic,
-                    clickSound = clickSound,
-                    inputEnabled = true,
-                    reverseSwipeDirection = true
+                    triggerMode = QuickMenuTriggerMode.SideRail,
+                    includePractice = true,
+                    hasFullAccess = hasUnlockedAccess,
+                    onLockedItemClick = {
+                        clickSound()
+                        haptic(true)
+                        onOpenSubscription()
+                    },
+                    onWeakPoints = {
+                        clickSound()
+                        haptic(true)
+                        onOpenWeakPoints(currentBelt)
+                    },
+                    onAllLists = {
+                        clickSound()
+                        haptic(true)
+                        onOpenAllLists(currentBelt)
+                    },
+                    onPractice = {
+                        clickSound()
+                        haptic(true)
+                        showPracticeMenu = true
+                    },
+                    onSummary = {
+                        clickSound()
+                        haptic(true)
+                        onOpenSummaryScreen(currentBelt)
+                    },
+                    onVoice = {
+                        clickSound()
+                        haptic(true)
+                        onOpenVoiceAssistant(currentBelt)
+                    },
+                    onPdf = {
+                        clickSound()
+                        haptic(true)
+                        onOpenPdfMaterials(currentBelt)
+                    }
                 )
             }
-
-            FloatingQuickMenu(
-                belt = currentBelt,
-                modifier = Modifier
-                    .align(Alignment.CenterStart)
-                    .zIndex(999f),
-                expanded = quickMenuExpanded,
-                onExpandedChange = { expanded ->
-                    quickMenuExpanded = expanded
-                },
-                triggerMode = QuickMenuTriggerMode.SideRail,
-                includePractice = true,
-                hasFullAccess = hasUnlockedAccess,
-                onLockedItemClick = {
-                    clickSound()
-                    haptic(true)
-                    onOpenSubscription()
-                },
-                onWeakPoints = {
-                    clickSound()
-                    haptic(true)
-                    onOpenWeakPoints(currentBelt)
-                },
-                onAllLists = {
-                    clickSound()
-                    haptic(true)
-                    onOpenAllLists(currentBelt)
-                },
-                onPractice = {
-                    clickSound()
-                    haptic(true)
-                    showPracticeMenu = true
-                },
-                onSummary = {
-                    clickSound()
-                    haptic(true)
-                    onOpenSummaryScreen(currentBelt)
-                },
-                onVoice = {
-                    clickSound()
-                    haptic(true)
-                    onOpenVoiceAssistant(currentBelt)
-                },
-                onPdf = {
-                    clickSound()
-                    haptic(true)
-                    onOpenPdfMaterials(currentBelt)
-                }
-            )
         }
     }
 }
@@ -1963,12 +1970,13 @@ private fun BeltQuestionsModeSwitcher(
         modifier = Modifier
             .fillMaxWidth(0.88f)
             .padding(bottom = 6.dp),
-        color = Color(0xFF062B4A).copy(alpha = 0.78f),
+        color = MaterialTheme.colorScheme.secondaryContainer,
+        contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
         shadowElevation = 0.dp,
         tonalElevation = 0.dp,
         border = BorderStroke(
             width = 1.dp,
-            color = Color.White.copy(alpha = 0.34f)
+            color = MaterialTheme.colorScheme.outlineVariant
         ),
         shape = RoundedCornerShape(18.dp)
     ) {
@@ -1984,7 +1992,9 @@ private fun BeltQuestionsModeSwitcher(
                     .width(1.dp)
                     .height(24.dp)
                     .background(
-                        Color.White.copy(alpha = 0.65f)
+                        MaterialTheme.colorScheme.onSecondaryContainer.copy(
+                            alpha = 0.65f
+                        )
                     )
             )
 
@@ -1995,7 +2005,8 @@ private fun BeltQuestionsModeSwitcher(
                 TabRow(
                     selectedTabIndex = selectedIndex,
                     containerColor = Color.Transparent,
-                    contentColor = Color.White,
+                    contentColor =
+                        MaterialTheme.colorScheme.onSecondaryContainer,
                     divider = {},
                     indicator = { positions ->
                         TabRowDefaults.SecondaryIndicator(
@@ -2003,7 +2014,8 @@ private fun BeltQuestionsModeSwitcher(
                                 positions[selectedIndex]
                             ),
                             height = 3.dp,
-                            color = Color.White
+                            color =
+                                MaterialTheme.colorScheme.onSecondaryContainer
                         )
                     },
                     modifier = Modifier.matchParentSize()
@@ -2029,9 +2041,12 @@ private fun BeltQuestionsModeSwitcher(
                                     overflow = TextOverflow.Ellipsis
                                 )
                             },
-                            selectedContentColor = Color.White,
+                            selectedContentColor =
+                                MaterialTheme.colorScheme.onSecondaryContainer,
                             unselectedContentColor =
-                                Color.White.copy(alpha = 0.82f)
+                                MaterialTheme.colorScheme.onSecondaryContainer.copy(
+                                    alpha = 0.82f
+                                )
                         )
                     }
                 }
@@ -2099,25 +2114,13 @@ private fun TopicsCardForBelt(
         else LayoutDirection.Rtl
 
     val cardBg =
-        if (isDarkTheme) {
-            Color(0xFF101827)
-        } else {
-            Color.White
-        }
+        MaterialTheme.colorScheme.surface
 
     val titleColor =
-        if (isDarkTheme) {
-            Color(0xFFF8FAFC)
-        } else {
-            Color(0xFF263238)
-        }
+        MaterialTheme.colorScheme.onSurface
 
     val rowTitleColor =
-        if (isDarkTheme) {
-            Color(0xFFF8FAFC)
-        } else {
-            Color(0xFF1F2937)
-        }
+        MaterialTheme.colorScheme.onSurface
 
     /*
      * צבע החגורה הלבנה נשאר לבן על הכרטיס הכהה.
@@ -2281,47 +2284,26 @@ private fun TopicsCardForBelt(
         ?.takeIf { it.isNotBlank() }
 
     if (visibleGeneralNote != null) {
-        val noteAccent = Color(0xFF2563EB)
+        val noteAccent =
+            MaterialTheme.colorScheme.secondary
 
         val noteCardBackground =
-            if (isDarkTheme) {
-                Brush.verticalGradient(
-                    colors = listOf(
-                        Color(0xFF172033),
-                        Color(0xFF101827),
-                        Color(0xFF0D1422)
-                    )
+            Brush.verticalGradient(
+                colors = listOf(
+                    MaterialTheme.colorScheme.surface,
+                    MaterialTheme.colorScheme.surfaceVariant,
+                    MaterialTheme.colorScheme.surface
                 )
-            } else {
-                Brush.verticalGradient(
-                    colors = listOf(
-                        Color(0xFFFDFEFF),
-                        Color(0xFFF5F8FF),
-                        Color(0xFFFFFFFF)
-                    )
-                )
-            }
+            )
 
         val noteBorderColor =
-            if (isDarkTheme) {
-                Color(0xFF60A5FA).copy(alpha = 0.34f)
-            } else {
-                noteAccent.copy(alpha = 0.20f)
-            }
+            MaterialTheme.colorScheme.outlineVariant
 
         val noteTitleColor =
-            if (isDarkTheme) {
-                Color(0xFFF8FAFC)
-            } else {
-                Color(0xFF182235)
-            }
+            MaterialTheme.colorScheme.onSurface
 
         val noteBodyColor =
-            if (isDarkTheme) {
-                Color(0xFFD5DEEB)
-            } else {
-                Color(0xFF334155)
-            }
+            MaterialTheme.colorScheme.onSurfaceVariant
 
         Dialog(
             onDismissRequest = {
@@ -2379,9 +2361,9 @@ private fun TopicsCardForBelt(
                                 .background(
                                     Brush.horizontalGradient(
                                         colors = listOf(
-                                            Color(0xFF60A5FA),
-                                            Color(0xFF2563EB),
-                                            Color(0xFF7C3AED)
+                                            MaterialTheme.colorScheme.secondary,
+                                            MaterialTheme.colorScheme.primary,
+                                            MaterialTheme.colorScheme.secondary
                                         )
                                     )
                                 )
@@ -2406,14 +2388,11 @@ private fun TopicsCardForBelt(
                                 modifier = Modifier.size(36.dp),
                                 shape = CircleShape,
                                 color =
-                                    if (isDarkTheme) {
-                                        noteAccent.copy(alpha = 0.22f)
-                                    } else {
-                                        Color(0xFFE8F1FF)
-                                    },
+                                    MaterialTheme.colorScheme.secondaryContainer,
                                 border = BorderStroke(
                                     width = 1.dp,
-                                    color = noteAccent.copy(alpha = 0.28f)
+                                    color = MaterialTheme.colorScheme.secondary
+                                        .copy(alpha = 0.40f)
                                 ),
                                 tonalElevation = 0.dp,
                                 shadowElevation = 0.dp
@@ -2425,11 +2404,7 @@ private fun TopicsCardForBelt(
                                         imageVector = Icons.Filled.Info,
                                         contentDescription = null,
                                         tint =
-                                            if (isDarkTheme) {
-                                                Color(0xFF60A5FA)
-                                            } else {
-                                                noteAccent
-                                            },
+                                            MaterialTheme.colorScheme.onSecondaryContainer,
                                         modifier =
                                             Modifier.size(
                                                 19.dp * LocalAppIconScale.current
@@ -2451,11 +2426,7 @@ private fun TopicsCardForBelt(
                                     fontWeight = FontWeight.ExtraBold
                                 ),
                                 color =
-                                    if (isDarkTheme) {
-                                        Color(0xFF93C5FD)
-                                    } else {
-                                        noteAccent
-                                    },
+                                    MaterialTheme.colorScheme.secondary,
                                 textAlign = TextAlign.Center
                             )
 
@@ -2477,11 +2448,7 @@ private fun TopicsCardForBelt(
                                 modifier = Modifier.fillMaxWidth(),
                                 thickness = 1.dp,
                                 color =
-                                    if (isDarkTheme) {
-                                        Color.White.copy(alpha = 0.10f)
-                                    } else {
-                                        noteAccent.copy(alpha = 0.12f)
-                                    }
+                                    MaterialTheme.colorScheme.outlineVariant
                             )
 
                             Spacer(Modifier.height(8.dp))
@@ -2496,20 +2463,12 @@ private fun TopicsCardForBelt(
                                     .heightIn(max = 360.dp)
                                     .clip(RoundedCornerShape(18.dp))
                                     .background(
-                                        if (isDarkTheme) {
-                                            Color.White.copy(alpha = 0.035f)
-                                        } else {
-                                            Color.White.copy(alpha = 0.72f)
-                                        }
+                                        MaterialTheme.colorScheme.surfaceVariant
                                     )
                                     .border(
                                         width = 1.dp,
                                         color =
-                                            if (isDarkTheme) {
-                                                Color.White.copy(alpha = 0.07f)
-                                            } else {
-                                                noteAccent.copy(alpha = 0.08f)
-                                            },
+                                            MaterialTheme.colorScheme.outlineVariant,
                                         shape = RoundedCornerShape(18.dp)
                                     )
                                     .verticalScroll(
@@ -2553,7 +2512,8 @@ private fun TopicsCardForBelt(
                                         generalNoteText = null
                                     },
                                 shape = RoundedCornerShape(16.dp),
-                                color = noteAccent,
+                                color = MaterialTheme.colorScheme.primary,
+                                contentColor = MaterialTheme.colorScheme.onPrimary,
                                 tonalElevation = 0.dp,
                                 shadowElevation = 0.dp
                             ) {
@@ -2579,7 +2539,7 @@ private fun TopicsCardForBelt(
                                         style = KmiTypography.action.copy(
                                             fontWeight = FontWeight.ExtraBold
                                         ),
-                                        color = Color.White
+                                        color = MaterialTheme.colorScheme.onPrimary
                                     )
 
                                     Spacer(Modifier.width(7.dp))
@@ -2598,8 +2558,8 @@ private fun TopicsCardForBelt(
         shape = RoundedCornerShape(24.dp),
         color = cardBg,
         border = BorderStroke(
-            1.dp,
-            if (isDarkTheme) Color.White.copy(alpha = 0.12f) else belt.color.copy(alpha = 0.14f)
+            width = 1.dp,
+            color = MaterialTheme.colorScheme.outlineVariant
         ),
         modifier = Modifier
             .fillMaxWidth()
@@ -2872,17 +2832,13 @@ private fun TopicsCardForBelt(
                                                             },
                                                         shape = CircleShape,
                                                         color =
-                                                            if (isDarkTheme) {
-                                                                Color(0xFF2563EB)
-                                                                    .copy(alpha = 0.24f)
-                                                            } else {
-                                                                Color(0xFFE8F1FF)
-                                                            },
+                                                            MaterialTheme.colorScheme.secondaryContainer,
                                                         border = BorderStroke(
                                                             width = 1.dp,
                                                             color =
-                                                                Color(0xFF2563EB)
-                                                                    .copy(alpha = 0.45f)
+                                                                MaterialTheme.colorScheme.secondary.copy(
+                                                                    alpha = 0.45f
+                                                                )
                                                         ),
                                                         tonalElevation = 0.dp,
                                                         shadowElevation = 0.dp
@@ -2901,11 +2857,7 @@ private fun TopicsCardForBelt(
                                                                         "הערה כללית"
                                                                     },
                                                                 tint =
-                                                                    if (isDarkTheme) {
-                                                                        Color(0xFF60A5FA)
-                                                                    } else {
-                                                                        Color(0xFF2563EB)
-                                                                    },
+                                                                    MaterialTheme.colorScheme.onSecondaryContainer,
                                                                 modifier =
                                                                     Modifier.size(
                                                                         17.dp * LocalAppIconScale.current
@@ -3144,26 +3096,14 @@ private fun TopicsCardForBelt(
                                                                     },
                                                                 shape = CircleShape,
                                                                 color =
-                                                                    if (isDarkTheme) {
-                                                                        Color(0xFF2563EB)
-                                                                            .copy(
-                                                                                alpha =
-                                                                                    0.24f
-                                                                            )
-                                                                    } else {
-                                                                        Color(0xFFE8F1FF)
-                                                                    },
+                                                                    MaterialTheme.colorScheme.secondaryContainer,
                                                                 border =
                                                                     BorderStroke(
                                                                         width = 1.dp,
                                                                         color =
-                                                                            Color(
-                                                                                0xFF2563EB
+                                                                            MaterialTheme.colorScheme.secondary.copy(
+                                                                                alpha = 0.45f
                                                                             )
-                                                                                .copy(
-                                                                                    alpha =
-                                                                                        0.45f
-                                                                                )
                                                                     ),
                                                                 tonalElevation = 0.dp,
                                                                 shadowElevation = 0.dp
@@ -3182,17 +3122,7 @@ private fun TopicsCardForBelt(
                                                                                 "הערה כללית"
                                                                             },
                                                                         tint =
-                                                                            if (
-                                                                                isDarkTheme
-                                                                            ) {
-                                                                                Color(
-                                                                                    0xFF60A5FA
-                                                                                )
-                                                                            } else {
-                                                                                Color(
-                                                                                    0xFF2563EB
-                                                                                )
-                                                                            },
+                                                                            MaterialTheme.colorScheme.onSecondaryContainer,
                                                                         modifier =
                                                                             Modifier.size(
                                                                                 17.dp *
@@ -3298,11 +3228,8 @@ private fun TopicsCardForBelt(
                         if (index != topicTitles.lastIndex) {
                             HorizontalDivider(
                                 thickness = 1.dp,
-                                color = if (isDarkTheme) {
-                                    Color.White.copy(alpha = 0.12f)
-                                } else {
-                                    Color(0x22000000)
-                                },
+                                color =
+                                    MaterialTheme.colorScheme.outlineVariant,
                                 modifier = Modifier.padding(horizontal = 18.dp)
                             )
                         }

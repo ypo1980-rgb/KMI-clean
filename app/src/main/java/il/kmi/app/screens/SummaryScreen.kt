@@ -20,10 +20,6 @@ import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
-import androidx.compose.animation.core.animateFloat
-import androidx.compose.animation.core.infiniteRepeatable
-import androidx.compose.animation.core.rememberInfiniteTransition
-import androidx.compose.animation.core.LinearEasing
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -32,7 +28,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.compositeOver
 import androidx.compose.ui.graphics.drawscope.Stroke
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.font.FontWeight
@@ -45,6 +40,7 @@ import il.kmi.app.favorites.FavoritesStore
 import il.kmi.app.ui.color
 import il.kmi.app.ui.KmiTypography
 import il.kmi.app.ui.LocalAppIconScale
+import il.kmi.app.ui.loading.KmiLoadingRings
 import il.kmi.shared.domain.Belt
 import il.kmi.shared.questions.model.util.ExerciseTitleFormatter
 import java.io.File
@@ -1176,148 +1172,6 @@ private fun SummaryToggleButton(
 }
 
 @Composable
-private fun PremiumSummaryLoadingRing(
-    size: Dp,
-    width: Dp,
-    rotation: Float,
-    colors: List<Color>
-) {
-    Box(
-        modifier = Modifier
-            .size(size)
-            .graphicsLayer {
-                rotationZ = rotation
-            }
-            .border(
-                width = width,
-                brush = Brush.sweepGradient(colors),
-                shape = CircleShape
-            )
-    )
-}
-
-@Composable
-private fun PremiumSummaryLoading() {
-    val infiniteTransition = rememberInfiniteTransition(
-        label = "premiumSummaryLoading"
-    )
-
-    val outerRotation by infiniteTransition.animateFloat(
-        initialValue = 0f,
-        targetValue = 360f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(
-                durationMillis = 1350,
-                easing = LinearEasing
-            )
-        ),
-        label = "premiumSummaryOuterRotation"
-    )
-
-    val middleRotation by infiniteTransition.animateFloat(
-        initialValue = 360f,
-        targetValue = 0f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(
-                durationMillis = 1650,
-                easing = LinearEasing
-            )
-        ),
-        label = "premiumSummaryMiddleRotation"
-    )
-
-    val innerRotation by infiniteTransition.animateFloat(
-        initialValue = 0f,
-        targetValue = 360f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(
-                durationMillis = 2050,
-                easing = LinearEasing
-            )
-        ),
-        label = "premiumSummaryInnerRotation"
-    )
-
-    Box(
-        modifier = Modifier.size(82.dp),
-        contentAlignment = Alignment.Center
-    ) {
-        PremiumSummaryLoadingRing(
-            size = 76.dp,
-            width = 5.dp,
-            rotation = outerRotation,
-            colors = listOf(
-                Color.Transparent,
-                Color(0xFFA78BFA),
-                Color(0xFF38BDF8),
-                Color.Transparent
-            )
-        )
-
-        PremiumSummaryLoadingRing(
-            size = 62.dp,
-            width = 4.dp,
-            rotation = middleRotation,
-            colors = listOf(
-                Color.Transparent,
-                Color(0xFF38BDF8),
-                Color(0xFFA78BFA),
-                Color.Transparent
-            )
-        )
-
-        PremiumSummaryLoadingRing(
-            size = 48.dp,
-            width = 3.5.dp,
-            rotation = innerRotation,
-            colors = listOf(
-                Color.Transparent,
-                Color(0xFFF59E0B),
-                Color(0xFF22C55E),
-                Color.Transparent
-            )
-        )
-
-        Surface(
-            modifier = Modifier.size(25.dp),
-            shape = CircleShape,
-            color = MaterialTheme.colorScheme.surface,
-            shadowElevation = 0.dp,
-            border = BorderStroke(
-                width = 1.dp,
-                color = MaterialTheme.colorScheme.primary.copy(
-                    alpha = 0.32f
-                )
-            )
-        ) {
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .background(
-                        brush = Brush.radialGradient(
-                            colors = listOf(
-                                MaterialTheme.colorScheme.surface,
-                                MaterialTheme.colorScheme.primaryContainer,
-                                MaterialTheme.colorScheme.surfaceVariant
-                            )
-                        ),
-                        shape = CircleShape
-                    ),
-                contentAlignment = Alignment.Center
-            ) {
-                Text(
-                    text = "✓",
-                    style = KmiTypography.caption,
-                    fontWeight = FontWeight.Black,
-                    color = MaterialTheme.colorScheme.primary,
-                    textAlign = TextAlign.Center
-                )
-            }
-        }
-    }
-}
-
-@Composable
 private fun CoachGroupsProgressCard(
     summary: CoachGroupProgressSummary?,
     isLoaded: Boolean,
@@ -1421,22 +1275,13 @@ private fun CoachGroupsProgressCard(
                     verticalArrangement =
                         Arrangement.Center
                 ) {
-                    PremiumSummaryLoading()
-
-                    Spacer(
-                        Modifier.height(8.dp)
-                    )
-
-                    Text(
+                    KmiLoadingRings(
                         text =
                             if (isEnglish) {
                                 "Loading group data..."
                             } else {
                                 "טוען את נתוני הקבוצות..."
-                            },
-                        style = KmiTypography.secondary,
-                        color = secondaryTextColor,
-                        textAlign = TextAlign.Center
+                            }
                     )
                 }
             } else if (
@@ -2802,17 +2647,11 @@ fun SummaryScreen(
                         horizontalAlignment = Alignment.CenterHorizontally,
                         verticalArrangement = Arrangement.spacedBy(16.dp)
                     ) {
-                        PremiumSummaryLoading()
-
-                        Text(
+                        KmiLoadingRings(
                             text = tr(
                                 "טוען את כל סימוני התרגילים...",
                                 "Loading all exercise marks..."
-                            ),
-                            style = KmiTypography.sectionTitle,
-                            color = summaryPrimaryText,
-                            textAlign = TextAlign.Center,
-                            maxLines = 2
+                            )
                         )
 
                         Text(

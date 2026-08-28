@@ -1,6 +1,6 @@
 @file:OptIn(
-    androidx.compose.material3.ExperimentalMaterial3Api::class,
-    androidx.compose.foundation.ExperimentalFoundationApi::class
+    ExperimentalMaterial3Api::class,
+    ExperimentalFoundationApi::class
 )
 
 package il.kmi.app.screens.registration
@@ -11,6 +11,7 @@ import android.util.Patterns
 import android.view.HapticFeedbackConstants
 import android.view.SoundEffectConstants
 import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -30,7 +31,6 @@ import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLayoutDirection
@@ -45,11 +45,13 @@ import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
-import il.kmi.app.KmiViewModel
+import androidx.core.content.edit
+import il.kmi.app.ui.KmiIconSize
+import il.kmi.app.ui.KmiTypography
 import il.kmi.shared.prefs.KmiPrefs
 import kotlinx.coroutines.launch
 import androidx.compose.material3.TabRowDefaults.tabIndicatorOffset
+import androidx.compose.ui.platform.LocalWindowInfo
 import il.kmi.app.FcmTokenManager
 import il.kmi.shared.localization.AppLanguage
 import il.kmi.shared.localization.AppLanguageManager
@@ -60,10 +62,6 @@ import com.google.firebase.functions.FirebaseFunctions
 import kotlinx.coroutines.tasks.await
 
 //======================================================================
-
-// מנרמל קוד: מוריד רווחים/מקפים וממיר ל-UPPERCASE
-private fun String?.normalizeCoachCode(): String =
-    this?.trim()?.replace(" ", "")?.replace("-", "")?.uppercase() ?: ""
 
 private fun firstNonBlank(vararg values: String?): String =
     values
@@ -162,11 +160,14 @@ private fun ExistingUserLockedTopBar(
 ) {
     Surface(
         modifier = Modifier.fillMaxWidth(),
-        color = Color.White,
+        color = MaterialTheme.colorScheme.surface,
+        contentColor = MaterialTheme.colorScheme.onSurface,
         shadowElevation = 0.dp,
         tonalElevation = 0.dp
     ) {
-        CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
+        CompositionLocalProvider(
+            LocalLayoutDirection provides LayoutDirection.Ltr
+        ) {
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -184,12 +185,10 @@ private fun ExistingUserLockedTopBar(
                     textAlign = TextAlign.Center,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
-                    style = MaterialTheme.typography.titleLarge.copy(
-                        fontWeight = FontWeight.ExtraBold,
-                        fontSize = 20.sp,
-                        lineHeight = 24.sp,
-                        color = Color(0xFF111827)
-                    )
+                    style = KmiTypography.screenTitle.copy(
+                        fontWeight = FontWeight.ExtraBold
+                    ),
+                    color = MaterialTheme.colorScheme.onSurface
                 )
 
                 Spacer(Modifier.width(38.dp))
@@ -202,11 +201,8 @@ private fun ExistingUserLockedTopBar(
 fun ExistingUserTraineeScreen(
     onBack: () -> Unit,
     onLoginComplete: () -> Unit,
-    onOpenRecovery: () -> Unit = {},
-    vm: KmiViewModel,
     sp: SharedPreferences,
-    kmiPrefs: KmiPrefs,
-    onOpenDrawer: () -> Unit = {}   // ← חדש
+    kmiPrefs: KmiPrefs
 ) {
     BackHandler { onBack() }
 
@@ -277,48 +273,12 @@ fun ExistingUserTraineeScreen(
         )
     }
 
-    // מאמן בלבד
-    var coachCode by rememberSaveable { mutableStateOf("") }
-    var coachCodeError by remember { mutableStateOf(false) }
-    var serverCoachCode by remember { mutableStateOf<String?>(null) }
-    var serverCoachRole by remember { mutableStateOf("") }
-    var serverCoachActive by remember { mutableStateOf(false) }
-    var serverCoachName by remember { mutableStateOf("") }
-
-    var canOpenCoachDrawer by remember { mutableStateOf(false) }
-    var canViewTrainees by remember { mutableStateOf(false) }
-    var canManageTrainees by remember { mutableStateOf(false) }
-    var canManageAttendance by remember { mutableStateOf(false) }
-    var canManageInternalExams by remember { mutableStateOf(false) }
-    var canViewPaymentReports by remember { mutableStateOf(false) }
-    var canManagePayments by remember { mutableStateOf(false) }
-    var canSendBroadcasts by remember { mutableStateOf(false) }
-
-    var coachCodeResetError by rememberSaveable { mutableStateOf<String?>(null) }
-    var coachCodeResetSuccess by rememberSaveable { mutableStateOf<String?>(null) }
-    var resettingCoachCode by rememberSaveable { mutableStateOf(false) }
+    var coachCodeError by remember {
+        mutableStateOf(false)
+    }
 
     LaunchedEffect(isCoach) {
-        if (isCoach) {
-            coachCodeError = false
-            coachCodeResetError = null
-            coachCodeResetSuccess = null
-            return@LaunchedEffect
-        }
-
-        serverCoachCode = null
-        serverCoachRole = ""
-        serverCoachActive = false
-        serverCoachName = ""
-
-        canOpenCoachDrawer = false
-        canViewTrainees = false
-        canManageTrainees = false
-        canManageAttendance = false
-        canManageInternalExams = false
-        canViewPaymentReports = false
-        canManagePayments = false
-        canSendBroadcasts = false
+        coachCodeError = false
     }
 
     // שדות
@@ -404,9 +364,22 @@ fun ExistingUserTraineeScreen(
                 .padding(innerPadding)
         ) {
             // ---------- מרווח עליון דינמי ----------
-            val cfg = LocalConfiguration.current
-            val topPad = if (cfg.screenHeightDp <= 700) 40.dp else 52.dp
-            Spacer(Modifier.height(topPad))
+            val windowInfo = LocalWindowInfo.current
+            val screenHeightDp =
+                with(density) {
+                    windowInfo.containerSize.height.toDp()
+                }
+
+            val topPad =
+                if (screenHeightDp <= 700.dp) {
+                    40.dp
+                } else {
+                    52.dp
+                }
+
+            Spacer(
+                Modifier.height(topPad)
+            )
 
             Column(
                 modifier = Modifier
@@ -454,8 +427,10 @@ fun ExistingUserTraineeScreen(
                             contentColor = Color.White,
                             divider = {},
                             indicator = { positions ->
-                                TabRowDefaults.Indicator(
-                                    modifier = Modifier.tabIndicatorOffset(positions[selectedIndex]),
+                                TabRowDefaults.SecondaryIndicator(
+                                    modifier = Modifier.tabIndicatorOffset(
+                                        positions[selectedIndex]
+                                    ),
                                     height = 3.dp,
                                     color = Color.White
                                 )
@@ -475,9 +450,22 @@ fun ExistingUserTraineeScreen(
                                         loginError = false
                                     }
                                 },
-                                text = { Text(tr("מתאמן", "Trainee"), fontWeight = FontWeight.Bold) },
+                                text = {
+                                    Text(
+                                        text = tr(
+                                            "מתאמן",
+                                            "Trainee"
+                                        ),
+                                        style = KmiTypography.action.copy(
+                                            fontWeight = FontWeight.Bold
+                                        ),
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+                                },
                                 selectedContentColor = Color.White,
-                                unselectedContentColor = Color.White.copy(alpha = 0.7f)
+                                unselectedContentColor =
+                                    Color.White.copy(alpha = 0.7f)
                             )
 
                             Tab(
@@ -492,9 +480,22 @@ fun ExistingUserTraineeScreen(
                                         coachCodeError = false
                                     }
                                 },
-                                text = { Text(tr("מאמן", "Coach"), fontWeight = FontWeight.Bold) },
+                                text = {
+                                    Text(
+                                        text = tr(
+                                            "מאמן",
+                                            "Coach"
+                                        ),
+                                        style = KmiTypography.action.copy(
+                                            fontWeight = FontWeight.Bold
+                                        ),
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+                                },
                                 selectedContentColor = Color.White,
-                                unselectedContentColor = Color.White.copy(alpha = 0.7f)
+                                unselectedContentColor =
+                                    Color.White.copy(alpha = 0.7f)
                             )
                         }
                     }
@@ -509,8 +510,9 @@ fun ExistingUserTraineeScreen(
                             "מצב מאמן יאומת מול השרת בעת ההתחברות",
                             "Coach mode will be verified by the server during login"
                         ),
-                        color = Color.White.copy(alpha = 0.90f),
-                        style = MaterialTheme.typography.bodySmall.copy(
+                        color = MaterialTheme.colorScheme.onPrimary
+                            .copy(alpha = 0.90f),
+                        style = KmiTypography.caption.copy(
                             fontWeight = FontWeight.Bold
                         ),
                         textAlign = TextAlign.Center,
@@ -521,58 +523,137 @@ fun ExistingUserTraineeScreen(
                 OutlinedTextField(
                     value = username,
                     onValueChange = { username = it },
-                    label = { Text(tr("שם משתמש", "Username"), color = Color.Black) },
+                    label = {
+                        Text(
+                            text = tr("שם משתמש", "Username"),
+                            style = KmiTypography.caption
+                        )
+                    },
                     modifier = Modifier
                         .fillMaxWidth(fieldWidth)
                         .defaultMinSize(minHeight = fieldHeight)
-                        .background(Color.White, shape = MaterialTheme.shapes.medium)
                         .bringIntoViewRequester(usernameBring)
                         .onFocusChanged {
-                            if (it.isFocused) scope.launch { usernameBring.bringIntoView() }
+                            if (it.isFocused) {
+                                scope.launch {
+                                    usernameBring.bringIntoView()
+                                }
+                            }
                         },
                     singleLine = true,
+                    textStyle = KmiTypography.body,
                     colors = OutlinedTextFieldDefaults.colors(
-                        focusedContainerColor = Color.White, unfocusedContainerColor = Color.White,
-                        focusedTextColor = Color.Black, unfocusedTextColor = Color.Black,
-                        focusedBorderColor = Color.Transparent, unfocusedBorderColor = Color.Transparent,
-                        errorBorderColor = MaterialTheme.colorScheme.error
+                        focusedContainerColor =
+                            MaterialTheme.colorScheme.surface,
+                        unfocusedContainerColor =
+                            MaterialTheme.colorScheme.surface,
+                        focusedTextColor =
+                            MaterialTheme.colorScheme.onSurface,
+                        unfocusedTextColor =
+                            MaterialTheme.colorScheme.onSurface,
+                        focusedBorderColor =
+                            MaterialTheme.colorScheme.primary,
+                        unfocusedBorderColor =
+                            MaterialTheme.colorScheme.outlineVariant,
+                        focusedLabelColor =
+                            MaterialTheme.colorScheme.primary,
+                        unfocusedLabelColor =
+                            MaterialTheme.colorScheme.onSurfaceVariant,
+                        errorBorderColor =
+                            MaterialTheme.colorScheme.error
                     )
                 )
 
                 OutlinedTextField(
                     value = password,
                     onValueChange = { password = it },
-                    label = { Text(tr("סיסמה", "Password"), color = Color.Black) },
+                    label = {
+                        Text(
+                            text = tr("סיסמה", "Password"),
+                            style = KmiTypography.caption
+                        )
+                    },
                     modifier = Modifier
                         .fillMaxWidth(fieldWidth)
                         .defaultMinSize(minHeight = fieldHeight)
-                        .background(Color.White, shape = MaterialTheme.shapes.medium)
                         .bringIntoViewRequester(passwordBring)
                         .onFocusChanged {
-                            if (it.isFocused) scope.launch { passwordBring.bringIntoView() }
+                            if (it.isFocused) {
+                                scope.launch {
+                                    passwordBring.bringIntoView()
+                                }
+                            }
                         },
                     singleLine = true,
-                    visualTransformation = if (passwordVisible) VisualTransformation.None else PasswordVisualTransformation(),
+                    visualTransformation =
+                        if (passwordVisible) {
+                            VisualTransformation.None
+                        } else {
+                            PasswordVisualTransformation()
+                        },
                     keyboardOptions = KeyboardOptions(
                         keyboardType = KeyboardType.Password,
                         imeAction = ImeAction.Next
                     ),
+                    textStyle = KmiTypography.body,
                     trailingIcon = {
-                        val icon = if (passwordVisible) Icons.Filled.VisibilityOff else Icons.Filled.Visibility
-                        val desc = if (passwordVisible) {
-                            tr("הסתר סיסמה", "Hide password")
-                        } else {
-                            tr("הצג סיסמה", "Show password")
-                        }
-                        IconButton(onClick = { passwordVisible = !passwordVisible }) {
-                            Icon(icon, contentDescription = desc, tint = Color.Black)
+                        val icon =
+                            if (passwordVisible) {
+                                Icons.Filled.VisibilityOff
+                            } else {
+                                Icons.Filled.Visibility
+                            }
+
+                        val desc =
+                            if (passwordVisible) {
+                                tr(
+                                    "הסתר סיסמה",
+                                    "Hide password"
+                                )
+                            } else {
+                                tr(
+                                    "הצג סיסמה",
+                                    "Show password"
+                                )
+                            }
+
+                        IconButton(
+                            onClick = {
+                                passwordVisible = !passwordVisible
+                            },
+                            modifier = Modifier.size(
+                                KmiIconSize.medium
+                            )
+                        ) {
+                            Icon(
+                                imageVector = icon,
+                                contentDescription = desc,
+                                tint = MaterialTheme.colorScheme.onSurface,
+                                modifier = Modifier.size(
+                                    KmiIconSize.small
+                                )
+                            )
                         }
                     },
                     colors = OutlinedTextFieldDefaults.colors(
-                        focusedContainerColor = Color.White, unfocusedContainerColor = Color.White,
-                        focusedTextColor = Color.Black, unfocusedTextColor = Color.Black,
-                        focusedBorderColor = Color.Transparent, unfocusedBorderColor = Color.Transparent,
-                        errorBorderColor = MaterialTheme.colorScheme.error
+                        focusedContainerColor =
+                            MaterialTheme.colorScheme.surface,
+                        unfocusedContainerColor =
+                            MaterialTheme.colorScheme.surface,
+                        focusedTextColor =
+                            MaterialTheme.colorScheme.onSurface,
+                        unfocusedTextColor =
+                            MaterialTheme.colorScheme.onSurface,
+                        focusedBorderColor =
+                            MaterialTheme.colorScheme.primary,
+                        unfocusedBorderColor =
+                            MaterialTheme.colorScheme.outlineVariant,
+                        focusedLabelColor =
+                            MaterialTheme.colorScheme.primary,
+                        unfocusedLabelColor =
+                            MaterialTheme.colorScheme.onSurfaceVariant,
+                        errorBorderColor =
+                            MaterialTheme.colorScheme.error
                     )
                 )
 
@@ -602,19 +683,29 @@ fun ExistingUserTraineeScreen(
                     Spacer(Modifier.width(10.dp))
 
                     Text(
-                        tr("שמירה לכניסה הבאה", "Remember me"),
+                        text = tr(
+                            "שמירה לכניסה הבאה",
+                            "Remember me"
+                        ),
                         maxLines = 1,
                         softWrap = false,
+                        overflow = TextOverflow.Ellipsis,
                         modifier = Modifier.padding(end = 6.dp),
-                        color = Color.White,
-                        style = MaterialTheme.typography.bodyMedium
+                        color = MaterialTheme.colorScheme.onPrimary,
+                        style = KmiTypography.body
                     )
                 }
 
                 if (loginError) {
                     Text(
-                        text = tr("פרטי ההתחברות שגויים", "Invalid login details"),
+                        text = tr(
+                            "פרטי ההתחברות שגויים",
+                            "Invalid login details"
+                        ),
                         color = MaterialTheme.colorScheme.error,
+                        style = KmiTypography.body.copy(
+                            fontWeight = FontWeight.Bold
+                        ),
                         textAlign = TextAlign.Center,
                         modifier = Modifier.fillMaxWidth(fieldWidth)
                     )
@@ -649,8 +740,8 @@ fun ExistingUserTraineeScreen(
                             }
 
                             var resolvedCoachCode = ""
-                            var resolvedCoachRole = ""
-                            var resolvedCoachActive = false
+                            var resolvedCoachRole: String
+                            var resolvedCoachActive: Boolean
                             var resolvedCoachName = ""
 
                             var resolvedCanOpenCoachDrawer = false
@@ -844,17 +935,29 @@ fun ExistingUserTraineeScreen(
                             loginError = false
 
                             if (rememberMe && password.isNotBlank()) {
-                                sp.edit()
-                                    .putBoolean("remember_me_login", true)
-                                    .putString("remember_username", username.trim())
-                                    .putString("remember_password", password)
-                                    .apply()
+                                sp.edit {
+                                    putBoolean(
+                                        "remember_me_login",
+                                        true
+                                    )
+                                    putString(
+                                        "remember_username",
+                                        username.trim()
+                                    )
+                                    putString(
+                                        "remember_password",
+                                        password
+                                    )
+                                }
                             } else {
-                                sp.edit()
-                                    .putBoolean("remember_me_login", false)
-                                    .remove("remember_username")
-                                    .remove("remember_password")
-                                    .apply()
+                                sp.edit {
+                                    putBoolean(
+                                        "remember_me_login",
+                                        false
+                                    )
+                                    remove("remember_username")
+                                    remove("remember_password")
+                                }
                             }
 
                             val role = if (isCoach) "coach" else "trainee"
@@ -867,42 +970,166 @@ fun ExistingUserTraineeScreen(
                                 )
                             }
 
-                            sp.edit()
-                                .putString("uid", resolvedLoginUid)
-                                .putString("profile_completed_uid", resolvedLoginUid)
-                                .putString("user_role", role)
-                                .putString("coach_code", if (role == "coach") resolvedCoachCode else "")
-                                .putString("coach_name", if (role == "coach") resolvedCoachName else "")
-                                .putBoolean("coach_authorized", role == "coach")
-                                .putBoolean("can_open_coach_drawer", role == "coach" && resolvedCanOpenCoachDrawer)
-                                .putBoolean("can_view_trainees", role == "coach" && resolvedCanViewTrainees)
-                                .putBoolean("can_manage_trainees", role == "coach" && resolvedCanManageTrainees)
-                                .putBoolean("can_manage_attendance", role == "coach" && resolvedCanManageAttendance)
-                                .putBoolean("can_manage_internal_exams", role == "coach" && resolvedCanManageInternalExams)
-                                .putBoolean("can_view_payment_reports", role == "coach" && resolvedCanViewPaymentReports)
-                                .putBoolean("can_manage_payments", role == "coach" && resolvedCanManagePayments)
-                                .putBoolean("can_send_broadcasts", role == "coach" && resolvedCanSendBroadcasts)
-                                .putBoolean("is_logged_in", true)
-                                .apply()
+                            sp.edit {
+                                putString(
+                                    "uid",
+                                    resolvedLoginUid
+                                )
+                                putString(
+                                    "profile_completed_uid",
+                                    resolvedLoginUid
+                                )
+                                putString(
+                                    "user_role",
+                                    role
+                                )
+                                putString(
+                                    "coach_code",
+                                    if (role == "coach") {
+                                        resolvedCoachCode
+                                    } else {
+                                        ""
+                                    }
+                                )
+                                putString(
+                                    "coach_name",
+                                    if (role == "coach") {
+                                        resolvedCoachName
+                                    } else {
+                                        ""
+                                    }
+                                )
+                                putBoolean(
+                                    "coach_authorized",
+                                    role == "coach"
+                                )
+                                putBoolean(
+                                    "can_open_coach_drawer",
+                                    role == "coach" &&
+                                            resolvedCanOpenCoachDrawer
+                                )
+                                putBoolean(
+                                    "can_view_trainees",
+                                    role == "coach" &&
+                                            resolvedCanViewTrainees
+                                )
+                                putBoolean(
+                                    "can_manage_trainees",
+                                    role == "coach" &&
+                                            resolvedCanManageTrainees
+                                )
+                                putBoolean(
+                                    "can_manage_attendance",
+                                    role == "coach" &&
+                                            resolvedCanManageAttendance
+                                )
+                                putBoolean(
+                                    "can_manage_internal_exams",
+                                    role == "coach" &&
+                                            resolvedCanManageInternalExams
+                                )
+                                putBoolean(
+                                    "can_view_payment_reports",
+                                    role == "coach" &&
+                                            resolvedCanViewPaymentReports
+                                )
+                                putBoolean(
+                                    "can_manage_payments",
+                                    role == "coach" &&
+                                            resolvedCanManagePayments
+                                )
+                                putBoolean(
+                                    "can_send_broadcasts",
+                                    role == "coach" &&
+                                            resolvedCanSendBroadcasts
+                                )
+                                putBoolean(
+                                    "is_logged_in",
+                                    true
+                                )
+                            }
 
-                            appCtx.getSharedPreferences("kmi_user", Context.MODE_PRIVATE)
-                                .edit()
-                                .putString("uid", resolvedLoginUid)
-                                .putString("profile_completed_uid", resolvedLoginUid)
-                                .putString("user_role", role)
-                                .putString("coach_code", if (role == "coach") resolvedCoachCode else "")
-                                .putString("coach_name", if (role == "coach") resolvedCoachName else "")
-                                .putBoolean("coach_authorized", role == "coach")
-                                .putBoolean("can_open_coach_drawer", role == "coach" && resolvedCanOpenCoachDrawer)
-                                .putBoolean("can_view_trainees", role == "coach" && resolvedCanViewTrainees)
-                                .putBoolean("can_manage_trainees", role == "coach" && resolvedCanManageTrainees)
-                                .putBoolean("can_manage_attendance", role == "coach" && resolvedCanManageAttendance)
-                                .putBoolean("can_manage_internal_exams", role == "coach" && resolvedCanManageInternalExams)
-                                .putBoolean("can_view_payment_reports", role == "coach" && resolvedCanViewPaymentReports)
-                                .putBoolean("can_manage_payments", role == "coach" && resolvedCanManagePayments)
-                                .putBoolean("can_send_broadcasts", role == "coach" && resolvedCanSendBroadcasts)
-                                .putBoolean("is_logged_in", true)
-                                .apply()
+                            appCtx.getSharedPreferences(
+                                "kmi_user",
+                                Context.MODE_PRIVATE
+                            ).edit {
+                                putString(
+                                    "uid",
+                                    resolvedLoginUid
+                                )
+                                putString(
+                                    "profile_completed_uid",
+                                    resolvedLoginUid
+                                )
+                                putString(
+                                    "user_role",
+                                    role
+                                )
+                                putString(
+                                    "coach_code",
+                                    if (role == "coach") {
+                                        resolvedCoachCode
+                                    } else {
+                                        ""
+                                    }
+                                )
+                                putString(
+                                    "coach_name",
+                                    if (role == "coach") {
+                                        resolvedCoachName
+                                    } else {
+                                        ""
+                                    }
+                                )
+                                putBoolean(
+                                    "coach_authorized",
+                                    role == "coach"
+                                )
+                                putBoolean(
+                                    "can_open_coach_drawer",
+                                    role == "coach" &&
+                                            resolvedCanOpenCoachDrawer
+                                )
+                                putBoolean(
+                                    "can_view_trainees",
+                                    role == "coach" &&
+                                            resolvedCanViewTrainees
+                                )
+                                putBoolean(
+                                    "can_manage_trainees",
+                                    role == "coach" &&
+                                            resolvedCanManageTrainees
+                                )
+                                putBoolean(
+                                    "can_manage_attendance",
+                                    role == "coach" &&
+                                            resolvedCanManageAttendance
+                                )
+                                putBoolean(
+                                    "can_manage_internal_exams",
+                                    role == "coach" &&
+                                            resolvedCanManageInternalExams
+                                )
+                                putBoolean(
+                                    "can_view_payment_reports",
+                                    role == "coach" &&
+                                            resolvedCanViewPaymentReports
+                                )
+                                putBoolean(
+                                    "can_manage_payments",
+                                    role == "coach" &&
+                                            resolvedCanManagePayments
+                                )
+                                putBoolean(
+                                    "can_send_broadcasts",
+                                    role == "coach" &&
+                                            resolvedCanSendBroadcasts
+                                )
+                                putBoolean(
+                                    "is_logged_in",
+                                    true
+                                )
+                            }
 
                             kmiPrefs.username = username
                             kmiPrefs.password = password
@@ -912,35 +1139,68 @@ fun ExistingUserTraineeScreen(
                     },
                     modifier = Modifier
                         .fillMaxWidth(fieldWidth)
-                        .defaultMinSize(minHeight = fieldHeight)
-                        .background(Color.White, shape = MaterialTheme.shapes.medium),
+                        .defaultMinSize(
+                            minHeight = fieldHeight
+                        ),
                     colors = ButtonDefaults.buttonColors(
-                        containerColor = Color.White,
-                        contentColor = Color.Black
+                        containerColor =
+                            MaterialTheme.colorScheme.surface,
+                        contentColor =
+                            MaterialTheme.colorScheme.onSurface
                     )
                 ) {
-                    Text(tr("התחבר", "Login"))
+                    Text(
+                        text = tr(
+                            "התחבר",
+                            "Login"
+                        ),
+                        style = KmiTypography.action.copy(
+                            fontWeight = FontWeight.Bold
+                        ),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
                 }
 
                 Column(
                     modifier = Modifier
                         .fillMaxWidth(fieldWidth),
                     horizontalAlignment = Alignment.End,
-                    verticalArrangement = Arrangement.spacedBy(-15.dp)
+                    verticalArrangement =
+                        Arrangement.spacedBy((-15).dp)
                 ) {
                     TextButton(
-                        onClick = { showRecoveryDialog = true },
+                        onClick = {
+                            showRecoveryDialog = true
+                        },
                         modifier = Modifier
                             .fillMaxWidth()
                             .heightIn(min = 0.dp),
-                        contentPadding = PaddingValues(horizontal = 0.dp, vertical = 0.dp),
-                        colors = ButtonDefaults.textButtonColors(contentColor = Color.White)
+                        contentPadding = PaddingValues(
+                            horizontal = 0.dp,
+                            vertical = 0.dp
+                        ),
+                        colors = ButtonDefaults.textButtonColors(
+                            contentColor = Color.White
+                        )
                     ) {
                         Text(
-                            tr("שכחתי סיסמה / שם משתמש", "Forgot password / username"),
+                            text = tr(
+                                "שכחתי סיסמה / שם משתמש",
+                                "Forgot password / username"
+                            ),
                             modifier = Modifier.fillMaxWidth(),
-                            textAlign = TextAlign.End,
-                            textDecoration = TextDecoration.Underline
+                            style = KmiTypography.caption,
+                            textAlign =
+                                if (isEnglish) {
+                                    TextAlign.Start
+                                } else {
+                                    TextAlign.End
+                                },
+                            textDecoration =
+                                TextDecoration.Underline,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
                         )
                     }
                 }
@@ -959,10 +1219,11 @@ fun ExistingUserTraineeScreen(
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
 
-                    Divider(
+                    HorizontalDivider(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(horizontal = 16.dp)
+                            .padding(horizontal = 16.dp),
+                        color = MaterialTheme.colorScheme.outlineVariant
                     )
 
                     Spacer(Modifier.height(6.dp))
@@ -972,11 +1233,13 @@ fun ExistingUserTraineeScreen(
                             "❤️ פותח באהבה ע\"י יובל פולק ❤️",
                             "❤️ Developed with love by Yuval Polak ❤️"
                         ),
-                        style = MaterialTheme.typography.bodyMedium.copy(
-                            fontSize = if (LocalConfiguration.current.screenWidthDp <= 360) 14.sp else 16.sp,
+                        style = KmiTypography.body.copy(
                             fontWeight = FontWeight.Bold
                         ),
-                        textAlign = TextAlign.Center
+                        textAlign = TextAlign.Center,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        color = MaterialTheme.colorScheme.onSurface
                     )
                 }
             }
@@ -1014,11 +1277,22 @@ private fun RecoveryDialog(
         },
         title = {
             Text(
-                text = tr("שחזור סיסמה", "Password Recovery"),
-                style = MaterialTheme.typography.titleLarge,
-                fontWeight = FontWeight.Bold,
-                textAlign = if (isEnglish) TextAlign.Start else TextAlign.Right,
-                modifier = Modifier.fillMaxWidth()
+                text = tr(
+                    "שחזור סיסמה",
+                    "Password Recovery"
+                ),
+                style = KmiTypography.screenTitle.copy(
+                    fontWeight = FontWeight.Bold
+                ),
+                textAlign =
+                    if (isEnglish) {
+                        TextAlign.Start
+                    } else {
+                        TextAlign.Right
+                    },
+                modifier = Modifier.fillMaxWidth(),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
             )
         },
         text = {
@@ -1031,8 +1305,13 @@ private fun RecoveryDialog(
                         "הזן את כתובת האימייל שאיתה נרשמת לאפליקציה. נשלח אליך מייל לאיפוס הסיסמה.",
                         "Enter the email address you used to register. We will send you a password reset email."
                     ),
-                    style = MaterialTheme.typography.bodyMedium,
-                    textAlign = if (isEnglish) TextAlign.Start else TextAlign.Right,
+                    style = KmiTypography.body,
+                    textAlign =
+                        if (isEnglish) {
+                            TextAlign.Start
+                        } else {
+                            TextAlign.Right
+                        },
                     modifier = Modifier.fillMaxWidth()
                 )
 
@@ -1045,13 +1324,24 @@ private fun RecoveryDialog(
                         errorText = null
                         successText = null
                     },
-                    label = { Text(tr("אימייל", "Email")) },
+                    label = {
+                        Text(
+                            text = tr(
+                                "אימייל",
+                                "Email"
+                            ),
+                            style = KmiTypography.caption
+                        )
+                    },
                     modifier = Modifier
                         .fillMaxWidth()
-                        .defaultMinSize(minHeight = 52.dp),
+                        .defaultMinSize(
+                            minHeight = 52.dp
+                        ),
                     singleLine = true,
                     enabled = !isSending,
                     isError = errorText != null,
+                    textStyle = KmiTypography.body,
                     keyboardOptions = KeyboardOptions(
                         keyboardType = KeyboardType.Email,
                         imeAction = ImeAction.Done
@@ -1064,8 +1354,15 @@ private fun RecoveryDialog(
                     Text(
                         text = errorText.orEmpty(),
                         color = MaterialTheme.colorScheme.error,
-                        style = MaterialTheme.typography.bodySmall,
-                        textAlign = if (isEnglish) TextAlign.Start else TextAlign.Right,
+                        style = KmiTypography.caption.copy(
+                            fontWeight = FontWeight.Bold
+                        ),
+                        textAlign =
+                            if (isEnglish) {
+                                TextAlign.Start
+                            } else {
+                                TextAlign.Right
+                            },
                         modifier = Modifier.fillMaxWidth()
                     )
                 }
@@ -1076,8 +1373,15 @@ private fun RecoveryDialog(
                     Text(
                         text = successText.orEmpty(),
                         color = Color(0xFF16A34A),
-                        style = MaterialTheme.typography.bodySmall,
-                        textAlign = if (isEnglish) TextAlign.Start else TextAlign.Right,
+                        style = KmiTypography.caption.copy(
+                            fontWeight = FontWeight.Bold
+                        ),
+                        textAlign =
+                            if (isEnglish) {
+                                TextAlign.Start
+                            } else {
+                                TextAlign.Right
+                            },
                         modifier = Modifier.fillMaxWidth()
                     )
                 }

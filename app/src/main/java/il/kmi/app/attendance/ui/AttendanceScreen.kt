@@ -48,6 +48,7 @@ import il.kmi.app.ui.KmiIconSize
 import il.kmi.app.ui.KmiPremiumDropdown
 import il.kmi.app.ui.KmiTopBar
 import il.kmi.app.ui.KmiTypography
+import il.yuval.ui.theme.kmiScreenBackgroundBrush
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.outlined.StarBorder
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -490,31 +491,14 @@ fun AttendanceScreen(
         contentWindowInsets = WindowInsets(left = 0)
     ) { p ->
 
-        // רקע גרדיאנט מודרני
+        /*
+         * שימוש ישיר ברקע הגלובלי של האפליקציה.
+         */
         Box(
             modifier = Modifier
                 .fillMaxSize()
                 .background(
-                    Brush.verticalGradient(
-                        colors =
-                            if (isDarkMode) {
-                                listOf(
-                                    MaterialTheme.colorScheme.background,
-                                    MaterialTheme.colorScheme.surface,
-                                    Color(0xFF10243A),
-                                    Color(0xFF0A3657),
-                                    Color(0xFF041E33)
-                                )
-                            } else {
-                                listOf(
-                                    Color(0xFFF8FBFF),
-                                    Color(0xFFEAF4FF),
-                                    Color(0xFFB7DDF7),
-                                    Color(0xFF1F78B4),
-                                    Color(0xFF062B4A)
-                                )
-                            }
-                    )
+                    brush = kmiScreenBackgroundBrush()
                 )
         ) {
             LazyColumn(

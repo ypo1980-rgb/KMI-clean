@@ -1,16 +1,12 @@
 package il.kmi.app.screens
 
+import android.app.Activity
 import android.content.Context
 import android.content.Intent
 import android.graphics.Paint
 import android.graphics.Typeface
 import android.graphics.pdf.PdfDocument
-import androidx.compose.animation.core.LinearEasing
-import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.infiniteRepeatable
-import androidx.compose.animation.core.rememberInfiniteTransition
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -33,15 +29,17 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.*
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.produceState
@@ -49,14 +47,14 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.core.content.FileProvider
 import androidx.core.graphics.ColorUtils
@@ -64,7 +62,11 @@ import il.kmi.app.KmiViewModel
 import il.kmi.app.ui.ext.color
 import il.kmi.app.ui.ext.lightColor
 import il.kmi.app.ui.KmiTypography
+import il.kmi.app.ui.loading.KmiLoadingRings
 import il.kmi.shared.domain.Belt
+import il.kmi.shared.localization.AppLanguage
+import il.kmi.shared.localization.AppLanguageManager
+import il.yuval.ui.theme.kmiScreenBackgroundBrush
 import il.kmi.shared.domain.content.ExerciseIdentityRegistry
 import il.kmi.shared.questions.model.util.ExerciseTitleFormatter
 import kotlinx.coroutines.Dispatchers
@@ -72,6 +74,9 @@ import kotlinx.coroutines.withContext
 import il.kmi.shared.domain.ContentRepo as SharedContentRepo
 import java.io.File
 import java.io.FileOutputStream
+
+
+//========================================================================
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -83,43 +88,30 @@ fun ProgressScreen(
 ) {
     val context = LocalContext.current
 
+    val languageManager =
+        remember(context) {
+            AppLanguageManager(context)
+        }
+
+    val isEnglish =
+        languageManager.getCurrentLanguage() ==
+                AppLanguage.ENGLISH
+
+    fun tr(
+        he: String,
+        en: String
+    ): String {
+        return if (isEnglish) {
+            en
+        } else {
+            he
+        }
+    }
+
     // === SP של ההחרגות בדיוק כמו במסך ההגדרות ===
     val spSettings = remember {
         context.getSharedPreferences("kmi_settings", Context.MODE_PRIVATE)
     }
-
-    // --- פונקציות עזר (נשארות מחוץ ל-produceState) ---
-    fun beltTitle(b: Belt): String = when (b) {
-        Belt.YELLOW -> "חגורה: צהובה"
-        Belt.ORANGE -> "חגורה: כתומה"
-        Belt.GREEN  -> "חגורה: ירוקה"
-        Belt.BLUE   -> "חגורה: כחולה"
-        Belt.BROWN  -> "חגורה: חומה"
-        Belt.BLACK  -> "חגורה: שחורה"
-        else        -> "חגורה"
-    }
-
-    // ✅ נרמול עברי (כדי לייצר מפתח עקבי, בדיוק כמו במסכי הסימון)
-    fun String.normHeb(): String = this
-        .replace("\u200F", "") // RLM
-        .replace("\u200E", "") // LRM
-        .replace("\u00A0", " ") // NBSP -> space
-        .replace(Regex("[\u0591-\u05C7]"), "") // ניקוד
-        .replace('\u05BE', '-') // מקאף עברי ־
-        .replace('\u2010', '-') // Hyphen
-        .replace('\u2011', '-') // Non-Breaking Hyphen
-        .replace('\u2012', '-') // Figure Dash
-        .replace('\u2013', '-') // En Dash
-        .replace('\u2014', '-') // Em Dash
-        .replace('\u2015', '-') // Horizontal Bar
-        .replace('\u2212', '-') // Minus
-        .replace(Regex("\\s*-\\s*"), "-")
-        .trim()
-        .replace(Regex("\\s+"), " ")
-        .lowercase()
-
-    fun canonicalKeyFor(rawItem: String): String =
-        ExerciseTitleFormatter.displayName(rawItem).trim().normHeb()
 
     fun normalizeStatusPart(s: String): String =
         s.replace("\u200F", "")
@@ -163,7 +155,6 @@ fun ProgressScreen(
     fun displayName(rawItem: String): String {
         val formatted = ExerciseTitleFormatter
             .displayName(rawItem)
-            .toString()
             .trim()
 
         return if (formatted.isNotBlank() && formatted != "null") {
@@ -377,14 +368,6 @@ fun ProgressScreen(
                             .trim()
                     }
 
-                val snapshotsByStatusTopicKey: Map<String, Map<String, Boolean?>> =
-                    uniqueProgressRows
-                        .map { row: ProgressExerciseRow -> row.statusTopicKey }
-                        .distinct()
-                        .associateWith { statusTopicKey: String ->
-                            vm.getTopicStatusSnapshot(belt, statusTopicKey)
-                        }
-
                 for (row in uniqueProgressRows) {
                     val rawItem = row.rawItem
                     val display = displayName(rawItem)
@@ -411,32 +394,6 @@ fun ProgressScreen(
                     }
 
                     total++
-
-                    val legacyStatusId =
-                        "status_${belt.id}_${row.statusTopicKey}_${row.indexInStatusGroup}_${normalizeStatusPart(rawItem)}"
-
-                    val canonicalId = il.kmi.app.domain.CanonicalIds.canonicalFor(
-                        belt = belt,
-                        topicTitle = row.sourceTopicTitle,
-                        displayItem = rawItem
-                    )
-
-                    val canonicalDisplayKey = canonicalKeyFor(rawItem)
-
-                    val statusKeys = listOf(
-                        identityStatusId,
-                        legacyStatusId,
-                        canonicalId,
-                        rawItem,
-                        display,
-                        canonicalDisplayKey
-                    )
-                        .map { key: String -> key.trim() }
-                        .filter { key: String -> key.isNotBlank() }
-                        .distinct()
-
-                    val topicSnap: Map<String, Boolean?> =
-                        snapshotsByStatusTopicKey[row.statusTopicKey].orEmpty()
 
                     val summaryTopicSnap: Map<String, Boolean?> =
                         vm.getTopicStatusSnapshot(
@@ -500,47 +457,64 @@ fun ProgressScreen(
         }
     }
 
-    val isDarkMode =
-        MaterialTheme.colorScheme.background
-            .luminance() < 0.5f
-
     val screenBackgroundBrush =
-        Brush.verticalGradient(
-            colors =
-                if (isDarkMode) {
-                    listOf(
-                        MaterialTheme.colorScheme.background,
-                        MaterialTheme.colorScheme.surface,
-                        Color(0xFF10243A),
-                        Color(0xFF0A3657),
-                        Color(0xFF041E33)
-                    )
-                } else {
-                    listOf(
-                        Color(0xFFF8FBFF),
-                        Color(0xFFEAF4FF),
-                        Color(0xFFB7DDF7),
-                        Color(0xFF1F78B4),
-                        Color(0xFF062B4A)
-                    )
-                }
-        )
+        kmiScreenBackgroundBrush()
 
-    Scaffold(
-        topBar = {
+    val screenLayoutDirection =
+        if (isEnglish) {
+            LayoutDirection.Ltr
+        } else {
+            LayoutDirection.Rtl
+        }
+
+    CompositionLocalProvider(
+        LocalLayoutDirection provides
+                screenLayoutDirection
+    ) {
+        Scaffold(
+            topBar = {
             il.kmi.app.ui.KmiTopBar(
-                title = "מד התקדמות",
+                title = tr(
+                    "מד התקדמות",
+                    "Progress"
+                ),
                 onBack = null,
                 onHome = onHome,
                 showTopHome = false,
-                showTopShare = false,
+                showTopShare = true,
+                currentLang =
+                    if (isEnglish) {
+                        "en"
+                    } else {
+                        "he"
+                    },
+                onToggleLanguage = {
+                    val newLanguage =
+                        if (isEnglish) {
+                            AppLanguage.HEBREW
+                        } else {
+                            AppLanguage.ENGLISH
+                        }
+
+                    languageManager.setLanguage(
+                        newLanguage
+                    )
+
+                    (context as? Activity)
+                        ?.recreate()
+                },
                 onShare = {
                     val pdfFile = createProgressPdf(
-                        dir = File(context.cacheDir, "pdfs").apply { mkdirs() },
+                        dir = File(
+                            context.cacheDir,
+                            "pdfs"
+                        ).apply {
+                            mkdirs()
+                        },
                         progress = beltsData.associate { row ->
                             row.belt to row.percent
                         },
-                        context = context
+                        isEnglish = isEnglish
                     )
 
                     val uri = FileProvider.getUriForFile(
@@ -549,17 +523,37 @@ fun ProgressScreen(
                         pdfFile
                     )
 
-                    val sendIntent = Intent(Intent.ACTION_SEND).apply {
-                        type = "application/pdf"
-                        putExtra(Intent.EXTRA_SUBJECT, "מד התקדמות - KAMI")
-                        putExtra(Intent.EXTRA_STREAM, uri)
-                        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                    }
+                    val sendIntent =
+                        Intent(
+                            Intent.ACTION_SEND
+                        ).apply {
+                            type = "application/pdf"
+
+                            putExtra(
+                                Intent.EXTRA_SUBJECT,
+                                tr(
+                                    "מד התקדמות - KAMI",
+                                    "Progress Report - KAMI"
+                                )
+                            )
+
+                            putExtra(
+                                Intent.EXTRA_STREAM,
+                                uri
+                            )
+
+                            addFlags(
+                                Intent.FLAG_GRANT_READ_URI_PERMISSION
+                            )
+                        }
 
                     context.startActivity(
                         Intent.createChooser(
                             sendIntent,
-                            "שיתוף PDF"
+                            tr(
+                                "שיתוף PDF",
+                                "Share PDF"
+                            )
                         )
                     )
                 }
@@ -583,17 +577,31 @@ fun ProgressScreen(
                             )
                             .heightIn(min = 52.dp),
                         shape = RoundedCornerShape(18.dp),
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = Color(0xFF1F2937),
-                            contentColor = Color.White
-                        )
+                        colors =
+                            ButtonDefaults.buttonColors(
+                                containerColor =
+                                    MaterialTheme
+                                        .colorScheme
+                                        .primary,
+                                contentColor =
+                                    MaterialTheme
+                                        .colorScheme
+                                        .onPrimary
+                            )
                     ) {
                         Text(
-                            text = "מעבר למסך התרגילים",
-                            style = KmiTypography.action.copy(
-                                fontWeight = FontWeight.ExtraBold
-                            ),
-                            textAlign = TextAlign.Center,
+                            text =
+                                tr(
+                                    "מעבר למסך התרגילים",
+                                    "Go to Exercises"
+                                ),
+                            style =
+                                KmiTypography.action.copy(
+                                    fontWeight =
+                                        FontWeight.ExtraBold
+                                ),
+                            textAlign =
+                                TextAlign.Center,
                             maxLines = 2
                         )
                     }
@@ -620,21 +628,20 @@ fun ProgressScreen(
                         horizontalAlignment = Alignment.CenterHorizontally,
                         verticalArrangement = Arrangement.spacedBy(14.dp)
                     ) {
-                        PremiumProgressLoading()
-
-                        Text(
-                            text = "טוען נתוני התקדמות...",
-                            style = KmiTypography.sectionTitle,
-                            color =
-                                MaterialTheme
-                                    .colorScheme
-                                    .onBackground,
-                            textAlign = TextAlign.Center,
-                            maxLines = 2
+                        KmiLoadingRings(
+                            text =
+                                tr(
+                                    "טוען נתוני התקדמות...",
+                                    "Loading progress..."
+                                )
                         )
 
                         Text(
-                            text = "מסדר את נתוני החגורות שלך",
+                            text =
+                                tr(
+                                    "מסדר את נתוני החגורות שלך",
+                                    "Preparing your belt data"
+                                ),
                             style = KmiTypography.secondary.copy(
                                 fontWeight = FontWeight.SemiBold
                             ),
@@ -660,146 +667,16 @@ fun ProgressScreen(
                             belt = row.belt,
                             percent = row.percent,
                             done = row.done,
-                            total = row.total
+                            total = row.total,
+                            isEnglish = isEnglish
                         )
                     }
                 }
             }
         }
-    }
-}
-
-@Composable
-private fun PremiumProgressLoading() {
-    val infiniteTransition = rememberInfiniteTransition(
-        label = "premiumProgressLoading"
-    )
-
-    val outerRotation by infiniteTransition.animateFloat(
-        initialValue = 0f,
-        targetValue = 360f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(
-                durationMillis = 1350,
-                easing = LinearEasing
-            )
-        ),
-        label = "premiumProgressOuterRotation"
-    )
-
-    val innerRotation by infiniteTransition.animateFloat(
-        initialValue = 360f,
-        targetValue = 0f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(
-                durationMillis = 1850,
-                easing = LinearEasing
-            )
-        ),
-        label = "premiumProgressInnerRotation"
-    )
-
-    Box(
-        modifier = Modifier.size(96.dp),
-        contentAlignment = Alignment.Center
-    ) {
-        Box(
-            modifier = Modifier
-                .size(88.dp)
-                .graphicsLayer {
-                    rotationZ = outerRotation
-                }
-                .border(
-                    width = 5.dp,
-                    brush = Brush.sweepGradient(
-                        colors = listOf(
-                            Color.Transparent,
-                            Color(0xFF7C3AED),
-                            Color(0xFF38BDF8),
-                            Color.Transparent
-                        )
-                    ),
-                    shape = CircleShape
-                )
-        )
-
-        Box(
-            modifier = Modifier
-                .size(62.dp)
-                .graphicsLayer {
-                    rotationZ = innerRotation
-                }
-                .border(
-                    width = 4.dp,
-                    brush = Brush.sweepGradient(
-                        colors = listOf(
-                            Color.Transparent,
-                            Color(0xFFF59E0B),
-                            Color(0xFF22C55E),
-                            Color.Transparent
-                        )
-                    ),
-                    shape = CircleShape
-                )
-        )
-
-        val isDarkMode =
-            MaterialTheme.colorScheme.background
-                .luminance() < 0.5f
-
-        Surface(
-            modifier = Modifier.size(26.dp),
-            shape = CircleShape,
-            color =
-                MaterialTheme
-                    .colorScheme
-                    .surface,
-            tonalElevation = 0.dp,
-            shadowElevation = 0.dp,
-            border = BorderStroke(
-                width = 1.dp,
-                color =
-                    Color(0xFF7C3AED)
-                        .copy(
-                            alpha =
-                                if (isDarkMode) {
-                                    0.65f
-                                } else {
-                                    0.30f
-                                }
-                        )
-            )
-        ) {
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .background(
-                        brush =
-                            Brush.radialGradient(
-                                colors =
-                                    if (isDarkMode) {
-                                        listOf(
-                                            MaterialTheme
-                                                .colorScheme
-                                                .surfaceVariant,
-                                            Color(0xFF312E81),
-                                            MaterialTheme
-                                                .colorScheme
-                                                .surface
-                                        )
-                                    } else {
-                                        listOf(
-                                            Color(0xFFFFFFFF),
-                                            Color(0xFFF3E8FF),
-                                            Color(0xFFE0F2FE)
-                                        )
-                                    }
-                            ),
-                        shape = CircleShape
-                    )
-            )
         }
     }
+
 }
 
 @Composable
@@ -807,7 +684,8 @@ private fun ProgressCard(
     belt: Belt,
     percent: Int,
     done: Int,
-    total: Int
+    total: Int,
+    isEnglish: Boolean
 ) {
     val progressAnim by animateFloatAsState(
         targetValue = if (total == 0) 0f else done.toFloat() / total.toFloat(),
@@ -885,14 +763,27 @@ private fun ProgressCard(
 
                 Text(
                     text =
-                        "חגורה: ${
-                            belt.heb
-                                .removePrefix("חגורה")
-                                .trim()
-                        }",
+                        if (isEnglish) {
+                            "Belt: ${
+                                belt.en
+                                    .removePrefix("Belt")
+                                    .trim()
+                            }"
+                        } else {
+                            "חגורה: ${
+                                belt.heb
+                                    .removePrefix("חגורה")
+                                    .trim()
+                            }"
+                        },
                     style = KmiTypography.sectionTitle,
                     color = readableBeltColor,
-                    textAlign = TextAlign.Right,
+                    textAlign =
+                        if (isEnglish) {
+                            TextAlign.Left
+                        } else {
+                            TextAlign.Right
+                        },
                     maxLines = 1,
                     modifier = Modifier.weight(1f)
                 )
@@ -927,13 +818,29 @@ private fun ProgressCard(
             Spacer(Modifier.height(6.dp))
 
             Text(
-                text = "($done מתוך $total)",
-                style = KmiTypography.body.copy(
-                    fontWeight = FontWeight.SemiBold
-                ),
-                textAlign = TextAlign.Right,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.fillMaxWidth()
+                text =
+                    if (isEnglish) {
+                        "($done of $total)"
+                    } else {
+                        "($done מתוך $total)"
+                    },
+                style =
+                    KmiTypography.body.copy(
+                        fontWeight =
+                            FontWeight.SemiBold
+                    ),
+                textAlign =
+                    if (isEnglish) {
+                        TextAlign.Left
+                    } else {
+                        TextAlign.Right
+                    },
+                color =
+                    MaterialTheme
+                        .colorScheme
+                        .onSurfaceVariant,
+                modifier =
+                    Modifier.fillMaxWidth()
             )
         }
     }
@@ -943,8 +850,19 @@ private fun ProgressCard(
 fun createProgressPdf(
     dir: File,
     progress: Map<Belt, Int>,
-    context: Context
+    isEnglish: Boolean
 ): File {
+    fun tr(
+        he: String,
+        en: String
+    ): String {
+        return if (isEnglish) {
+            en
+        } else {
+            he
+        }
+    }
+
     val pageWidth = 595
     val pageHeight = 842
     val margin = 24f
@@ -1087,20 +1005,73 @@ fun createProgressPdf(
 
         drawKmiLogo(78f, 58f, 42f)
 
-        titlePaint.textAlign = Paint.Align.RIGHT
-        subTitlePaint.textAlign = Paint.Align.RIGHT
+        val headerTextAlign =
+            if (isEnglish) {
+                Paint.Align.LEFT
+            } else {
+                Paint.Align.RIGHT
+            }
 
-        canvas.drawText("מד התקדמות", pageWidth - 34f, 52f, titlePaint)
-        canvas.drawText("דו״ח התקדמות אישי לפי חגורות", pageWidth - 34f, 78f, subTitlePaint)
+        val headerTextX =
+            if (isEnglish) {
+                156f
+            } else {
+                pageWidth - 34f
+            }
 
-        smallPaint.textAlign = Paint.Align.RIGHT
+        titlePaint.textAlign =
+            headerTextAlign
+
+        subTitlePaint.textAlign =
+            headerTextAlign
+
         canvas.drawText(
-            "תאריך הפקה: " +
-                    java.text.SimpleDateFormat(
-                        "dd/MM/yyyy",
-                        java.util.Locale("he", "IL")
-                    ).format(java.util.Date()),
-            pageWidth - 34f,
+            tr(
+                "מד התקדמות",
+                "Progress"
+            ),
+            headerTextX,
+            52f,
+            titlePaint
+        )
+
+        canvas.drawText(
+            tr(
+                "דו״ח התקדמות אישי לפי חגורות",
+                "Personal Progress Report by Belt"
+            ),
+            headerTextX,
+            78f,
+            subTitlePaint
+        )
+
+        smallPaint.textAlign =
+            headerTextAlign
+
+        val reportLocale =
+            if (isEnglish) {
+                java.util.Locale.ENGLISH
+            } else {
+                java.util.Locale(
+                    "he",
+                    "IL"
+                )
+            }
+
+        val reportDate =
+            java.text.SimpleDateFormat(
+                "dd/MM/yyyy",
+                reportLocale
+            ).format(
+                java.util.Date()
+            )
+
+        canvas.drawText(
+            tr(
+                "תאריך הפקה: $reportDate",
+                "Generated: $reportDate"
+            ),
+            headerTextX,
             142f,
             smallPaint
         )
@@ -1121,8 +1092,18 @@ fun createProgressPdf(
         smallPaint.textAlign = Paint.Align.LEFT
         canvas.drawText("Together We Protect", 62f, footerY + 25f, smallPaint)
 
-        smallPaint.textAlign = Paint.Align.CENTER
-        canvas.drawText("עמוד 1 מתוך 1", pageWidth / 2f, footerY + 25f, smallPaint)
+        smallPaint.textAlign =
+            Paint.Align.CENTER
+
+        canvas.drawText(
+            tr(
+                "עמוד 1 מתוך 1",
+                "Page 1 of 1"
+            ),
+            pageWidth / 2f,
+            footerY + 25f,
+            smallPaint
+        )
 
         smallPaint.textAlign = Paint.Align.RIGHT
         canvas.drawText("Krav Maga Israel", pageWidth - 66f, footerY + 18f, smallPaint)
@@ -1137,7 +1118,10 @@ fun createProgressPdf(
     }
 
     fun drawSummary(top: Float): Float {
-        val beltsToShow = Belt.values().filter { it != Belt.WHITE }
+        val beltsToShow =
+            Belt.entries.filter { belt ->
+                belt != Belt.WHITE
+            }
         val avg = if (beltsToShow.isNotEmpty()) {
             beltsToShow.map { belt -> (progress[belt] ?: 0).coerceIn(0, 100) }.average().toInt()
         } else {
@@ -1162,16 +1146,72 @@ fun createProgressPdf(
             stroke = true
         )
 
-        sectionPaint.textAlign = Paint.Align.RIGHT
-        canvas.drawText("סיכום כללי", pageWidth - margin - 22f, top + 32f, sectionPaint)
+        val summaryTextAlign =
+            if (isEnglish) {
+                Paint.Align.LEFT
+            } else {
+                Paint.Align.RIGHT
+            }
 
-        labelPaint.textAlign = Paint.Align.RIGHT
-        canvas.drawText("אחוז התקדמות ממוצע:", pageWidth - margin - 22f, top + 58f, labelPaint)
+        val summaryTextX =
+            if (isEnglish) {
+                margin + 22f
+            } else {
+                pageWidth - margin - 22f
+            }
 
-        boldValuePaint.textAlign = Paint.Align.LEFT
+        val summaryValueAlign =
+            if (isEnglish) {
+                Paint.Align.RIGHT
+            } else {
+                Paint.Align.LEFT
+            }
+
+        val summaryValueX =
+            if (isEnglish) {
+                pageWidth - margin - 28f
+            } else {
+                margin + 28f
+            }
+
+        sectionPaint.textAlign =
+            summaryTextAlign
+
+        canvas.drawText(
+            tr(
+                "סיכום כללי",
+                "Overall Summary"
+            ),
+            summaryTextX,
+            top + 32f,
+            sectionPaint
+        )
+
+        labelPaint.textAlign =
+            summaryTextAlign
+
+        canvas.drawText(
+            tr(
+                "אחוז התקדמות ממוצע:",
+                "Average progress:"
+            ),
+            summaryTextX,
+            top + 58f,
+            labelPaint
+        )
+
+        boldValuePaint.textAlign =
+            summaryValueAlign
+
         boldValuePaint.textSize = 24f
         boldValuePaint.color = navy
-        canvas.drawText("$avg%", margin + 28f, top + 56f, boldValuePaint)
+
+        canvas.drawText(
+            "$avg%",
+            summaryValueX,
+            top + 56f,
+            boldValuePaint
+        )
 
         boldValuePaint.textSize = 13f
         boldValuePaint.color = textDark
@@ -1186,7 +1226,6 @@ fun createProgressPdf(
         index: Int
     ): Float {
         val cardHeight = 78f
-        val cardLeft = margin
         val cardRight = pageWidth - margin
         val cardBottom = top + cardHeight
 
@@ -1194,7 +1233,7 @@ fun createProgressPdf(
         val beltLight = beltPdfLightColor(belt)
 
         drawRoundRect(
-            cardLeft,
+            margin,
             top,
             cardRight,
             cardBottom,
@@ -1202,7 +1241,7 @@ fun createProgressPdf(
             12f
         )
         drawRoundRect(
-            cardLeft,
+            margin,
             top,
             cardRight,
             cardBottom,
@@ -1212,12 +1251,47 @@ fun createProgressPdf(
             strokeWidth = 1.6f
         )
 
-        val title = "חגורה: ${belt.heb.removePrefix("חגורה").trim()}"
+        val title =
+            if (isEnglish) {
+                "Belt: ${
+                    belt.en
+                        .removePrefix("Belt")
+                        .trim()
+                }"
+            } else {
+                "חגורה: ${
+                    belt.heb
+                        .removePrefix("חגורה")
+                        .trim()
+                }"
+            }
 
-        sectionPaint.textAlign = Paint.Align.RIGHT
+        val cardTextAlign =
+            if (isEnglish) {
+                Paint.Align.LEFT
+            } else {
+                Paint.Align.RIGHT
+            }
+
+        val cardTextX =
+            if (isEnglish) {
+                margin + 22f
+            } else {
+                cardRight - 22f
+            }
+
+        sectionPaint.textAlign =
+            cardTextAlign
+
         sectionPaint.textSize = 15f
         sectionPaint.color = beltColor
-        canvas.drawText(title, cardRight - 22f, top + 28f, sectionPaint)
+
+        canvas.drawText(
+            title,
+            cardTextX,
+            top + 28f,
+            sectionPaint
+        )
 
         sectionPaint.textSize = 17f
         sectionPaint.color = blue
@@ -1228,7 +1302,7 @@ fun createProgressPdf(
         }
         canvas.drawCircle(cardRight - 22f, top + 48f, 5.5f, dotPaint)
 
-        val percentCircleX = cardLeft + 42f
+        val percentCircleX = margin + 42f
         val percentCircleY = top + 31f
 
         val circlePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
@@ -1238,7 +1312,7 @@ fun createProgressPdf(
         canvas.drawCircle(percentCircleX, percentCircleY, 23f, circlePaint)
         drawCenteredText("$pct%", percentCircleX, percentCircleY, percentPaint)
 
-        val barLeft = cardLeft + 22f
+        val barLeft = margin + 22f
         val barRight = cardRight - 22f
         val barTop = top + 52f
         val barBottom = barTop + 10f
@@ -1264,11 +1338,26 @@ fun createProgressPdf(
             )
         }
 
-        valuePaint.textAlign = Paint.Align.RIGHT
-        valuePaint.color = textDark
+        valuePaint.textAlign =
+            if (isEnglish) {
+                Paint.Align.LEFT
+            } else {
+                Paint.Align.RIGHT
+            }
+
+        valuePaint.color =
+            textDark
+
         canvas.drawText(
-            "$pct% התקדמות לפי פריטים שסומנו באפליקציה",
-            barRight,
+            tr(
+                "$pct% התקדמות לפי פריטים שסומנו באפליקציה",
+                "$pct% progress based on marked items"
+            ),
+            if (isEnglish) {
+                barLeft
+            } else {
+                barRight
+            },
             cardBottom - 8f,
             valuePaint
         )
@@ -1281,12 +1370,25 @@ fun createProgressPdf(
     var y = 136f
     y = drawSummary(y)
 
-    sectionPaint.textAlign = Paint.Align.CENTER
-    canvas.drawText("פירוט לפי חגורות", pageWidth / 2f, y, sectionPaint)
+    sectionPaint.textAlign =
+        Paint.Align.CENTER
+
+    canvas.drawText(
+        tr(
+            "פירוט לפי חגורות",
+            "Progress by Belt"
+        ),
+        pageWidth / 2f,
+        y,
+        sectionPaint
+    )
 
     y += 24f
 
-    val beltsToShow = Belt.values().filter { it != Belt.WHITE }
+    val beltsToShow =
+        Belt.entries.filter { belt ->
+            belt != Belt.WHITE
+        }
 
     beltsToShow.forEachIndexed { index, belt ->
         val pct = (progress[belt] ?: 0).coerceIn(0, 100)
@@ -1305,8 +1407,20 @@ fun createProgressPdf(
 
     document.finishPage(page)
 
-    val file = File(dir, "progress_report_${System.currentTimeMillis()}.pdf")
-    FileOutputStream(file).use { output ->
+    val file =
+        File(
+            dir,
+            if (isEnglish) {
+                "Progress Report.pdf"
+            } else {
+                "דוח התקדמות.pdf"
+            }
+        )
+
+    FileOutputStream(
+        file,
+        false
+    ).use { output ->
         document.writeTo(output)
     }
 

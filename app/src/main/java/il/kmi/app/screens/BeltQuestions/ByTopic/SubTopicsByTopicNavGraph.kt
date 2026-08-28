@@ -8,8 +8,7 @@ import androidx.navigation.compose.composable
 import androidx.navigation.navArgument
 import il.kmi.app.KmiViewModel
 import il.kmi.app.Route
-import il.kmi.app.screens.BeltQuestions.SubTopics.SubTopicsScreen
-import il.kmi.app.screens.BeltQuestions.SubTopics.SubTopicsSourceMode
+import il.kmi.app.screens.BeltQuestions.subtopics.SubTopicsScreen
 import il.kmi.shared.domain.Belt
 import il.kmi.shared.domain.content.HardSectionsCatalog
 
@@ -103,9 +102,6 @@ fun NavGraphBuilder.subTopicsByTopicNavGraph(
         SubTopicsScreen(
             belt = belt,
             topic = topic,
-            onBack = {
-                nav.popBackStack()
-            },
             onHome = {
                 nav.navigate(Route.Home.route) {
                     popUpTo(Route.Home.route) {
@@ -120,35 +116,16 @@ fun NavGraphBuilder.subTopicsByTopicNavGraph(
                     belt = belt,
                     topic = topic,
                     subTopic = subTitle
-                ) ?: return@SubTopicsScreen
-
-                nav.navigate(route) {
-                    launchSingleTop = true
-                    restoreState = true
-                }
-            },
-            onOpenExercise = { itemName ->
-                val route = Route.Exercise.make(itemName)
-
-                nav.navigate(route) {
-                    launchSingleTop = true
-                    restoreState = true
-                }
-            },
-            onOpenPdfMaterials = { selectedBelt, selectedTopic ->
-                val route = Route.Materials.make(
-                    belt = selectedBelt,
-                    topic = selectedTopic
                 )
 
-                nav.navigate(route) {
-                    launchSingleTop = true
-                    restoreState = false
+                if (route != null) {
+                    nav.navigate(route) {
+                        launchSingleTop = true
+                        restoreState = true
+                    }
                 }
             },
             vm = vm,
-            sourceMode =
-                SubTopicsSourceMode.BY_TOPIC,
             isCoach = isCoach
         )
     }
