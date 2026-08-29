@@ -31,7 +31,6 @@ import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Email
-import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -93,7 +92,6 @@ import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.rounded.NearMe
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -102,15 +100,22 @@ import il.kmi.shared.localization.AppLanguage
 import il.kmi.shared.localization.AppLanguageManager
 import il.kmi.app.database.KmiDatabaseProvider
 import il.kmi.app.domain.ExerciseExplanationResolver
+import il.kmi.app.privacy.DemoPrivacy
 import il.kmi.app.training.TrainingCatalog
 import il.kmi.app.screens.registration.CoachBranchAssignmentsCodec
+import il.kmi.app.ui.KmiIconSize
 import il.kmi.app.ui.KmiTopBar
 import il.kmi.app.ui.KmiTypography
-import il.kmi.app.ui.pdf.KmiPdfHeader
+import il.kmi.app.ui.pdf.KmiPdfDirection
+import il.kmi.app.ui.scaledIconSize
 import il.kmi.app.ui.pdf.KmiPdfFooter
+import il.kmi.app.ui.pdf.KmiPdfHeader
 import il.kmi.shared.domain.content.ExerciseTitlesEn
+import il.yuval.ui.theme.kmiGraniteActionBrush
+import il.yuval.ui.theme.kmiGraniteActionHighlightColor
 import il.yuval.ui.theme.kmiScreenBackgroundBrush
 import il.yuval.ui.theme.kmiSectionHeaderBrush
+import il.yuval.ui.theme.kmiSectionHeaderContentColor
 import kotlinx.coroutines.delay
 import org.json.JSONArray
 import java.text.SimpleDateFormat
@@ -124,7 +129,6 @@ import java.util.TimeZone
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.zIndex
-import il.kmi.app.ui.LocalAppIconScale
 import kotlin.time.Duration.Companion.seconds
 
 //=================================================================================
@@ -153,6 +157,145 @@ private data class CoachHomeMessage(
     val branch: String,
     val group: String
 )
+
+/**
+ * מחזיר את שם המאמן שמותר להציג.
+ *
+ * הנתון האמיתי נשמר ללא שינוי ב־Firestore,
+ * ב־SharedPreferences ובמודלים הפנימיים.
+ */
+private fun homeCoachDisplayName(
+    realName: String?,
+    isEnglish: Boolean
+): String {
+    if (DemoPrivacy.isEnabled()) {
+        return if (isEnglish) {
+            "Coach"
+        } else {
+            "מאמן"
+        }
+    }
+
+    return realName
+        ?.trim()
+        .orEmpty()
+        .ifBlank {
+            if (isEnglish) {
+                "Coach"
+            } else {
+                "המאמן"
+            }
+        }
+}
+
+/**
+ * קורא את החגורה הפעילה בלי לשנות נתונים שמורים.
+ */
+private fun resolveHomeActiveBelt(
+    userSp: SharedPreferences,
+    legacySp: SharedPreferences,
+    settingsSp: SharedPreferences
+): Belt {
+    val rawBelt =
+        listOf(
+            userSp.getString(
+                "current_belt",
+                null
+            ),
+            userSp.getString(
+                "belt_current",
+                null
+            ),
+            userSp.getString(
+                "belt",
+                null
+            ),
+            legacySp.getString(
+                "current_belt",
+                null
+            ),
+            legacySp.getString(
+                "belt_current",
+                null
+            ),
+            legacySp.getString(
+                "belt",
+                null
+            ),
+            settingsSp.getString(
+                "current_belt",
+                null
+            ),
+            settingsSp.getString(
+                "belt",
+                null
+            )
+        )
+            .firstOrNull {
+                !it.isNullOrBlank()
+            }
+            ?.trim()
+            .orEmpty()
+
+    return Belt.fromId(rawBelt)
+        ?: Belt.entries.firstOrNull { belt ->
+            belt.id.equals(
+                rawBelt,
+                ignoreCase = true
+            ) ||
+                    belt.heb.equals(
+                        rawBelt,
+                        ignoreCase = true
+                    ) ||
+                    belt.en.equals(
+                        rawBelt,
+                        ignoreCase = true
+                    )
+        }
+        ?: Belt.WHITE
+}
+
+/**
+ * מתאים חגורה בהירה או שחורה למצב התצוגה,
+ * תוך שמירה על גוון החגורה המקורי.
+ */
+@Composable
+private fun readableHomeBeltAccent(
+    beltColor: Color
+): Color {
+    val colorScheme =
+        MaterialTheme.colorScheme
+
+    val isDarkMode =
+        colorScheme
+            .background
+            .luminance() < 0.5f
+
+    return when {
+        beltColor.luminance() > 0.72f -> {
+            lerp(
+                beltColor,
+                if (isDarkMode) {
+                    colorScheme.surface
+                } else {
+                    colorScheme.onSurface
+                },
+                0.34f
+            )
+        }
+
+        beltColor.luminance() < 0.12f &&
+                isDarkMode -> {
+            lerp(
+                beltColor,
+                colorScheme.onSurface,
+                0.38f
+            )
+        }
+
+        else -> beltColor
+    }
+}
 
 @Composable
 private fun TrainingsWeekHeader(
@@ -225,7 +368,8 @@ private fun TrainingsWeekHeader(
                     KmiTypography.secondary.copy(
                         fontWeight = FontWeight.Bold
                     ),
-                color = Color.White,
+                color =
+                    kmiSectionHeaderContentColor(),
                 textAlign = TextAlign.Center,
                 maxLines = 1
             )
@@ -241,7 +385,8 @@ private fun TrainingsWeekHeader(
                     },
                 style = KmiTypography.caption,
                 color =
-                    Color.White.copy(alpha = 0.92f),
+                    kmiSectionHeaderContentColor()
+                        .copy(alpha = 0.92f),
                 textAlign = TextAlign.Center,
                 maxLines = 1
             )
@@ -262,6 +407,7 @@ fun HomeScreen(
     onOpenFreeSessions: (String, String, String, String) -> Unit,
     onOpenMonthlyCalendar: () -> Unit,
     onOpenTrainingSummary: () -> Unit,
+    onOpenTrainingArchive: () -> Unit,
     onOpenTrainingManagement: () -> Unit
 ) {
     val haptic = rememberHapticsGlobal()
@@ -269,11 +415,6 @@ fun HomeScreen(
 
     // 🔵 מצב לדיאלוג העוזר האישי (AI)
     var showAiDialog by rememberSaveable {
-        mutableStateOf(false)
-    }
-
-    // 🗂️ מצב חלון ארכיון האימונים
-    var showTrainingArchive by rememberSaveable {
         mutableStateOf(false)
     }
 
@@ -292,15 +433,6 @@ fun HomeScreen(
             )
         }
 
-    var openArchiveFromVoice by remember {
-        mutableStateOf(
-            voiceHomeActionsPrefs.getBoolean(
-                "open_training_archive",
-                false
-            )
-        )
-    }
-
     var openFreeTrainingsFromVoice by remember {
         mutableStateOf(
             voiceHomeActionsPrefs.getBoolean(
@@ -317,14 +449,6 @@ fun HomeScreen(
                     key ->
 
                 when (key) {
-                    "open_training_archive" -> {
-                        openArchiveFromVoice =
-                            preferences.getBoolean(
-                                key,
-                                false
-                            )
-                    }
-
                     "open_free_trainings" -> {
                         openFreeTrainingsFromVoice =
                             preferences.getBoolean(
@@ -348,19 +472,6 @@ fun HomeScreen(
         }
     }
 
-    LaunchedEffect(openArchiveFromVoice) {
-        if (openArchiveFromVoice) {
-            voiceHomeActionsPrefs.edit {
-                putBoolean(
-                    "open_training_archive",
-                    false
-                )
-            }
-
-            openArchiveFromVoice = false
-            showTrainingArchive = true
-        }
-    }
     val contextLang = LocalContext.current
     val langManager = remember { AppLanguageManager(contextLang) }
     val isEnglish = langManager.getCurrentLanguage() == AppLanguage.ENGLISH
@@ -503,12 +614,61 @@ fun HomeScreen(
             val listState = rememberLazyListState()
 
             val ctx = LocalContext.current
-            val userSp = remember { ctx.getSharedPreferences("kmi_user", Context.MODE_PRIVATE) }
-            val subsSp = remember { ctx.getSharedPreferences("kmi_subs", Context.MODE_PRIVATE) }
-            val legacySp = remember { ctx.getSharedPreferences("kmi_prefs", Context.MODE_PRIVATE) }
-            val settingsSp = remember { ctx.getSharedPreferences("kmi_settings", Context.MODE_PRIVATE) }
+            val userSp =
+                remember {
+                    ctx.getSharedPreferences(
+                        "kmi_user",
+                        Context.MODE_PRIVATE
+                    )
+                }
 
-            var homeAccessRefreshTick by remember { mutableIntStateOf(0) }
+            val subsSp =
+                remember {
+                    ctx.getSharedPreferences(
+                        "kmi_subs",
+                        Context.MODE_PRIVATE
+                    )
+                }
+
+            val legacySp =
+                remember {
+                    ctx.getSharedPreferences(
+                        "kmi_prefs",
+                        Context.MODE_PRIVATE
+                    )
+                }
+
+            val settingsSp =
+                remember {
+                    ctx.getSharedPreferences(
+                        "kmi_settings",
+                        Context.MODE_PRIVATE
+                    )
+                }
+
+            val activeHomeBelt =
+                remember(
+                    userSp,
+                    legacySp,
+                    settingsSp
+                ) {
+                    resolveHomeActiveBelt(
+                        userSp = userSp,
+                        legacySp = legacySp,
+                        settingsSp = settingsSp
+                    )
+                }
+
+            val homeBeltAccent =
+                readableHomeBeltAccent(
+                    beltColor =
+                        activeHomeBelt.color
+                )
+
+            var homeAccessRefreshTick by
+            remember {
+                mutableIntStateOf(0)
+            }
 
             // מצב הגישה מתרענן דרך SharedPreferences listener.
             // אין צורך בלולאת רענון קבועה במסך הבית.
@@ -2388,6 +2548,28 @@ fun HomeScreen(
                         result
                     }
 
+                /*
+                 * הרשימה זמינה כאן בתוך תחום התוכן של
+                 * מסך הבית. מעדכנים את מאגר הניווט בכל
+                 * פעם שמקורות האימונים משתנים.
+                 */
+                LaunchedEffect(
+                    currentWeekCandidates
+                ) {
+                    TrainingArchiveNavigationStore.update(
+                        currentWeekCandidates.map { candidate ->
+                            TrainingArchiveSource(
+                                training =
+                                    candidate.training,
+                                branch =
+                                    candidate.branch,
+                                group =
+                                    candidate.group
+                            )
+                        }
+                    )
+                }
+
                 data class HomeTrainingUi(
                     val training: TrainingData,
                     val branch: String,
@@ -2764,8 +2946,12 @@ fun HomeScreen(
                                         }
 
                                     },
-                                    style = KmiTypography.cardTitle,
-                                    color = Color.White,
+                                    style =
+                                        KmiTypography.cardTitle,
+                                    color =
+                                        MaterialTheme
+                                            .colorScheme
+                                            .onBackground,
                                     textAlign = TextAlign.Center,
                                     modifier = Modifier
                                         .fillMaxWidth()
@@ -2981,17 +3167,23 @@ fun HomeScreen(
                                             alpha = 0.35f
                                         )
                                     ),
-                                    modifier = Modifier.size(
-                                        38.dp * LocalAppIconScale.current
-                                    )
+                                    modifier =
+                                        Modifier.size(
+                                            scaledIconSize(38.dp)
+                                        )
                                 ) {
                                     Icon(
-                                        imageVector = Icons.Default.Person,
+                                        imageVector =
+                                            Icons.Default.Person,
                                         contentDescription = null,
-                                        tint = MaterialTheme.colorScheme.primary,
-                                        modifier = Modifier.padding(
-                                            8.dp * LocalAppIconScale.current
-                                        )
+                                        tint =
+                                            MaterialTheme
+                                                .colorScheme
+                                                .primary,
+                                        modifier =
+                                            Modifier.padding(
+                                                scaledIconSize(8.dp)
+                                            )
                                     )
                                 }
 
@@ -3029,25 +3221,34 @@ fun HomeScreen(
                                                         alpha = 0.40f
                                                     )
                                                 ),
-                                                modifier = Modifier.size(
-                                                    32.dp * LocalAppIconScale.current
-                                                )
+                                                modifier =
+                                                    Modifier.size(
+                                                        scaledIconSize(32.dp)
+                                                    )
                                             ) {
                                                 Box(
-                                                    contentAlignment = Alignment.Center
+                                                    contentAlignment =
+                                                        Alignment.Center
                                                 ) {
                                                     Icon(
-                                                        imageVector = Icons.Filled.Email,
+                                                        imageVector =
+                                                            Icons.Filled.Email,
                                                         contentDescription =
                                                             if (isEnglish) {
                                                                 "Messages and events"
                                                             } else {
                                                                 "הודעות ואירועים"
                                                             },
-                                                        tint = MaterialTheme.colorScheme.primary,
-                                                        modifier = Modifier.size(
-                                                            17.dp * LocalAppIconScale.current
-                                                        )
+                                                        tint =
+                                                            MaterialTheme
+                                                                .colorScheme
+                                                                .primary,
+                                                        modifier =
+                                                            Modifier.size(
+                                                                scaledIconSize(
+                                                                    17.dp
+                                                                )
+                                                            )
                                                     )
                                                 }
                                             }
@@ -3264,14 +3465,8 @@ fun HomeScreen(
                             modifier = Modifier
                                 .fillMaxSize()
                                 .background(
-                                    Brush.linearGradient(
-                                        colors = listOf(
-                                            Color(0xFF7F00FF),
-                                            Color(0xFF3F51B5),
-                                            Color(0xFF03A9F4)
-
-                                        )
-                                    )
+                                    brush =
+                                        kmiGraniteActionBrush()
                                 )
                         ) {
 
@@ -3280,12 +3475,14 @@ fun HomeScreen(
                                     .offset(x = bubbleOffset.dp)
                                     .size(140.dp)
                                     .background(
-                                        Brush.radialGradient(
-                                            listOf(
-                                                Color.White.copy(alpha = 0.45f),
-                                                Color.Transparent
-                                            )
-                                        ),
+                                        brush =
+                                            Brush.radialGradient(
+                                                colors =
+                                                    listOf(
+                                                        kmiGraniteActionHighlightColor(),
+                                                        Color.Transparent
+                                                    )
+                                            ),
                                         shape = CircleShape
                                     )
                             )
@@ -3308,8 +3505,7 @@ fun HomeScreen(
                                                 .onPrimary,
                                         modifier =
                                             Modifier.size(
-                                                16.dp *
-                                                        LocalAppIconScale.current
+                                                scaledIconSize(16.dp)
                                             )
                                     )
 
@@ -3341,39 +3537,6 @@ fun HomeScreen(
                 }
 
                 Spacer(Modifier.height(2.dp))
-
-                if (showTrainingArchive) {
-                    TrainingArchiveDialog(
-                        baseTrainings =
-                            currentWeekCandidates.map { candidate ->
-                                TrainingArchiveSource(
-                                    training = candidate.training,
-                                    branch = candidate.branch,
-                                    group = candidate.group
-                                )
-                            },
-                        isEnglish = isEnglish,
-                        onDismiss = {
-                            showTrainingArchive = false
-                        },
-                        onOpenDrawer = {
-                            showTrainingArchive = false
-                            onOpenDrawer()
-                        },
-                        onSettings = {
-                            showTrainingArchive = false
-                            onSettings()
-                        },
-                        onOpenExercise = { key ->
-                            showTrainingArchive = false
-                            onOpenExercise(key)
-                        },
-                        onOpenAi = {
-                            showTrainingArchive = false
-                            showAiDialog = true
-                        }
-                    )
-                }
             }
 
             val lockSuffix = if (hasFullAccess) "" else " 🔒"
@@ -3436,7 +3599,7 @@ fun HomeScreen(
                     fabExpanded = false
 
                     if (hasFullAccess) {
-                        showTrainingArchive = true
+                        onOpenTrainingArchive()
                     } else {
                         onOpenSubscription()
                     }
@@ -3491,10 +3654,18 @@ fun HomeScreen(
                             )
             ) {
                 HomePremiumQuickMenuPanel(
-                    title = if (isEnglish) "Quick Menu" else "תפריט מהיר",
+                    title =
+                        if (isEnglish) {
+                            "Quick Menu"
+                        } else {
+                            "תפריט מהיר"
+                        },
                     isEnglish = isEnglish,
+                    accentColor = homeBeltAccent,
                     items = quickMenuItems,
-                    onClose = { fabExpanded = false }
+                    onClose = {
+                        fabExpanded = false
+                    }
                 )
             }
 
@@ -3509,6 +3680,7 @@ fun HomeScreen(
             ) {
                 ModernHomeQuickFab(
                     isEnglish = isEnglish,
+                    accentColor = homeBeltAccent,
                     onClick = {
                         clickSound()
                         haptic(true)
@@ -3570,20 +3742,18 @@ fun HomeScreen(
                                 tonalElevation = 0.dp,
                                 shadowElevation = 0.dp
                             ) {
-                                val iconScale =
-                                    LocalAppIconScale.current
-
                                 Icon(
-                                    imageVector = Icons.Filled.Email,
+                                    imageVector =
+                                        Icons.Filled.Email,
                                     contentDescription = null,
                                     tint = noticeAccent,
                                     modifier =
                                         Modifier
                                             .size(
-                                                40.dp * iconScale
+                                                scaledIconSize(40.dp)
                                             )
                                             .padding(
-                                                9.dp * iconScale
+                                                scaledIconSize(9.dp)
                                             )
                                 )
                             }
@@ -3693,7 +3863,7 @@ fun HomeScreen(
                                                     ),
                                                 modifier =
                                                     Modifier.size(
-                                                        28.dp * LocalAppIconScale.current
+                                                        KmiIconSize.large
                                                     )
                                             )
 
@@ -3797,12 +3967,14 @@ fun HomeScreen(
                                                                     modifier =
                                                                         Modifier
                                                                             .size(
-                                                                                30.dp *
-                                                                                        LocalAppIconScale.current
+                                                                                scaledIconSize(
+                                                                                    30.dp
+                                                                                )
                                                                             )
                                                                             .padding(
-                                                                                6.dp *
-                                                                                        LocalAppIconScale.current
+                                                                                scaledIconSize(
+                                                                                    6.dp
+                                                                                )
                                                                             )
                                                                 )
                                                             }
@@ -3811,14 +3983,15 @@ fun HomeScreen(
                                                         }
 
                                                         Text(
-                                                            text = message.coachName.ifBlank {
-                                                                if (isEnglish) {
-                                                                    "Coach"
-                                                                } else {
-                                                                    "המאמן"
-                                                                }
-                                                            },
-                                                            style = KmiTypography.cardTitle,
+                                                            text =
+                                                                homeCoachDisplayName(
+                                                                    realName =
+                                                                        message.coachName,
+                                                                    isEnglish =
+                                                                        isEnglish
+                                                                ),
+                                                            style =
+                                                                KmiTypography.cardTitle,
                                                             color = noticeAccent,
                                                             maxLines = 1,
                                                             overflow = TextOverflow.Ellipsis,
@@ -3853,12 +4026,14 @@ fun HomeScreen(
                                                                     modifier =
                                                                         Modifier
                                                                             .size(
-                                                                                30.dp *
-                                                                                        LocalAppIconScale.current
+                                                                                scaledIconSize(
+                                                                                    30.dp
+                                                                                )
                                                                             )
                                                                             .padding(
-                                                                                6.dp *
-                                                                                        LocalAppIconScale.current
+                                                                                scaledIconSize(
+                                                                                    6.dp
+                                                                                )
                                                                             )
                                                                 )
                                                             }
@@ -3981,9 +4156,12 @@ fun HomeScreen(
                                                                         contentDescription = null,
                                                                         tint =
                                                                             noticeColors.onSurfaceVariant,
-                                                                        modifier = Modifier.size(
-                                                                            12.dp * LocalAppIconScale.current
-                                                                        )
+                                                                        modifier =
+                                                                            Modifier.size(
+                                                                                scaledIconSize(
+                                                                                    12.dp
+                                                                                )
+                                                                            )
                                                                     )
 
                                                                     Text(
@@ -4195,6 +4373,7 @@ fun HomeScreen(
 @Composable
 private fun ModernHomeQuickFab(
     isEnglish: Boolean,
+    accentColor: Color,
     modifier: Modifier = Modifier,
     onClick: () -> Unit
 ) {
@@ -4217,20 +4396,31 @@ private fun ModernHomeQuickFab(
             modifier = Modifier
                 .matchParentSize()
                 .background(
-                    brush = Brush.horizontalGradient(
-                        colors = listOf(
-                            Color(0xFFFFE7A3),
-                            Color(0xFFFFC247),
-                            Color(0xFFFFA928)
-                        )
-                    ),
+                    brush =
+                        Brush.horizontalGradient(
+                            colors =
+                                listOf(
+                                    accentColor.copy(
+                                        alpha = 0.52f
+                                    ),
+                                    accentColor,
+                                    lerp(
+                                        accentColor,
+                                        MaterialTheme
+                                            .colorScheme
+                                            .primary,
+                                        0.30f
+                                    )
+                                )
+                        ),
                     shape = tabShape
                 )
                 .border(
                     width = 1.dp,
-                    color = MaterialTheme.colorScheme
-                        .outlineVariant
-                        .copy(alpha = 0.72f),
+                    color =
+                        accentColor.copy(
+                            alpha = 0.78f
+                        ),
                     shape = tabShape
                 )
                 .clickable(
@@ -4248,10 +4438,13 @@ private fun ModernHomeQuickFab(
                     } else {
                         "תפריט מהיר"
                     },
-                tint = Color.White,
+                tint =
+                    MaterialTheme
+                        .colorScheme
+                        .onPrimary,
                 modifier =
                     Modifier.size(
-                        21.dp * LocalAppIconScale.current
+                        scaledIconSize(21.dp)
                     )
             )
         }
@@ -4264,6 +4457,7 @@ private fun ModernHomeQuickFab(
 private fun HomePremiumQuickMenuPanel(
     title: String,
     isEnglish: Boolean,
+    accentColor: Color,
     items: List<Triple<String, ImageVector, () -> Unit>>,
     onClose: () -> Unit
 ) {
@@ -4281,16 +4475,16 @@ private fun HomePremiumQuickMenuPanel(
         colorScheme.surfaceVariant
 
     val menuAccent =
-        colorScheme.primary
+        accentColor
 
     val borderColor =
-        colorScheme.outline.copy(
-            alpha = 0.45f
+        accentColor.copy(
+            alpha = 0.58f
         )
 
     val dividerColor =
-        colorScheme.outline.copy(
-            alpha = 0.40f
+        accentColor.copy(
+            alpha = 0.32f
         )
 
     Surface(
@@ -4360,14 +4554,23 @@ private fun HomePremiumQuickMenuPanel(
                         )
 
                         Icon(
-                            imageVector = Icons.Filled.Close,
-                            contentDescription = "Close",
+                            imageVector =
+                                Icons.Filled.Close,
+                            contentDescription =
+                                if (isEnglish) {
+                                    "Close"
+                                } else {
+                                    "סגור"
+                                },
                             tint = menuAccent,
-                            modifier = Modifier
-                                .size(
-                                    18.dp * LocalAppIconScale.current
-                                )
-                                .clickable { onClose() }
+                            modifier =
+                                Modifier
+                                    .size(
+                                        KmiIconSize.small
+                                    )
+                                    .clickable {
+                                        onClose()
+                                    }
                         )
                     } else {
                         Text(
@@ -4387,14 +4590,23 @@ private fun HomePremiumQuickMenuPanel(
                         Spacer(Modifier.width(6.dp))
 
                         Icon(
-                            imageVector = Icons.Filled.Close,
-                            contentDescription = "סגור",
+                            imageVector =
+                                Icons.Filled.Close,
+                            contentDescription =
+                                if (isEnglish) {
+                                    "Close"
+                                } else {
+                                    "סגור"
+                                },
                             tint = menuAccent,
-                            modifier = Modifier
-                                .size(
-                                    18.dp * LocalAppIconScale.current
-                                )
-                                .clickable { onClose() }
+                            modifier =
+                                Modifier
+                                    .size(
+                                        KmiIconSize.small
+                                    )
+                                    .clickable {
+                                        onClose()
+                                    }
                         )
                     }
                 }
@@ -4406,6 +4618,7 @@ private fun HomePremiumQuickMenuPanel(
                         text = item.first,
                         icon = item.second,
                         isEnglish = isEnglish,
+                        accentColor = menuAccent,
                         onClick = item.third
                     )
 
@@ -4427,21 +4640,18 @@ private fun HomePremiumQuickMenuRow(
     text: String,
     icon: ImageVector,
     isEnglish: Boolean,
+    accentColor: Color,
     onClick: () -> Unit
 ) {
     val isLocked = text.endsWith(" 🔒")
     val cleanText = if (isLocked) text.removeSuffix(" 🔒") else text
-    val isDarkMode =
-        MaterialTheme.colorScheme.background.luminance() < 0.5f
-
     val menuAccent =
-        if (isDarkMode) {
-            Color(0xFF6EE7A0)
-        } else {
-            Color(0xFF16A34A)
-        }
+        accentColor
 
-    val lockPulse = rememberInfiniteTransition(label = "homeQuickMenuLockPulse")
+    val lockPulse =
+        rememberInfiniteTransition(
+            label = "homeQuickMenuLockPulse"
+        )
 
     val lockScale by lockPulse.animateFloat(
         initialValue = 0.90f,
@@ -4462,7 +4672,10 @@ private fun HomePremiumQuickMenuRow(
         verticalAlignment = Alignment.CenterVertically
     ) {
         if (isEnglish) {
-            HomePremiumQuickMenuIcon(icon)
+            HomePremiumQuickMenuIcon(
+                icon = icon,
+                accentColor = menuAccent
+            )
             Spacer(Modifier.width(7.dp))
 
             Text(
@@ -4485,18 +4698,28 @@ private fun HomePremiumQuickMenuRow(
             if (isLocked) {
                 Spacer(Modifier.width(5.dp))
                 Icon(
-                    imageVector = Icons.Filled.Lock,
-                    contentDescription = null,
-                    tint = Color(0xFFF59E0B),
-                    modifier = Modifier
-                        .size(
-                            13.dp * LocalAppIconScale.current
-                        )
-                        .graphicsLayer {
-                            scaleX = lockScale
-                            scaleY = lockScale
-                            alpha = 1f
-                        }
+                    imageVector =
+                        Icons.Filled.Lock,
+                    contentDescription =
+                        if (isEnglish) {
+                            "Premium feature"
+                        } else {
+                            "תכונת פרימיום"
+                        },
+                    tint =
+                        MaterialTheme
+                            .colorScheme
+                            .tertiary,
+                    modifier =
+                        Modifier
+                            .size(
+                                scaledIconSize(13.dp)
+                            )
+                            .graphicsLayer {
+                                scaleX = lockScale
+                                scaleY = lockScale
+                                alpha = 1f
+                            }
                 )
             }
         } else {
@@ -4504,7 +4727,10 @@ private fun HomePremiumQuickMenuRow(
              * ב־RTL הרכיב הראשון מוצג בצד ימין:
              * האייקון בצד ימין והמנעול בצד שמאל.
              */
-            HomePremiumQuickMenuIcon(icon)
+            HomePremiumQuickMenuIcon(
+                icon = icon,
+                accentColor = menuAccent
+            )
 
             Spacer(Modifier.width(7.dp))
 
@@ -4529,18 +4755,28 @@ private fun HomePremiumQuickMenuRow(
                 Spacer(Modifier.width(5.dp))
 
                 Icon(
-                    imageVector = Icons.Filled.Lock,
-                    contentDescription = null,
-                    tint = Color(0xFFF59E0B),
-                    modifier = Modifier
-                        .size(
-                            13.dp * LocalAppIconScale.current
-                        )
-                        .graphicsLayer {
-                            scaleX = lockScale
-                            scaleY = lockScale
-                            alpha = 1f
-                        }
+                    imageVector =
+                        Icons.Filled.Lock,
+                    contentDescription =
+                        if (isEnglish) {
+                            "Premium feature"
+                        } else {
+                            "תכונת פרימיום"
+                        },
+                    tint =
+                        MaterialTheme
+                            .colorScheme
+                            .tertiary,
+                    modifier =
+                        Modifier
+                            .size(
+                                scaledIconSize(13.dp)
+                            )
+                            .graphicsLayer {
+                                scaleX = lockScale
+                                scaleY = lockScale
+                                alpha = 1f
+                            }
                 )
             }
         }
@@ -4549,21 +4785,17 @@ private fun HomePremiumQuickMenuRow(
 
 @Composable
 private fun HomePremiumQuickMenuIcon(
-    icon: ImageVector
+    icon: ImageVector,
+    accentColor: Color
 ) {
-    val iconScale =
-        LocalAppIconScale.current
-
     val menuAccent =
-        MaterialTheme
-            .colorScheme
-            .primary
+        accentColor
 
     Box(
         modifier =
             Modifier
                 .size(
-                    20.dp * iconScale
+                    scaledIconSize(20.dp)
                 )
                 .background(
                     color =
@@ -4589,7 +4821,7 @@ private fun HomePremiumQuickMenuIcon(
             tint = menuAccent,
             modifier =
                 Modifier.size(
-                    10.5.dp * iconScale
+                    scaledIconSize(10.5.dp)
                 )
         )
     }
@@ -4665,125 +4897,70 @@ private fun TrainingCardCompact(
         mutableStateOf(false)
     }
 
+    var rememberNavigationChoice by rememberSaveable(
+        training.cal.timeInMillis
+    ) {
+        mutableStateOf(true)
+    }
+
     if (showNavPicker) {
-        AlertDialog(
-            onDismissRequest = { showNavPicker = false },
-            title = {
-                Text(
-                    text =
-                        if (isEnglish) {
-                            "Open with"
-                        } else {
-                            "פתיחה באמצעות"
-                        },
-                    style = KmiTypography.cardTitle,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onSurface,
-                    textAlign =
-                        if (isEnglish) {
-                            TextAlign.Left
-                        } else {
-                            TextAlign.Right
-                        },
-                    modifier = Modifier.fillMaxWidth()
-                )
+        val navigationAddress =
+            training.address
+                .trim()
+
+        NavPickerDialog(
+            address = navigationAddress,
+            isEnglish = isEnglish,
+            rememberChoice =
+                rememberNavigationChoice,
+            onRememberChoiceChange = {
+                rememberNavigationChoice = it
             },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Text(
-                        text =
-                            if (isEnglish) {
-                                "Choose a navigation app. You can also save it as the default."
-                            } else {
-                                "בחר אפליקציה לניווט. אפשר גם לשמור כברירת מחדל."
-                            },
-                        style = KmiTypography.body,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        textAlign =
-                            if (isEnglish) {
-                                TextAlign.Left
-                            } else {
-                                TextAlign.Right
-                            },
-                        modifier = Modifier.fillMaxWidth()
-                    )
+            onPick = { navigationChoice ->
+                if (navigationAddress.isNotBlank()) {
+                    if (rememberNavigationChoice) {
+                        writeNavPref(
+                            ctx,
+                            when (navigationChoice) {
+                                NavChoice.WAZE ->
+                                    NavAppPref.WAZE
 
-                    var rememberChoice by rememberSaveable(training.cal.timeInMillis) {
-                        mutableStateOf(
-                            true
+                                NavChoice.GOOGLE_MAPS ->
+                                    NavAppPref.GOOGLE_MAPS
+                            }
+                        )
+                    } else {
+                        /*
+                         * המשתמש ביקש לא לשמור ברירת מחדל,
+                         * ולכן בפעם הבאה החלון יוצג שוב.
+                         */
+                        writeNavPref(
+                            ctx,
+                            NavAppPref.ASK
                         )
                     }
 
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.End
-                    ) {
-                        Text(
-                            text =
-                                if (isEnglish) {
-                                    "Remember selection"
-                                } else {
-                                    "זכור בחירה"
-                                },
-                            style = KmiTypography.secondary,
-                            color = MaterialTheme.colorScheme.onSurface,
-                            modifier = Modifier.padding(end = 8.dp)
-                        )
-                        Switch(
-                            checked = rememberChoice,
-                            onCheckedChange = { rememberChoice = it }
-                        )
-                    }
-
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(10.dp)
-                    ) {
-                        Button(
-                            onClick = {
-                                val safeAddress = training.address.trim()
-                                if (safeAddress.isNotBlank()) {
-                                    if (rememberChoice) writeNavPref(ctx, NavAppPref.WAZE)
-                                    openWaze(ctx, safeAddress)
-                                }
-                                showNavPicker = false
-                            },
-                            modifier = Modifier.weight(1f),
-                            shape = RoundedCornerShape(12.dp)
-                        ) {
-                            Text("וייז", fontWeight = FontWeight.Bold)
+                    when (navigationChoice) {
+                        NavChoice.WAZE -> {
+                            openWaze(
+                                ctx,
+                                navigationAddress
+                            )
                         }
 
-                        Button(
-                            onClick = {
-                                val safeAddress = training.address.trim()
-                                if (safeAddress.isNotBlank()) {
-                                    if (rememberChoice) writeNavPref(ctx, NavAppPref.GOOGLE_MAPS)
-                                    openGoogleMaps(ctx, safeAddress)
-                                }
-                                showNavPicker = false
-                            },
-                            modifier = Modifier.weight(1f),
-                            shape = RoundedCornerShape(12.dp)
-                        ) {
-                            Text("גוגל מפות", fontWeight = FontWeight.Bold)
+                        NavChoice.GOOGLE_MAPS -> {
+                            openGoogleMaps(
+                                ctx,
+                                navigationAddress
+                            )
                         }
-                    }
-
-                    TextButton(
-                        onClick = {
-                            writeNavPref(ctx, NavAppPref.ASK)
-                            showNavPicker = false
-                        },
-                        modifier = Modifier.align(Alignment.End)
-                    ) {
-                        Text("כל פעם לשאול")
                     }
                 }
+
+                showNavPicker = false
             },
-            confirmButton = {
-                TextButton(onClick = { showNavPicker = false }) { Text("סגור") }
+            onDismiss = {
+                showNavPicker = false
             }
         )
     }
@@ -4913,30 +5090,41 @@ private fun TrainingCardCompact(
 
             "$start – $end"
         }
-    val dateTimeText = remember(dayText, dateText, timeText, isEnglish) {
-        if (isEnglish) {
-            "$dayText $dateText · $timeText"
-        } else {
+    val dateTimeText =
+        remember(
+            dayText,
+            dateText,
+            timeText
+        ) {
             "$dayText $dateText · $timeText"
         }
-    }
 
     val trainingCardBorderColor =
         when (visualStatusState) {
             TrainingStatusEngine.State.ONGOING ->
-                Color(0xFF047857)
+                MaterialTheme
+                    .colorScheme
+                    .tertiary
 
             TrainingStatusEngine.State.COMPLETED ->
-                Color(0xFF475569)
+                MaterialTheme
+                    .colorScheme
+                    .outline
 
             TrainingStatusEngine.State.CANCELLED_BY_HOLIDAY ->
-                Color(0xFF9A3412)
+                MaterialTheme
+                    .colorScheme
+                    .secondary
 
             TrainingStatusEngine.State.INVALID ->
-                Color(0xFFB91C1C)
+                MaterialTheme
+                    .colorScheme
+                    .error
 
             TrainingStatusEngine.State.SCHEDULED ->
-                Color(0xFF1D4ED8)
+                MaterialTheme
+                    .colorScheme
+                    .primary
         }
 
     Box(
@@ -5082,70 +5270,63 @@ private fun TrainingCardCompact(
                 }
 
                 if (statusMessage.isNotBlank()) {
-                    val isDarkMode =
-                        MaterialTheme.colorScheme.surface.luminance() < 0.5f
-
-                val statusContentColor =
-                    when (visualStatusState) {
-                        TrainingStatusEngine.State.ONGOING ->
-                            if (isDarkMode) {
-                                Color(0xFF6EE7B7)
-                            } else {
-                                Color(0xFF047857)
-                            }
-
-                        TrainingStatusEngine.State.COMPLETED ->
-                            if (isDarkMode) {
-                                Color(0xFFCBD5E1)
-                            } else {
-                                Color(0xFF475569)
-                            }
-
-                        TrainingStatusEngine.State.CANCELLED_BY_HOLIDAY ->
-                            if (isDarkMode) {
-                                Color(0xFFFDBA74)
-                            } else {
-                                Color(0xFF9A3412)
-                            }
-
-                        TrainingStatusEngine.State.INVALID ->
-                            if (isDarkMode) {
-                                Color(0xFFFCA5A5)
-                            } else {
-                                Color(0xFFB91C1C)
-                            }
-
-                        TrainingStatusEngine.State.SCHEDULED ->
-                            if (isDarkMode) {
-                                Color(0xFF93C5FD)
-                            } else {
-                                Color(0xFF1D4ED8)
-                            }
-                    }
-
-                val statusBackgroundColor =
-                    if (isDarkMode) {
-                        statusContentColor.copy(alpha = 0.14f)
-                    } else {
+                    val statusContentColor =
                         when (visualStatusState) {
                             TrainingStatusEngine.State.ONGOING ->
-                                Color(0xFFECFDF5)
+                                MaterialTheme
+                                    .colorScheme
+                                    .onTertiaryContainer
 
                             TrainingStatusEngine.State.COMPLETED ->
-                                Color(0xFFF1F5F9)
+                                MaterialTheme
+                                    .colorScheme
+                                    .onSurfaceVariant
 
                             TrainingStatusEngine.State.CANCELLED_BY_HOLIDAY ->
-                                Color(0xFFFFF7ED)
+                                MaterialTheme
+                                    .colorScheme
+                                    .onSecondaryContainer
 
                             TrainingStatusEngine.State.INVALID ->
-                                Color(0xFFFEF2F2)
+                                MaterialTheme
+                                    .colorScheme
+                                    .onErrorContainer
 
                             TrainingStatusEngine.State.SCHEDULED ->
-                                Color(0xFFEFF6FF)
+                                MaterialTheme
+                                    .colorScheme
+                                    .onPrimaryContainer
                         }
-                    }
 
-                Spacer(Modifier.height(4.dp))
+                    val statusBackgroundColor =
+                        when (visualStatusState) {
+                            TrainingStatusEngine.State.ONGOING ->
+                                MaterialTheme
+                                    .colorScheme
+                                    .tertiaryContainer
+
+                            TrainingStatusEngine.State.COMPLETED ->
+                                MaterialTheme
+                                    .colorScheme
+                                    .surfaceVariant
+
+                            TrainingStatusEngine.State.CANCELLED_BY_HOLIDAY ->
+                                MaterialTheme
+                                    .colorScheme
+                                    .secondaryContainer
+
+                            TrainingStatusEngine.State.INVALID ->
+                                MaterialTheme
+                                    .colorScheme
+                                    .errorContainer
+
+                            TrainingStatusEngine.State.SCHEDULED ->
+                                MaterialTheme
+                                    .colorScheme
+                                    .primaryContainer
+                        }
+
+                    Spacer(Modifier.height(4.dp))
 
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -5246,8 +5427,7 @@ private fun TrainingCardCompact(
                         y = (-10).dp
                     )
                     .size(
-                        46.dp *
-                                LocalAppIconScale.current
+                        scaledIconSize(46.dp)
                     )
                     .zIndex(3f),
                 shape = CircleShape,
@@ -5281,10 +5461,13 @@ private fun TrainingCardCompact(
                                 "שינוי או ביטול אימון"
                             },
                         tint =
-                            MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.size(
-                            23.dp * LocalAppIconScale.current
-                        )
+                            MaterialTheme
+                                .colorScheme
+                                .primary,
+                        modifier =
+                            Modifier.size(
+                                scaledIconSize(23.dp)
+                            )
                     )
                 }
             }
@@ -5411,9 +5594,10 @@ private fun NavigationChip(
                 ),
                 tonalElevation = 0.dp,
                 shadowElevation = 0.dp,
-                modifier = Modifier.size(
-                    34.dp * LocalAppIconScale.current
-                )
+                modifier =
+                    Modifier.size(
+                        scaledIconSize(34.dp)
+                    )
             ) {
                 Box(
                     modifier = Modifier.fillMaxSize(),
@@ -5427,10 +5611,14 @@ private fun NavigationChip(
                             } else {
                                 "ניווט"
                             },
-                        tint = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.size(
-                            19.dp * LocalAppIconScale.current
-                        )
+                        tint =
+                            MaterialTheme
+                                .colorScheme
+                                .primary,
+                        modifier =
+                            Modifier.size(
+                                scaledIconSize(19.dp)
+                            )
                     )
                 }
             }
@@ -5497,9 +5685,6 @@ private fun NavPickerDialog(
         return if (isEnglish) en else he
     }
 
-    val uiScale =
-        LocalAppIconScale.current
-
     /*
      * משמש רק להתאמת שקיפות המסגרת.
      * צבעי הרקע נשארים גלובליים.
@@ -5527,14 +5712,16 @@ private fun NavPickerDialog(
         onDismissRequest = onDismiss
     ) {
         Surface(
-            modifier = Modifier
-                .fillMaxWidth()
-                .widthIn(
-                    max = 430.dp * uiScale
+            modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .widthIn(
+                        max = 430.dp
+                    ),
+            shape =
+                RoundedCornerShape(
+                    28.dp
                 ),
-            shape = RoundedCornerShape(
-                28.dp * uiScale
-            ),
             color = graniteCardColor,
 
             /*
@@ -5560,13 +5747,14 @@ private fun NavPickerDialog(
             )
         ) {
             Column(
-                modifier = Modifier.padding(
-                    horizontal = 20.dp * uiScale,
-                    vertical = 20.dp * uiScale
-                ),
+                modifier =
+                    Modifier.padding(
+                        horizontal = 20.dp,
+                        vertical = 20.dp
+                    ),
                 verticalArrangement =
                     Arrangement.spacedBy(
-                        16.dp * uiScale
+                        16.dp
                     )
             ) {
                 /*
@@ -5576,7 +5764,7 @@ private fun NavPickerDialog(
                     modifier = Modifier.fillMaxWidth(),
                     verticalArrangement =
                         Arrangement.spacedBy(
-                            6.dp * uiScale
+                            6.dp
                         )
                 ) {
                     Text(
@@ -5620,10 +5808,12 @@ private fun NavPickerDialog(
                  * בחירת שמירת ברירת המחדל.
                  */
                 Surface(
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(
-                        16.dp * uiScale
-                    ),
+                    modifier =
+                        Modifier.fillMaxWidth(),
+                    shape =
+                        RoundedCornerShape(
+                            16.dp
+                        ),
                     color = innerCardColor,
                     tonalElevation = 0.dp,
                     shadowElevation = 0.dp,
@@ -5638,8 +5828,8 @@ private fun NavPickerDialog(
                         modifier = Modifier
                             .fillMaxWidth()
                             .padding(
-                                horizontal = 14.dp * uiScale,
-                                vertical = 8.dp * uiScale
+                                horizontal = 14.dp,
+                                vertical = 8.dp
                             ),
                         verticalAlignment =
                             Alignment.CenterVertically
@@ -5667,10 +5857,7 @@ private fun NavPickerDialog(
                         Switch(
                             checked = rememberChoice,
                             onCheckedChange =
-                                onRememberChoiceChange,
-                            modifier = Modifier.scale(
-                                uiScale
-                            )
+                                onRememberChoiceChange
                         )
                     }
                 }
@@ -5684,7 +5871,7 @@ private fun NavPickerDialog(
                         .height(IntrinsicSize.Max),
                     horizontalArrangement =
                         Arrangement.spacedBy(
-                            10.dp * uiScale
+                            10.dp
                         ),
                     verticalAlignment =
                         Alignment.CenterVertically
@@ -5768,19 +5955,18 @@ private fun NavigationAppChoiceCard(
     onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val uiScale = LocalAppIconScale.current
-
     Surface(
         onClick = onClick,
         modifier =
             modifier
                 .fillMaxHeight()
                 .heightIn(
-                    min = 56.dp * uiScale
+                    min = 56.dp
                 ),
-        shape = RoundedCornerShape(
-            16.dp * uiScale
-        ),
+        shape =
+            RoundedCornerShape(
+                16.dp
+            ),
         color = containerColor,
 
         /*
@@ -5801,8 +5987,8 @@ private fun NavigationAppChoiceCard(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(
-                    horizontal = 8.dp * uiScale,
-                    vertical = 12.dp * uiScale
+                    horizontal = 8.dp,
+                    vertical = 12.dp
                 ),
             verticalAlignment =
                 Alignment.CenterVertically,
@@ -5810,19 +5996,21 @@ private fun NavigationAppChoiceCard(
                 Arrangement.Center
         ) {
             Icon(
-                painter = painterResource(
-                    id = iconRes
-                ),
+                painter =
+                    painterResource(
+                        id = iconRes
+                    ),
                 contentDescription = label,
                 tint = Color.Unspecified,
-                modifier = Modifier.size(
-                    23.dp * uiScale
-                )
+                modifier =
+                    Modifier.size(
+                        scaledIconSize(23.dp)
+                    )
             )
 
             Spacer(
                 Modifier.width(
-                    8.dp * uiScale
+                    8.dp
                 )
             )
 
@@ -5882,13 +6070,32 @@ private fun shareHomePdf(
     trainings: List<HomePdfTraining>,
     isEnglish: Boolean
 ) {
-    val pdfFile = createHomePdf(
-        context = context,
-        trainings = trainings,
-        isEnglish = isEnglish
-    )
+    /*
+     * שכבת הגנת פרטיות לתצוגת ה־PDF בלבד.
+     * הרשימה המקורית והנתונים האמיתיים אינם משתנים.
+     */
+    val displayTrainings =
+        trainings.map { training ->
+            training.copy(
+                coach =
+                    homeCoachDisplayName(
+                        realName =
+                            training.coach,
+                        isEnglish =
+                            isEnglish
+                    )
+            )
+        }
 
-    val uri = FileProvider.getUriForFile(
+    val pdfFile =
+        createHomePdf(
+            context = context,
+            trainings = displayTrainings,
+            isEnglish = isEnglish
+        )
+
+    val uri =
+        FileProvider.getUriForFile(
         context,
         "${context.packageName}.fileprovider",
         pdfFile
@@ -5943,10 +6150,13 @@ private fun createHomePdf(
     val softBlue = android.graphics.Color.rgb(244, 250, 255)
     val borderBlue = android.graphics.Color.rgb(191, 213, 232)
     val textDark = android.graphics.Color.rgb(15, 23, 42)
-    val textMuted = android.graphics.Color.rgb(80, 100, 120)
     val orange = android.graphics.Color.rgb(249, 115, 22)
 
-    val regular = Typeface.create(Typeface.SANS_SERIF, Typeface.NORMAL)
+    val regular =
+        Typeface.create(
+            Typeface.SANS_SERIF,
+            Typeface.NORMAL
+        )
     val bold = Typeface.create(Typeface.SANS_SERIF, Typeface.BOLD)
 
     fun alpha(color: Int, value: Float): Int =
@@ -5956,8 +6166,13 @@ private fun createHomePdf(
         size: Float,
         color: Int = textDark,
         typeface: Typeface = regular,
-        align: Paint.Align = if (isEnglish) Paint.Align.LEFT else Paint.Align.RIGHT
-    ) = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        align: Paint.Align =
+            KmiPdfDirection.textAlign(
+                isEnglish = isEnglish
+            )
+    ) = Paint(
+        Paint.ANTI_ALIAS_FLAG
+    ).apply {
         textSize = size
         this.color = color
         this.typeface = typeface
@@ -6033,33 +6248,37 @@ private fun createHomePdf(
             stroke = true
         )
 
+        val contentLeft =
+            margin
+
+        val contentRight =
+            pageWidth - margin
+
         val summaryTextAlign =
-            if (isEnglish) {
-                Paint.Align.LEFT
-            } else {
-                Paint.Align.RIGHT
-            }
+            KmiPdfDirection.textAlign(
+                isEnglish = isEnglish
+            )
 
         val summaryTextX =
-            if (isEnglish) {
-                margin + 22f
-            } else {
-                pageWidth - margin - 22f
-            }
+            KmiPdfDirection.startPaddingX(
+                isEnglish = isEnglish,
+                left = contentLeft,
+                right = contentRight,
+                padding = 22f
+            )
 
         val summaryValueAlign =
-            if (isEnglish) {
-                Paint.Align.RIGHT
-            } else {
-                Paint.Align.LEFT
-            }
+            KmiPdfDirection.endTextAlign(
+                isEnglish = isEnglish
+            )
 
         val summaryValueX =
-            if (isEnglish) {
-                pageWidth - margin - 28f
-            } else {
-                margin + 28f
-            }
+            KmiPdfDirection.endPaddingX(
+                isEnglish = isEnglish,
+                left = contentLeft,
+                right = contentRight,
+                padding = 28f
+            )
 
         sectionPaint.textAlign =
             summaryTextAlign
@@ -6183,25 +6402,29 @@ private fun createHomePdf(
         canvas.drawLine(mid, top + 22f, mid, bottom - 20f, divider)
 
         val cardTextAlign =
-            if (isEnglish) {
-                Paint.Align.LEFT
-            } else {
-                Paint.Align.RIGHT
-            }
+            KmiPdfDirection.textAlign(
+                isEnglish = isEnglish
+            )
 
         val primaryColumnX =
-            if (isEnglish) {
-                margin + 22f
-            } else {
-                right - 22f
-            }
+            KmiPdfDirection.startPaddingX(
+                isEnglish = isEnglish,
+                left = margin,
+                right = right,
+                padding = 22f
+            )
 
+        /*
+         * תחילת העמודה המשנית נמצאת משני צדי
+         * קו האמצע בהתאם לכיוון השפה.
+         */
         val secondaryColumnX =
-            if (isEnglish) {
-                mid + 22f
-            } else {
-                mid - 22f
-            }
+            KmiPdfDirection.startPaddingX(
+                isEnglish = isEnglish,
+                left = mid,
+                right = mid,
+                padding = 22f
+            )
 
         sectionPaint.textAlign =
             cardTextAlign

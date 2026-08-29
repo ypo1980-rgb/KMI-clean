@@ -157,6 +157,43 @@ fun kmiSectionHeaderBrush(): Brush {
     )
 }
 
+/**
+ * צבע הטקסט והאייקונים בכותרות המשנה העליונות.
+ *
+ * הרקע של הכותרת תמיד כהה ולכן הצבע נשאר לבן
+ * גם במצב בהיר וגם במצב כהה.
+ */
+@Composable
+fun kmiSectionHeaderContentColor(): Color {
+    return Color.White
+}
+
+/**
+ * גרדיאנט הגרניט הגלובלי לכפתורי הפעולה התחתונים.
+ *
+ * זהו הגרדיאנט הסגול־כחול־תכלת המקורי.
+ */
+@Composable
+fun kmiGraniteActionBrush(): Brush {
+    return Brush.linearGradient(
+        colors = listOf(
+            Color(0xFF7F00FF),
+            Color(0xFF3F51B5),
+            Color(0xFF03A9F4)
+        )
+    )
+}
+
+/**
+ * צבע ההברקה שעוברת באנימציה מעל כפתור הגרניט.
+ */
+@Composable
+fun kmiGraniteActionHighlightColor(): Color {
+    return Color.White.copy(
+        alpha = 0.45f
+    )
+}
+
 @Composable
 fun AppTheme(
     darkTheme: Boolean = isSystemInDarkTheme(),

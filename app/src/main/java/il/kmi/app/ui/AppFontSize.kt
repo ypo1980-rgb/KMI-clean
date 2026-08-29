@@ -24,7 +24,7 @@ enum class AppFontSize(
 ) {
     SMALL(
         storageValue = "small",
-        scaleFactor = 0.80f
+        scaleFactor = 0.90f
     ),
 
     MEDIUM(

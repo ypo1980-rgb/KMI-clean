@@ -8,13 +8,20 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import android.app.Activity
+import android.content.Context
+import android.content.Intent
+import android.graphics.Paint
+import android.graphics.Typeface
+import android.graphics.pdf.PdfDocument
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.material3.Scaffold
 import androidx.compose.ui.platform.LocalContext
 import il.kmi.app.ui.KmiTopBar
 import il.kmi.app.ui.KmiTypography
+import il.kmi.app.ui.loading.KmiLoadingRings
 import il.kmi.app.ui.scaledIconSize
+import il.yuval.ui.theme.kmiScreenBackgroundBrush
 import il.kmi.shared.localization.AppLanguage
 import il.kmi.shared.localization.AppLanguageManager
 import androidx.compose.foundation.layout.fillMaxSize
@@ -46,7 +53,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.text.font.FontWeight
@@ -54,14 +60,19 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.window.Dialog
-import androidx.compose.ui.window.DialogProperties
+import androidx.core.content.FileProvider
+import il.kmi.app.privacy.DemoPrivacy
 import il.kmi.app.training.TrainingData
 import il.kmi.app.training.TrainingOverride
 import il.kmi.app.training.TrainingOverrideRepository
 import il.kmi.app.training.TrainingStatusEngine
 import il.kmi.app.ui.calendar.KmiCalendarMarkers
 import il.kmi.app.ui.calendar.KmiCalendarPickerDialog
+import il.kmi.app.ui.pdf.KmiPdfDirection
+import il.kmi.app.ui.pdf.KmiPdfFooter
+import il.kmi.app.ui.pdf.KmiPdfHeader
+import java.io.File
+import java.io.FileOutputStream
 import java.text.SimpleDateFormat
 import java.time.Instant
 import java.time.LocalDate
@@ -72,6 +83,7 @@ import java.util.Calendar
 import java.util.Date
 import java.util.Locale
 import java.util.TimeZone
+import kotlin.math.ceil
 
 
 //==============================================================================
@@ -84,6 +96,45 @@ data class TrainingArchiveSource(
     val branch: String,
     val group: String
 )
+
+/**
+ * מעביר למסך הארכיון את מקורות האימונים שכבר
+ * חושבו במסך הבית.
+ *
+ * המאגר אינו נשמר במסד הנתונים ואינו משנה
+ * את נתוני האימונים.
+ */
+object TrainingArchiveNavigationStore {
+
+    private var sources:
+            List<TrainingArchiveSource> =
+        emptyList()
+
+    fun update(
+        value: List<TrainingArchiveSource>
+    ) {
+        sources =
+            value
+                .distinctBy { source ->
+                    listOf(
+                        source.training.startMillis,
+                        source.branch,
+                        source.group,
+                        source.training.place,
+                        source.training.address
+                    ).joinToString("|")
+                }
+    }
+
+    fun currentOrFallback(
+        fallback: List<TrainingArchiveSource>
+    ): List<TrainingArchiveSource> {
+        return sources
+            .ifEmpty {
+                fallback
+            }
+    }
+}
 
 private data class TrainingArchiveItem(
     val training: TrainingData,
@@ -141,10 +192,11 @@ private val archiveQuickRanges =
     )
 
 @Composable
-fun TrainingArchiveDialog(
+fun TrainingArchiveScreen(
     baseTrainings: List<TrainingArchiveSource>,
     isEnglish: Boolean,
-    onDismiss: () -> Unit,
+    onBack: () -> Unit,
+    onHome: () -> Unit,
     onOpenDrawer: () -> Unit = {},
     onSettings: () -> Unit = {},
     onOpenExercise: (String) -> Unit = {},
@@ -206,10 +258,18 @@ fun TrainingArchiveDialog(
         )
     }
 
-    var activeOverridesByOccurrenceKey by remember {
-        mutableStateOf<Map<String, TrainingOverride>>(
+    var activeOverridesByOccurrenceKey by
+    remember {
+        mutableStateOf<
+                Map<String, TrainingOverride>
+                >(
             emptyMap()
         )
+    }
+
+    var isArchiveLoading by
+    remember {
+        mutableStateOf(true)
     }
 
     val archiveRangeStartMillis =
@@ -233,6 +293,8 @@ fun TrainingArchiveDialog(
         archiveRangeStartMillis,
         archiveRangeEndMillis
     ) {
+        isArchiveLoading = true
+
         val listenerHandle =
             TrainingOverrideRepository
                 .listenForOverridesInRange(
@@ -243,10 +305,14 @@ fun TrainingArchiveDialog(
                     onChanged = { overrides ->
                         activeOverridesByOccurrenceKey =
                             overrides
+
+                        isArchiveLoading = false
                     },
                     onError = {
                         activeOverridesByOccurrenceKey =
                             emptyMap()
+
+                        isArchiveLoading = false
                     }
                 )
 
@@ -462,27 +528,14 @@ fun TrainingArchiveDialog(
         LocalLayoutDirection provides
                 layoutDirection
     ) {
-        Dialog(
-            onDismissRequest = onDismiss,
-            properties =
-                DialogProperties(
-                    usePlatformDefaultWidth = false,
-                    decorFitsSystemWindows = true
-                )
-        ) {
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .background(
-                        Brush.verticalGradient(
-                            colors = listOf(
-                                MaterialTheme.colorScheme.background,
-                                MaterialTheme.colorScheme.surfaceVariant
-                                    .copy(alpha = 0.38f),
-                                MaterialTheme.colorScheme.background
-                            )
+        Box(
+                modifier =
+                    Modifier
+                        .fillMaxSize()
+                        .background(
+                            brush =
+                                kmiScreenBackgroundBrush()
                         )
-                    )
             ) {
                 Scaffold(
                     modifier =
@@ -513,7 +566,7 @@ fun TrainingArchiveDialog(
                                 } else {
                                     "he"
                                 },
-                            onHome = onDismiss,
+                            onHome = onHome,
                             onSettings = onSettings,
                             onOpenDrawer =
                                 onOpenDrawer,
@@ -530,9 +583,24 @@ fun TrainingArchiveDialog(
                             showRoleBadge = true,
                             showTopHome = true,
                             showTopSearch = true,
-                            showTopShare = false,
+                            showTopShare = true,
+                            onShare = {
+                                shareTrainingArchivePdf(
+                                    context = context,
+                                    items =
+                                        filteredItems.map { item ->
+                                            item.toPdfItem(
+                                                isEnglish = isEnglish,
+                                                locale = locale
+                                            )
+                                        },
+                                    fromDate = fromDate,
+                                    toDate = toDate,
+                                    isEnglish = isEnglish
+                                )
+                            },
                             useCloseIcon = false,
-                            onBack = null,
+                            onBack = onBack,
                             onToggleLanguage = {
                                 val newLanguage =
                                     if (
@@ -630,13 +698,32 @@ fun TrainingArchiveDialog(
                             }
                         )
 
-                        if (filteredItems.isEmpty()) {
+                        if (isArchiveLoading) {
+                            Box(
+                                modifier =
+                                    Modifier
+                                        .weight(1f)
+                                        .fillMaxWidth(),
+                                contentAlignment =
+                                    Alignment.Center
+                            ) {
+                                KmiLoadingRings(
+                                    text =
+                                        if (isEnglish) {
+                                            "Loading training archive..."
+                                        } else {
+                                            "טוען את ארכיון האימונים..."
+                                        }
+                                )
+                            }
+                        } else if (filteredItems.isEmpty()) {
                             ArchiveEmptyState(
                                 isEnglish =
                                     isEnglish,
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .fillMaxWidth()
+                                modifier =
+                                    Modifier
+                                        .weight(1f)
+                                        .fillMaxWidth()
                             )
                         } else {
                             LazyColumn(
@@ -680,7 +767,6 @@ fun TrainingArchiveDialog(
                         }
                     }
                 }
-            }
         }
 
         if (showFromDatePicker) {
@@ -735,6 +821,539 @@ fun TrainingArchiveDialog(
             )
         }
     }
+}
+
+private data class TrainingArchivePdfItem(
+    val place: String,
+    val address: String,
+    val coach: String,
+    val branch: String,
+    val group: String,
+    val date: String,
+    val time: String,
+    val status: String,
+    val isCancelled: Boolean
+)
+
+private fun archiveCoachDisplayName(
+    realName: String,
+    isEnglish: Boolean
+): String {
+    val cleanName = realName.trim()
+
+    if (!DemoPrivacy.isEnabled()) {
+        return cleanName
+    }
+
+    if (cleanName.isBlank()) {
+        return ""
+    }
+
+    return if (isEnglish) {
+        "Coach"
+    } else {
+        "מאמן"
+    }
+}
+
+private fun TrainingArchiveItem.toPdfItem(
+    isEnglish: Boolean,
+    locale: Locale
+): TrainingArchivePdfItem {
+    val dateFormatter =
+        SimpleDateFormat(
+            "dd/MM/yyyy",
+            locale
+        ).apply {
+            timeZone =
+                TimeZone.getTimeZone(
+                    "Asia/Jerusalem"
+                )
+        }
+
+    val timeFormatter =
+        SimpleDateFormat(
+            "HH:mm",
+            locale
+        ).apply {
+            timeZone =
+                TimeZone.getTimeZone(
+                    "Asia/Jerusalem"
+                )
+        }
+
+    val startMillis =
+        activeOverride
+            ?.effectiveStartMillis
+            ?: training.startMillis
+
+    val endMillis =
+        activeOverride
+            ?.effectiveEndMillis
+            ?: training.endMillis
+            ?: startMillis
+
+    val timeText =
+        buildString {
+            append(
+                timeFormatter.format(
+                    Date(startMillis)
+                )
+            )
+
+            if (endMillis > startMillis) {
+                append(" – ")
+
+                append(
+                    timeFormatter.format(
+                        Date(endMillis)
+                    )
+                )
+            }
+        }
+
+    return TrainingArchivePdfItem(
+        place =
+            training.place.ifBlank {
+                if (isEnglish) {
+                    "Training"
+                } else {
+                    "אימון"
+                }
+            },
+        address = training.address.trim(),
+        coach =
+            archiveCoachDisplayName(
+                realName = training.coach,
+                isEnglish = isEnglish
+            ),
+        branch = branch.trim(),
+        group = group.trim(),
+        date =
+            dateFormatter.format(
+                Date(startMillis)
+            ),
+        time = timeText,
+        status =
+            if (isCancelled) {
+                if (isEnglish) {
+                    "Cancelled"
+                } else {
+                    "בוטל"
+                }
+            } else {
+                if (isEnglish) {
+                    "Completed"
+                } else {
+                    "הושלם"
+                }
+            },
+        isCancelled = isCancelled
+    )
+}
+
+private fun shareTrainingArchivePdf(
+    context: Context,
+    items: List<TrainingArchivePdfItem>,
+    fromDate: LocalDate,
+    toDate: LocalDate,
+    isEnglish: Boolean
+) {
+    val pdfFile =
+        createTrainingArchivePdf(
+            context = context,
+            items = items,
+            fromDate = fromDate,
+            toDate = toDate,
+            isEnglish = isEnglish
+        )
+
+    val uri =
+        FileProvider.getUriForFile(
+            context,
+            "${context.packageName}.fileprovider",
+            pdfFile
+        )
+
+    val shareIntent =
+        Intent(Intent.ACTION_SEND).apply {
+            type = "application/pdf"
+
+            putExtra(
+                Intent.EXTRA_SUBJECT,
+                if (isEnglish) {
+                    "Training Archive"
+                } else {
+                    "ארכיון אימונים"
+                }
+            )
+
+            putExtra(
+                Intent.EXTRA_STREAM,
+                uri
+            )
+
+            addFlags(
+                Intent.FLAG_GRANT_READ_URI_PERMISSION
+            )
+        }
+
+    context.startActivity(
+        Intent.createChooser(
+            shareIntent,
+            if (isEnglish) {
+                "Share PDF"
+            } else {
+                "שיתוף PDF"
+            }
+        )
+    )
+}
+
+private fun createTrainingArchivePdf(
+    context: Context,
+    items: List<TrainingArchivePdfItem>,
+    fromDate: LocalDate,
+    toDate: LocalDate,
+    isEnglish: Boolean
+): File {
+    val pageWidth = 595
+    val pageHeight = 842
+    val margin = 26f
+    val rowsPerPage = 6
+
+    val totalPages =
+        maxOf(
+            1,
+            ceil(
+                items.size.toDouble() /
+                        rowsPerPage.toDouble()
+            ).toInt()
+        )
+
+    val document = PdfDocument()
+
+    val regularTypeface =
+        Typeface.create(
+            Typeface.SANS_SERIF,
+            Typeface.NORMAL
+        )
+
+    val boldTypeface =
+        Typeface.create(
+            Typeface.SANS_SERIF,
+            Typeface.BOLD
+        )
+
+    val textColor =
+        android.graphics.Color.rgb(
+            23,
+            32,
+            51
+        )
+
+    val secondaryTextColor =
+        android.graphics.Color.rgb(
+            71,
+            84,
+            103
+        )
+
+    val completedColor =
+        android.graphics.Color.rgb(
+            103,
+            80,
+            164
+        )
+
+    val cancelledColor =
+        android.graphics.Color.rgb(
+            186,
+            26,
+            26
+        )
+
+    val cardBackground =
+        android.graphics.Color.rgb(
+            248,
+            251,
+            255
+        )
+
+    val cardBorder =
+        android.graphics.Color.rgb(
+            213,
+            222,
+            229
+        )
+
+    fun textPaint(
+        size: Float,
+        color: Int = textColor,
+        bold: Boolean = false
+    ): Paint {
+        return Paint(
+            Paint.ANTI_ALIAS_FLAG
+        ).apply {
+            textSize = size
+            this.color = color
+            typeface =
+                if (bold) {
+                    boldTypeface
+                } else {
+                    regularTypeface
+                }
+
+            textAlign =
+                KmiPdfDirection.textAlign(
+                    isEnglish = isEnglish
+                )
+        }
+    }
+
+    val dateFormatter =
+        DateTimeFormatter.ofPattern(
+            "dd/MM/yyyy",
+            if (isEnglish) {
+                Locale.US
+            } else {
+                Locale("he", "IL")
+            }
+        )
+
+    val rangeText =
+        "${fromDate.format(dateFormatter)} – " +
+                toDate.format(dateFormatter)
+
+    for (pageIndex in 0 until totalPages) {
+        val pageNumber = pageIndex + 1
+
+        val page =
+            document.startPage(
+                PdfDocument.PageInfo.Builder(
+                    pageWidth,
+                    pageHeight,
+                    pageNumber
+                ).create()
+            )
+
+        val canvas = page.canvas
+
+        KmiPdfHeader.draw(
+            context = context,
+            canvas = canvas,
+            pageWidth = pageWidth,
+            isEnglish = isEnglish,
+            titleHebrew = "ארכיון אימונים",
+            titleEnglish = "Training Archive",
+            subtitleHebrew = "טווח תאריכים: $rangeText",
+            subtitleEnglish = "Date range: $rangeText"
+        )
+
+        val contentLeft = margin
+        val contentRight =
+            pageWidth - margin
+
+        val startX =
+            KmiPdfDirection.startPaddingX(
+                isEnglish = isEnglish,
+                left = contentLeft,
+                right = contentRight,
+                padding = 14f
+            )
+
+        var currentTop = 138f
+
+        val pageItems =
+            items.drop(
+                pageIndex * rowsPerPage
+            ).take(
+                rowsPerPage
+            )
+
+        if (items.isEmpty()) {
+            val emptyPaint =
+                textPaint(
+                    size = 16f,
+                    bold = true
+                ).apply {
+                    textAlign =
+                        Paint.Align.CENTER
+                }
+
+            canvas.drawText(
+                if (isEnglish) {
+                    "No trainings were found in the selected range."
+                } else {
+                    "לא נמצאו אימונים בטווח שנבחר."
+                },
+                pageWidth / 2f,
+                currentTop + 70f,
+                emptyPaint
+            )
+        } else {
+            pageItems.forEach { item ->
+                val cardBottom =
+                    currentTop + 94f
+
+                val backgroundPaint =
+                    Paint(
+                        Paint.ANTI_ALIAS_FLAG
+                    ).apply {
+                        color = cardBackground
+                        style = Paint.Style.FILL
+                    }
+
+                val borderPaint =
+                    Paint(
+                        Paint.ANTI_ALIAS_FLAG
+                    ).apply {
+                        color = cardBorder
+                        style = Paint.Style.STROKE
+                        strokeWidth = 1f
+                    }
+
+                canvas.drawRoundRect(
+                    contentLeft,
+                    currentTop,
+                    contentRight,
+                    cardBottom,
+                    10f,
+                    10f,
+                    backgroundPaint
+                )
+
+                canvas.drawRoundRect(
+                    contentLeft,
+                    currentTop,
+                    contentRight,
+                    cardBottom,
+                    10f,
+                    10f,
+                    borderPaint
+                )
+
+                val titlePaint =
+                    textPaint(
+                        size = 14f,
+                        bold = true
+                    )
+
+                val detailPaint =
+                    textPaint(
+                        size = 10.5f,
+                        color = secondaryTextColor
+                    )
+
+                val statusPaint =
+                    textPaint(
+                        size = 11f,
+                        color =
+                            if (item.isCancelled) {
+                                cancelledColor
+                            } else {
+                                completedColor
+                            },
+                        bold = true
+                    )
+
+                canvas.drawText(
+                    item.place.take(46),
+                    startX,
+                    currentTop + 23f,
+                    titlePaint
+                )
+
+                canvas.drawText(
+                    "${item.date} · ${item.time}",
+                    startX,
+                    currentTop + 42f,
+                    detailPaint
+                )
+
+                val locationText =
+                    listOf(
+                        item.branch,
+                        item.group,
+                        item.address
+                    )
+                        .filter {
+                            it.isNotBlank()
+                        }
+                        .joinToString(" · ")
+
+                if (locationText.isNotBlank()) {
+                    canvas.drawText(
+                        locationText.take(72),
+                        startX,
+                        currentTop + 61f,
+                        detailPaint
+                    )
+                }
+
+                val coachText =
+                    if (item.coach.isBlank()) {
+                        item.status
+                    } else {
+                        if (isEnglish) {
+                            "Coach: ${item.coach} · ${item.status}"
+                        } else {
+                            "מאמן: ${item.coach} · ${item.status}"
+                        }
+                    }
+
+                canvas.drawText(
+                    coachText.take(72),
+                    startX,
+                    currentTop + 80f,
+                    statusPaint
+                )
+
+                currentTop =
+                    cardBottom + 8f
+            }
+        }
+
+        KmiPdfFooter.draw(
+            canvas = canvas,
+            pageWidth = pageWidth,
+            pageHeight = pageHeight,
+            pageNumber = pageNumber,
+            totalPages = totalPages,
+            isEnglish = isEnglish
+        )
+
+        document.finishPage(page)
+    }
+
+    val pdfDirectory =
+        File(
+            context.cacheDir,
+            "shared_pdfs"
+        ).apply {
+            mkdirs()
+        }
+
+    val pdfFile =
+        File(
+            pdfDirectory,
+            if (isEnglish) {
+                "Training Archive.pdf"
+            } else {
+                "ארכיון אימונים.pdf"
+            }
+        )
+
+    FileOutputStream(
+        pdfFile,
+        false
+    ).use { output ->
+        document.writeTo(output)
+    }
+
+    document.close()
+
+    return pdfFile
 }
 
 @Composable
@@ -1433,7 +2052,13 @@ private fun TrainingArchiveCard(
                 )
             }
 
-            if (training.coach.isNotBlank()) {
+            val displayCoach =
+                archiveCoachDisplayName(
+                    realName = training.coach,
+                    isEnglish = isEnglish
+                )
+
+            if (displayCoach.isNotBlank()) {
                 ArchiveDetailLine(
                     title =
                         if (isEnglish) {
@@ -1441,7 +2066,7 @@ private fun TrainingArchiveCard(
                         } else {
                             "מאמן"
                         },
-                    value = training.coach
+                    value = displayCoach
                 )
             }
 

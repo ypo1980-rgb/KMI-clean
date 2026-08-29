@@ -1,7 +1,14 @@
 package il.kmi.app.ui.training
 
 import android.content.Context
+import android.content.Intent
 import android.content.SharedPreferences
+import android.graphics.Paint
+import android.graphics.Typeface
+import android.graphics.pdf.PdfDocument
+import android.text.StaticLayout
+import android.text.TextPaint
+import android.widget.Toast
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -45,6 +52,8 @@ import il.kmi.shared.prefs.KmiPrefs
 import il.kmi.shared.localization.AppLanguage
 import il.kmi.shared.localization.AppLanguageManager
 import org.json.JSONArray
+import java.io.File
+import java.io.FileOutputStream
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 import java.util.Locale
@@ -64,8 +73,8 @@ import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Surface
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.ModalBottomSheet
@@ -93,11 +102,19 @@ import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
+import androidx.core.content.FileProvider
 import androidx.core.content.edit
+import androidx.core.graphics.withTranslation
 import il.kmi.app.domain.ContentRepo
 import il.kmi.app.search.KmiSearchBridge
+import il.kmi.app.ui.KmiIconSize
 import il.kmi.app.ui.KmiPremiumDropdown
-import il.kmi.app.ui.LocalAppIconScale
+import il.kmi.app.ui.loading.KmiLoadingRings
+import il.kmi.app.ui.pdf.KmiPdfDirection
+import il.kmi.app.ui.pdf.KmiPdfFooter
+import il.kmi.app.ui.pdf.KmiPdfHeader
+import il.kmi.app.ui.scaledIconSize
+import il.yuval.ui.theme.kmiScreenBackgroundBrush
 import il.kmi.shared.domain.SubTopicRegistry
 import il.kmi.shared.questions.model.util.ExerciseTitleFormatter
 
@@ -105,27 +122,6 @@ import il.kmi.shared.questions.model.util.ExerciseTitleFormatter
 // ===========================
 // Training Summary Palette
 // ===========================
-
-private val SummaryBgTop: Color
-    @Composable
-    get() =
-        MaterialTheme.colorScheme.background
-
-private val SummaryBgMid1: Color
-    @Composable
-    get() =
-        MaterialTheme.colorScheme.surface
-
-private val SummaryBgMid2: Color
-    @Composable
-    get() =
-        MaterialTheme.colorScheme.surfaceVariant
-
-private val SummaryBgBottom: Color
-    @Composable
-    get() =
-        MaterialTheme.colorScheme.primary
-            .copy(alpha = 0.42f)
 
 private val SummaryCard: Color
     @Composable
@@ -316,7 +312,7 @@ private fun SummarySectionHeader(
                             .onPrimary,
                     modifier =
                         Modifier.size(
-                            18.dp * LocalAppIconScale.current
+                            KmiIconSize.small
                         )
                 )
             }
@@ -495,6 +491,39 @@ fun TrainingSummaryScreen(
                     lockHome = false,
                     onHome = {
                         onHome?.invoke()
+                    },
+                    onShare = {
+                        shareTrainingSummaryPdf(
+                            context = ctx,
+                            data =
+                                TrainingSummaryPdfData(
+                                    dateIso =
+                                        state.dateIso,
+                                    branchName =
+                                        state.branchName,
+                                    groupName =
+                                        state.groupKey,
+                                    coachName =
+                                        state.coachName,
+                                    generalNotes =
+                                        state.notes,
+                                    exercises =
+                                        state.selected
+                                            .values
+                                            .sortedBy {
+                                                it.name.lowercase()
+                                            }
+                                            .map { exercise ->
+                                                TrainingSummaryPdfExercise(
+                                                    name =
+                                                        exercise.name,
+                                                    highlight =
+                                                        exercise.highlight
+                                                )
+                                            }
+                                ),
+                            isEnglish = isEnglish
+                        )
                     }
                 )
             }
@@ -506,32 +535,6 @@ fun TrainingSummaryScreen(
                 .colorScheme
                 .background
     ) { padding ->
-
-        val granite =
-            Brush.verticalGradient(
-                colors =
-                    listOf(
-                        SummaryBgTop,
-                        SummaryBgMid1,
-                        SummaryBgMid2,
-                        MaterialTheme
-                            .colorScheme
-                            .primary
-                            .copy(alpha = 0.72f),
-                        SummaryBgBottom
-                    )
-            )
-
-        val graniteNoise = Brush.linearGradient(
-            colors = listOf(
-                Color.White.copy(alpha = 0.16f),
-                Color.Transparent,
-                Color.White.copy(alpha = 0.08f),
-                Color.Transparent
-            ),
-            start = Offset(0f, 0f),
-            end = Offset(1200f, 1200f)
-        )
 
         val screenLayoutDirection =
             if (isEnglish) {
@@ -546,8 +549,9 @@ fun TrainingSummaryScreen(
             Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .background(granite)
-                    .background(graniteNoise)
+                    .background(
+                        brush = kmiScreenBackgroundBrush()
+                    )
                     .padding(padding)
                     .imePadding()
                     .navigationBarsPadding()
@@ -670,7 +674,7 @@ fun TrainingSummaryScreen(
                                     contentDescription = null,
                                     modifier =
                                         Modifier.size(
-                                            18.dp * LocalAppIconScale.current
+                                            KmiIconSize.small
                                         )
                                 )
 
@@ -1025,8 +1029,46 @@ fun TrainingSummaryScreen(
                         initialBelt = belt,
                         beltHebLabel = ::beltHebLabel,
                         isEnglish = isEnglish,
-                        onDismiss = { showAddExercisesSheet = false }
+                        onDismiss = {
+                            showAddExercisesSheet = false
+                        }
                     )
+                }
+
+                if (state.isSaving) {
+                    Dialog(
+                        onDismissRequest = {}
+                    ) {
+                        Surface(
+                            shape = RoundedCornerShape(24.dp),
+                            color =
+                                MaterialTheme
+                                    .colorScheme
+                                    .surface,
+                            tonalElevation = 0.dp,
+                            shadowElevation = 0.dp,
+                            border = BorderStroke(
+                                width = 1.dp,
+                                color =
+                                    MaterialTheme
+                                        .colorScheme
+                                        .outlineVariant
+                            )
+                        ) {
+                            KmiLoadingRings(
+                                modifier =
+                                    Modifier.padding(
+                                        horizontal = 32.dp,
+                                        vertical = 24.dp
+                                    ),
+                                text =
+                                    tr(
+                                        "שומר את סיכום האימון...",
+                                        "Saving training summary..."
+                                    )
+                            )
+                        }
+                    }
                 }
 
             } // Box
@@ -1197,17 +1239,8 @@ private fun AddExercisesBottomSheet(
         }
     ) {
         Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .background(
-                    Brush.verticalGradient(
-                        listOf(
-                            SummaryBgTop,
-                            SummaryBgMid1,
-                            SummaryCard
-                        )
-                    )
-                )
+            modifier =
+                Modifier.fillMaxWidth()
         ) {
             LazyColumn(
                 modifier =
@@ -1461,7 +1494,7 @@ private fun AddExercisesBottomSheet(
                                     contentDescription = null,
                                     modifier =
                                         Modifier.size(
-                                            18.dp * LocalAppIconScale.current
+                                            KmiIconSize.small
                                         )
                                 )
 
@@ -1755,7 +1788,7 @@ private fun TrainingInfoCard(
                                     .onPrimary,
                             modifier =
                                 Modifier.size(
-                                    16.dp * LocalAppIconScale.current
+                                    scaledIconSize(16.dp)
                                 )
                         )
                     }
@@ -1787,7 +1820,7 @@ private fun TrainingInfoCard(
                         contentDescription = null,
                         modifier =
                             Modifier.size(
-                                15.dp * LocalAppIconScale.current
+                                scaledIconSize(15.dp)
                             ),
                         tint =
                             MaterialTheme
@@ -2323,6 +2356,646 @@ private fun SelectedExerciseEditor(
             }
         }
     }
+}
+
+// =========================
+// Training summary PDF
+// =========================
+
+private data class TrainingSummaryPdfExercise(
+    val name: String,
+    val highlight: String
+)
+
+private data class TrainingSummaryPdfData(
+    val dateIso: String,
+    val branchName: String,
+    val groupName: String,
+    val coachName: String,
+    val generalNotes: String,
+    val exercises: List<TrainingSummaryPdfExercise>
+)
+
+@Suppress("SpellCheckingInspection")
+private fun shareTrainingSummaryPdf(
+    context: Context,
+    data: TrainingSummaryPdfData,
+    isEnglish: Boolean
+) {
+    runCatching {
+        val pdfFile =
+            createTrainingSummaryPdf(
+                context = context,
+                data = data,
+                isEnglish = isEnglish
+            )
+
+        val uri =
+            FileProvider.getUriForFile(
+                context,
+                "${context.packageName}.fileprovider",
+                pdfFile
+            )
+
+        val shareIntent =
+            Intent(Intent.ACTION_SEND).apply {
+                type = "application/pdf"
+
+                putExtra(
+                    Intent.EXTRA_SUBJECT,
+                    if (isEnglish) {
+                        "KMI training summary"
+                    } else {
+                        "סיכום אימון ק.מ.י"
+                    }
+                )
+
+                putExtra(
+                    Intent.EXTRA_STREAM,
+                    uri
+                )
+
+                addFlags(
+                    Intent.FLAG_GRANT_READ_URI_PERMISSION
+                )
+            }
+
+        context.startActivity(
+            Intent.createChooser(
+                shareIntent,
+                if (isEnglish) {
+                    "Share training summary PDF"
+                } else {
+                    "שיתוף סיכום האימון כ־PDF"
+                }
+            )
+        )
+    }.onFailure {
+        Toast.makeText(
+            context,
+            if (isEnglish) {
+                "The PDF file could not be created"
+            } else {
+                "לא ניתן היה ליצור את קובץ ה־PDF"
+            },
+            Toast.LENGTH_LONG
+        ).show()
+    }
+}
+
+private fun createTrainingSummaryPdf(
+    context: Context,
+    data: TrainingSummaryPdfData,
+    isEnglish: Boolean
+): File {
+    val pageWidth = 595
+    val pageHeight = 842
+    val horizontalMargin = 40f
+    val contentWidth =
+        (pageWidth - horizontalMargin * 2f)
+            .toInt()
+
+    val contentBottom =
+        pageHeight -
+                KmiPdfFooter.CONTENT_BOTTOM_PADDING
+
+    val document =
+        PdfDocument()
+
+    val regularTypeface =
+        Typeface.create(
+            Typeface.SANS_SERIF,
+            Typeface.NORMAL
+        )
+
+    val boldTypeface =
+        Typeface.create(
+            Typeface.SANS_SERIF,
+            Typeface.BOLD
+        )
+
+    fun textPaint(
+        size: Float,
+        color: Int,
+        bold: Boolean = false
+    ): TextPaint {
+        return TextPaint(
+            Paint.ANTI_ALIAS_FLAG
+        ).apply {
+            textSize = size
+            this.color = color
+            typeface =
+                if (bold) {
+                    boldTypeface
+                } else {
+                    regularTypeface
+                }
+        }
+    }
+
+    val titleColor =
+        android.graphics.Color.rgb(
+            6,
+            43,
+            74
+        )
+
+    val textColor =
+        android.graphics.Color.rgb(
+            23,
+            32,
+            51
+        )
+
+    val mutedColor =
+        android.graphics.Color.rgb(
+            71,
+            84,
+            103
+        )
+
+    val dividerColor =
+        android.graphics.Color.rgb(
+            213,
+            222,
+            229
+        )
+
+    val sectionPaint =
+        textPaint(
+            size = 17f,
+            color = titleColor,
+            bold = true
+        )
+
+    val bodyPaint =
+        textPaint(
+            size = 13f,
+            color = textColor
+        )
+
+    val emphasizedPaint =
+        textPaint(
+            size = 13f,
+            color = textColor,
+            bold = true
+        )
+
+    val mutedPaint =
+        textPaint(
+            size = 12f,
+            color = mutedColor
+        )
+
+    val linePaint =
+        Paint(
+            Paint.ANTI_ALIAS_FLAG
+        ).apply {
+            color = dividerColor
+            strokeWidth = 1.2f
+        }
+
+    fun tr(
+        he: String,
+        en: String
+    ): String {
+        return if (isEnglish) {
+            en
+        } else {
+            he
+        }
+    }
+
+    fun cleanText(
+        value: String,
+        fallback: String
+    ): String {
+        return value
+            .trim()
+            .ifBlank {
+                fallback
+            }
+    }
+
+    val headerSubtitle =
+        listOf(
+            data.dateIso.trim(),
+            data.branchName.trim(),
+            data.groupName.trim()
+        )
+            .filter {
+                it.isNotBlank()
+            }
+            .joinToString(" · ")
+
+    var pageNumber = 0
+    var pageStarted = false
+    lateinit var page: PdfDocument.Page
+    lateinit var canvas: android.graphics.Canvas
+    var y = KmiPdfHeader.CONTENT_TOP
+
+    fun drawHeader() {
+        KmiPdfHeader.draw(
+            context = context,
+            canvas = canvas,
+            pageWidth = pageWidth,
+            isEnglish = isEnglish,
+            titleHebrew = "סיכום אימון",
+            titleEnglish = "Training Summary",
+            subtitleHebrew = headerSubtitle,
+            subtitleEnglish = headerSubtitle
+        )
+
+        y = KmiPdfHeader.CONTENT_TOP
+    }
+
+    fun drawFooter() {
+        KmiPdfFooter.draw(
+            canvas = canvas,
+            pageWidth = pageWidth,
+            pageHeight = pageHeight,
+            pageNumber = pageNumber,
+            totalPages = null,
+            isEnglish = isEnglish
+        )
+    }
+
+    fun startPage() {
+        if (pageStarted) {
+            drawFooter()
+            document.finishPage(page)
+        }
+
+        pageNumber++
+
+        page =
+            document.startPage(
+                PdfDocument.PageInfo
+                    .Builder(
+                        pageWidth,
+                        pageHeight,
+                        pageNumber
+                    )
+                    .create()
+            )
+
+        pageStarted = true
+        canvas = page.canvas
+        drawHeader()
+    }
+
+    fun ensureSpace(
+        requiredHeight: Float
+    ) {
+        if (
+            y + requiredHeight >
+            contentBottom
+        ) {
+            startPage()
+        }
+    }
+
+    fun wrappedLines(
+        text: String,
+        paint: TextPaint
+    ): List<String> {
+        val result =
+            mutableListOf<String>()
+
+        text
+            .replace("\r\n", "\n")
+            .replace('\r', '\n')
+            .split('\n')
+            .forEach { paragraph ->
+                if (paragraph.isBlank()) {
+                    result.add("")
+                    return@forEach
+                }
+
+                var currentLine = ""
+
+                paragraph
+                    .trim()
+                    .split(
+                        Regex("\\s+")
+                    )
+                    .forEach { word ->
+                        val candidate =
+                            if (currentLine.isBlank()) {
+                                word
+                            } else {
+                                "$currentLine $word"
+                            }
+
+                        if (
+                            paint.measureText(candidate) <=
+                            contentWidth
+                        ) {
+                            currentLine = candidate
+                        } else {
+                            if (currentLine.isNotBlank()) {
+                                result.add(currentLine)
+                            }
+
+                            currentLine = word
+                        }
+                    }
+
+                if (currentLine.isNotBlank()) {
+                    result.add(currentLine)
+                }
+            }
+
+        return result
+    }
+
+    fun drawTextLines(
+        text: String,
+        paint: TextPaint,
+        bottomSpacing: Float = 6f
+    ) {
+        val lines =
+            wrappedLines(
+                text = text,
+                paint = paint
+            )
+
+        lines.forEach { line ->
+            val displayLine =
+                line.ifBlank {
+                    " "
+                }
+
+            val layout =
+                StaticLayout.Builder
+                    .obtain(
+                        displayLine,
+                        0,
+                        displayLine.length,
+                        paint,
+                        contentWidth
+                    )
+                    .setAlignment(
+                        KmiPdfDirection.layoutAlignment(
+                            isEnglish = isEnglish
+                        )
+                    )
+                    .setTextDirection(
+                        KmiPdfDirection.textDirection(
+                            isEnglish = isEnglish
+                        )
+                    )
+                    .setIncludePad(false)
+                    .setMaxLines(1)
+                    .build()
+
+            ensureSpace(
+                layout.height + 4f
+            )
+
+            canvas.withTranslation(
+                x = horizontalMargin,
+                y = y
+            ) {
+                layout.draw(this)
+            }
+
+            y += layout.height + 4f
+        }
+
+        y += bottomSpacing
+    }
+
+    fun drawSectionTitle(
+        title: String
+    ) {
+        ensureSpace(34f)
+
+        drawTextLines(
+            text = title,
+            paint = sectionPaint,
+            bottomSpacing = 4f
+        )
+
+        canvas.drawLine(
+            horizontalMargin,
+            y,
+            pageWidth - horizontalMargin,
+            y,
+            linePaint
+        )
+
+        y += 12f
+    }
+
+    fun drawField(
+        label: String,
+        value: String
+    ) {
+        drawTextLines(
+            text = label,
+            paint = emphasizedPaint,
+            bottomSpacing = 1f
+        )
+
+        drawTextLines(
+            text = value,
+            paint = bodyPaint,
+            bottomSpacing = 8f
+        )
+    }
+
+    startPage()
+
+    drawSectionTitle(
+        tr(
+            "פרטי האימון",
+            "Training details"
+        )
+    )
+
+    drawField(
+        label =
+            tr(
+                "תאריך",
+                "Date"
+            ),
+        value =
+            cleanText(
+                data.dateIso,
+                tr(
+                    "לא נבחר תאריך",
+                    "No date selected"
+                )
+            )
+    )
+
+    drawField(
+        label =
+            tr(
+                "סניף",
+                "Branch"
+            ),
+        value =
+            cleanText(
+                data.branchName,
+                tr(
+                    "לא צוין סניף",
+                    "No branch specified"
+                )
+            )
+    )
+
+    drawField(
+        label =
+            tr(
+                "קבוצה",
+                "Group"
+            ),
+        value =
+            cleanText(
+                data.groupName,
+                tr(
+                    "לא צוינה קבוצה",
+                    "No group specified"
+                )
+            )
+    )
+
+    drawField(
+        label =
+            tr(
+                "מאמן",
+                "Coach"
+            ),
+        value =
+            cleanText(
+                data.coachName,
+                tr(
+                    "לא צוין מאמן",
+                    "No coach specified"
+                )
+            )
+    )
+
+    drawSectionTitle(
+        tr(
+            "תרגילים שבוצעו באימון",
+            "Exercises performed in training"
+        )
+    )
+
+    if (data.exercises.isEmpty()) {
+        drawTextLines(
+            text =
+                tr(
+                    "לא נוספו תרגילים לסיכום האימון.",
+                    "No exercises were added to the training summary."
+                ),
+            paint = mutedPaint,
+            bottomSpacing = 12f
+        )
+    } else {
+        data.exercises
+            .forEachIndexed { index, exercise ->
+                ensureSpace(48f)
+
+                drawTextLines(
+                    text =
+                        "${index + 1}. ${
+                            cleanText(
+                                exercise.name,
+                                tr(
+                                    "תרגיל ללא שם",
+                                    "Unnamed exercise"
+                                )
+                            )
+                        }",
+                    paint = emphasizedPaint,
+                    bottomSpacing = 2f
+                )
+
+                if (exercise.highlight.isNotBlank()) {
+                    drawTextLines(
+                        text =
+                            tr(
+                                "דגשים: ",
+                                "Highlights: "
+                            ) +
+                                    exercise.highlight.trim(),
+                        paint = mutedPaint,
+                        bottomSpacing = 8f
+                    )
+                } else {
+                    y += 5f
+                }
+            }
+    }
+
+    drawSectionTitle(
+        tr(
+            "סיכום כללי",
+            "General summary"
+        )
+    )
+
+    drawTextLines(
+        text =
+            cleanText(
+                data.generalNotes,
+                tr(
+                    "לא נוסף סיכום כללי.",
+                    "No general summary was added."
+                )
+            ),
+        paint = bodyPaint,
+        bottomSpacing = 8f
+    )
+
+    drawFooter()
+    document.finishPage(page)
+
+    val reportsDirectory =
+        File(
+            context.cacheDir,
+            "reports"
+        ).apply {
+            mkdirs()
+        }
+
+    val safeDate =
+        data.dateIso
+            .trim()
+            .replace(
+                Regex("[^0-9A-Za-zא-ת_-]"),
+                "_"
+            )
+            .ifBlank {
+                "training"
+            }
+
+    val fileName =
+        if (isEnglish) {
+            "KMI_Training_Summary_$safeDate.pdf"
+        } else {
+            "סיכום_אימון_קמי_$safeDate.pdf"
+        }
+
+    val outputFile =
+        File(
+            reportsDirectory,
+            fileName
+        )
+
+    FileOutputStream(
+        outputFile
+    ).use { output ->
+        document.writeTo(output)
+    }
+
+    document.close()
+
+    return outputFile
 }
 
 /* =========================

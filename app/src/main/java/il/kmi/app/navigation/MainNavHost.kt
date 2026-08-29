@@ -1620,6 +1620,11 @@ fun MainNavHost(
                 il.kmi.app.screens.MonthlyCalendarScreen(
                     kmiPrefs = kmiPrefs,
 
+                    // לוח השנה הראשי הוא מצב צפייה בלבד:
+                    // לחיצה על יום מעדכנת את האימונים / החגים המוצגים,
+                    // אך אינה פותחת את מסך הסיכום.
+                    mode = il.kmi.app.screens.MonthlyCalendarMode.VIEW_ONLY,
+
                     onBack = {
                         nav.popBackStack()
                     },
@@ -2262,17 +2267,6 @@ fun MainNavHost(
                                 return@commandHandler
                             }
 
-                            ctx.getSharedPreferences(
-                                "kmi_voice_home_actions",
-                                Context.MODE_PRIVATE
-                            )
-                                .edit()
-                                .putBoolean(
-                                    "open_training_archive",
-                                    true
-                                )
-                                .apply()
-
                             speakVoiceCommandFeedback(
                                 hebrewText =
                                     "פותח את ארכיון האימונים",
@@ -2280,7 +2274,9 @@ fun MainNavHost(
                                     "Opening the training archive"
                             )
 
-                            nav.navigate(Route.Home.route) {
+                            nav.navigate(
+                                TRAINING_ARCHIVE_ROUTE
+                            ) {
                                 launchSingleTop = true
                                 restoreState = false
                             }

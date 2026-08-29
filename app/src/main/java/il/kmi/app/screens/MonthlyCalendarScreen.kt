@@ -1,10 +1,14 @@
-@file:OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
+@file:OptIn(ExperimentalMaterial3Api::class)
 
 package il.kmi.app.screens
 
 import android.app.Activity
 import android.content.Context
+import android.content.Intent
 import android.content.SharedPreferences
+import android.graphics.Paint
+import android.graphics.Typeface
+import android.graphics.pdf.PdfDocument
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
@@ -23,7 +27,6 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLayoutDirection
@@ -31,6 +34,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
+import androidx.core.content.FileProvider
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -38,11 +42,21 @@ import il.kmi.app.training.TrainingCatalog
 import il.kmi.app.database.KmiDatabaseProvider
 import il.kmi.app.halacha.HolidayCalendarRepository
 import il.kmi.app.ui.KmiTopBar
+import il.kmi.app.ui.KmiTypography
+import il.yuval.ui.theme.kmiScreenBackgroundBrush
 import il.kmi.app.ui.calendar.KmiCalendarMarkers
 import il.kmi.app.ui.calendar.KmiCalendarMonth
+import il.kmi.app.ui.pdf.KmiPdfDirection
+import il.kmi.app.ui.pdf.KmiPdfFooter
+import il.kmi.app.ui.pdf.KmiPdfHeader
 import il.kmi.shared.prefs.KmiPrefs
+import java.io.File
+import java.io.FileOutputStream
 import java.time.*
+import java.time.format.DateTimeFormatter
+import java.time.format.TextStyle
 import java.util.Locale
+import kotlin.math.ceil
 
 private data class CalendarTrainingItem(
     val branch: String,
@@ -64,11 +78,17 @@ private data class CalendarTrainingItem(
 /*                             Screen itself                                  */
 /* -------------------------------------------------------------------------- */
 
+enum class MonthlyCalendarMode {
+    VIEW_ONLY,
+    SUMMARY_DATE_PICKER
+}
+
 @Composable
 fun MonthlyCalendarScreen(
     kmiPrefs: KmiPrefs,
     onBack: () -> Unit,
     onHome: () -> Unit,
+    mode: MonthlyCalendarMode = MonthlyCalendarMode.SUMMARY_DATE_PICKER,
     onDateClick: (
         date: LocalDate,
         branch: String,
@@ -84,75 +104,31 @@ fun MonthlyCalendarScreen(
 
     fun tr(he: String, en: String): String = if (isEnglish) en else he
 
-    val colorScheme = MaterialTheme.colorScheme
-    val isDarkTheme =
-        colorScheme.background.luminance() < 0.5f
-
-    val screenBackgroundBrush =
-        if (isDarkTheme) {
-            Brush.verticalGradient(
-                colors = listOf(
-                    Color(0xFF071126),
-                    Color(0xFF0D1E43),
-                    Color(0xFF183A7A),
-                    Color(0xFF3F78F2)
-                )
-            )
-        } else {
-            Brush.verticalGradient(
-                colors = listOf(
-                    colorScheme.background,
-                    colorScheme.surface,
-                    colorScheme.primaryContainer.copy(alpha = 0.30f),
-                    colorScheme.background
-                )
-            )
-        }
+    val colorScheme =
+        MaterialTheme.colorScheme
 
     val secondaryTextColor =
-        if (isDarkTheme) {
-            Color.White.copy(alpha = 0.92f)
-        } else {
-            colorScheme.onSurfaceVariant
-        }
+        colorScheme.onSurfaceVariant
 
     val informationCardColor =
-        if (isDarkTheme) {
-            Color.White.copy(alpha = 0.10f)
-        } else {
-            colorScheme.surface
-        }
+        colorScheme.surface
 
     val informationCardBorder =
-        if (isDarkTheme) {
-            Color.White.copy(alpha = 0.12f)
-        } else {
-            colorScheme.outline.copy(alpha = 0.22f)
-        }
+        colorScheme.outline.copy(
+            alpha = 0.22f
+        )
 
     val selectedDayBrush =
-        if (isDarkTheme) {
-            Brush.verticalGradient(
-                colors = listOf(
-                    Color(0xFF6A8FE8).copy(alpha = 0.78f),
-                    Color(0xFF5D84E4).copy(alpha = 0.72f)
-                )
-            )
-        } else {
-            Brush.verticalGradient(
-                colors = listOf(
+        Brush.verticalGradient(
+            colors =
+                listOf(
                     colorScheme.primaryContainer,
                     colorScheme.secondaryContainer
                 )
-            )
-        }
+        )
 
     val selectedDayTextColor =
-        if (isDarkTheme) {
-            Color.White
-        } else {
-            colorScheme.onPrimaryContainer
-        }
+        colorScheme.onPrimaryContainer
 
     CompositionLocalProvider(
         LocalLayoutDirection provides screenLayoutDirection
@@ -218,20 +194,23 @@ fun MonthlyCalendarScreen(
             if (pickedFromDb.isNotEmpty()) {
                 pickedFromDb.distinct()
             } else {
-                val regionBranches = TrainingCatalog.branchesFor(region)
-                if (regionBranches.isEmpty()) {
-                    emptyList()
-                } else {
-                    val picked = branchListRaw.mapNotNull { wanted ->
-                        regionBranches.firstOrNull { it == wanted }
-                            ?: regionBranches.firstOrNull { it.equals(wanted, true) }
+                val regionBranches =
+                    TrainingCatalog.branchesFor(
+                        region
+                    )
+
+                branchListRaw
+                    .mapNotNull { wanted ->
+                        regionBranches.firstOrNull { branch ->
+                            branch.equals(
+                                wanted,
+                                ignoreCase = true
+                            )
+                        }
                     }
-                    if (picked.isNotEmpty()) picked else listOf(regionBranches.first())
-                }
+                    .distinct()
             }
         }
-
-        val ctx = LocalContext.current
 
         /*
          * מקור אמת יחיד לכל נתוני החגים בחודש:
@@ -281,8 +260,11 @@ fun MonthlyCalendarScreen(
             ctx.getSharedPreferences("kmi_training_summary", Context.MODE_PRIVATE)
         }
 
-        // ✅ גרסת רענון כדי שהלוח יתעדכן מיד אחרי שמירה / חזרה מהמסך
-        var summaryVersion by remember { mutableStateOf(0) }
+        // גרסת רענון כדי שהלוח יתעדכן מיד אחרי שמירה או חזרה למסך.
+        var summaryVersion by
+        remember {
+            mutableIntStateOf(0)
+        }
 
         DisposableEffect(summarySp) {
             val listener = SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
@@ -411,7 +393,7 @@ fun MonthlyCalendarScreen(
         }
 
         Scaffold(
-            containerColor = colorScheme.background,
+            containerColor = Color.Transparent,
             contentWindowInsets = WindowInsets(0),
             topBar = {
                 val contextLang =
@@ -428,11 +410,7 @@ fun MonthlyCalendarScreen(
                         "Monthly calendar"
                     ),
 
-                    /*
-                     * במסך לוח השנה אין צורך בכפתור X.
-                     * החזרה זמינה דרך מערכת הניווט של המכשיר.
-                     */
-                    onBack = null,
+                    onBack = onBack,
                     onHome = onHome,
                     useCloseIcon = false,
 
@@ -458,8 +436,21 @@ fun MonthlyCalendarScreen(
                     showBottomHelp = true,
 
                     centerTitle = true,
-                    showTopHome = false,
-                    showTopShare = false,
+                    showTopHome = true,
+                    showTopShare = true,
+                    onShare = {
+                        shareMonthlyCalendarPdf(
+                            context = contextLang,
+                            yearMonth = ym,
+                            trainingsByDate =
+                                trainingsByDate,
+                            holidaysByDate =
+                                holidaysByDate,
+                            summaryDates =
+                                summaryDatesThisMonth,
+                            isEnglish = isEnglish
+                        )
+                    },
 
                     currentLang =
                         if (
@@ -500,7 +491,9 @@ fun MonthlyCalendarScreen(
                 modifier = Modifier
                     .padding(padding)
                     .fillMaxSize()
-                    .background(screenBackgroundBrush)
+                    .background(
+                        brush = kmiScreenBackgroundBrush()
+                    )
                     .pointerInput(ym) {
                         val threshold = 48f
                         detectHorizontalDragGestures { _, dragAmount ->
@@ -515,8 +508,12 @@ fun MonthlyCalendarScreen(
                 AnimatedContent(
                     targetState = ym,
                     transitionSpec = {
-                        slideInHorizontally { width -> width } togetherWith
-                                slideOutHorizontally { width -> -width }
+                        slideInHorizontally { width ->
+                            width
+                        } togetherWith
+                                slideOutHorizontally { width ->
+                                    -width
+                                }
                     },
                     label = "month-transition"
                 ) { animatedYm ->
@@ -527,7 +524,6 @@ fun MonthlyCalendarScreen(
                             .fillMaxSize()
                             .verticalScroll(calendarScrollState)
                             .navigationBarsPadding()
-                            .padding(horizontal = 12.dp, vertical = 12.dp)
                             .padding(bottom = 28.dp)
                     ) {
 
@@ -538,8 +534,7 @@ fun MonthlyCalendarScreen(
                                 shape = RoundedCornerShape(18.dp),
                                 color = informationCardColor,
                                 tonalElevation = 0.dp,
-                                shadowElevation =
-                                    if (isDarkTheme) 0.dp else 3.dp,
+                                shadowElevation = 0.dp,
                                 border = BorderStroke(
                                     1.dp,
                                     informationCardBorder
@@ -554,9 +549,16 @@ fun MonthlyCalendarScreen(
                                         "No trainings were found for the region, branch, and group selected in your profile."
                                     ),
                                     color = secondaryTextColor,
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    fontWeight = FontWeight.SemiBold,
-                                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
+                                    style =
+                                        KmiTypography.body.copy(
+                                            fontWeight =
+                                                FontWeight.SemiBold
+                                        ),
+                                    modifier =
+                                        Modifier.padding(
+                                            horizontal = 14.dp,
+                                            vertical = 12.dp
+                                        ),
                                     textAlign = TextAlign.Center
                                 )
                             }
@@ -587,7 +589,12 @@ fun MonthlyCalendarScreen(
                         ) {
                             KmiCalendarMonth(
                                 visibleMonth = animatedYm,
-                                selectedDate = selectedDate,
+                                selectedDate =
+                                    if (mode == MonthlyCalendarMode.SUMMARY_DATE_PICKER) {
+                                        selectedDate
+                                    } else {
+                                        null
+                                    },
                                 isEnglish = isEnglish,
                                 onVisibleMonthChange = { newMonth ->
                                     ym = newMonth
@@ -595,40 +602,54 @@ fun MonthlyCalendarScreen(
                                 onDateSelected = { date ->
                                     selectedDate = date
 
-                                    val dayTrainings =
-                                        trainingsByDate[date]
-                                            .orEmpty()
-                                            .sortedBy {
-                                                it.timeText
+                                    /*
+                                     * VIEW_ONLY:
+                                     * לחיצה על התאריך רק בוחרת אותו.
+                                     * הפרטים של האימונים / החגים מוצגים בכרטיס שמתחת ללוח.
+                                     * לא עוברים למסך הסיכום ולא פותחים בחירת אימון.
+                                     *
+                                     * SUMMARY_DATE_PICKER:
+                                     * שומרים בדיוק את ההתנהגות הקיימת.
+                                     */
+                                    if (mode == MonthlyCalendarMode.VIEW_ONLY) {
+                                        trainingChoiceDate = null
+                                        trainingChoices = emptyList()
+                                    } else {
+                                        val dayTrainings =
+                                            trainingsByDate[date]
+                                                .orEmpty()
+                                                .sortedBy {
+                                                    it.timeText
+                                                }
+
+                                        when {
+                                            dayTrainings.size == 1 -> {
+                                                val training =
+                                                    dayTrainings.first()
+
+                                                onDateClick(
+                                                    date,
+                                                    training.branch,
+                                                    training.group,
+                                                    training.timeText
+                                                )
                                             }
 
-                                    when {
-                                        dayTrainings.size == 1 -> {
-                                            val training =
-                                                dayTrainings.first()
+                                            dayTrainings.size > 1 -> {
+                                                trainingChoiceDate =
+                                                    date
 
-                                            onDateClick(
-                                                date,
-                                                training.branch,
-                                                training.group,
-                                                training.timeText
-                                            )
-                                        }
+                                                trainingChoices =
+                                                    dayTrainings
+                                            }
 
-                                        dayTrainings.size > 1 -> {
-                                            trainingChoiceDate =
-                                                date
+                                            else -> {
+                                                trainingChoiceDate =
+                                                    null
 
-                                            trainingChoices =
-                                                dayTrainings
-                                        }
-
-                                        else -> {
-                                            trainingChoiceDate =
-                                                null
-
-                                            trainingChoices =
-                                                emptyList()
+                                                trainingChoices =
+                                                    emptyList()
+                                            }
                                         }
                                     }
                                 },
@@ -642,14 +663,17 @@ fun MonthlyCalendarScreen(
                                 val selTrainings = trainingsCountByDate[sel] ?: 0
                                 val selectedTrainingItems = trainingsByDate[sel].orEmpty()
                                 val selHoliday = holidaysByDate[sel]
-                                val dowName = sel.dayOfWeek.getDisplayName(
-                                    java.time.format.TextStyle.FULL,
-                                    screenLocale
-                                )
-                                val monthName = sel.month.getDisplayName(
-                                    java.time.format.TextStyle.FULL,
-                                    screenLocale
-                                )
+                                val dowName =
+                                    sel.dayOfWeek.getDisplayName(
+                                        TextStyle.FULL,
+                                        screenLocale
+                                    )
+
+                                val monthName =
+                                    sel.month.getDisplayName(
+                                        TextStyle.FULL,
+                                        screenLocale
+                                    )
 
                                 Surface(
                                     modifier = Modifier
@@ -661,8 +685,7 @@ fun MonthlyCalendarScreen(
                                     shape = RoundedCornerShape(26.dp),
                                     color = informationCardColor,
                                     tonalElevation = 0.dp,
-                                    shadowElevation =
-                                        if (isDarkTheme) 14.dp else 5.dp,
+                                    shadowElevation = 0.dp,
                                     border = BorderStroke(
                                         1.dp,
                                         informationCardBorder
@@ -695,8 +718,11 @@ fun MonthlyCalendarScreen(
                                                     "יום נבחר: $dowName ${sel.dayOfMonth} $monthName ${sel.year}",
                                                     "Selected day: $dowName ${sel.dayOfMonth} $monthName ${sel.year}"
                                                 ),
-                                                style = MaterialTheme.typography.titleMedium,
-                                                fontWeight = FontWeight.ExtraBold,
+                                                style =
+                                                    KmiTypography.sectionTitle.copy(
+                                                        fontWeight =
+                                                            FontWeight.ExtraBold
+                                                    ),
                                                 color = selectedDayTextColor,
                                                 textAlign =
                                                     if (isEnglish) {
@@ -746,7 +772,7 @@ fun MonthlyCalendarScreen(
                                                     }
                                                 },
                                                 style =
-                                                    MaterialTheme.typography.bodyMedium,
+                                                    KmiTypography.body,
                                                 color =
                                                     selectedDayTextColor.copy(
                                                         alpha = 0.92f
@@ -759,69 +785,103 @@ fun MonthlyCalendarScreen(
                                         Row(
                                             modifier = Modifier
                                                 .fillMaxWidth()
-                                                .align(if (isEnglish) Alignment.BottomStart else Alignment.BottomEnd)
-                                                .padding(top = 8.dp),
-                                            horizontalArrangement = if (isEnglish) Arrangement.Start else Arrangement.End
-                                        ) {
-                                            val hasSummaryForSelectedDate = sel in summaryDatesThisMonth
+                                                    .align(
+                                                        if (isEnglish) {
+                                                            Alignment.BottomStart
+                                                        } else {
+                                                            Alignment.BottomEnd
+                                                        }
+                                                    )
+                                                    .padding(top = 8.dp),
+                                                horizontalArrangement =
+                                                    if (isEnglish) {
+                                                        Arrangement.Start
+                                                    } else {
+                                                        Arrangement.End
+                                                    }
+                                            ) {
+                                                val hasSummaryForSelectedDate =
+                                                    sel in summaryDatesThisMonth
 
-                                            Button(
-                                                onClick = {
-                                                    val dayTrainings =
+                                                Button(
+                                                    enabled =
                                                         selectedTrainingItems
-                                                            .sortedBy {
-                                                                it.timeText
+                                                            .isNotEmpty(),
+                                                    onClick = {
+                                                        val dayTrainings =
+                                                            selectedTrainingItems
+                                                                .sortedBy {
+                                                                    it.timeText
+                                                                }
+
+                                                        when {
+                                                            dayTrainings.size == 1 -> {
+                                                                val training =
+                                                                    dayTrainings.first()
+
+                                                                onDateClick(
+                                                                    sel,
+                                                                    training.branch,
+                                                                    training.group,
+                                                                    training.timeText
+                                                                )
                                                             }
 
-                                                    when {
-                                                        dayTrainings.size == 1 -> {
-                                                            val training =
-                                                                dayTrainings.first()
+                                                            dayTrainings.size > 1 -> {
+                                                                trainingChoiceDate =
+                                                                    sel
 
-                                                            onDateClick(
-                                                                sel,
-                                                                training.branch,
-                                                                training.group,
-                                                                training.timeText
-                                                            )
+                                                                trainingChoices =
+                                                                    dayTrainings
+                                                            }
                                                         }
-
-                                                        dayTrainings.size > 1 -> {
-                                                            trainingChoiceDate =
-                                                                sel
-
-                                                            trainingChoices =
-                                                                dayTrainings
-                                                        }
-                                                    }
-                                                },
-                                                shape = RoundedCornerShape(16.dp),
-                                                contentPadding = PaddingValues(horizontal = 18.dp, vertical = 10.dp),
-                                                colors =
-                                                    ButtonDefaults.buttonColors(
-                                                        containerColor =
-                                                            colorScheme.primary,
-                                                        contentColor =
-                                                            colorScheme.onPrimary
-                                                    ),
-                                                elevation = ButtonDefaults.buttonElevation(
-                                                    defaultElevation = 6.dp,
-                                                    pressedElevation = 10.dp
-                                                )
-                                            ) {
-                                                Text(
-                                                    text = if (hasSummaryForSelectedDate) {
-                                                        tr("קריאת סיכום", "Read training summary")
-                                                    } else {
-                                                        tr("הוספת סיכום", "Add training summary")
                                                     },
-                                                    fontWeight = FontWeight.ExtraBold
-                                                )
+                                                    shape = RoundedCornerShape(16.dp),
+                                                    contentPadding =
+                                                        PaddingValues(
+                                                            horizontal = 18.dp,
+                                                            vertical = 10.dp
+                                                        ),
+                                                    colors =
+                                                        ButtonDefaults.buttonColors(
+                                                            containerColor =
+                                                                colorScheme.primary,
+                                                            contentColor =
+                                                                colorScheme.onPrimary
+                                                        ),
+                                                    elevation =
+                                                        ButtonDefaults.buttonElevation(
+                                                            defaultElevation = 0.dp,
+                                                            pressedElevation = 0.dp,
+                                                            focusedElevation = 0.dp,
+                                                            hoveredElevation = 0.dp,
+                                                            disabledElevation = 0.dp
+                                                        )
+                                                ) {
+                                                    Text(
+                                                        text =
+                                                            if (hasSummaryForSelectedDate) {
+                                                                tr(
+                                                                    "קריאת סיכום",
+                                                                    "Read training summary"
+                                                                )
+                                                            } else {
+                                                                tr(
+                                                                    "הוספת סיכום",
+                                                                    "Add training summary"
+                                                                )
+                                                            },
+                                                        style =
+                                                            KmiTypography.action.copy(
+                                                                fontWeight =
+                                                                    FontWeight.ExtraBold
+                                                            )
+                                                    )
+                                                }
                                             }
                                         }
                                     }
                                 }
-                            }
 
                             Spacer(Modifier.height(2.dp))
                         }
@@ -848,8 +908,11 @@ fun MonthlyCalendarScreen(
                                     "בחר אימון לסיכום",
                                     "Choose training for summary"
                                 ),
-                            fontWeight =
-                                FontWeight.ExtraBold,
+                            style =
+                                KmiTypography.sectionTitle.copy(
+                                    fontWeight =
+                                        FontWeight.ExtraBold
+                                ),
                             textAlign =
                                 if (isEnglish) {
                                     TextAlign.Left
@@ -928,11 +991,10 @@ fun MonthlyCalendarScreen(
                                                 text =
                                                     "${training.timeText} · $branchLabel",
                                                 style =
-                                                    MaterialTheme
-                                                        .typography
-                                                        .titleSmall,
-                                                fontWeight =
-                                                    FontWeight.ExtraBold,
+                                                    KmiTypography.cardTitle.copy(
+                                                        fontWeight =
+                                                            FontWeight.ExtraBold
+                                                    ),
                                                 textAlign =
                                                     if (isEnglish) {
                                                         TextAlign.Left
@@ -950,9 +1012,7 @@ fun MonthlyCalendarScreen(
                                             Text(
                                                 text = groupLabel,
                                                 style =
-                                                    MaterialTheme
-                                                        .typography
-                                                        .bodyMedium,
+                                                    KmiTypography.body,
                                                 textAlign =
                                                     if (isEnglish) {
                                                         TextAlign.Left
@@ -976,10 +1036,13 @@ fun MonthlyCalendarScreen(
                             }
                         ) {
                             Text(
-                                tr(
-                                    "ביטול",
-                                    "Cancel"
-                                )
+                                text =
+                                    tr(
+                                        "ביטול",
+                                        "Cancel"
+                                    ),
+                                style =
+                                    KmiTypography.action
                             )
                         }
                     }
@@ -987,6 +1050,519 @@ fun MonthlyCalendarScreen(
             }
         }
     }
+}
+
+/* -------------------------------------------------------------------------- */
+/*                             PDF sharing                                     */
+/* -------------------------------------------------------------------------- */
+
+private data class MonthlyCalendarPdfDay(
+    val date: LocalDate,
+    val trainings: List<CalendarTrainingItem>,
+    val holiday: String,
+    val hasSummary: Boolean
+)
+
+private fun shareMonthlyCalendarPdf(
+    context: Context,
+    yearMonth: YearMonth,
+    trainingsByDate:
+    Map<LocalDate, List<CalendarTrainingItem>>,
+    holidaysByDate: Map<LocalDate, String>,
+    summaryDates: Set<LocalDate>,
+    isEnglish: Boolean
+) {
+    val pdfDays =
+        (1..yearMonth.lengthOfMonth())
+            .map { dayOfMonth ->
+                val date =
+                    yearMonth.atDay(dayOfMonth)
+
+                MonthlyCalendarPdfDay(
+                    date = date,
+                    trainings =
+                        trainingsByDate[
+                            date
+                        ].orEmpty()
+                            .sortedBy { training ->
+                                training.timeText
+                            },
+                    holiday =
+                        holidaysByDate[
+                            date
+                        ].orEmpty(),
+                    hasSummary =
+                        date in summaryDates
+                )
+            }
+            .filter { day ->
+                day.trainings.isNotEmpty() ||
+                        day.holiday.isNotBlank() ||
+                        day.hasSummary
+            }
+
+    val pdfFile =
+        createMonthlyCalendarPdf(
+            context = context,
+            yearMonth = yearMonth,
+            days = pdfDays,
+            isEnglish = isEnglish
+        )
+
+    val pdfUri =
+        FileProvider.getUriForFile(
+            context,
+            "${context.packageName}.fileprovider",
+            pdfFile
+        )
+
+    val shareIntent =
+        Intent(
+            Intent.ACTION_SEND
+        ).apply {
+            type = "application/pdf"
+
+            putExtra(
+                Intent.EXTRA_SUBJECT,
+                if (isEnglish) {
+                    "Monthly Training Calendar"
+                } else {
+                    "לוח אימונים חודשי"
+                }
+            )
+
+            putExtra(
+                Intent.EXTRA_STREAM,
+                pdfUri
+            )
+
+            addFlags(
+                Intent.FLAG_GRANT_READ_URI_PERMISSION
+            )
+        }
+
+    context.startActivity(
+        Intent.createChooser(
+            shareIntent,
+            if (isEnglish) {
+                "Share PDF"
+            } else {
+                "שיתוף PDF"
+            }
+        )
+    )
+}
+
+private fun createMonthlyCalendarPdf(
+    context: Context,
+    yearMonth: YearMonth,
+    days: List<MonthlyCalendarPdfDay>,
+    isEnglish: Boolean
+): File {
+    val pageWidth = 595
+    val pageHeight = 842
+    val horizontalMargin = 26f
+    val rowsPerPage = 9
+
+    val totalPages =
+        maxOf(
+            1,
+            ceil(
+                days.size.toDouble() /
+                        rowsPerPage.toDouble()
+            ).toInt()
+        )
+
+    val locale =
+        if (isEnglish) {
+            Locale.US
+        } else {
+            Locale("he", "IL")
+        }
+
+    val document =
+        PdfDocument()
+
+    val regularTypeface =
+        Typeface.create(
+            Typeface.SANS_SERIF,
+            Typeface.NORMAL
+        )
+
+    val boldTypeface =
+        Typeface.create(
+            Typeface.SANS_SERIF,
+            Typeface.BOLD
+        )
+
+    val primaryTextColor =
+        android.graphics.Color.rgb(
+            23,
+            32,
+            51
+        )
+
+    val secondaryTextColor =
+        android.graphics.Color.rgb(
+            71,
+            84,
+            103
+        )
+
+    val cardBackgroundColor =
+        android.graphics.Color.rgb(
+            248,
+            251,
+            255
+        )
+
+    val cardBorderColor =
+        android.graphics.Color.rgb(
+            213,
+            222,
+            229
+        )
+
+    val summaryColor =
+        android.graphics.Color.rgb(
+            31,
+            120,
+            180
+        )
+
+    fun textPaint(
+        size: Float,
+        color: Int = primaryTextColor,
+        bold: Boolean = false
+    ): Paint {
+        return Paint(
+            Paint.ANTI_ALIAS_FLAG
+        ).apply {
+            textSize = size
+            this.color = color
+            typeface =
+                if (bold) {
+                    boldTypeface
+                } else {
+                    regularTypeface
+                }
+
+            textAlign =
+                KmiPdfDirection.textAlign(
+                    isEnglish = isEnglish
+                )
+        }
+    }
+
+    val monthText =
+        buildString {
+            append(
+                yearMonth.month.getDisplayName(
+                    TextStyle.FULL,
+                    locale
+                )
+            )
+
+            append(" ")
+            append(yearMonth.year)
+        }
+
+    val dateFormatter =
+        DateTimeFormatter.ofPattern(
+            "EEEE, dd/MM/yyyy",
+            locale
+        )
+
+    for (pageIndex in 0 until totalPages) {
+        val pageNumber =
+            pageIndex + 1
+
+        val page =
+            document.startPage(
+                PdfDocument.PageInfo.Builder(
+                    pageWidth,
+                    pageHeight,
+                    pageNumber
+                ).create()
+            )
+
+        val canvas =
+            page.canvas
+
+        KmiPdfHeader.draw(
+            context = context,
+            canvas = canvas,
+            pageWidth = pageWidth,
+            isEnglish = isEnglish,
+            titleHebrew =
+                "לוח אימונים חודשי",
+            titleEnglish =
+                "Monthly Training Calendar",
+            subtitleHebrew =
+                "חודש: $monthText",
+            subtitleEnglish =
+                "Month: $monthText"
+        )
+
+        val contentRight =
+            pageWidth - horizontalMargin
+
+        val startX =
+            KmiPdfDirection.startPaddingX(
+                isEnglish = isEnglish,
+                left = horizontalMargin,
+                right = contentRight,
+                padding = 13f
+            )
+
+        var currentTop =
+            136f
+
+        val pageDays =
+            days
+                .drop(
+                    pageIndex * rowsPerPage
+                )
+                .take(
+                    rowsPerPage
+                )
+
+        if (days.isEmpty()) {
+            val emptyPaint =
+                textPaint(
+                    size = 15f,
+                    bold = true
+                ).apply {
+                    textAlign =
+                        Paint.Align.CENTER
+                }
+
+            canvas.drawText(
+                if (isEnglish) {
+                    "No trainings or events were found this month."
+                } else {
+                    "לא נמצאו אימונים או אירועים בחודש זה."
+                },
+                pageWidth / 2f,
+                currentTop + 80f,
+                emptyPaint
+            )
+        } else {
+            pageDays.forEach { day ->
+                val rowHeight =
+                    66f
+
+                val cardBottom =
+                    currentTop + rowHeight
+
+                val backgroundPaint =
+                    Paint(
+                        Paint.ANTI_ALIAS_FLAG
+                    ).apply {
+                        color =
+                            cardBackgroundColor
+                        style =
+                            Paint.Style.FILL
+                    }
+
+                val borderPaint =
+                    Paint(
+                        Paint.ANTI_ALIAS_FLAG
+                    ).apply {
+                        color =
+                            cardBorderColor
+                        style =
+                            Paint.Style.STROKE
+                        strokeWidth = 1f
+                    }
+
+                canvas.drawRoundRect(
+                    horizontalMargin,
+                    currentTop,
+                    contentRight,
+                    cardBottom,
+                    9f,
+                    9f,
+                    backgroundPaint
+                )
+
+                canvas.drawRoundRect(
+                    horizontalMargin,
+                    currentTop,
+                    contentRight,
+                    cardBottom,
+                    9f,
+                    9f,
+                    borderPaint
+                )
+
+                val datePaint =
+                    textPaint(
+                        size = 12.5f,
+                        bold = true
+                    )
+
+                val detailPaint =
+                    textPaint(
+                        size = 9.5f,
+                        color =
+                            secondaryTextColor
+                    )
+
+                val summaryPaint =
+                    textPaint(
+                        size = 9.5f,
+                        color =
+                            summaryColor,
+                        bold = true
+                    )
+
+                canvas.drawText(
+                    day.date.format(
+                        dateFormatter
+                    ),
+                    startX,
+                    currentTop + 18f,
+                    datePaint
+                )
+
+                val trainingText =
+                    day.trainings
+                        .joinToString(" | ") { training ->
+                            val branch =
+                                training.displayBranch(
+                                    isEnglish
+                                )
+
+                            val group =
+                                training.displayGroup(
+                                    isEnglish
+                                )
+
+                            listOf(
+                                training.timeText,
+                                branch,
+                                group
+                            )
+                                .filter { value ->
+                                    value.isNotBlank()
+                                }
+                                .joinToString(" · ")
+                        }
+
+                val firstDetail =
+                    when {
+                        trainingText.isNotBlank() ->
+                            trainingText
+
+                        day.holiday.isNotBlank() ->
+                            if (isEnglish) {
+                                "Holiday: ${day.holiday}"
+                            } else {
+                                "חג / מועד: ${day.holiday}"
+                            }
+
+                        else ->
+                            if (isEnglish) {
+                                "Training summary"
+                            } else {
+                                "סיכום אימון"
+                            }
+                    }
+
+                canvas.drawText(
+                    firstDetail.take(92),
+                    startX,
+                    currentTop + 37f,
+                    detailPaint
+                )
+
+                val secondaryParts =
+                    buildList {
+                        if (
+                            trainingText.isNotBlank() &&
+                            day.holiday.isNotBlank()
+                        ) {
+                            add(
+                                if (isEnglish) {
+                                    "Holiday: ${day.holiday}"
+                                } else {
+                                    "חג / מועד: ${day.holiday}"
+                                }
+                            )
+                        }
+
+                        if (day.hasSummary) {
+                            add(
+                                if (isEnglish) {
+                                    "Training summary saved"
+                                } else {
+                                    "קיים סיכום אימון"
+                                }
+                            )
+                        }
+                    }
+
+                if (secondaryParts.isNotEmpty()) {
+                    canvas.drawText(
+                        secondaryParts
+                            .joinToString(" · ")
+                            .take(92),
+                        startX,
+                        currentTop + 55f,
+                        summaryPaint
+                    )
+                }
+
+                currentTop =
+                    cardBottom + 7f
+            }
+        }
+
+        KmiPdfFooter.draw(
+            canvas = canvas,
+            pageWidth = pageWidth,
+            pageHeight = pageHeight,
+            pageNumber = pageNumber,
+            totalPages = totalPages,
+            isEnglish = isEnglish
+        )
+
+        document.finishPage(
+            page
+        )
+    }
+
+    val pdfDirectory =
+        File(
+            context.cacheDir,
+            "shared_pdfs"
+        ).apply {
+            mkdirs()
+        }
+
+    val pdfFile =
+        File(
+            pdfDirectory,
+            if (isEnglish) {
+                "Monthly Training Calendar.pdf"
+            } else {
+                "לוח אימונים חודשי.pdf"
+            }
+        )
+
+    FileOutputStream(
+        pdfFile,
+        false
+    ).use { output ->
+        document.writeTo(
+            output
+        )
+    }
+
+    document.close()
+
+    return pdfFile
 }
 
 /* -------------------------------------------------------------------------- */
@@ -1312,36 +1888,4 @@ private fun firstDateInMonthForDow(startOfMonth: LocalDate, calendarDow: Int): L
     var d = startOfMonth
     while (d.dayOfWeek != wanted) d = d.plusDays(1)
     return d
-}
-
-private fun anyToLocalDate(v: Any?): LocalDate? {
-    return when (v) {
-        null -> null
-        is LocalDate -> v
-        is LocalDateTime -> v.toLocalDate()
-        is OffsetDateTime -> v.toLocalDate()
-        is ZonedDateTime -> v.toLocalDate()
-        is java.util.Date ->
-            v.toInstant().atZone(ZoneId.systemDefault()).toLocalDate()
-        is Long -> {
-            val millis = if (v < 3_000_000_000L) v * 1000L else v
-            Instant.ofEpochMilli(millis).atZone(ZoneId.systemDefault()).toLocalDate()
-        }
-        is Int -> {
-            val millis = if (v.toLong() < 3_000_000_000L) v.toLong() * 1000L else v.toLong()
-            Instant.ofEpochMilli(millis).atZone(ZoneId.systemDefault()).toLocalDate()
-        }
-        is String -> {
-            runCatching { LocalDate.parse(v.take(10)) }.getOrNull()
-                ?: runCatching {
-                    Instant.parse(v).atZone(ZoneId.systemDefault()).toLocalDate()
-                }.getOrNull()
-                ?: runCatching {
-                    val num = v.trim().toLong()
-                    val millis = if (num < 3_000_000_000L) num * 1000L else num
-                    Instant.ofEpochMilli(millis).atZone(ZoneId.systemDefault()).toLocalDate()
-                }.getOrNull()
-        }
-        else -> null
-    }
 }

@@ -44,6 +44,8 @@ import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import il.kmi.app.ui.KmiTypography
+import il.yuval.ui.theme.kmiSectionHeaderBrush
+import il.yuval.ui.theme.kmiSectionHeaderContentColor
 import java.time.LocalDate
 import java.time.YearMonth
 import java.time.format.DateTimeFormatter
@@ -68,20 +70,6 @@ fun KmiCalendarMonth(
     val colorScheme = MaterialTheme.colorScheme
     val isDarkTheme =
         colorScheme.background.luminance() < 0.5f
-
-    val navigationButtonColor =
-        if (isDarkTheme) {
-            Color(0xFF0A234A)
-        } else {
-            colorScheme.primaryContainer
-        }
-
-    val navigationButtonContentColor =
-        if (isDarkTheme) {
-            Color.White
-        } else {
-            colorScheme.onPrimaryContainer
-        }
 
     val calendarSectionColor =
         if (isDarkTheme) {
@@ -215,108 +203,100 @@ fun KmiCalendarMonth(
             LocalLayoutDirection provides
                     LayoutDirection.Ltr
         ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement =
-                    Arrangement.spacedBy(
-                        space = 8.dp,
-                        alignment =
-                            Alignment.CenterHorizontally
-                    ),
-                verticalAlignment =
-                    Alignment.CenterVertically
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(
+                        brush = kmiSectionHeaderBrush()
+                    )
+                    .padding(vertical = 4.dp),
+                contentAlignment = Alignment.Center
             ) {
-                Surface(
-                    onClick = {
-                        onVisibleMonthChange(
-                            if (isEnglish) {
-                                visibleMonth.minusMonths(1)
-                            } else {
-                                visibleMonth.plusMonths(1)
-                            }
-                        )
-                    },
-                    shape = CircleShape,
-                    color = navigationButtonColor,
-                    tonalElevation = 0.dp,
-                    shadowElevation =
-                        if (isDarkTheme) {
-                            0.dp
-                        } else {
-                            1.dp
-                        },
-                    modifier = Modifier.sizeIn(
-                        minWidth = 34.dp,
-                        minHeight = 34.dp
-                    )
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(min = 52.dp)
+                        .padding(horizontal = 16.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
                 ) {
-                    Box(
-                        contentAlignment =
-                            Alignment.Center
+
+                    Surface(
+                        onClick = {
+                            onVisibleMonthChange(
+                                if (isEnglish) {
+                                    visibleMonth.minusMonths(1)
+                                } else {
+                                    visibleMonth.plusMonths(1)
+                                }
+                            )
+                        },
+                        shape = CircleShape,
+                        color = Color.Transparent,
+                        tonalElevation = 0.dp,
+                        shadowElevation = 0.dp,
+                        modifier = Modifier.size(40.dp)
                     ) {
-                        Text(
-                            text = "‹",
-                            color = navigationButtonContentColor,
-                            style =
-                                KmiTypography.action.copy(
-                                    fontWeight = FontWeight.Black
-                                ),
-                            textAlign = TextAlign.Center,
-                            maxLines = 1
-                        )
+                        Box(
+                            modifier = Modifier.fillMaxSize(),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = "‹",
+                                color = kmiSectionHeaderContentColor(),
+                                style =
+                                    KmiTypography.sectionTitle.copy(
+                                        fontWeight = FontWeight.Black
+                                    ),
+                                textAlign = TextAlign.Center,
+                                maxLines = 1
+                            )
+                        }
                     }
-                }
 
-                Text(
-                    text = monthTitle,
-                    color = primaryTextColor,
-                    style =
-                        KmiTypography.sectionTitle.copy(
-                            fontWeight = FontWeight.Black
-                        ),
-                    textAlign = TextAlign.Center,
-                    maxLines = 2,
-                    modifier = Modifier.weight(1f)
-                )
-
-                Surface(
-                    onClick = {
-                        onVisibleMonthChange(
-                            if (isEnglish) {
-                                visibleMonth.plusMonths(1)
-                            } else {
-                                visibleMonth.minusMonths(1)
-                            }
-                        )
-                    },
-                    shape = CircleShape,
-                    color = navigationButtonColor,
-                    tonalElevation = 0.dp,
-                    shadowElevation =
-                        if (isDarkTheme) {
-                            0.dp
-                        } else {
-                            1.dp
-                        },
-                    modifier = Modifier.sizeIn(
-                        minWidth = 34.dp,
-                        minHeight = 34.dp
+                    Text(
+                        text = monthTitle,
+                        color = kmiSectionHeaderContentColor(),
+                        style =
+                            KmiTypography.sectionTitle.copy(
+                                fontWeight = FontWeight.Black
+                            ),
+                        textAlign = TextAlign.Center,
+                        maxLines = 1,
+                        modifier = Modifier.weight(1f)
                     )
-                ) {
-                    Box(
-                        contentAlignment =
-                            Alignment.Center
+
+                    Surface(
+                        onClick = {
+                            onVisibleMonthChange(
+                                if (isEnglish) {
+                                    visibleMonth.plusMonths(1)
+                                } else {
+                                    visibleMonth.minusMonths(1)
+                                }
+                            )
+                        },
+                        shape = CircleShape,
+                        color = Color.Transparent,
+                        tonalElevation = 0.dp,
+                        shadowElevation = 0.dp,
+                        modifier = Modifier.size(40.dp)
                     ) {
-                        Text(
-                            text = "›",
-                            color = navigationButtonContentColor,
-                            style =
-                                KmiTypography.action.copy(
-                                    fontWeight = FontWeight.Black
-                                ),
-                            textAlign = TextAlign.Center,
-                            maxLines = 1
-                        )
+                        Box(
+                            modifier = Modifier.fillMaxSize(),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = "›",
+                                color = kmiSectionHeaderContentColor(),
+                                style =
+                                    KmiTypography.sectionTitle.copy(
+                                        fontWeight = FontWeight.Black
+                                    ),
+                                textAlign = TextAlign.Center,
+                                maxLines = 1
+                            )
+                        }
                     }
                 }
             }

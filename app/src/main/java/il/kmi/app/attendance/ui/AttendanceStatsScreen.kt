@@ -4,15 +4,11 @@ import android.app.Application
 import android.content.Context
 import android.content.Intent
 import android.graphics.Paint
-import android.graphics.Path
 import android.graphics.Typeface
 import android.graphics.pdf.PdfDocument
 import androidx.core.content.FileProvider
 import java.io.File
 import java.io.FileOutputStream
-import java.text.SimpleDateFormat
-import java.util.Date
-import java.util.Locale
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -47,6 +43,8 @@ import il.kmi.app.training.TrainingCatalog
 import il.kmi.app.ui.KmiIconSize
 import il.kmi.app.ui.KmiTopBar
 import il.kmi.app.ui.loading.KmiLoadingRings
+import il.kmi.app.ui.pdf.KmiPdfFooter
+import il.kmi.app.ui.pdf.KmiPdfHeader
 import java.time.DayOfWeek
 import java.time.LocalDate
 import java.util.Calendar
@@ -2100,13 +2098,6 @@ private fun createAttendanceStatsPdf(
             42
         )
 
-    val textMuted =
-        android.graphics.Color.rgb(
-            80,
-            100,
-            120
-        )
-
     val green =
         android.graphics.Color.rgb(
             22,
@@ -2147,19 +2138,6 @@ private fun createAttendanceStatsPdf(
         }
     }
 
-    val titlePaint =
-        paint(
-            size = 27f,
-            color = android.graphics.Color.WHITE,
-            typeface = bold
-        )
-
-    val subtitlePaint =
-        paint(
-            size = 13f,
-            color = android.graphics.Color.WHITE
-        )
-
     val sectionPaint =
         paint(
             size = 17f,
@@ -2185,12 +2163,6 @@ private fun createAttendanceStatsPdf(
             size = 14f,
             color = textDark,
             typeface = bold
-        )
-
-    val smallPaint =
-        paint(
-            size = 9f,
-            color = textMuted
         )
 
     fun drawRoundRect(
@@ -2227,203 +2199,39 @@ private fun createAttendanceStatsPdf(
         )
     }
 
-    fun drawKmiLogo(
-        centerX: Float,
-        centerY: Float,
-        radius: Float
-    ) {
-        val outerPaint =
-            Paint(
-                Paint.ANTI_ALIAS_FLAG
-            ).apply {
-                color = navy
-            }
-
-        val innerPaint =
-            Paint(
-                Paint.ANTI_ALIAS_FLAG
-            ).apply {
-                color =
-                    android.graphics.Color.WHITE
-            }
-
-        val logoTextPaint =
-            Paint(
-                Paint.ANTI_ALIAS_FLAG
-            ).apply {
-                color = navy
-                typeface = bold
-                textSize = radius * 0.62f
-                textAlign = Paint.Align.CENTER
-            }
-
-        canvas.drawCircle(
-            centerX,
-            centerY,
-            radius,
-            outerPaint
-        )
-
-        canvas.drawCircle(
-            centerX,
-            centerY,
-            radius - 4f,
-            innerPaint
-        )
-
-        canvas.drawText(
-            "KAMI",
-            centerX,
-            centerY + radius * 0.22f,
-            logoTextPaint
-        )
-    }
-
-    /*
-     * כותרת זהה לסגנון דו״ח מסך הבית.
-     */
-    canvas.drawColor(
-        android.graphics.Color.WHITE
-    )
-
-    val headerPaint =
-        Paint(
-            Paint.ANTI_ALIAS_FLAG
-        ).apply {
-            color = navy
-        }
-
-    val firstAccentPaint =
-        Paint(
-            Paint.ANTI_ALIAS_FLAG
-        ).apply {
-            color =
-                android.graphics.Color.rgb(
-                    36,
-                    103,
-                    158
-                )
-        }
-
-    val secondAccentPaint =
-        Paint(
-            Paint.ANTI_ALIAS_FLAG
-        ).apply {
-            color =
-                android.graphics.Color.rgb(
-                    128,
-                    183,
-                    220
-                )
-        }
-
-    canvas.drawPath(
-        Path().apply {
-            moveTo(
-                pageWidth.toFloat(),
-                0f
-            )
-            lineTo(
-                pageWidth.toFloat(),
-                122f
-            )
-            lineTo(
-                178f,
-                122f
-            )
-            lineTo(
-                238f,
-                0f
-            )
-            close()
-        },
-        headerPaint
-    )
-
-    canvas.drawPath(
-        Path().apply {
-            moveTo(208f, 122f)
-            lineTo(224f, 122f)
-            lineTo(284f, 0f)
-            lineTo(268f, 0f)
-            close()
-        },
-        firstAccentPaint
-    )
-
-    canvas.drawPath(
-        Path().apply {
-            moveTo(230f, 122f)
-            lineTo(238f, 122f)
-            lineTo(298f, 0f)
-            lineTo(290f, 0f)
-            close()
-        },
-        secondAccentPaint
-    )
-
-    drawKmiLogo(
-        centerX = 78f,
-        centerY = 58f,
-        radius = 42f
-    )
-
-    titlePaint.textAlign =
-        Paint.Align.RIGHT
-
-    subtitlePaint.textAlign =
-        Paint.Align.RIGHT
-
-    canvas.drawText(
-        tr(
-            "דו״ח סטטיסטיקת נוכחות",
-            "Attendance statistics report"
-        ),
-        pageWidth - 34f,
-        50f,
-        titlePaint
-    )
-
-    canvas.drawText(
-        data.memberName.take(34),
-        pageWidth - 34f,
-        77f,
-        subtitlePaint
-    )
-
-    smallPaint.textAlign =
-        Paint.Align.RIGHT
-
-    canvas.drawText(
-        tr(
-            "תאריך הפקה:",
-            "Generated:"
-        ) + " " +
-                SimpleDateFormat(
-                    "dd/MM/yyyy",
-                    Locale.getDefault()
-                ).format(Date()),
-        pageWidth - 34f,
-        142f,
-        smallPaint
+    KmiPdfHeader.draw(
+        context = context,
+        canvas = canvas,
+        pageWidth = pageWidth,
+        isEnglish = isEnglish,
+        titleHebrew = "דו״ח סטטיסטיקת נוכחות",
+        titleEnglish = "Attendance Statistics Report",
+        subtitleHebrew = data.memberName.take(34),
+        subtitleEnglish = data.memberName.take(34)
     )
 
     /*
      * פרטי מתאמן.
      */
+    val detailsTop =
+        KmiPdfHeader.CONTENT_TOP + 14f
+
+    val detailsBottom =
+        detailsTop + 72f
+
     drawRoundRect(
         margin,
-        160f,
+        detailsTop,
         pageWidth - margin,
-        232f,
+        detailsBottom,
         lightBlue
     )
 
     drawRoundRect(
         margin,
-        160f,
+        detailsTop,
         pageWidth - margin,
-        232f,
+        detailsBottom,
         borderBlue,
         stroke = true
     )
@@ -2437,7 +2245,7 @@ private fun createAttendanceStatsPdf(
             "Trainee details"
         ),
         pageWidth - margin - 18f,
-        184f,
+        detailsTop + 24f,
         sectionPaint
     )
 
@@ -2449,7 +2257,7 @@ private fun createAttendanceStatsPdf(
                 " " +
                 data.branch.take(42),
         pageWidth - margin - 18f,
-        205f,
+        detailsTop + 45f,
         valuePaint
     )
 
@@ -2458,15 +2266,19 @@ private fun createAttendanceStatsPdf(
                 " " +
                 data.groupKey.take(42),
         pageWidth - margin - 18f,
-        222f,
+        detailsTop + 62f,
         valuePaint
     )
 
     /*
      * ארבעה נתוני סיכום.
      */
-    val cardTop = 250f
-    val cardBottom = 334f
+    val cardTop =
+        detailsBottom + 18f
+
+    val cardBottom =
+        cardTop + 84f
+
     val cardWidth = 126f
     val cardGap = 10f
 
@@ -2593,17 +2405,21 @@ private fun createAttendanceStatsPdf(
     sectionPaint.textAlign =
         Paint.Align.RIGHT
 
+    val monthlySectionTop =
+        cardBottom + 36f
+
     canvas.drawText(
         tr(
             "נוכחות לפי חודשים",
             "Attendance by month"
         ),
         pageWidth - margin,
-        370f,
+        monthlySectionTop,
         sectionPaint
     )
 
-    var rowY = 397f
+    var rowY =
+        monthlySectionTop + 27f
 
     if (data.monthlyPoints.isEmpty()) {
         valuePaint.textAlign =
@@ -2715,7 +2531,11 @@ private fun createAttendanceStatsPdf(
                     index,
                     session ->
 
-                if (rowY < 785f) {
+                if (
+                    rowY + 12f <=
+                    pageHeight -
+                    KmiPdfFooter.CONTENT_BOTTOM_PADDING
+                ) {
                     drawRoundRect(
                         margin,
                         rowY - 17f,
@@ -2744,71 +2564,13 @@ private fun createAttendanceStatsPdf(
             }
     }
 
-    /*
-     * תחתית זהה לדו״ח מסך הבית.
-     */
-    val footerY = 804f
-
-    val footerLine =
-        Paint(
-            Paint.ANTI_ALIAS_FLAG
-        ).apply {
-            color = navy
-            strokeWidth = 2f
-        }
-
-    canvas.drawLine(
-        0f,
-        footerY,
-        pageWidth.toFloat(),
-        footerY,
-        footerLine
-    )
-
-    drawKmiLogo(
-        centerX = 38f,
-        centerY = footerY + 22f,
-        radius = 13f
-    )
-
-    smallPaint.textAlign =
-        Paint.Align.LEFT
-
-    canvas.drawText(
-        "Together We Protect",
-        62f,
-        footerY + 25f,
-        smallPaint
-    )
-
-    smallPaint.textAlign =
-        Paint.Align.CENTER
-
-    canvas.drawText(
-        tr(
-            "עמוד 1 מתוך 1",
-            "Page 1 of 1"
-        ),
-        pageWidth / 2f,
-        footerY + 25f,
-        smallPaint
-    )
-
-    smallPaint.textAlign =
-        Paint.Align.RIGHT
-
-    canvas.drawText(
-        "Krav Maga Israel",
-        pageWidth - 66f,
-        footerY + 18f,
-        smallPaint
-    )
-
-    canvas.drawText(
-        "www.kmi.org.il",
-        pageWidth - 66f,
-        footerY + 31f,
-        smallPaint
+    KmiPdfFooter.draw(
+        canvas = canvas,
+        pageWidth = pageWidth,
+        pageHeight = pageHeight,
+        pageNumber = 1,
+        totalPages = 1,
+        isEnglish = isEnglish
     )
 
     document.finishPage(page)

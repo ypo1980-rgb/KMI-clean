@@ -1,5 +1,11 @@
 package il.kmi.app.screens
 
+import android.content.Context
+import android.content.Intent
+import android.graphics.Paint
+import android.graphics.Typeface
+import android.graphics.pdf.PdfDocument
+import android.widget.Toast
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -26,7 +32,7 @@ import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.CircularProgressIndicator
+import il.kmi.app.ui.loading.KmiLoadingRings
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -39,7 +45,9 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TimePicker
 import androidx.compose.material3.rememberTimePickerState
+import androidx.core.content.FileProvider
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -49,22 +57,28 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import il.kmi.app.training.TrainingData
 import il.kmi.app.training.TrainingOverrideRepository
 import il.kmi.app.ui.KmiTopBar
 import il.kmi.app.ui.KmiTypography
 import il.kmi.app.ui.LocalAppIconScale
+import il.kmi.app.ui.pdf.KmiPdfFooter
+import il.kmi.app.ui.pdf.KmiPdfHeader
+import il.yuval.ui.theme.kmiScreenBackgroundBrush
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.suspendCancellableCoroutine
+import java.io.File
+import java.io.FileOutputStream
 import java.util.Calendar
 import java.util.Locale
 import kotlin.coroutines.resume
-import kotlin.coroutines.suspendCoroutine
 
 data class TrainingManagementUiData(
     val occurrenceKey: String,
@@ -144,7 +158,7 @@ private suspend fun cancelManagedTraining(
     reason: String,
     isEnglish: Boolean
 ): Result<Unit> {
-    return suspendCoroutine { continuation ->
+    return suspendCancellableCoroutine { continuation ->
         TrainingOverrideRepository.cancelTraining(
             training = request.training,
             branch = request.branch,
@@ -241,7 +255,7 @@ private suspend fun changeManagedTrainingTime(
         )
     }
 
-    return suspendCoroutine { continuation ->
+    return suspendCancellableCoroutine { continuation ->
         TrainingOverrideRepository.changeTrainingTime(
             training = request.training,
             branch = request.branch,
@@ -313,6 +327,317 @@ fun TrainingManagementRoute(
     )
 }
 
+private fun createTrainingManagementPdf(
+    context: Context,
+    training: TrainingManagementUiData,
+    isEnglish: Boolean
+): File {
+    val pageWidth = 595
+    val pageHeight = 842
+    val margin = 36f
+
+    val document = PdfDocument()
+
+    val page =
+        document.startPage(
+            PdfDocument.PageInfo.Builder(
+                pageWidth,
+                pageHeight,
+                1
+            ).create()
+        )
+
+    val canvas = page.canvas
+
+    val regularTypeface =
+        Typeface.create(
+            Typeface.SANS_SERIF,
+            Typeface.NORMAL
+        )
+
+    val boldTypeface =
+        Typeface.create(
+            Typeface.SANS_SERIF,
+            Typeface.BOLD
+        )
+
+    val titleColor =
+        android.graphics.Color.rgb(
+            15,
+            23,
+            42
+        )
+
+    val secondaryColor =
+        android.graphics.Color.rgb(
+            71,
+            85,
+            105
+        )
+
+    val cardBackground =
+        android.graphics.Color.rgb(
+            248,
+            250,
+            252
+        )
+
+    val cardBorder =
+        android.graphics.Color.rgb(
+            203,
+            213,
+            225
+        )
+
+    val labelPaint =
+        Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = secondaryColor
+            textSize = 10.5f
+            typeface = boldTypeface
+            textAlign =
+                if (isEnglish) {
+                    Paint.Align.LEFT
+                } else {
+                    Paint.Align.RIGHT
+                }
+        }
+
+    val valuePaint =
+        Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = titleColor
+            textSize = 14f
+            typeface = regularTypeface
+            textAlign =
+                if (isEnglish) {
+                    Paint.Align.LEFT
+                } else {
+                    Paint.Align.RIGHT
+                }
+        }
+
+    val cardFillPaint =
+        Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = cardBackground
+            style = Paint.Style.FILL
+        }
+
+    val cardStrokePaint =
+        Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = cardBorder
+            style = Paint.Style.STROKE
+            strokeWidth = 1.2f
+        }
+
+    fun tr(
+        hebrew: String,
+        english: String
+    ): String {
+        return if (isEnglish) {
+            english
+        } else {
+            hebrew
+        }
+    }
+
+    KmiPdfHeader.draw(
+        context = context,
+        canvas = canvas,
+        pageWidth = pageWidth,
+        isEnglish = isEnglish,
+        titleHebrew = "פרטי אימון",
+        titleEnglish = "Training Details",
+        subtitleHebrew =
+            training.place.ifBlank {
+                training.branch
+            },
+        subtitleEnglish =
+            training.place.ifBlank {
+                training.branch
+            }
+    )
+
+    val cardTop =
+        KmiPdfHeader.CONTENT_TOP + 14f
+
+    val cardBottom =
+        cardTop + 286f
+
+    canvas.drawRoundRect(
+        margin,
+        cardTop,
+        pageWidth - margin,
+        cardBottom,
+        16f,
+        16f,
+        cardFillPaint
+    )
+
+    canvas.drawRoundRect(
+        margin,
+        cardTop,
+        pageWidth - margin,
+        cardBottom,
+        16f,
+        16f,
+        cardStrokePaint
+    )
+
+    val textX =
+        if (isEnglish) {
+            margin + 22f
+        } else {
+            pageWidth - margin - 22f
+        }
+
+    var y = cardTop + 36f
+
+    fun drawDetail(
+        label: String,
+        value: String
+    ) {
+        canvas.drawText(
+            label,
+            textX,
+            y,
+            labelPaint
+        )
+
+        y += 22f
+
+        canvas.drawText(
+            value.ifBlank { "—" }.take(58),
+            textX,
+            y,
+            valuePaint
+        )
+
+        y += 42f
+    }
+
+    drawDetail(
+        tr("מקום", "Location"),
+        training.place
+    )
+
+    drawDetail(
+        tr("סניף", "Branch"),
+        training.branch
+    )
+
+    drawDetail(
+        tr("קבוצה", "Group"),
+        training.group
+    )
+
+    drawDetail(
+        tr("תאריך", "Date"),
+        training.dateText
+    )
+
+    drawDetail(
+        tr("שעות האימון", "Training time"),
+        "${extractManagementTime(training.startTime)}–" +
+                extractManagementTime(training.endTime)
+    )
+
+    KmiPdfFooter.draw(
+        canvas = canvas,
+        pageWidth = pageWidth,
+        pageHeight = pageHeight,
+        pageNumber = 1,
+        totalPages = 1,
+        isEnglish = isEnglish
+    )
+
+    document.finishPage(page)
+
+    val directory =
+        File(
+            context.cacheDir,
+            "shared_pdfs"
+        ).apply {
+            mkdirs()
+        }
+
+    val fileName =
+        if (isEnglish) {
+            "Training Details.pdf"
+        } else {
+            "פרטי אימון.pdf"
+        }
+
+    val file =
+        File(
+            directory,
+            fileName
+        )
+
+    FileOutputStream(
+        file,
+        false
+    ).use { output ->
+        document.writeTo(output)
+    }
+
+    document.close()
+
+    return file
+}
+
+private fun shareTrainingManagementPdf(
+    context: Context,
+    training: TrainingManagementUiData,
+    isEnglish: Boolean
+) {
+    val pdfFile =
+        createTrainingManagementPdf(
+            context = context,
+            training = training,
+            isEnglish = isEnglish
+        )
+
+    val uri =
+        FileProvider.getUriForFile(
+            context,
+            "${context.packageName}.fileprovider",
+            pdfFile
+        )
+
+    val sendIntent =
+        Intent(Intent.ACTION_SEND).apply {
+            type = "application/pdf"
+
+            putExtra(
+                Intent.EXTRA_SUBJECT,
+                if (isEnglish) {
+                    "Training Details"
+                } else {
+                    "פרטי אימון"
+                }
+            )
+
+            putExtra(
+                Intent.EXTRA_STREAM,
+                uri
+            )
+
+            addFlags(
+                Intent.FLAG_GRANT_READ_URI_PERMISSION
+            )
+        }
+
+    context.startActivity(
+        Intent.createChooser(
+            sendIntent,
+            if (isEnglish) {
+                "Share training PDF"
+            } else {
+                "שיתוף פרטי האימון"
+            }
+        )
+    )
+}
+
 enum class TrainingManagementScreenMode {
     MENU,
     CHANGE_TIME,
@@ -340,6 +665,9 @@ fun TrainingManagementScreen(
         reason: String
     ) -> Result<Unit>
 ) {
+    val context =
+        androidx.compose.ui.platform.LocalContext.current
+
     var mode by rememberSaveable {
         mutableStateOf(initialMode)
     }
@@ -447,16 +775,42 @@ fun TrainingManagementScreen(
     val scope = rememberCoroutineScope()
     val colorScheme = MaterialTheme.colorScheme
 
-    val accent = when (mode) {
-        TrainingManagementScreenMode.MENU ->
-            Color(0xFF075985)
+    val screenLayoutDirection =
+        if (isEnglish) {
+            LayoutDirection.Ltr
+        } else {
+            LayoutDirection.Rtl
+        }
 
-        TrainingManagementScreenMode.CHANGE_TIME ->
-            Color(0xFF6D4BB6)
+    val changeTimeAccent =
+        colorScheme.primary
 
-        TrainingManagementScreenMode.CANCEL ->
-            Color(0xFFB91C1C)
-    }
+    val cancellationAccent =
+        colorScheme.error
+
+    val accent =
+        when (mode) {
+            TrainingManagementScreenMode.MENU ->
+                colorScheme.secondary
+
+            TrainingManagementScreenMode.CHANGE_TIME ->
+                changeTimeAccent
+
+            TrainingManagementScreenMode.CANCEL ->
+                cancellationAccent
+        }
+
+    val accentContentColor =
+        when (mode) {
+            TrainingManagementScreenMode.MENU ->
+                colorScheme.onSecondary
+
+            TrainingManagementScreenMode.CHANGE_TIME ->
+                colorScheme.onPrimary
+
+            TrainingManagementScreenMode.CANCEL ->
+                colorScheme.onError
+        }
 
     val title = when (mode) {
         TrainingManagementScreenMode.MENU ->
@@ -547,289 +901,338 @@ fun TrainingManagementScreen(
         )
     }
 
-    Scaffold(
-        topBar = {
-            KmiTopBar(
-                title = title,
-                onHome = {
-                    if (!isSaving) {
-                        onHome()
-                    }
-                },
-                onOpenDrawer = {
-                    if (!isSaving) {
-                        onOpenDrawer()
-                    }
-                },
-                onOpenVoiceCommands = {
-                    if (!isSaving) {
-                        onOpenVoiceCommands()
-                    }
-                },
-                onOpenAi = {
-                    if (!isSaving) {
-                        onOpenAi()
-                    }
-                },
-                currentLang = if (isEnglish) "en" else "he",
-                showTopHome = false,
-                showTopShare = false,
-                showBottomActions = true,
-                centerTitle = true
-            )
-        },
-        containerColor = colorScheme.background
-    ) { padding ->
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(padding)
-                .background(
-                    Brush.verticalGradient(
-                        colors = listOf(
-                            colorScheme.background,
-                            colorScheme.surfaceVariant.copy(alpha = 0.38f),
-                            colorScheme.background
-                        )
-                    )
+    CompositionLocalProvider(
+        LocalLayoutDirection provides
+                screenLayoutDirection
+    ) {
+        Scaffold(
+            topBar = {
+                KmiTopBar(
+                    title = title,
+                    onHome = {
+                        if (!isSaving) {
+                            onHome()
+                        }
+                    },
+                    onOpenDrawer = {
+                        if (!isSaving) {
+                            onOpenDrawer()
+                        }
+                    },
+                    onOpenVoiceCommands = {
+                        if (!isSaving) {
+                            onOpenVoiceCommands()
+                        }
+                    },
+                    onOpenAi = {
+                        if (!isSaving) {
+                            onOpenAi()
+                        }
+                    },
+                    currentLang = if (isEnglish) "en" else "he",
+                    showTopHome = false,
+                    showTopShare = false,
+                    showBottomActions = true,
+                    showBottomShare = true,
+                    onShare = {
+                        runCatching {
+                            shareTrainingManagementPdf(
+                                context = context,
+                                training = training,
+                                isEnglish = isEnglish
+                            )
+                        }.onFailure {
+                            Toast.makeText(
+                                context,
+                                if (isEnglish) {
+                                    "Unable to create the PDF file"
+                                } else {
+                                    "לא ניתן ליצור את קובץ ה־PDF"
+                                },
+                                Toast.LENGTH_SHORT
+                            ).show()
+                        }
+                    },
+                    centerTitle = true
                 )
-                .imePadding()
-                .navigationBarsPadding()
-                .padding(
-                    horizontal = 20.dp,
-                    vertical = 14.dp
-                ),
-            verticalArrangement = Arrangement.spacedBy(14.dp)
-        ) {
-            Column(
+            },
+            containerColor = colorScheme.background
+        ) { padding ->
+            Box(
                 modifier = Modifier
-                    .weight(1f)
-                    .fillMaxWidth()
-                    .verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(14.dp)
+                    .fillMaxSize()
+                    .padding(padding)
+                    .background(
+                        kmiScreenBackgroundBrush()
+                    )
             ) {
-                TrainingDetailsCard(
-                    training = training,
-                    isEnglish = isEnglish,
-                    accent = accent
-                )
-
-                Text(
-                    text =
-                        if (isEnglish) {
-                            "Choose the action you want to perform"
-                        } else {
-                            "בחר את הפעולה שברצונך לבצע"
-                        },
-                    style = KmiTypography.sectionTitle,
-                    color = colorScheme.onBackground,
-                    textAlign =
-                        if (isEnglish) {
-                            TextAlign.Left
-                        } else {
-                            TextAlign.Right
-                        },
-                    modifier = Modifier.fillMaxWidth()
-                )
-
-                when (mode) {
-                    TrainingManagementScreenMode.MENU -> {
-                        TrainingManagementActionCard(
-                            title =
-                                if (isEnglish) {
-                                    "Change training time"
-                                } else {
-                                    "שינוי שעת אימון"
-                                },
-                            subtitle =
-                                if (isEnglish) {
-                                    "Choose new start and end times"
-                                } else {
-                                    "בחירת שעת התחלה וסיום חדשות"
-                                },
-                            iconTint = Color(0xFF6D4BB6),
-                            titleColor = colorScheme.onSurface,
-                            subtitleColor = colorScheme.onSurfaceVariant,
-                            containerColor =
-                                colorScheme.surfaceVariant,
-                            borderColor =
-                                Color(0xFF6D4BB6)
-                                    .copy(alpha = 0.38f),
-                            icon = {
-                                Icon(
-                                    imageVector = Icons.Filled.Schedule,
-                                    contentDescription = null,
-                                    tint = Color.White,
-                                    modifier = Modifier.size(
-                                        22.dp *
-                                                LocalAppIconScale.current
-                                    )
-                                )
-                            },
-                            onClick = {
-                                errorMessage = null
-                                mode =
-                                    TrainingManagementScreenMode.CHANGE_TIME
-                            }
-                        )
-
-                        TrainingManagementActionCard(
-                            title =
-                                if (isEnglish) {
-                                    "Cancel training"
-                                } else {
-                                    "ביטול אימון"
-                                },
-                            subtitle =
-                                if (isEnglish) {
-                                    "Cancel and notify the trainees"
-                                } else {
-                                    "ביטול האימון ושליחת עדכון למתאמנים"
-                                },
-                            iconTint = Color(0xFFC81E1E),
-                            titleColor = colorScheme.onErrorContainer,
-                            subtitleColor =
-                                colorScheme.onErrorContainer.copy(alpha = 0.82f),
-                            containerColor =
-                                colorScheme.errorContainer
-                                    .copy(alpha = 0.52f),
-                            borderColor =
-                                colorScheme.error
-                                    .copy(alpha = 0.38f),
-                            icon = {
-                                Icon(
-                                    imageVector = Icons.Filled.Cancel,
-                                    contentDescription = null,
-                                    tint = Color.White,
-                                    modifier = Modifier.size(
-                                        22.dp *
-                                                LocalAppIconScale.current
-                                    )
-                                )
-                            },
-                            onClick = {
-                                errorMessage = null
-                                mode =
-                                    TrainingManagementScreenMode.CANCEL
-                            }
-                        )
-                    }
-
-                    TrainingManagementScreenMode.CHANGE_TIME -> {
-                        TrainingTimeEditor(
-                            startTime = changedStartTime,
-                            endTime = changedEndTime,
-                            isEnglish = isEnglish,
-                            accent = accent,
-                            onStartClick = {
-                                showStartTimePicker = true
-                            },
-                            onEndClick = {
-                                showEndTimePicker = true
-                            }
-                        )
-
-                        TrainingReasonField(
-                            value = reason,
-                            isEnglish = isEnglish,
-                            isCancellation = false,
-                            accent = accent,
-                            onValueChange = {
-                                reason = it.take(250)
-                                errorMessage = null
-                            }
-                        )
-                    }
-
-                    TrainingManagementScreenMode.CANCEL -> {
-                        TrainingReasonField(
-                            value = reason,
-                            isEnglish = isEnglish,
-                            isCancellation = true,
-                            accent = accent,
-                            onValueChange = {
-                                reason = it.take(250)
-                                errorMessage = null
-                            }
-                        )
-                    }
-                }
-
-                errorMessage?.let {
-                    Surface(
-                        modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(14.dp),
-                        color = colorScheme.errorContainer
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .imePadding()
+                        .navigationBarsPadding()
+                        .padding(
+                            horizontal = 20.dp,
+                            vertical = 14.dp
+                        ),
+                    verticalArrangement =
+                        Arrangement.spacedBy(14.dp)
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .weight(1f)
+                            .fillMaxWidth()
+                            .verticalScroll(rememberScrollState()),
+                        verticalArrangement = Arrangement.spacedBy(14.dp)
                     ) {
-                        Text(
-                            text = it,
-                            style = KmiTypography.body,
-                            color = colorScheme.onErrorContainer,
-                            fontWeight = FontWeight.Bold,
-                            textAlign = TextAlign.Center,
-                            modifier = Modifier.padding(12.dp)
+                        TrainingDetailsCard(
+                            training = training,
+                            isEnglish = isEnglish,
+                            accent = accent
                         )
+
+                        Text(
+                            text =
+                                if (isEnglish) {
+                                    "Choose the action you want to perform"
+                                } else {
+                                    "בחר את הפעולה שברצונך לבצע"
+                                },
+                            style = KmiTypography.sectionTitle,
+                            color = colorScheme.onBackground,
+                            textAlign =
+                                if (isEnglish) {
+                                    TextAlign.Left
+                                } else {
+                                    TextAlign.Right
+                                },
+                            modifier = Modifier.fillMaxWidth()
+                        )
+
+                        when (mode) {
+                            TrainingManagementScreenMode.MENU -> {
+                                TrainingManagementActionCard(
+                                    title =
+                                        if (isEnglish) {
+                                            "Change training time"
+                                        } else {
+                                            "שינוי שעת אימון"
+                                        },
+                                    subtitle =
+                                        if (isEnglish) {
+                                            "Choose new start and end times"
+                                        } else {
+                                            "בחירת שעת התחלה וסיום חדשות"
+                                        },
+                                    iconTint = changeTimeAccent,
+                                    titleColor = colorScheme.onSurface,
+                                    subtitleColor = colorScheme.onSurfaceVariant,
+                                    containerColor =
+                                        colorScheme.surfaceVariant,
+                                    borderColor =
+                                        changeTimeAccent.copy(alpha = 0.38f),
+                                    icon = {
+                                        Icon(
+                                            imageVector = Icons.Filled.Schedule,
+                                            contentDescription = null,
+                                            tint = colorScheme.onPrimary,
+                                            modifier = Modifier.size(
+                                                22.dp *
+                                                        LocalAppIconScale.current
+                                            )
+                                        )
+                                    },
+                                    onClick = {
+                                        errorMessage = null
+                                        mode =
+                                            TrainingManagementScreenMode.CHANGE_TIME
+                                    }
+                                )
+
+                                TrainingManagementActionCard(
+                                    title =
+                                        if (isEnglish) {
+                                            "Cancel training"
+                                        } else {
+                                            "ביטול אימון"
+                                        },
+                                    subtitle =
+                                        if (isEnglish) {
+                                            "Cancel and notify the trainees"
+                                        } else {
+                                            "ביטול האימון ושליחת עדכון למתאמנים"
+                                        },
+                                    iconTint = cancellationAccent,
+                                    titleColor = colorScheme.onErrorContainer,
+                                    subtitleColor =
+                                        colorScheme.onErrorContainer.copy(alpha = 0.82f),
+                                    containerColor =
+                                        colorScheme.errorContainer
+                                            .copy(alpha = 0.52f),
+                                    borderColor =
+                                        cancellationAccent.copy(alpha = 0.38f),
+                                    icon = {
+                                        Icon(
+                                            imageVector = Icons.Filled.Cancel,
+                                            contentDescription = null,
+                                            tint = colorScheme.onError,
+                                            modifier = Modifier.size(
+                                                22.dp *
+                                                        LocalAppIconScale.current
+                                            )
+                                        )
+                                    },
+                                    onClick = {
+                                        errorMessage = null
+                                        mode =
+                                            TrainingManagementScreenMode.CANCEL
+                                    }
+                                )
+                            }
+
+                            TrainingManagementScreenMode.CHANGE_TIME -> {
+                                TrainingTimeEditor(
+                                    startTime = changedStartTime,
+                                    endTime = changedEndTime,
+                                    isEnglish = isEnglish,
+                                    accent = accent,
+                                    onStartClick = {
+                                        showStartTimePicker = true
+                                    },
+                                    onEndClick = {
+                                        showEndTimePicker = true
+                                    }
+                                )
+
+                                TrainingReasonField(
+                                    value = reason,
+                                    isEnglish = isEnglish,
+                                    isCancellation = false,
+                                    accent = accent,
+                                    onValueChange = {
+                                        reason = it.take(250)
+                                        errorMessage = null
+                                    }
+                                )
+                            }
+
+                            TrainingManagementScreenMode.CANCEL -> {
+                                TrainingReasonField(
+                                    value = reason,
+                                    isEnglish = isEnglish,
+                                    isCancellation = true,
+                                    accent = accent,
+                                    onValueChange = {
+                                        reason = it.take(250)
+                                        errorMessage = null
+                                    }
+                                )
+                            }
+                        }
+
+                        errorMessage?.let {
+                            Surface(
+                                modifier = Modifier.fillMaxWidth(),
+                                shape = RoundedCornerShape(14.dp),
+                                color = colorScheme.errorContainer
+                            ) {
+                                Text(
+                                    text = it,
+                                    style = KmiTypography.body,
+                                    color = colorScheme.onErrorContainer,
+                                    fontWeight = FontWeight.Bold,
+                                    textAlign = TextAlign.Center,
+                                    modifier = Modifier.padding(12.dp)
+                                )
+                            }
+                        }
+                    }
+
+                    TrainingManagementBottomActions(
+                        mode = mode,
+                        isEnglish = isEnglish,
+                        accent = accent,
+                        accentContentColor = accentContentColor,
+                        isSaving = isSaving,
+                        canSubmit = canSubmit,
+                        onReturnToMenu = {
+                            if (!isSaving) {
+                                returnToMenu()
+                            }
+                        },
+                        onSubmit = {
+                            if (!canSubmit || isSaving) {
+                                return@TrainingManagementBottomActions
+                            }
+
+                            isSaving = true
+                            errorMessage = null
+
+                            scope.launch {
+                                val result =
+                                    when (mode) {
+                                        TrainingManagementScreenMode.CANCEL ->
+                                            onCancelTraining(reason.trim())
+
+                                        TrainingManagementScreenMode.CHANGE_TIME ->
+                                            onChangeTrainingTime(
+                                                changedStartTime,
+                                                changedEndTime,
+                                                reason.trim()
+                                            )
+
+                                        TrainingManagementScreenMode.MENU ->
+                                            Result.success(Unit)
+                                    }
+
+                                isSaving = false
+
+                                result.fold(
+                                    onSuccess = {
+                                        onBack()
+                                    },
+                                    onFailure = {
+                                        errorMessage =
+                                            it.localizedMessage
+                                                ?.takeIf(String::isNotBlank)
+                                                ?: if (isEnglish) {
+                                                    "The change could not be saved."
+                                                } else {
+                                                    "לא ניתן היה לשמור את השינוי."
+                                                }
+                                    }
+                                )
+                            }
+                        }
+                    )
+
+                    if (isSaving) {
+                        Surface(
+                            modifier = Modifier.fillMaxSize(),
+                            color =
+                                colorScheme.scrim.copy(
+                                    alpha = 0.28f
+                                ),
+                            tonalElevation = 0.dp,
+                            shadowElevation = 0.dp
+                        ) {
+                            Box(
+                                modifier = Modifier.fillMaxSize(),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                KmiLoadingRings(
+                                    text =
+                                        if (isEnglish) {
+                                            "Saving changes…"
+                                        } else {
+                                            "שומר את השינויים…"
+                                        }
+                                )
+                            }
+                        }
                     }
                 }
             }
-
-            TrainingManagementBottomActions(
-                mode = mode,
-                isEnglish = isEnglish,
-                accent = accent,
-                isSaving = isSaving,
-                canSubmit = canSubmit,
-                onClose = onBack,
-                onReturnToMenu = {
-                    if (!isSaving) {
-                        returnToMenu()
-                    }
-                },
-                onSubmit = {
-                    if (!canSubmit || isSaving) {
-                        return@TrainingManagementBottomActions
-                    }
-
-                    isSaving = true
-                    errorMessage = null
-
-                    scope.launch {
-                        val result =
-                            when (mode) {
-                                TrainingManagementScreenMode.CANCEL ->
-                                    onCancelTraining(reason.trim())
-
-                                TrainingManagementScreenMode.CHANGE_TIME ->
-                                    onChangeTrainingTime(
-                                        changedStartTime,
-                                        changedEndTime,
-                                        reason.trim()
-                                    )
-
-                                TrainingManagementScreenMode.MENU ->
-                                    Result.success(Unit)
-                            }
-
-                        isSaving = false
-
-                        result.fold(
-                            onSuccess = {
-                                onBack()
-                            },
-                            onFailure = {
-                                errorMessage =
-                                    it.localizedMessage
-                                        ?.takeIf(String::isNotBlank)
-                                        ?: if (isEnglish) {
-                                            "The change could not be saved."
-                                        } else {
-                                            "לא ניתן היה לשמור את השינוי."
-                                        }
-                            }
-                        )
-                    }
-                }
-            )
         }
     }
 }
@@ -1216,39 +1619,13 @@ private fun TrainingManagementBottomActions(
     mode: TrainingManagementScreenMode,
     isEnglish: Boolean,
     accent: Color,
+    accentContentColor: Color,
     isSaving: Boolean,
     canSubmit: Boolean,
-    onClose: () -> Unit,
     onReturnToMenu: () -> Unit,
     onSubmit: () -> Unit
 ) {
     if (mode == TrainingManagementScreenMode.MENU) {
-        Surface(
-            onClick = onClose,
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(52.dp),
-            shape = RoundedCornerShape(999.dp),
-            color = accent,
-            border = BorderStroke(
-                1.dp,
-                Color.White.copy(alpha = 0.30f)
-            ),
-            tonalElevation = 0.dp,
-            shadowElevation = 0.dp
-        ) {
-            Box(
-                contentAlignment = Alignment.Center
-            ) {
-                Text(
-                    text = if (isEnglish) "Close" else "סגור",
-                    style = KmiTypography.action,
-                    color = Color.White,
-                    fontWeight = FontWeight.ExtraBold
-                )
-            }
-        }
-
         return
     }
 
@@ -1304,19 +1681,6 @@ private fun TrainingManagementBottomActions(
                     accent.copy(alpha = 0.35f)
             )
         ) {
-            if (isSaving) {
-                CircularProgressIndicator(
-                    modifier = Modifier.size(
-                        17.dp *
-                                LocalAppIconScale.current
-                    ),
-                    strokeWidth = 2.dp,
-                    color = Color.White
-                )
-
-                Spacer(Modifier.width(6.dp))
-            }
-
             Text(
                 text =
                     when (mode) {
@@ -1338,7 +1702,7 @@ private fun TrainingManagementBottomActions(
                             ""
                     },
                 style = KmiTypography.action,
-                color = Color.White,
+                color = accentContentColor,
                 fontWeight = FontWeight.ExtraBold,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis

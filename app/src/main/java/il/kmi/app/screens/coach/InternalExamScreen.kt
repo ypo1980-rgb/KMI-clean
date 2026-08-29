@@ -110,10 +110,13 @@ import kotlinx.coroutines.launch
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
+import il.kmi.app.ui.KmiPremiumDropdown
 import il.kmi.app.ui.KmiTopBar
 import il.kmi.app.ui.KmiTypography
+import il.kmi.app.ui.loading.KmiLoadingRings
 import il.kmi.app.ui.pdf.KmiPdfHeader
 import il.kmi.app.ui.pdf.KmiPdfFooter
+import il.yuval.ui.theme.kmiScreenBackgroundBrush
 import androidx.compose.ui.graphics.luminance
 
 
@@ -265,30 +268,6 @@ private fun examBeltDrawableRes(belt: Belt): Int =
         Belt.BLACK -> R.drawable.intro_belt_black
         else -> R.drawable.intro_belt_black
     }
-
-private fun internalExamEntryScreenBrush():
-        androidx.compose.ui.graphics.Brush =
-    androidx.compose.ui.graphics.Brush.verticalGradient(
-        colors = listOf(
-            Color(0xFFF8FBFF),
-            Color(0xFFEAF4FF),
-            Color(0xFFB7DDF7),
-            Color(0xFF1F78B4),
-            Color(0xFF062B4A)
-        )
-    )
-
-private fun examBeltScreenBrush():
-        androidx.compose.ui.graphics.Brush =
-    androidx.compose.ui.graphics.Brush.verticalGradient(
-        colors = listOf(
-            Color(0xFFF8FBFF),
-            Color(0xFFEAF4FF),
-            Color(0xFFB7DDF7),
-            Color(0xFF1F78B4),
-            Color(0xFF062B4A)
-        )
-    )
 
 private fun examBeltButtonBrush(belt: Belt): androidx.compose.ui.graphics.Brush =
     androidx.compose.ui.graphics.Brush.horizontalGradient(
@@ -1305,7 +1284,7 @@ fun InternalExamScreen(
                 .padding(padding)
                 .fillMaxSize()
                 .background(
-                    examBeltScreenBrush()
+                    kmiScreenBackgroundBrush()
                 )
         ) {
             Column(
@@ -1402,8 +1381,7 @@ fun InternalExamScreen(
                                                     }
                                                     .takeIf {
                                                         it >= 0
-                                                    }
-                                                    ?.plus(1),
+                                                    },
                                             isEnglish = isEnglish
                                         ),
                                     modifier = Modifier.weight(1f),
@@ -1472,7 +1450,7 @@ fun InternalExamScreen(
                                                                         name
                                                                     ),
                                                                 demoIndex =
-                                                                    index + 1,
+                                                                    index,
                                                                 isEnglish =
                                                                     isEnglish
                                                             ),
@@ -2149,9 +2127,55 @@ fun InternalExamScreen(
                     Button(onClick = {
                         showExitDialog = false
                         onBack()
-                    }) { Text(examTr(isEnglish, "צא בלי לשמור", "Exit without saving")) }
+                    }) {
+                        Text(
+                            examTr(
+                                isEnglish,
+                                "צא בלי לשמור",
+                                "Exit without saving"
+                            )
+                        )
+                    }
                 }
             )
+        }
+
+        if (isSavingFinalResult) {
+            androidx.compose.ui.window.Dialog(
+                onDismissRequest = {}
+            ) {
+                Surface(
+                    shape = RoundedCornerShape(24.dp),
+                    color =
+                        MaterialTheme.colorScheme.surface,
+                    border = BorderStroke(
+                        width = 1.dp,
+                        color =
+                            MaterialTheme.colorScheme
+                                .outlineVariant
+                    ),
+                    tonalElevation = 0.dp,
+                    shadowElevation = 0.dp
+                ) {
+                    Box(
+                        modifier = Modifier.padding(
+                            horizontal = 32.dp,
+                            vertical = 26.dp
+                        ),
+                        contentAlignment =
+                            Alignment.Center
+                    ) {
+                        KmiLoadingRings(
+                            text =
+                                examTr(
+                                    isEnglish,
+                                    "שומר את תוצאת המבחן…",
+                                    "Saving exam result…"
+                                )
+                        )
+                    }
+                }
+            }
         }
     }
 }
@@ -2539,7 +2563,6 @@ fun InternalExamEntryScreen(
                             .takeIf {
                                 it >= 0
                             }
-                            ?.plus(1)
                 )
 
             if (uri != null) {
@@ -2578,7 +2601,6 @@ fun InternalExamEntryScreen(
                         .takeIf {
                             it >= 0
                         }
-                        ?.plus(1)
             )
 
         androidx.compose.material3.AlertDialog(
@@ -2698,8 +2720,7 @@ fun InternalExamEntryScreen(
                             }
                             .takeIf {
                                 it >= 0
-                            }
-                            ?.plus(1),
+                            },
                     isEnglish = isEnglish
                 )
             } else {
@@ -2815,25 +2836,7 @@ fun InternalExamEntryScreen(
                     .padding(padding)
                     .fillMaxSize()
                     .background(
-                        brush =
-                            if (isDarkMode) {
-                                androidx.compose.ui.graphics.Brush
-                                    .verticalGradient(
-                                        colors = listOf(
-                                            MaterialTheme
-                                                .colorScheme
-                                                .background,
-                                            MaterialTheme
-                                                .colorScheme
-                                                .surface,
-                                            Color(0xFF10243A),
-                                            Color(0xFF07365B),
-                                            Color(0xFF031B31)
-                                        )
-                                    )
-                            } else {
-                                internalExamEntryScreenBrush()
-                            }
+                        kmiScreenBackgroundBrush()
                     )
             ) {
                 Column(
@@ -3172,7 +3175,7 @@ fun InternalExamEntryScreen(
                                                                 demoSafeTraineeName(
                                                                     realName = name,
                                                                     demoIndex =
-                                                                        index + 1
+                                                                        index
                                                                 ),
                                                             style =
                                                                 KmiTypography.body.copy(
@@ -3562,7 +3565,7 @@ fun InternalExamEntryScreen(
                                             TraineeDisplayNameMapper.displayName(
                                                 realName = result.traineeName,
                                                 stableKey = result.resultId,
-                                                demoIndex = index + 1,
+                                                demoIndex = index,
                                                 isEnglish = isEnglish
                                             ),
                                         isEnglish = isEnglish,
@@ -3622,7 +3625,6 @@ fun InternalExamEntryScreen(
                     .takeIf {
                         it >= 0
                     }
-                    ?.plus(1)
                     ?: recentCompletedResults
                         .indexOfFirst {
                             it.traineeName.trim().equals(
@@ -3633,7 +3635,6 @@ fun InternalExamEntryScreen(
                         .takeIf {
                             it >= 0
                         }
-                        ?.plus(1)
 
             CompletedExamPreviewDialog(
                 session = previewSession,
@@ -3705,7 +3706,6 @@ fun InternalExamEntryScreen(
                             .takeIf {
                                 it >= 0
                             }
-                            ?.plus(1)
 
                     val uri =
                         InternalExamPdf.createPdf(
@@ -3736,6 +3736,68 @@ fun InternalExamEntryScreen(
                 sharedMarksMap = marksMap,
                 showSetupHeader = false
             )
+        }
+
+        val isEntryOperationLoading =
+            isDeletingTrainee ||
+                    isDeletingExamHistoryResult ||
+                    isLoadingCompletedPreview
+
+        if (isEntryOperationLoading) {
+            val loadingText =
+                when {
+                    isDeletingTrainee ->
+                        examTr(
+                            isEnglish,
+                            "מוחק את הנבחן…",
+                            "Deleting trainee…"
+                        )
+
+                    isDeletingExamHistoryResult ->
+                        examTr(
+                            isEnglish,
+                            "מוחק את המבחן…",
+                            "Deleting exam…"
+                        )
+
+                    else ->
+                        examTr(
+                            isEnglish,
+                            "טוען את פרטי המבחן…",
+                            "Loading exam details…"
+                        )
+                }
+
+            androidx.compose.ui.window.Dialog(
+                onDismissRequest = {}
+            ) {
+                Surface(
+                    shape = RoundedCornerShape(24.dp),
+                    color =
+                        MaterialTheme.colorScheme.surface,
+                    border = BorderStroke(
+                        width = 1.dp,
+                        color =
+                            MaterialTheme.colorScheme
+                                .outlineVariant
+                    ),
+                    tonalElevation = 0.dp,
+                    shadowElevation = 0.dp
+                ) {
+                    Box(
+                        modifier = Modifier.padding(
+                            horizontal = 32.dp,
+                            vertical = 26.dp
+                        ),
+                        contentAlignment =
+                            Alignment.Center
+                    ) {
+                        KmiLoadingRings(
+                            text = loadingText
+                        )
+                    }
+                }
+            }
         }
     }
 }
@@ -4792,374 +4854,73 @@ private fun BeltSelector(
     isEnglish: Boolean,
     onBeltChange: (Belt) -> Unit
 ) {
-    var expanded by remember {
-        mutableStateOf(false)
-    }
+    val belts =
+        remember {
+            listOf(
+                Belt.YELLOW,
+                Belt.ORANGE,
+                Belt.GREEN,
+                Belt.BLUE,
+                Belt.BROWN,
+                Belt.BLACK
+            )
+        }
 
-    val belts = listOf(
-        Belt.YELLOW,
-        Belt.ORANGE,
-        Belt.GREEN,
-        Belt.BLUE,
-        Belt.BROWN,
-        Belt.BLACK
-    )
-
-    val isDarkMode =
-        MaterialTheme.colorScheme.background
-            .luminance() < 0.5f
-
-    val mainColor =
-        examBeltMainColor(currentBelt)
-
-    val darkColor =
-        if (isDarkMode) {
-            when (currentBelt) {
-                Belt.BLACK ->
-                    MaterialTheme.colorScheme.onSurface
-
-                else ->
-                    mainColor
+    val beltByDisplayName =
+        remember(
+            belts,
+            isEnglish
+        ) {
+            belts.associateBy { belt ->
+                examBeltShortNameForUi(
+                    belt,
+                    isEnglish
+                )
             }
-        } else {
-            examBeltDarkColor(currentBelt)
         }
 
-    val cardColor =
-        if (isDarkMode) {
-            MaterialTheme.colorScheme
-                .surfaceVariant
-                .copy(alpha = 0.76f)
-        } else {
-            Color.White.copy(alpha = 0.76f)
-        }
+    val selectedDisplayName =
+        examBeltShortNameForUi(
+            currentBelt,
+            isEnglish
+        )
 
-    val imageFrameColor =
-        if (isDarkMode) {
-            MaterialTheme.colorScheme.surface
-        } else {
-            Color(0xFFF8FAFF)
-        }
-
-    val secondaryTextColor =
-        if (isDarkMode) {
-            MaterialTheme.colorScheme
-                .onSurfaceVariant
-        } else {
-            Color(0xFF64748B)
-        }
-
-    Box(
-        modifier = Modifier.fillMaxWidth()
-    ) {
-        Surface(
-            onClick = {
-                expanded = true
-            },
-            modifier = Modifier
-                .fillMaxWidth()
-                .heightIn(min = 88.dp),
-            shape = RoundedCornerShape(20.dp),
-            color = cardColor,
-            border = BorderStroke(
-                width = 1.dp,
-                color =
-                    if (isDarkMode) {
-                        MaterialTheme.colorScheme
-                            .outline
-                            .copy(alpha = 0.48f)
-                    } else {
-                        mainColor.copy(alpha = 0.24f)
-                    }
+    KmiPremiumDropdown(
+        title =
+            examTr(
+                isEnglish,
+                "חגורה נבחרת",
+                "Selected belt"
             ),
-            tonalElevation = 0.dp,
-            shadowElevation = 0.dp
-        ) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(
-                        horizontal = 12.dp,
-                        vertical = 10.dp
-                    ),
-                verticalAlignment =
-                    Alignment.CenterVertically,
-                horizontalArrangement =
-                    Arrangement.spacedBy(12.dp)
-            ) {
-                /*
-    * החץ בצד של המלל.
-    */
-                Text(
-                    text =
-                        if (expanded) {
-                            "▲"
-                        } else {
-                            "▼"
-                        },
-                    color =
-                        if (isDarkMode) {
-                            Color(0xFFA78BFA)
-                        } else {
-                            Color(0xFF7C3AED)
-                        },
-                    style = KmiTypography.caption,
-                    fontWeight = FontWeight.Black
+        options =
+            belts.map { belt ->
+                examBeltShortNameForUi(
+                    belt,
+                    isEnglish
                 )
-
-                Column(
-                    modifier = Modifier.weight(1f),
-                    verticalArrangement =
-                        Arrangement.Center,
-                    horizontalAlignment =
-                        if (isEnglish) {
-                            Alignment.Start
-                        } else {
-                            Alignment.End
-                        }
-                ) {
-                    Text(
-                        text = examTr(
-                            isEnglish,
-                            "חגורה נבחרת",
-                            "Selected belt"
-                        ),
-                        modifier = Modifier.fillMaxWidth(),
-                        color = secondaryTextColor,
-                        style = KmiTypography.caption,
-                        fontWeight = FontWeight.SemiBold,
-                        textAlign =
-                            if (isEnglish) {
-                                TextAlign.Left
-                            } else {
-                                TextAlign.Right
-                            },
-                        maxLines = 2,
-                        overflow = TextOverflow.Ellipsis
-                    )
-
-                    Spacer(Modifier.height(3.dp))
-
-                    Text(
-                        text =
-                            examBeltShortNameForUi(
-                                currentBelt,
-                                isEnglish
-                            ),
-                        modifier = Modifier.fillMaxWidth(),
-                        color = darkColor,
-                        style =
-                            KmiTypography.sectionTitle,
-                        fontWeight =
-                            FontWeight.ExtraBold,
-                        textAlign =
-                            if (isEnglish) {
-                                TextAlign.Left
-                            } else {
-                                TextAlign.Right
-                            },
-                        maxLines = 2,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                }
-
-                /*
-                 * תמונת החגורה נמצאת בצד הנגדי
-                 * למלל ובתוך מסגרת נפרדת.
-                 */
-                Surface(
-                    modifier = Modifier.size(
-                        width = 100.dp,
-                        height = 62.dp
-                    ),
-                    shape = RoundedCornerShape(16.dp),
-                    color = imageFrameColor,
-                    border = BorderStroke(
-                        width = 1.dp,
-                        color =
-                            if (isDarkMode) {
-                                MaterialTheme.colorScheme
-                                    .outline
-                                    .copy(alpha = 0.42f)
-                            } else {
-                                Color(0xFFC8D8EE)
-                            }
-                    ),
-                    tonalElevation = 0.dp,
-                    shadowElevation = 0.dp
-                ) {
-                    Box(
-                        modifier = Modifier.fillMaxSize(),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Image(
-                            painter = painterResource(
-                                id =
-                                    examBeltDrawableRes(
-                                        currentBelt
-                                    )
-                            ),
-                            contentDescription =
-                                examBeltNameForUi(
-                                    currentBelt,
-                                    isEnglish
-                                ),
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .padding(
-                                    horizontal = 13.dp,
-                                    vertical = 12.dp
-                                ),
-                            contentScale =
-                                ContentScale.Fit
-                        )
-                    }
-                }
-            }
-        }
-
-        androidx.compose.material3.DropdownMenu(
-            expanded = expanded,
-            onDismissRequest = {
-                expanded = false
             },
-            modifier = Modifier
-                .fillMaxWidth(0.90f)
-                .background(
-                    if (isDarkMode) {
-                        MaterialTheme.colorScheme.surface
-                    } else {
-                        Color(0xFFF8FAFC)
-                    }
-                )
-        ) {
-            belts.forEach { belt ->
-                DropdownMenuItem(
-                    text = {
-                        Row(
-                            modifier =
-                                Modifier.fillMaxWidth(),
-                            verticalAlignment =
-                                Alignment.CenterVertically,
-                            horizontalArrangement =
-                                Arrangement.spacedBy(10.dp)
-                        ) {
-                            Surface(
-                                modifier = Modifier.size(
-                                    width = 72.dp,
-                                    height = 42.dp
-                                ),
-                                shape =
-                                    RoundedCornerShape(12.dp),
-                                color =
-                                    if (isDarkMode) {
-                                        MaterialTheme
-                                            .colorScheme
-                                            .surfaceVariant
-                                    } else {
-                                        Color(0xFFF8FAFF)
-                                    },
-                                border = BorderStroke(
-                                    width = 1.dp,
-                                    color =
-                                        examBeltMainColor(
-                                            belt
-                                        ).copy(
-                                            alpha = 0.30f
-                                        )
-                                ),
-                                tonalElevation = 0.dp,
-                                shadowElevation = 0.dp
-                            ) {
-                                Image(
-                                    painter =
-                                        painterResource(
-                                            id =
-                                                examBeltDrawableRes(
-                                                    belt
-                                                )
-                                        ),
-                                    contentDescription = null,
-                                    modifier = Modifier
-                                        .fillMaxSize()
-                                        .padding(
-                                            horizontal = 9.dp,
-                                            vertical = 8.dp
-                                        ),
-                                    contentScale =
-                                        ContentScale.Fit
-                                )
-                            }
+        selectedValue =
+            selectedDisplayName,
+        isEnglish =
+            isEnglish,
+        onSelected = { selectedName ->
+            val selectedBelt =
+                beltByDisplayName[selectedName]
+                    ?: return@KmiPremiumDropdown
 
-                            Text(
-                                text =
-                                    examBeltShortNameForUi(
-                                        belt,
-                                        isEnglish
-                                    ),
-                                modifier =
-                                    Modifier.weight(1f),
-                                color =
-                                    if (isDarkMode) {
-                                        MaterialTheme
-                                            .colorScheme
-                                            .onSurface
-                                    } else if (
-                                        belt == currentBelt
-                                    ) {
-                                        examBeltDarkColor(
-                                            belt
-                                        )
-                                    } else {
-                                        Color(0xFF111827)
-                                    },
-                                style =
-                                    KmiTypography.body,
-                                fontWeight =
-                                    if (
-                                        belt == currentBelt
-                                    ) {
-                                        FontWeight.ExtraBold
-                                    } else {
-                                        FontWeight.SemiBold
-                                    },
-                                textAlign =
-                                    if (isEnglish) {
-                                        TextAlign.Left
-                                    } else {
-                                        TextAlign.Right
-                                    },
-                                maxLines = 2,
-                                overflow =
-                                    TextOverflow.Ellipsis
-                            )
-
-                            if (belt == currentBelt) {
-                                Text(
-                                    text = "✓",
-                                    color =
-                                        examBeltMainColor(
-                                            belt
-                                        ),
-                                    style =
-                                        KmiTypography.action,
-                                    fontWeight =
-                                        FontWeight.Black
-                                )
-                            }
-                        }
-                    },
-                    onClick = {
-                        expanded = false
-
-                        if (belt != currentBelt) {
-                            onBeltChange(belt)
-                        }
-                    }
-                )
+            if (selectedBelt != currentBelt) {
+                onBeltChange(selectedBelt)
             }
-        }
-    }
+        },
+        modifier =
+            Modifier.fillMaxWidth(),
+        placeholder =
+            examTr(
+                isEnglish,
+                "בחר חגורה",
+                "Select belt"
+            )
+    )
 }
 
 @Composable

@@ -32,6 +32,9 @@ import il.kmi.app.screens.ExercisesTabsScreen
 import il.kmi.app.screens.FavoritesScreen
 import il.kmi.app.screens.HomeScreen
 import il.kmi.app.screens.PracticeByTopicsSelection
+import il.kmi.app.screens.TrainingArchiveNavigationStore
+import il.kmi.app.screens.TrainingArchiveScreen
+import il.kmi.app.screens.TrainingArchiveSource
 import il.kmi.app.screens.TrainingManagementNavigationStore
 import il.kmi.app.screens.TrainingManagementRoute
 import il.kmi.app.voicecommands.VoiceCommandsBridge
@@ -52,6 +55,9 @@ import java.net.URLDecoder
 //-----------------------------------------------------------------------------------
 
 const val TOPICS_PICK_TOKEN = "__TOPICS_PICK__"
+
+const val TRAINING_ARCHIVE_ROUTE =
+    "training_archive"
 
 private fun encTopicForToken(s: String): String =
     java.net.URLEncoder.encode(s, Charsets.UTF_8.name()).replace("+", "%20")
@@ -231,9 +237,20 @@ fun NavGraphBuilder.homeNavGraph(
                 },
 
                 onOpenTrainingSummary = {
-                    nav.navigate(Route.TrainingSummary.route) {
+                    nav.navigate(
+                        Route.TrainingSummary.route
+                    ) {
                         launchSingleTop = true
                         restoreState = true
+                    }
+                },
+
+                onOpenTrainingArchive = {
+                    nav.navigate(
+                        TRAINING_ARCHIVE_ROUTE
+                    ) {
+                        launchSingleTop = true
+                        restoreState = false
                     }
                 },
 
@@ -295,6 +312,115 @@ fun NavGraphBuilder.homeNavGraph(
                 )
             }
         }
+    }
+
+    composable(
+        route = TRAINING_ARCHIVE_ROUTE
+    ) {
+        val context =
+            LocalContext.current
+
+        val languageManager =
+            remember(context) {
+                AppLanguageManager(context)
+            }
+
+        val archiveIsEnglish =
+            languageManager.getCurrentLanguage() ==
+                    AppLanguage.ENGLISH
+
+        val userRegion =
+            kmiPrefs.region.orEmpty()
+
+        val userBranch =
+            kmiPrefs.branch.orEmpty()
+
+        val userGroup =
+            TrainingCatalog.normalizeGroupName(
+                kmiPrefs.ageGroup.orEmpty()
+            )
+
+        /*
+         * גיבוי למקרה שהמסך נפתח מפקודה קולית
+         * ולא דרך מסך הבית.
+         */
+        val fallbackSources =
+            remember(
+                userRegion,
+                userBranch,
+                userGroup,
+                archiveIsEnglish
+            ) {
+                if (
+                    userRegion.isNotBlank() &&
+                    userBranch.isNotBlank() &&
+                    userGroup.isNotBlank()
+                ) {
+                    TrainingCatalog
+                        .upcomingFor(
+                            region = userRegion,
+                            branch = userBranch,
+                            group = userGroup,
+                            count = 3
+                        )
+                        .map { training ->
+                            TrainingArchiveSource(
+                                training = training,
+                                branch = userBranch,
+                                group = userGroup
+                            )
+                        }
+                } else {
+                    emptyList()
+                }
+            }
+
+        val archiveSources =
+            TrainingArchiveNavigationStore
+                .currentOrFallback(
+                    fallbackSources
+                )
+
+        TrainingArchiveScreen(
+            baseTrainings = archiveSources,
+            isEnglish = archiveIsEnglish,
+            onBack = {
+                nav.popBackStack()
+            },
+            onHome = {
+                nav.navigate(
+                    Route.Home.route
+                ) {
+                    popUpTo(
+                        TRAINING_ARCHIVE_ROUTE
+                    ) {
+                        inclusive = true
+                    }
+
+                    launchSingleTop = true
+                    restoreState = true
+                }
+            },
+            onOpenDrawer = onOpenDrawer,
+            onSettings = {
+                nav.navigate(
+                    Route.Settings.route
+                )
+            },
+            onOpenExercise = {
+                /*
+                 * החיפוש יטופל בהמשך דרך Route התרגיל.
+                 * כרגע אין לפתוח דיאלוג מעל מסך עצמאי.
+                 */
+            },
+            onOpenAi = {
+                nav.navigate(
+                    Route.VoiceAssistant.route
+                ) {
+                    launchSingleTop = true
+                }
+            }
+        )
     }
 
     composable(Route.TrainingManagement.route) {
