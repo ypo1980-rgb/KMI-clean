@@ -46,6 +46,7 @@ import il.kmi.app.ui.KmiTypography
 import il.yuval.ui.theme.kmiScreenBackgroundBrush
 import il.kmi.app.ui.calendar.KmiCalendarMarkers
 import il.kmi.app.ui.calendar.KmiCalendarMonth
+import il.kmi.app.ui.calendar.KmiCalendarMonthHeader
 import il.kmi.app.ui.pdf.KmiPdfDirection
 import il.kmi.app.ui.pdf.KmiPdfFooter
 import il.kmi.app.ui.pdf.KmiPdfHeader
@@ -149,9 +150,9 @@ fun MonthlyCalendarScreen(
         }
 
         // קלטים מהעדפות המשתמש
-        val region   = kmiPrefs.region.orEmpty()
+        val region = kmiPrefs.region.orEmpty()
         val branchRaw = kmiPrefs.branch.orEmpty()
-        val groupRaw  = kmiPrefs.ageGroup.orEmpty()
+        val groupRaw = kmiPrefs.ageGroup.orEmpty()
 
         // ❌ הוסר: דיאלוג אימונים מקומי
         // var dialogDate by remember { mutableStateOf<LocalDate?>(null) }
@@ -164,7 +165,7 @@ fun MonthlyCalendarScreen(
                 .filter { it.isNotEmpty() }
 
         val branchListRaw = splitMulti(branchRaw)
-        val groupListRaw  = splitMulti(groupRaw)
+        val groupListRaw = splitMulti(groupRaw)
 
         // נרמול קבוצות – כל קבוצה בנפרד
         val normGroupKeys: List<String> = remember(groupListRaw) {
@@ -366,7 +367,7 @@ fun MonthlyCalendarScreen(
 
         // לערכי תצוגה
         val primaryBranch = normBranchKeys.firstOrNull().orEmpty()
-        val primaryGroup  = normGroupKeys.firstOrNull().orEmpty()
+        val primaryGroup = normGroupKeys.firstOrNull().orEmpty()
 
         val databaseRegionActive = remember(ctx, region) {
             KmiDatabaseProvider.regions(ctx).any { dbRegion ->
@@ -387,8 +388,10 @@ fun MonthlyCalendarScreen(
             primaryGroup.isBlank() -> "לא נבחרה קבוצה / קבוצת גיל"
             !databaseRegionActive && !TrainingCatalog.isRegionActive(region) ->
                 "האזור \"$region\" לא פעיל ב־Database או ב־TrainingCatalog"
+
             !databaseBranchExists && !TrainingCatalog.branchesFor(region).contains(primaryBranch) ->
                 "הסניף \"$primaryBranch\" לא שייך לאזור \"$region\""
+
             else -> null
         }
 
@@ -498,293 +501,333 @@ fun MonthlyCalendarScreen(
                         val threshold = 48f
                         detectHorizontalDragGestures { _, dragAmount ->
                             when {
-                                dragAmount > threshold -> ym = ym.minusMonths(1)
-                                dragAmount < -threshold -> ym = ym.plusMonths(1)
+                                dragAmount > threshold -> ym = ym.plusMonths(1)
+                                dragAmount < -threshold -> ym = ym.minusMonths(1)
                             }
                         }
                     }
             ) {
 
-                AnimatedContent(
-                    targetState = ym,
-                    transitionSpec = {
-                        slideInHorizontally { width ->
-                            width
-                        } togetherWith
-                                slideOutHorizontally { width ->
-                                    -width
-                                }
-                    },
-                    label = "month-transition"
-                ) { animatedYm ->
-                    val calendarScrollState = rememberScrollState()
+                Column(
+                    modifier = Modifier.fillMaxSize()
+                ) {
 
-                    Column(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .verticalScroll(calendarScrollState)
-                            .navigationBarsPadding()
-                            .padding(bottom = 28.dp)
-                    ) {
-
-                        // הודעה נקייה למשתמש אם חסרים פרטי סניף / אזור / קבוצה.
-                        // לא מציגים יותר באנר דיאגנוסטיקה במסך עצמו.
-                        if (missingReason != null) {
-                            Surface(
-                                shape = RoundedCornerShape(18.dp),
-                                color = informationCardColor,
-                                tonalElevation = 0.dp,
-                                shadowElevation = 0.dp,
-                                border = BorderStroke(
-                                    1.dp,
-                                    informationCardBorder
-                                ),
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(vertical = 6.dp)
-                            ) {
-                                Text(
-                                    text = tr(
-                                        "לא נמצאו אימונים להצגה עבור האזור, הסניף והקבוצה שנבחרו בפרופיל.",
-                                        "No trainings were found for the region, branch, and group selected in your profile."
-                                    ),
-                                    color = secondaryTextColor,
-                                    style =
-                                        KmiTypography.body.copy(
-                                            fontWeight =
-                                                FontWeight.SemiBold
-                                        ),
-                                    modifier =
-                                        Modifier.padding(
-                                            horizontal = 14.dp,
-                                            vertical = 12.dp
-                                        ),
-                                    textAlign = TextAlign.Center
-                                )
-                            }
+                    // כותרת החודש נשארת קבועה מתחת ל־KmiTopBar.
+                    KmiCalendarMonthHeader(
+                        visibleMonth = ym,
+                        isEnglish = isEnglish,
+                        onVisibleMonthChange = { newMonth ->
+                            ym = newMonth
                         }
+                    )
 
-                        // לוח השנה המרכזי המשותף לכל מסכי האפליקציה.
-                        val calendarMarkers = remember(
-                            trainingsCountByDate,
-                            holidaysByDate,
-                            summaryDatesThisMonth
-                        ) {
-                            KmiCalendarMarkers(
-                                trainingDates =
-                                    trainingsCountByDate
-                                        .filterValues { count ->
-                                            count > 0
-                                        }
-                                        .keys,
-                                holidayDates =
-                                    holidaysByDate.keys,
-                                summaryDates =
-                                    summaryDatesThisMonth
-                            )
-                        }
+                    AnimatedContent(
+                        targetState = ym,
+                        transitionSpec = {
+                            slideInHorizontally { width ->
+                                width
+                            } togetherWith
+                                    slideOutHorizontally { width ->
+                                        -width
+                                    }
+                        },
+                        label = "month-transition",
+                        modifier = Modifier.weight(1f)
+                    ) { animatedYm ->
+
+                        val calendarScrollState =
+                            rememberScrollState()
 
                         Column(
-                            modifier = Modifier.fillMaxWidth()
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .verticalScroll(calendarScrollState)
+                                .navigationBarsPadding()
+                                .padding(bottom = 28.dp)
                         ) {
-                            KmiCalendarMonth(
-                                visibleMonth = animatedYm,
-                                selectedDate =
-                                    if (mode == MonthlyCalendarMode.SUMMARY_DATE_PICKER) {
-                                        selectedDate
-                                    } else {
-                                        null
-                                    },
-                                isEnglish = isEnglish,
-                                onVisibleMonthChange = { newMonth ->
-                                    ym = newMonth
-                                },
-                                onDateSelected = { date ->
-                                    selectedDate = date
 
-                                    /*
-                                     * VIEW_ONLY:
-                                     * לחיצה על התאריך רק בוחרת אותו.
-                                     * הפרטים של האימונים / החגים מוצגים בכרטיס שמתחת ללוח.
-                                     * לא עוברים למסך הסיכום ולא פותחים בחירת אימון.
-                                     *
-                                     * SUMMARY_DATE_PICKER:
-                                     * שומרים בדיוק את ההתנהגות הקיימת.
-                                     */
-                                    if (mode == MonthlyCalendarMode.VIEW_ONLY) {
-                                        trainingChoiceDate = null
-                                        trainingChoices = emptyList()
-                                    } else {
-                                        val dayTrainings =
-                                            trainingsByDate[date]
-                                                .orEmpty()
-                                                .sortedBy {
-                                                    it.timeText
-                                                }
-
-                                        when {
-                                            dayTrainings.size == 1 -> {
-                                                val training =
-                                                    dayTrainings.first()
-
-                                                onDateClick(
-                                                    date,
-                                                    training.branch,
-                                                    training.group,
-                                                    training.timeText
-                                                )
-                                            }
-
-                                            dayTrainings.size > 1 -> {
-                                                trainingChoiceDate =
-                                                    date
-
-                                                trainingChoices =
-                                                    dayTrainings
-                                            }
-
-                                            else -> {
-                                                trainingChoiceDate =
-                                                    null
-
-                                                trainingChoices =
-                                                    emptyList()
-                                            }
-                                        }
-                                    }
-                                },
-                                markers = calendarMarkers
-                            )
-
-                            Spacer(Modifier.height(4.dp))
-
-                            // אינדיקציה ל"יום הנבחר"
-                            selectedDate?.let { sel ->
-                                val selTrainings = trainingsCountByDate[sel] ?: 0
-                                val selectedTrainingItems = trainingsByDate[sel].orEmpty()
-                                val selHoliday = holidaysByDate[sel]
-                                val dowName =
-                                    sel.dayOfWeek.getDisplayName(
-                                        TextStyle.FULL,
-                                        screenLocale
-                                    )
-
-                                val monthName =
-                                    sel.month.getDisplayName(
-                                        TextStyle.FULL,
-                                        screenLocale
-                                    )
-
+                            // הודעה נקייה למשתמש אם חסרים פרטי סניף / אזור / קבוצה.
+                            // לא מציגים יותר באנר דיאגנוסטיקה במסך עצמו.
+                            if (missingReason != null) {
                                 Surface(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(
-                                            horizontal = 2.dp,
-                                            vertical = 8.dp
-                                        ),
-                                    shape = RoundedCornerShape(26.dp),
+                                    shape = RoundedCornerShape(18.dp),
                                     color = informationCardColor,
                                     tonalElevation = 0.dp,
                                     shadowElevation = 0.dp,
                                     border = BorderStroke(
                                         1.dp,
                                         informationCardBorder
-                                    )
+                                    ),
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(vertical = 6.dp)
                                 ) {
-                                    val infoParts = buildList {
-                                        if (selTrainings > 0) {
-                                            add(tr("$selTrainings אימון/ים", "$selTrainings training(s)"))
-                                        }
-                                        if (!selHoliday.isNullOrBlank()) {
-                                            add(selHoliday)
-                                        }
-                                    }
+                                    Text(
+                                        text = tr(
+                                            "לא נמצאו אימונים להצגה עבור האזור, הסניף והקבוצה שנבחרו בפרופיל.",
+                                            "No trainings were found for the region, branch, and group selected in your profile."
+                                        ),
+                                        color = secondaryTextColor,
+                                        style =
+                                            KmiTypography.body.copy(
+                                                fontWeight =
+                                                    FontWeight.SemiBold
+                                            ),
+                                        modifier =
+                                            Modifier.padding(
+                                                horizontal = 14.dp,
+                                                vertical = 12.dp
+                                            ),
+                                        textAlign = TextAlign.Center
+                                    )
+                                }
+                            }
 
-                                    Box(
+                            // לוח השנה המרכזי המשותף לכל מסכי האפליקציה.
+                            val calendarMarkers = remember(
+                                trainingsCountByDate,
+                                holidaysByDate,
+                                summaryDatesThisMonth
+                            ) {
+                                KmiCalendarMarkers(
+                                    trainingDates =
+                                        trainingsCountByDate
+                                            .filterValues { count ->
+                                                count > 0
+                                            }
+                                            .keys,
+                                    holidayDates =
+                                        holidaysByDate.keys,
+                                    summaryDates =
+                                        summaryDatesThisMonth
+                                )
+                            }
+
+                            Column(
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                KmiCalendarMonth(
+                                    visibleMonth = animatedYm,
+                                    selectedDate =
+                                        if (mode == MonthlyCalendarMode.SUMMARY_DATE_PICKER) {
+                                            selectedDate
+                                        } else {
+                                            null
+                                        },
+                                    isEnglish = isEnglish,
+                                    onVisibleMonthChange = { newMonth ->
+                                        ym = newMonth
+                                    },
+                                    onDateSelected = { date ->
+                                        selectedDate = date
+
+                                        /*
+                                         * VIEW_ONLY:
+                                         * לחיצה על התאריך רק בוחרת אותו.
+                                         * הפרטים של האימונים / החגים מוצגים בכרטיס שמתחת ללוח.
+                                         * לא עוברים למסך הסיכום ולא פותחים בחירת אימון.
+                                         *
+                                         * SUMMARY_DATE_PICKER:
+                                         * שומרים בדיוק את ההתנהגות הקיימת.
+                                         */
+                                        if (mode == MonthlyCalendarMode.VIEW_ONLY) {
+                                            trainingChoiceDate = null
+                                            trainingChoices = emptyList()
+                                        } else {
+                                            val dayTrainings =
+                                                trainingsByDate[date]
+                                                    .orEmpty()
+                                                    .sortedBy {
+                                                        it.timeText
+                                                    }
+
+                                            when {
+                                                dayTrainings.size == 1 -> {
+                                                    val training =
+                                                        dayTrainings.first()
+
+                                                    onDateClick(
+                                                        date,
+                                                        training.branch,
+                                                        training.group,
+                                                        training.timeText
+                                                    )
+                                                }
+
+                                                dayTrainings.size > 1 -> {
+                                                    trainingChoiceDate =
+                                                        date
+
+                                                    trainingChoices =
+                                                        dayTrainings
+                                                }
+
+                                                else -> {
+                                                    trainingChoiceDate =
+                                                        null
+
+                                                    trainingChoices =
+                                                        emptyList()
+                                                }
+                                            }
+                                        }
+                                    },
+                                    markers = calendarMarkers,
+                                    showMonthHeader = false
+                                )
+
+                                Spacer(Modifier.height(4.dp))
+
+                                // אינדיקציה ל"יום הנבחר"
+                                selectedDate?.let { sel ->
+                                    val selTrainings = trainingsCountByDate[sel] ?: 0
+                                    val selectedTrainingItems = trainingsByDate[sel].orEmpty()
+                                    val selHoliday = holidaysByDate[sel]
+                                    val dowName =
+                                        sel.dayOfWeek.getDisplayName(
+                                            TextStyle.FULL,
+                                            screenLocale
+                                        )
+
+                                    val monthName =
+                                        sel.month.getDisplayName(
+                                            TextStyle.FULL,
+                                            screenLocale
+                                        )
+
+                                    Surface(
                                         modifier = Modifier
                                             .fillMaxWidth()
-                                            .heightIn(min = 156.dp)
-                                            .background(selectedDayBrush)
-                                            .padding(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 18.dp)
+                                            .padding(
+                                                horizontal = 2.dp,
+                                                vertical = 8.dp
+                                            ),
+                                        shape = RoundedCornerShape(26.dp),
+                                        color = informationCardColor,
+                                        tonalElevation = 0.dp,
+                                        shadowElevation = 0.dp,
+                                        border = BorderStroke(
+                                            1.dp,
+                                            informationCardBorder
+                                        )
                                     ) {
-                                        Column(
-                                            modifier = Modifier
-                                                .fillMaxWidth()
-                                                .align(Alignment.TopStart)
-                                                .padding(bottom = 76.dp)
-                                        ) {
-                                            Text(
-                                                text = tr(
-                                                    "יום נבחר: $dowName ${sel.dayOfMonth} $monthName ${sel.year}",
-                                                    "Selected day: $dowName ${sel.dayOfMonth} $monthName ${sel.year}"
-                                                ),
-                                                style =
-                                                    KmiTypography.sectionTitle.copy(
-                                                        fontWeight =
-                                                            FontWeight.ExtraBold
-                                                    ),
-                                                color = selectedDayTextColor,
-                                                textAlign =
-                                                    if (isEnglish) {
-                                                        TextAlign.Start
-                                                    } else {
-                                                        TextAlign.Right
-                                                    },
-                                                modifier = Modifier.fillMaxWidth()
-                                            )
-
-                                            Spacer(Modifier.height(10.dp))
-
-                                            Text(
-                                                text = when {
-                                                    selectedTrainingItems.isNotEmpty() -> {
-                                                        val title = tr("פירוט אימונים:", "Training details:")
-                                                        val rows = selectedTrainingItems
-                                                            .sortedBy { it.timeText }
-                                                            .joinToString("\n") { item ->
-                                                                val branchLabel = item.displayBranch(isEnglish)
-                                                                val groupLabel = item.displayGroup(isEnglish)
-
-                                                                tr(
-                                                                    "• ${item.timeText} · $branchLabel · $groupLabel",
-                                                                    "• ${item.timeText} · $branchLabel · $groupLabel"
-                                                                )
-                                                            }
-
-                                                        buildString {
-                                                            append(title)
-                                                            append("\n")
-                                                            append(rows)
-
-                                                            if (!selHoliday.isNullOrBlank()) {
-                                                                append("\n")
-                                                                append(tr("חג / מועד: $selHoliday", "Holiday: $selHoliday"))
-                                                            }
-                                                        }
-                                                    }
-
-                                                    infoParts.isEmpty() -> {
-                                                        tr("אין אירועים ביום זה.", "No events on this day.")
-                                                    }
-
-                                                    else -> {
-                                                        infoParts.joinToString(" • ")
-                                                    }
-                                                },
-                                                style =
-                                                    KmiTypography.body,
-                                                color =
-                                                    selectedDayTextColor.copy(
-                                                        alpha = 0.92f
-                                                    ),
-                                                textAlign = if (isEnglish) TextAlign.Start else TextAlign.Right,
-                                                modifier = Modifier.fillMaxWidth()
-                                            )
+                                        val infoParts = buildList {
+                                            if (selTrainings > 0) {
+                                                add(
+                                                    tr(
+                                                        "$selTrainings אימון/ים",
+                                                        "$selTrainings training(s)"
+                                                    )
+                                                )
+                                            }
+                                            if (!selHoliday.isNullOrBlank()) {
+                                                add(selHoliday)
+                                            }
                                         }
 
-                                        Row(
+                                        Box(
                                             modifier = Modifier
                                                 .fillMaxWidth()
+                                                .heightIn(min = 156.dp)
+                                                .background(selectedDayBrush)
+                                                .padding(
+                                                    start = 16.dp,
+                                                    end = 16.dp,
+                                                    top = 16.dp,
+                                                    bottom = 18.dp
+                                                )
+                                        ) {
+                                            Column(
+                                                modifier = Modifier
+                                                    .fillMaxWidth()
+                                                    .align(Alignment.TopStart)
+                                                    .padding(bottom = 76.dp)
+                                            ) {
+                                                Text(
+                                                    text = tr(
+                                                        "יום נבחר: $dowName ${sel.dayOfMonth} $monthName ${sel.year}",
+                                                        "Selected day: $dowName ${sel.dayOfMonth} $monthName ${sel.year}"
+                                                    ),
+                                                    style =
+                                                        KmiTypography.sectionTitle.copy(
+                                                            fontWeight =
+                                                                FontWeight.ExtraBold
+                                                        ),
+                                                    color = selectedDayTextColor,
+                                                    textAlign =
+                                                        if (isEnglish) {
+                                                            TextAlign.Start
+                                                        } else {
+                                                            TextAlign.Right
+                                                        },
+                                                    modifier = Modifier.fillMaxWidth()
+                                                )
+
+                                                Spacer(Modifier.height(10.dp))
+
+                                                Text(
+                                                    text = when {
+                                                        selectedTrainingItems.isNotEmpty() -> {
+                                                            val title = tr(
+                                                                "פירוט אימונים:",
+                                                                "Training details:"
+                                                            )
+                                                            val rows = selectedTrainingItems
+                                                                .sortedBy { it.timeText }
+                                                                .joinToString("\n") { item ->
+                                                                    val branchLabel =
+                                                                        item.displayBranch(isEnglish)
+                                                                    val groupLabel =
+                                                                        item.displayGroup(isEnglish)
+
+                                                                    tr(
+                                                                        "• ${item.timeText} · $branchLabel · $groupLabel",
+                                                                        "• ${item.timeText} · $branchLabel · $groupLabel"
+                                                                    )
+                                                                }
+
+                                                            buildString {
+                                                                append(title)
+                                                                append("\n")
+                                                                append(rows)
+
+                                                                if (!selHoliday.isNullOrBlank()) {
+                                                                    append("\n")
+                                                                    append(
+                                                                        tr(
+                                                                            "חג / מועד: $selHoliday",
+                                                                            "Holiday: $selHoliday"
+                                                                        )
+                                                                    )
+                                                                }
+                                                            }
+                                                        }
+
+                                                        infoParts.isEmpty() -> {
+                                                            tr(
+                                                                "אין אירועים ביום זה.",
+                                                                "No events on this day."
+                                                            )
+                                                        }
+
+                                                        else -> {
+                                                            infoParts.joinToString(" • ")
+                                                        }
+                                                    },
+                                                    style =
+                                                        KmiTypography.body,
+                                                    color =
+                                                        selectedDayTextColor.copy(
+                                                            alpha = 0.92f
+                                                        ),
+                                                    textAlign = if (isEnglish) TextAlign.Start else TextAlign.Right,
+                                                    modifier = Modifier.fillMaxWidth()
+                                                )
+                                            }
+
+                                            Row(
+                                                modifier = Modifier
+                                                    .fillMaxWidth()
                                                     .align(
                                                         if (isEnglish) {
                                                             Alignment.BottomStart
@@ -883,170 +926,171 @@ fun MonthlyCalendarScreen(
                                     }
                                 }
 
-                            Spacer(Modifier.height(2.dp))
+                                Spacer(Modifier.height(2.dp))
+                            }
                         }
                     }
                 }
-            }
 
-            val choiceDate =
-                trainingChoiceDate
+                val choiceDate =
+                    trainingChoiceDate
 
-            if (
-                choiceDate != null &&
-                trainingChoices.size > 1
-            ) {
-                AlertDialog(
-                    onDismissRequest = {
-                        trainingChoiceDate = null
-                        trainingChoices = emptyList()
-                    },
-                    title = {
-                        Text(
-                            text =
-                                tr(
-                                    "בחר אימון לסיכום",
-                                    "Choose training for summary"
-                                ),
-                            style =
-                                KmiTypography.sectionTitle.copy(
-                                    fontWeight =
-                                        FontWeight.ExtraBold
-                                ),
-                            textAlign =
-                                if (isEnglish) {
-                                    TextAlign.Left
-                                } else {
-                                    TextAlign.Right
-                                },
-                            modifier =
-                                Modifier.fillMaxWidth()
-                        )
-                    },
-                    text = {
-                        Column(
-                            modifier =
-                                Modifier.fillMaxWidth(),
-                            verticalArrangement =
-                                Arrangement.spacedBy(8.dp)
-                        ) {
-                            trainingChoices
-                                .sortedBy {
-                                    it.timeText
-                                }
-                                .forEach { training ->
-
-                                    val branchLabel =
-                                        training.displayBranch(
-                                            isEnglish
-                                        )
-
-                                    val groupLabel =
-                                        training.displayGroup(
-                                            isEnglish
-                                        )
-
-                                    Surface(
-                                        modifier =
-                                            Modifier
-                                                .fillMaxWidth()
-                                                .clickable {
-                                                    onDateClick(
-                                                        choiceDate,
-                                                        training.branch,
-                                                        training.group,
-                                                        training.timeText
-                                                    )
-
-                                                    trainingChoiceDate =
-                                                        null
-
-                                                    trainingChoices =
-                                                        emptyList()
-                                                },
-                                        shape =
-                                            RoundedCornerShape(16.dp),
-                                        color =
-                                            MaterialTheme
-                                                .colorScheme
-                                                .surfaceVariant,
-                                        border =
-                                            BorderStroke(
-                                                1.dp,
-                                                MaterialTheme
-                                                    .colorScheme
-                                                    .outlineVariant
-                                            )
-                                    ) {
-                                        Column(
-                                            modifier =
-                                                Modifier
-                                                    .fillMaxWidth()
-                                                    .padding(
-                                                        horizontal = 14.dp,
-                                                        vertical = 12.dp
-                                                    )
-                                        ) {
-                                            Text(
-                                                text =
-                                                    "${training.timeText} · $branchLabel",
-                                                style =
-                                                    KmiTypography.cardTitle.copy(
-                                                        fontWeight =
-                                                            FontWeight.ExtraBold
-                                                    ),
-                                                textAlign =
-                                                    if (isEnglish) {
-                                                        TextAlign.Left
-                                                    } else {
-                                                        TextAlign.Right
-                                                    },
-                                                modifier =
-                                                    Modifier.fillMaxWidth()
-                                            )
-
-                                            Spacer(
-                                                Modifier.height(3.dp)
-                                            )
-
-                                            Text(
-                                                text = groupLabel,
-                                                style =
-                                                    KmiTypography.body,
-                                                textAlign =
-                                                    if (isEnglish) {
-                                                        TextAlign.Left
-                                                    } else {
-                                                        TextAlign.Right
-                                                    },
-                                                modifier =
-                                                    Modifier.fillMaxWidth()
-                                            )
-                                        }
-                                    }
-                                }
-                        }
-                    },
-                    confirmButton = {},
-                    dismissButton = {
-                        TextButton(
-                            onClick = {
-                                trainingChoiceDate = null
-                                trainingChoices = emptyList()
-                            }
-                        ) {
+                if (
+                    choiceDate != null &&
+                    trainingChoices.size > 1
+                ) {
+                    AlertDialog(
+                        onDismissRequest = {
+                            trainingChoiceDate = null
+                            trainingChoices = emptyList()
+                        },
+                        title = {
                             Text(
                                 text =
                                     tr(
-                                        "ביטול",
-                                        "Cancel"
+                                        "בחר אימון לסיכום",
+                                        "Choose training for summary"
                                     ),
                                 style =
-                                    KmiTypography.action
+                                    KmiTypography.sectionTitle.copy(
+                                        fontWeight =
+                                            FontWeight.ExtraBold
+                                    ),
+                                textAlign =
+                                    if (isEnglish) {
+                                        TextAlign.Left
+                                    } else {
+                                        TextAlign.Right
+                                    },
+                                modifier =
+                                    Modifier.fillMaxWidth()
                             )
+                        },
+                        text = {
+                            Column(
+                                modifier =
+                                    Modifier.fillMaxWidth(),
+                                verticalArrangement =
+                                    Arrangement.spacedBy(8.dp)
+                            ) {
+                                trainingChoices
+                                    .sortedBy {
+                                        it.timeText
+                                    }
+                                    .forEach { training ->
+
+                                        val branchLabel =
+                                            training.displayBranch(
+                                                isEnglish
+                                            )
+
+                                        val groupLabel =
+                                            training.displayGroup(
+                                                isEnglish
+                                            )
+
+                                        Surface(
+                                            modifier =
+                                                Modifier
+                                                    .fillMaxWidth()
+                                                    .clickable {
+                                                        onDateClick(
+                                                            choiceDate,
+                                                            training.branch,
+                                                            training.group,
+                                                            training.timeText
+                                                        )
+
+                                                        trainingChoiceDate =
+                                                            null
+
+                                                        trainingChoices =
+                                                            emptyList()
+                                                    },
+                                            shape =
+                                                RoundedCornerShape(16.dp),
+                                            color =
+                                                MaterialTheme
+                                                    .colorScheme
+                                                    .surfaceVariant,
+                                            border =
+                                                BorderStroke(
+                                                    1.dp,
+                                                    MaterialTheme
+                                                        .colorScheme
+                                                        .outlineVariant
+                                                )
+                                        ) {
+                                            Column(
+                                                modifier =
+                                                    Modifier
+                                                        .fillMaxWidth()
+                                                        .padding(
+                                                            horizontal = 14.dp,
+                                                            vertical = 12.dp
+                                                        )
+                                            ) {
+                                                Text(
+                                                    text =
+                                                        "${training.timeText} · $branchLabel",
+                                                    style =
+                                                        KmiTypography.cardTitle.copy(
+                                                            fontWeight =
+                                                                FontWeight.ExtraBold
+                                                        ),
+                                                    textAlign =
+                                                        if (isEnglish) {
+                                                            TextAlign.Left
+                                                        } else {
+                                                            TextAlign.Right
+                                                        },
+                                                    modifier =
+                                                        Modifier.fillMaxWidth()
+                                                )
+
+                                                Spacer(
+                                                    Modifier.height(3.dp)
+                                                )
+
+                                                Text(
+                                                    text = groupLabel,
+                                                    style =
+                                                        KmiTypography.body,
+                                                    textAlign =
+                                                        if (isEnglish) {
+                                                            TextAlign.Left
+                                                        } else {
+                                                            TextAlign.Right
+                                                        },
+                                                    modifier =
+                                                        Modifier.fillMaxWidth()
+                                                )
+                                            }
+                                        }
+                                    }
+                            }
+                        },
+                        confirmButton = {},
+                        dismissButton = {
+                            TextButton(
+                                onClick = {
+                                    trainingChoiceDate = null
+                                    trainingChoices = emptyList()
+                                }
+                            ) {
+                                Text(
+                                    text =
+                                        tr(
+                                            "ביטול",
+                                            "Cancel"
+                                        ),
+                                    style =
+                                        KmiTypography.action
+                                )
+                            }
                         }
-                    }
-                )
+                    )
+                }
             }
         }
     }

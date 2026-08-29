@@ -63,6 +63,7 @@ import il.kmi.shared.localization.AppLanguageManager
 import il.kmi.app.ui.KmiIconSize
 import il.kmi.app.ui.KmiTopBar
 import il.kmi.app.ui.KmiTypography
+import il.yuval.ui.theme.kmiSectionHeaderBrush
 import il.kmi.app.ui.pdf.KmiPdfHeader
 import il.kmi.app.ui.pdf.KmiPdfFooter
 import il.kmi.app.R
@@ -1648,56 +1649,260 @@ fun MyProfileScreen(
             ) {
 
                 Column(
+                    modifier = Modifier.fillMaxSize(),
+                    horizontalAlignment =
+                        Alignment.CenterHorizontally
+                ) {
+
+                    // =====================================================
+                    // שם + דרגה + חגורה
+                    // קבועים מתחת לכותרת ואינם משתתפים בגלילה
+                    // =====================================================
+
+                    ProfileIdentityHeader(
+                        info = info,
+                        isEnglish = isEnglish
+                    )
+
+                    // =====================================================
+                    // רק תוכן הפרופיל שמתחת למלבן הכחול נגלל
+                    // =====================================================
+
+                    Column(
+                        modifier = Modifier
+                            .weight(1f)
+                            .fillMaxWidth()
+                            .verticalScroll(scroll)
+                            .padding(
+                                bottom = 20.dp
+                            ),
+                        horizontalAlignment =
+                            Alignment.CenterHorizontally
+                    ) {
+
+                        Spacer(Modifier.height(14.dp))
+
+                        if (isLoadingFirestoreProfile) {
+                            Surface(
+                                shape = RoundedCornerShape(999.dp),
+                                color = Color.White.copy(alpha = 0.14f),
+                                border = BorderStroke(
+                                    1.dp,
+                                    Color.White.copy(alpha = 0.24f)
+                                )
+                            ) {
+                                Text(
+                                    text = profileTr(
+                                        isEnglish,
+                                        "מסנכרן פרופיל...",
+                                        "Syncing profile..."
+                                    ),
+                                    style = KmiTypography.secondary.copy(
+                                        fontWeight = FontWeight.Bold
+                                    ),
+                                    color = Color.White,
+                                    modifier = Modifier.padding(
+                                        horizontal = 14.dp,
+                                        vertical = 8.dp
+                                    )
+                                )
+                            }
+
+                            Spacer(Modifier.height(12.dp))
+                        }
+
+                        UserProfileCard(
+                            info = info,
+                            isEnglish = isEnglish,
+                            onEditProfile = onEditProfile,
+                            modifier =
+                                Modifier.padding(
+                                    horizontal = 20.dp
+                                ),
+                            onClose = {
+                                runCatching { onClose() }.onFailure {
+                                    backDispatcher?.onBackPressed()
+                                }
+                            }
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ProfileIdentityHeader(
+    info: UserProfileInfo,
+    isEnglish: Boolean
+) {
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(68.dp)
+            .background(
+                brush = kmiSectionHeaderBrush()
+            )
+    ) {
+        if (isEnglish) {
+            Row(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(horizontal = 16.dp),
+                horizontalArrangement =
+                    Arrangement.spacedBy(10.dp),
+                verticalAlignment =
+                    Alignment.CenterVertically
+            ) {
+
+                Box(
+                    modifier = Modifier
+                        .width(88.dp)
+                        .height(60.dp),
+                    contentAlignment =
+                        Alignment.Center
+                ) {
+                    ProfileBeltImage(
+                        rawBeltId = info.currentBeltId,
+                        modifier = Modifier.fillMaxWidth(),
+                        imageHeight = 60.dp,
+                        horizontalPadding = 0.dp,
+                        rotateDegrees = -24f,
+                        flipHorizontally = false
+                    )
+                }
+
+                Column(
+                    modifier = Modifier.weight(1f),
+                    horizontalAlignment =
+                        Alignment.Start,
+                    verticalArrangement =
+                        Arrangement.Center
+                ) {
+                    Text(
+                        text = info.userName,
+                        modifier = Modifier.fillMaxWidth(),
+                        style =
+                            KmiTypography.screenTitle.copy(
+                                fontWeight =
+                                    FontWeight.ExtraBold
+                            ),
+                        color = Color.White,
+                        textAlign = TextAlign.Left,
+                        maxLines = 1,
+                        overflow =
+                            TextOverflow.Ellipsis
+                    )
+
+                    Spacer(
+                        Modifier.height(1.dp)
+                    )
+
+                    Text(
+                        text = info.belt,
+                        modifier = Modifier.fillMaxWidth(),
+                        style =
+                            KmiTypography.secondary.copy(
+                                fontWeight =
+                                    FontWeight.Bold
+                            ),
+                        color =
+                            Color.White.copy(
+                                alpha = 0.90f
+                            ),
+                        textAlign = TextAlign.Left,
+                        maxLines = 1,
+                        overflow =
+                            TextOverflow.Ellipsis
+                    )
+                }
+            }
+        } else {
+            CompositionLocalProvider(
+                LocalLayoutDirection provides LayoutDirection.Ltr
+            ) {
+                Row(
                     modifier = Modifier
                         .fillMaxSize()
-                        .verticalScroll(scroll)
-                        .padding(
-                            start = 20.dp,
-                            end = 20.dp,
-                            top = 20.dp,
-                            bottom = 20.dp
-                        ),
-                    horizontalAlignment = Alignment.CenterHorizontally
+                        .padding(horizontal = 24.dp),
+                    verticalAlignment =
+                        Alignment.CenterVertically
                 ) {
-                    if (isLoadingFirestoreProfile) {
-                        Surface(
-                            shape = RoundedCornerShape(999.dp),
-                            color = Color.White.copy(alpha = 0.14f),
-                            border = BorderStroke(
-                                1.dp,
-                                Color.White.copy(alpha = 0.24f)
-                            )
-                        ) {
-                            Text(
-                                text = profileTr(
-                                    isEnglish,
-                                    "מסנכרן פרופיל...",
-                                    "Syncing profile..."
-                                ),
-                                style = KmiTypography.secondary.copy(
-                                    fontWeight = FontWeight.Bold
-                                ),
-                                color = Color.White,
-                                modifier = Modifier.padding(
-                                    horizontal = 14.dp,
-                                    vertical = 8.dp
-                                )
-                            )
-                        }
 
-                        Spacer(Modifier.height(12.dp))
+                    // תמונת החגורה — צד שמאל פיזי
+                    Box(
+                        modifier = Modifier
+                            .width(88.dp)
+                            .height(60.dp),
+                        contentAlignment =
+                            Alignment.Center
+                    ) {
+                        ProfileBeltImage(
+                            rawBeltId = info.currentBeltId,
+                            modifier = Modifier.fillMaxWidth(),
+                            imageHeight = 60.dp,
+                            horizontalPadding = 0.dp,
+                            rotateDegrees = -24f,
+                            flipHorizontally = false
+                        )
                     }
 
-                    UserProfileCard(
-                        info = info,
-                        isEnglish = isEnglish,
-                        onEditProfile = onEditProfile,
-                        onClose = {
-                            runCatching { onClose() }.onFailure {
-                                backDispatcher?.onBackPressed()
-                            }
-                        }
+                    Spacer(
+                        Modifier.width(16.dp)
                     )
+
+                    // שם + דרגה — צד ימין פיזי
+                    CompositionLocalProvider(
+                        LocalLayoutDirection provides LayoutDirection.Rtl
+                    ) {
+                        Column(
+                            modifier = Modifier
+                                .weight(1f)
+                                .offset(x = 45.dp),
+                            horizontalAlignment =
+                                Alignment.End,
+                            verticalArrangement =
+                                Arrangement.Center
+                        ) {
+                            Text(
+                                text = info.userName,
+                                modifier = Modifier.fillMaxWidth(),
+                                style =
+                                    KmiTypography.screenTitle.copy(
+                                        fontWeight =
+                                            FontWeight.ExtraBold
+                                    ),
+                                color = Color.White,
+                                textAlign = TextAlign.Right,
+                                maxLines = 1,
+                                overflow =
+                                    TextOverflow.Ellipsis
+                            )
+
+                            Spacer(
+                                Modifier.height(1.dp)
+                            )
+
+                            Text(
+                                text = info.belt,
+                                modifier = Modifier.fillMaxWidth(),
+                                style =
+                                    KmiTypography.secondary.copy(
+                                        fontWeight =
+                                            FontWeight.Bold
+                                    ),
+                                color =
+                                    Color.White.copy(
+                                        alpha = 0.90f
+                                    ),
+                                textAlign = TextAlign.Right,
+                                maxLines = 1,
+                                overflow =
+                                    TextOverflow.Ellipsis
+                            )
+                        }
+                    }
                 }
             }
         }
@@ -1761,137 +1966,6 @@ private fun UserProfileCard(
                 .padding(horizontal = 22.dp, vertical = 22.dp),
             horizontalAlignment = profileHorizontalAlignment(isEnglish)
         ) {
-            // כותרת + חגורה באלכסון בצד כדי לחסוך מקום אנכי
-            if (isEnglish) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(top = 2.dp),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalAlignment = Alignment.Top
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .width(118.dp)
-                            .height(76.dp),
-                        contentAlignment = Alignment.TopCenter
-                    ) {
-                        ProfileBeltImage(
-                            rawBeltId = info.currentBeltId,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                // ✅ מוריד מעט את החגורה כדי שלא תישב גבוה מדי
-                                .offset(x = 4.dp, y = (-16).dp),
-                            imageHeight = 84.dp,
-                            horizontalPadding = 0.dp,
-                            rotateDegrees = -24f,
-                            flipHorizontally = false
-                        )
-                    }
-
-                    Column(
-                        modifier = Modifier.weight(1f),
-                        horizontalAlignment = Alignment.Start
-                    ) {
-                        Text(
-                            text = info.userName,
-                            style = KmiTypography.screenTitle.copy(
-                                fontWeight = FontWeight.ExtraBold
-                            ),
-                            maxLines = 2,
-                            overflow = TextOverflow.Ellipsis,
-                            color = cardContentColor,
-                            modifier = Modifier.fillMaxWidth(),
-                            textAlign = TextAlign.Left
-                        )
-
-                        Spacer(Modifier.height(6.dp))
-
-                        Text(
-                            text = info.belt,
-                            style = KmiTypography.secondary.copy(
-                                fontWeight = FontWeight.SemiBold
-                            ),
-                            color =
-                                if (isDarkMode) {
-                                    MaterialTheme.colorScheme.primary
-                                } else {
-                                    Color(0xFF31528A)
-                                },
-                            modifier = Modifier.fillMaxWidth(),
-                            textAlign = TextAlign.Left,
-                            maxLines = 2,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                    }
-                }
-            } else {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(top = 2.dp),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalAlignment = Alignment.Top
-                ) {
-                    Column(
-                        modifier = Modifier.weight(1f),
-                        horizontalAlignment = Alignment.End
-                    ) {
-                        Text(
-                            text = info.userName,
-                            style = KmiTypography.screenTitle.copy(
-                                fontWeight = FontWeight.ExtraBold
-                            ),
-                            maxLines = 2,
-                            overflow = TextOverflow.Ellipsis,
-                            color = cardContentColor,
-                            modifier = Modifier.fillMaxWidth(),
-                            textAlign = TextAlign.Right
-                        )
-
-                        Spacer(Modifier.height(6.dp))
-
-                        Text(
-                            text = info.belt,
-                            style = KmiTypography.secondary.copy(
-                                fontWeight = FontWeight.SemiBold
-                            ),
-                            color =
-                                if (isDarkMode) {
-                                    MaterialTheme.colorScheme.primary
-                                } else {
-                                    Color(0xFF31528A)
-                                },
-                            modifier = Modifier.fillMaxWidth(),
-                            textAlign = TextAlign.Right,
-                            maxLines = 2,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                    }
-
-                    Box(
-                        modifier = Modifier
-                            .width(104.dp)
-                            .height(82.dp),
-                        contentAlignment = Alignment.TopCenter
-                    ) {
-                        ProfileBeltImage(
-                            rawBeltId = info.currentBeltId,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                // ✅ מוריד את החגורה מעט למטה כדי שלא תיצמד לחלק העליון
-                                .offset(x = 4.dp, y = (-12).dp),
-                            imageHeight = 84.dp,
-                            horizontalPadding = 0.dp,
-                            rotateDegrees = -24f,
-                            flipHorizontally = false
-                        )
-                    }
-                }
-            }
-
-            Spacer(Modifier.height(2.dp))
-
             Button(
                 onClick = onEditProfile,
                 modifier = Modifier

@@ -58,6 +58,141 @@ data class KmiCalendarMarkers(
 )
 
 @Composable
+fun KmiCalendarMonthHeader(
+    visibleMonth: YearMonth,
+    isEnglish: Boolean,
+    onVisibleMonthChange: (YearMonth) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val monthLocale = remember(isEnglish) {
+        if (isEnglish) {
+            Locale.ENGLISH
+        } else {
+            Locale("he", "IL")
+        }
+    }
+
+    val monthTitle = remember(
+        visibleMonth,
+        monthLocale
+    ) {
+        visibleMonth
+            .atDay(1)
+            .format(
+                DateTimeFormatter.ofPattern(
+                    "MMMM yyyy",
+                    monthLocale
+                )
+            )
+    }
+
+    CompositionLocalProvider(
+        LocalLayoutDirection provides
+                LayoutDirection.Ltr
+    ) {
+        Box(
+            modifier = modifier
+                .fillMaxWidth()
+                .background(
+                    brush = kmiSectionHeaderBrush()
+                )
+                .padding(vertical = 4.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(min = 52.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.Center
+            ) {
+
+                Surface(
+                    onClick = {
+                        onVisibleMonthChange(
+                            if (isEnglish) {
+                                visibleMonth.minusMonths(1)
+                            } else {
+                                visibleMonth.plusMonths(1)
+                            }
+                        )
+                    },
+                    shape = CircleShape,
+                    color = Color.Transparent,
+                    tonalElevation = 0.dp,
+                    shadowElevation = 0.dp,
+                    modifier = Modifier.size(40.dp)
+                ) {
+                    Box(
+                        modifier = Modifier.fillMaxSize(),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = "‹",
+                            color = kmiSectionHeaderContentColor(),
+                            style =
+                                KmiTypography.sectionTitle.copy(
+                                    fontWeight = FontWeight.Black
+                                ),
+                            textAlign = TextAlign.Center,
+                            maxLines = 1
+                        )
+                    }
+                }
+
+                Spacer(Modifier.width(10.dp))
+
+                Text(
+                    text = monthTitle,
+                    color = kmiSectionHeaderContentColor(),
+                    style =
+                        KmiTypography.sectionTitle.copy(
+                            fontWeight = FontWeight.Black
+                        ),
+                    textAlign = TextAlign.Center,
+                    maxLines = 1
+                )
+
+                Spacer(Modifier.width(10.dp))
+
+                Surface(
+                    onClick = {
+                        onVisibleMonthChange(
+                            if (isEnglish) {
+                                visibleMonth.plusMonths(1)
+                            } else {
+                                visibleMonth.minusMonths(1)
+                            }
+                        )
+                    },
+                    shape = CircleShape,
+                    color = Color.Transparent,
+                    tonalElevation = 0.dp,
+                    shadowElevation = 0.dp,
+                    modifier = Modifier.size(40.dp)
+                ) {
+                    Box(
+                        modifier = Modifier.fillMaxSize(),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = "›",
+                            color = kmiSectionHeaderContentColor(),
+                            style =
+                                KmiTypography.sectionTitle.copy(
+                                    fontWeight = FontWeight.Black
+                                ),
+                            textAlign = TextAlign.Center,
+                            maxLines = 1
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
 fun KmiCalendarMonth(
     visibleMonth: YearMonth,
     selectedDate: LocalDate?,
@@ -65,7 +200,8 @@ fun KmiCalendarMonth(
     onVisibleMonthChange: (YearMonth) -> Unit,
     onDateSelected: (LocalDate) -> Unit,
     modifier: Modifier = Modifier,
-    markers: KmiCalendarMarkers = KmiCalendarMarkers()
+    markers: KmiCalendarMarkers = KmiCalendarMarkers(),
+    showMonthHeader: Boolean = true
 ) {
     val colorScheme = MaterialTheme.colorScheme
     val isDarkTheme =
@@ -133,25 +269,6 @@ fun KmiCalendarMonth(
         visibleMonth.lengthOfMonth()
     }
 
-    val monthLocale = remember(isEnglish) {
-        if (isEnglish) {
-            Locale.ENGLISH
-        } else {
-            Locale("he", "IL")
-        }
-    }
-
-    val monthTitle = remember(visibleMonth, monthLocale) {
-        visibleMonth
-            .atDay(1)
-            .format(
-                DateTimeFormatter.ofPattern(
-                    "MMMM yyyy",
-                    monthLocale
-                )
-            )
-    }
-
     val weekDays = remember(isEnglish) {
         if (isEnglish) {
             listOf(
@@ -199,107 +316,12 @@ fun KmiCalendarMonth(
       * הכפייה ל־LTR משפיעה רק על מיקום החצים,
       * ולא על שפת הכותרת.
       */
-        CompositionLocalProvider(
-            LocalLayoutDirection provides
-                    LayoutDirection.Ltr
-        ) {
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .background(
-                        brush = kmiSectionHeaderBrush()
-                    )
-                    .padding(vertical = 4.dp),
-                contentAlignment = Alignment.Center
-            ) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .heightIn(min = 52.dp)
-                        .padding(horizontal = 16.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-
-                    Surface(
-                        onClick = {
-                            onVisibleMonthChange(
-                                if (isEnglish) {
-                                    visibleMonth.minusMonths(1)
-                                } else {
-                                    visibleMonth.plusMonths(1)
-                                }
-                            )
-                        },
-                        shape = CircleShape,
-                        color = Color.Transparent,
-                        tonalElevation = 0.dp,
-                        shadowElevation = 0.dp,
-                        modifier = Modifier.size(40.dp)
-                    ) {
-                        Box(
-                            modifier = Modifier.fillMaxSize(),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Text(
-                                text = "‹",
-                                color = kmiSectionHeaderContentColor(),
-                                style =
-                                    KmiTypography.sectionTitle.copy(
-                                        fontWeight = FontWeight.Black
-                                    ),
-                                textAlign = TextAlign.Center,
-                                maxLines = 1
-                            )
-                        }
-                    }
-
-                    Text(
-                        text = monthTitle,
-                        color = kmiSectionHeaderContentColor(),
-                        style =
-                            KmiTypography.sectionTitle.copy(
-                                fontWeight = FontWeight.Black
-                            ),
-                        textAlign = TextAlign.Center,
-                        maxLines = 1,
-                        modifier = Modifier.weight(1f)
-                    )
-
-                    Surface(
-                        onClick = {
-                            onVisibleMonthChange(
-                                if (isEnglish) {
-                                    visibleMonth.plusMonths(1)
-                                } else {
-                                    visibleMonth.minusMonths(1)
-                                }
-                            )
-                        },
-                        shape = CircleShape,
-                        color = Color.Transparent,
-                        tonalElevation = 0.dp,
-                        shadowElevation = 0.dp,
-                        modifier = Modifier.size(40.dp)
-                    ) {
-                        Box(
-                            modifier = Modifier.fillMaxSize(),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Text(
-                                text = "›",
-                                color = kmiSectionHeaderContentColor(),
-                                style =
-                                    KmiTypography.sectionTitle.copy(
-                                        fontWeight = FontWeight.Black
-                                    ),
-                                textAlign = TextAlign.Center,
-                                maxLines = 1
-                            )
-                        }
-                    }
-                }
-            }
+        if (showMonthHeader) {
+            KmiCalendarMonthHeader(
+                visibleMonth = visibleMonth,
+                isEnglish = isEnglish,
+                onVisibleMonthChange = onVisibleMonthChange
+            )
         }
 
         Surface(

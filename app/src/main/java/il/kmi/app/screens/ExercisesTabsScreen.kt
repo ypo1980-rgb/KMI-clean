@@ -58,6 +58,7 @@ import il.kmi.app.ui.pdf.KmiPdfHeader
 import il.kmi.app.ui.pdf.KmiPdfFooter
 import il.kmi.shared.localization.AppLanguage
 import il.kmi.shared.localization.AppLanguageManager
+import il.yuval.ui.theme.kmiSectionHeaderBrush
 
 //==============================================================================
 
@@ -72,8 +73,8 @@ private enum class ExerciseCoachStatus(
 ) {
     NOT_TAUGHT("not_taught"),
     TAUGHT("taught"),
-    PRACTICE("practice"),
-    NEEDS_IMPROVEMENT("needs_improvement");
+    PRACTICED("practiced"),
+    NEEDS_REINFORCEMENT("needs_reinforcement");
 
     companion object {
         fun fromStorage(value: String?): ExerciseCoachStatus {
@@ -940,8 +941,6 @@ fun ExercisesTabsScreen(
      */
     val unknownItems: Set<String> by remember(
         itemList,
-        unknowns,
-        itemStates.toMap(),
         belt,
         topic,
         subTopicFilter,
@@ -949,22 +948,21 @@ fun ExercisesTabsScreen(
     ) {
         derivedStateOf {
             itemList.filterTo(linkedSetOf()) { rawItem ->
-                isUnknownForCards(rawItem)
+                itemStates[rawItem] == false ||
+                        isUnknownRawItem(rawItem)
             }
         }
     }
 
-    fun coachStatusKey(raw: String): String {
+    fun coachStatusBaseKey(raw: String): String {
         val itemTopic = topicForRawItem(raw)
-
-        val canonicalId = CanonicalIds.canonicalFor(
-            belt,
-            itemTopic,
-            raw
-        )
+        val exerciseId = exerciseIdentityIdFor(raw)
 
         val statusTopicKey =
-            if (!subTopicFilter.isNullOrBlank() && topic != "__ALL__") {
+            if (
+                !subTopicFilter.isNullOrBlank() &&
+                topic != "__ALL__"
+            ) {
                 "${itemTopic.trim()}__${dec(subTopicFilter).trim()}"
             } else {
                 itemTopic.trim()
@@ -976,29 +974,95 @@ fun ExercisesTabsScreen(
             append("_")
             append(statusTopicKey)
             append("_")
-            append(canonicalId)
-            append("_status")
+            append(exerciseId)
         }
     }
 
-    fun loadCoachStatus(raw: String): ExerciseCoachStatus {
-        return ExerciseCoachStatus.fromStorage(
-            sp.getString(
-                coachStatusKey(raw),
-                null
+    fun loadCoachStatuses(
+        raw: String
+    ): Set<ExerciseCoachStatus> {
+
+        val key =
+            coachStatusBaseKey(raw)
+
+        val selectableStatuses =
+            listOf(
+                ExerciseCoachStatus.TAUGHT,
+                ExerciseCoachStatus.PRACTICED,
+                ExerciseCoachStatus.NEEDS_REINFORCEMENT
             )
-        )
+
+        val selected =
+            selectableStatuses
+                .filterTo(linkedSetOf()) { status ->
+                    sp.getBoolean(
+                        "${key}_${status.storageValue}_selected",
+                        false
+                    )
+                }
+
+        /*
+         * תאימות לנתונים הישנים:
+         * אם אין עדיין מבנה multi-select,
+         * מנסים לקרוא את _status הישן.
+         */
+        if (selected.isEmpty()) {
+            val legacy =
+                ExerciseCoachStatus.fromStorage(
+                    sp.getString(
+                        "${key}_status",
+                        null
+                    )
+                )
+
+            if (legacy != ExerciseCoachStatus.NOT_TAUGHT) {
+                selected.add(legacy)
+            }
+        }
+
+        return selected
     }
 
-    fun saveCoachStatus(
+    fun saveCoachStatuses(
         raw: String,
-        status: ExerciseCoachStatus
+        statuses: Set<ExerciseCoachStatus>
     ) {
-        sp.edit {
-            putString(
-                coachStatusKey(raw),
-                status.storageValue
+        val key =
+            coachStatusBaseKey(raw)
+
+        val selectableStatuses =
+            listOf(
+                ExerciseCoachStatus.TAUGHT,
+                ExerciseCoachStatus.PRACTICED,
+                ExerciseCoachStatus.NEEDS_REINFORCEMENT
             )
+
+        sp.edit {
+            selectableStatuses.forEach { status ->
+
+                val selected =
+                    status in statuses
+
+                putBoolean(
+                    "${key}_${status.storageValue}_selected",
+                    selected
+                )
+
+                if (selected) {
+                    putLong(
+                        "${key}_${status.storageValue}_updated_at",
+                        System.currentTimeMillis()
+                    )
+                } else {
+                    remove(
+                        "${key}_${status.storageValue}_updated_at"
+                    )
+                }
+            }
+
+            // מנקים את המבנה הישן אחרי השמירה החדשה.
+            remove("${key}_status")
+            remove("${key}_updated_at")
         }
     }
 
@@ -1006,27 +1070,56 @@ fun ExercisesTabsScreen(
         mutableIntStateOf(0)
     }
 
-    val coachStatuses: Map<String, ExerciseCoachStatus> = remember(
-        itemList,
-        isCoach,
-        coachStatusesVersion
-    ) {
-        if (!isCoach) {
-            emptyMap()
-        } else {
-            itemList.associateWith { raw ->
-                loadCoachStatus(raw)
+    val coachStatuses:
+            Map<String, Set<ExerciseCoachStatus>> =
+        remember(
+            itemList,
+            isCoach,
+            coachStatusesVersion
+        ) {
+            if (!isCoach) {
+                emptyMap()
+            } else {
+                itemList.associateWith { raw ->
+                    loadCoachStatuses(raw)
+                }
             }
         }
-    }
 
     fun updateCoachStatus(
         raw: String,
         status: ExerciseCoachStatus
     ) {
-        saveCoachStatus(
+        if (status == ExerciseCoachStatus.NOT_TAUGHT) {
+            saveCoachStatuses(
+                raw = raw,
+                statuses = emptySet()
+            )
+
+            coachStatusesVersion++
+            return
+        }
+
+        val current =
+            loadCoachStatuses(raw)
+                .toMutableSet()
+
+        if (status in current) {
+            current.remove(status)
+        } else {
+            /*
+             * במסך המאמן מותר לבחור עד 2 מתוך 3.
+             */
+            if (current.size >= 2) {
+                return
+            }
+
+            current.add(status)
+        }
+
+        saveCoachStatuses(
             raw = raw,
-            status = status
+            statuses = current
         )
 
         coachStatusesVersion++
@@ -1112,18 +1205,18 @@ fun ExercisesTabsScreen(
         if (isCoach) {
             when (selectedTab) {
                 1 -> itemList.filter { rawItem ->
-                    coachStatuses[rawItem] ==
-                            ExerciseCoachStatus.TAUGHT
+                    ExerciseCoachStatus.TAUGHT in
+                            coachStatuses[rawItem].orEmpty()
                 }
 
                 2 -> itemList.filter { rawItem ->
-                    coachStatuses[rawItem] ==
-                            ExerciseCoachStatus.PRACTICE
+                    ExerciseCoachStatus.PRACTICED in
+                            coachStatuses[rawItem].orEmpty()
                 }
 
                 3 -> itemList.filter { rawItem ->
-                    coachStatuses[rawItem] ==
-                            ExerciseCoachStatus.NEEDS_IMPROVEMENT
+                    ExerciseCoachStatus.NEEDS_REINFORCEMENT in
+                            coachStatuses[rawItem].orEmpty()
                 }
 
                 else -> itemList
@@ -1445,7 +1538,7 @@ fun ExercisesTabsScreen(
         }
     ) { padding ->
 
-        // ===== טאבים "מקצה-לקצה" =====
+        // ===== טאבים על פס הגראניט =====
         @Composable
         fun MetricFieldEdgeToEdge(
             title: String,
@@ -1454,155 +1547,74 @@ fun ExercisesTabsScreen(
             onClick: () -> Unit,
             modifier: Modifier = Modifier
         ) {
-            val shape = RoundedCornerShape(18.dp)
-
-            val selectedGradient =
-                Brush.verticalGradient(
-                    colors = listOf(
-                        MaterialTheme.colorScheme.primary,
-                        MaterialTheme.colorScheme.primary
-                            .copy(alpha = 0.90f),
-                        MaterialTheme.colorScheme.secondary
-                            .copy(alpha = 0.82f)
-                    )
-                )
-
-            val idleGradient =
-                Brush.verticalGradient(
-                    colors = listOf(
-                        MaterialTheme.colorScheme.surface,
-                        MaterialTheme.colorScheme.surfaceVariant
-                            .copy(alpha = 0.62f),
-                        MaterialTheme.colorScheme.surface
-                    )
-                )
-
-            Surface(
-                onClick = onClick,
+            Box(
                 modifier = modifier
-                    .padding(
-                        horizontal = 3.dp,
-                        vertical = 6.dp
-                    )
-                    .height(104.dp),
-                shape = shape,
-                color = Color.Transparent,
-                tonalElevation = 0.dp,
-                shadowElevation = 0.dp,
-                border = BorderStroke(
-                    width =
-                        if (selected) {
-                            2.dp
-                        } else {
-                            1.dp
-                        },
-                    color =
-                        if (selected) {
-                            MaterialTheme.colorScheme.primary
-                                .copy(alpha = 0.42f)
-                        } else {
-                            MaterialTheme.colorScheme.outline
-                                .copy(alpha = 0.28f)
-                        }
-                )
+                    .height(70.dp)
+                    .clickable(onClick = onClick),
+                contentAlignment = Alignment.Center
             ) {
-                Box(
+                Column(
                     modifier = Modifier
                         .fillMaxSize()
-                        .background(
-                            brush =
-                                if (selected) {
-                                    selectedGradient
-                                } else {
-                                    idleGradient
-                                },
-                            shape = shape
+                        .padding(
+                            horizontal = 4.dp,
+                            vertical = 7.dp
                         ),
-                    contentAlignment = Alignment.Center
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.Center
                 ) {
-                    Column(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .padding(
-                                horizontal = 4.dp,
-                                vertical = 7.dp
-                            ),
-                        horizontalAlignment =
-                            Alignment.CenterHorizontally,
-                        verticalArrangement =
-                            Arrangement.Center
+                    Text(
+                        text = title,
+                        style = KmiTypography.caption.copy(
+                            fontWeight = FontWeight.ExtraBold
+                        ),
+                        color = Color.White,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        textAlign = TextAlign.Center
+                    )
+
+                    Spacer(Modifier.height(4.dp))
+
+                    Surface(
+                        shape = RoundedCornerShape(999.dp),
+                        color = Color.White.copy(
+                            alpha = if (selected) 1f else 0.92f
+                        ),
+                        tonalElevation = 0.dp,
+                        shadowElevation = 0.dp,
+                        border = BorderStroke(
+                            width = 1.dp,
+                            color = Color.White.copy(alpha = 0.48f)
+                        )
                     ) {
                         Text(
-                            text = title,
-                            style = KmiTypography.caption.copy(
-                                fontWeight = FontWeight.ExtraBold
+                            text = number.toString(),
+                            style = KmiTypography.action.copy(
+                                fontWeight = FontWeight.Black
                             ),
-                            color =
-                                if (selected) {
-                                    MaterialTheme.colorScheme.onPrimary
-                                } else {
-                                    MaterialTheme.colorScheme.onSurface
-                                },
-                            maxLines = 2,
-                            overflow = TextOverflow.Ellipsis,
+                            color = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.padding(
+                                horizontal = 13.dp,
+                                vertical = 1.dp
+                            ),
                             textAlign = TextAlign.Center
                         )
-
-                        Spacer(Modifier.height(4.dp))
-
-                        Surface(
-                            shape = RoundedCornerShape(999.dp),
-                            color =
-                                if (selected) {
-                                    MaterialTheme.colorScheme.surface
-                                        .copy(alpha = 0.96f)
-                                } else {
-                                    MaterialTheme.colorScheme.surfaceVariant
-                                },
-                            tonalElevation = 0.dp,
-                            shadowElevation = 0.dp,
-                            border = BorderStroke(
-                                width = 1.dp,
-                                color =
-                                    MaterialTheme.colorScheme.outline
-                                        .copy(alpha = 0.24f)
-                            )
-                        ) {
-                            Text(
-                                text = number.toString(),
-                                style = KmiTypography.action.copy(
-                                    fontWeight = FontWeight.Black
-                                ),
-                                color =
-                                    if (selected) {
-                                        MaterialTheme.colorScheme.primary
-                                    } else {
-                                        MaterialTheme.colorScheme.onSurface
-                                    },
-                                modifier = Modifier.padding(
-                                    horizontal = 13.dp,
-                                    vertical = 2.dp
-                                ),
-                                textAlign = TextAlign.Center
-                            )
-                        }
                     }
+                }
 
-                    if (selected) {
-                        Box(
-                            modifier = Modifier
-                                .align(Alignment.BottomCenter)
-                                .padding(bottom = 3.dp)
-                                .width(28.dp)
-                                .height(3.dp)
-                                .background(
-                                    color =
-                                        MaterialTheme.colorScheme.onPrimary,
-                                    shape =
-                                        RoundedCornerShape(999.dp)
-                                )
-                        )
-                    }
+                if (selected) {
+                    Box(
+                        modifier = Modifier
+                            .align(Alignment.BottomCenter)
+                            .padding(bottom = 2.dp)
+                            .width(30.dp)
+                            .height(3.dp)
+                            .background(
+                                color = Color.White,
+                                shape = RoundedCornerShape(999.dp)
+                            )
+                    )
                 }
             }
         }
@@ -1627,19 +1639,40 @@ fun ExercisesTabsScreen(
             }
         }
 
-        val taughtCount = itemList.count { item ->
-            coachStatuses[item] ==
-                    ExerciseCoachStatus.TAUGHT
+        val taughtCount by remember(
+            itemList,
+            coachStatuses
+        ) {
+            derivedStateOf {
+                itemList.count { item ->
+                    ExerciseCoachStatus.TAUGHT in
+                            coachStatuses[item].orEmpty()
+                }
+            }
         }
 
-        val practiceCount = itemList.count { item ->
-            coachStatuses[item] ==
-                    ExerciseCoachStatus.PRACTICE
+        val practiceCount by remember(
+            itemList,
+            coachStatuses
+        ) {
+            derivedStateOf {
+                itemList.count { item ->
+                    ExerciseCoachStatus.PRACTICED in
+                            coachStatuses[item].orEmpty()
+                }
+            }
         }
 
-        val improvementCount = itemList.count { item ->
-            coachStatuses[item] ==
-                    ExerciseCoachStatus.NEEDS_IMPROVEMENT
+        val improvementCount by remember(
+            itemList,
+            coachStatuses
+        ) {
+            derivedStateOf {
+                itemList.count { item ->
+                    ExerciseCoachStatus.NEEDS_REINFORCEMENT in
+                            coachStatuses[item].orEmpty()
+                }
+            }
         }
 
         Column(
@@ -1647,108 +1680,202 @@ fun ExercisesTabsScreen(
                 .fillMaxSize()
                 .padding(padding)
         ) {
-            if (isCoach) {
-                Row(
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    MetricFieldEdgeToEdge(
-                        title = tr("הכול", "All"),
-                        number = allCount,
-                        selected = selectedTab == 0,
-                        onClick = { selectedTab = 0 },
-                        modifier = Modifier.weight(1f)
-                    )
 
-                    MetricFieldEdgeToEdge(
-                        title = tr("נלמד", "Taught"),
-                        number = taughtCount,
-                        selected = selectedTab == 1,
-                        onClick = { selectedTab = 1 },
-                        modifier = Modifier.weight(1f)
+            // =========================================================
+            // טאבים על מלבן הגראניט העליון
+            // =========================================================
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(
+                        brush = kmiSectionHeaderBrush()
                     )
+            ) {
+                if (isCoach) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(70.dp)
+                            .padding(horizontal = 40.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
 
-                    MetricFieldEdgeToEdge(
-                        title = tr("לתרגול", "Practice"),
-                        number = practiceCount,
-                        selected = selectedTab == 2,
-                        onClick = { selectedTab = 2 },
-                        modifier = Modifier.weight(1f)
-                    )
+                        MetricFieldEdgeToEdge(
+                            title = tr("הכול", "All"),
+                            number = allCount,
+                            selected = selectedTab == 0,
+                            onClick = {
+                                selectedTab = 0
+                            },
+                            modifier = Modifier.weight(1f)
+                        )
 
-                    MetricFieldEdgeToEdge(
-                        title = tr("לשיפור", "Improve"),
-                        number = improvementCount,
-                        selected = selectedTab == 3,
-                        onClick = { selectedTab = 3 },
-                        modifier = Modifier.weight(1f)
-                    )
-                }
-            } else {
-                Row(
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    MetricFieldEdgeToEdge(
-                        title = tr("הכול", "All"),
-                        number = allCount,
-                        selected = selectedTab == 0,
-                        onClick = { selectedTab = 0 },
-                        modifier = Modifier.weight(1f)
-                    )
+                        Box(
+                            modifier = Modifier
+                                .width(1.dp)
+                                .height(54.dp)
+                                .background(
+                                    Color.White.copy(alpha = 0.72f)
+                                )
+                        )
 
-                    MetricFieldEdgeToEdge(
-                        title = tr("לא יודע", "Unknown"),
-                        number = unknownCount,
-                        selected = selectedTab == 1,
-                        onClick = { selectedTab = 1 },
-                        modifier = Modifier.weight(1f)
-                    )
+                        MetricFieldEdgeToEdge(
+                            title = tr("נלמד", "Taught"),
+                            number = taughtCount,
+                            selected = selectedTab == 1,
+                            onClick = {
+                                selectedTab = 1
+                            },
+                            modifier = Modifier.weight(1f)
+                        )
 
-                    MetricFieldEdgeToEdge(
-                        title = tr("מועדפים", "Favorites"),
-                        number = favCount,
-                        selected = selectedTab == 2,
-                        onClick = { selectedTab = 2 },
-                        modifier = Modifier.weight(1f)
-                    )
+                        Box(
+                            modifier = Modifier
+                                .width(1.dp)
+                                .height(54.dp)
+                                .background(
+                                    Color.White.copy(alpha = 0.72f)
+                                )
+                        )
+
+                        MetricFieldEdgeToEdge(
+                            title = tr("לתרגול", "Practice"),
+                            number = practiceCount,
+                            selected = selectedTab == 2,
+                            onClick = {
+                                selectedTab = 2
+                            },
+                            modifier = Modifier.weight(1f)
+                        )
+
+                        Box(
+                            modifier = Modifier
+                                .width(1.dp)
+                                .height(54.dp)
+                                .background(
+                                    Color.White.copy(alpha = 0.72f)
+                                )
+                        )
+
+                        MetricFieldEdgeToEdge(
+                            title = tr("לשיפור", "Improve"),
+                            number = improvementCount,
+                            selected = selectedTab == 3,
+                            onClick = {
+                                selectedTab = 3
+                            },
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
+                } else {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(70.dp)
+                            .padding(horizontal = 40.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+
+                        MetricFieldEdgeToEdge(
+                            title = tr("הכול", "All"),
+                            number = allCount,
+                            selected = selectedTab == 0,
+                            onClick = {
+                                selectedTab = 0
+                            },
+                            modifier = Modifier.weight(1f)
+                        )
+
+                        Box(
+                            modifier = Modifier
+                                .width(1.dp)
+                                .height(54.dp)
+                                .background(
+                                    Color.White.copy(alpha = 0.72f)
+                                )
+                        )
+
+                        MetricFieldEdgeToEdge(
+                            title = tr("לא יודע", "Unknown"),
+                            number = unknownCount,
+                            selected = selectedTab == 1,
+                            onClick = {
+                                selectedTab = 1
+                            },
+                            modifier = Modifier.weight(1f)
+                        )
+
+                        Box(
+                            modifier = Modifier
+                                .width(1.dp)
+                                .height(54.dp)
+                                .background(
+                                    Color.White.copy(alpha = 0.72f)
+                                )
+                        )
+
+                        MetricFieldEdgeToEdge(
+                            title = tr("מועדפים", "Favorites"),
+                            number = favCount,
+                            selected = selectedTab == 2,
+                            onClick = {
+                                selectedTab = 2
+                            },
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
                 }
             }
 
             Spacer(Modifier.height(8.dp))
 
-            val filtered: List<String> =
-                if (isCoach) {
-                    when (selectedTab) {
-                        1 -> itemList.filter { item ->
-                            coachStatuses[item] ==
-                                    ExerciseCoachStatus.TAUGHT
-                        }
+            val filtered: List<String> by remember(
+                selectedTab,
+                isCoach,
+                itemList,
+                coachStatuses,
+                unknownItems,
+                favoriteExerciseIds,
+                belt,
+                topic
+            ) {
+                derivedStateOf {
+                    if (isCoach) {
+                        when (selectedTab) {
+                            1 -> itemList.filter { item ->
+                                ExerciseCoachStatus.TAUGHT in
+                                        coachStatuses[item].orEmpty()
+                            }
 
-                        2 -> itemList.filter { item ->
-                            coachStatuses[item] ==
-                                    ExerciseCoachStatus.PRACTICE
-                        }
+                            2 -> itemList.filter { item ->
+                                ExerciseCoachStatus.PRACTICED in
+                                        coachStatuses[item].orEmpty()
+                            }
 
-                        3 -> itemList.filter { item ->
-                            coachStatuses[item] ==
-                                    ExerciseCoachStatus.NEEDS_IMPROVEMENT
-                        }
+                            3 -> itemList.filter { item ->
+                                ExerciseCoachStatus.NEEDS_REINFORCEMENT in
+                                        coachStatuses[item].orEmpty()
+                            }
 
-                        else -> itemList
-                    }
-                } else {
-                    when (selectedTab) {
-                        1 -> itemList.filter { item ->
-                            item in unknownItems
+                            else -> itemList
                         }
+                    } else {
+                        when (selectedTab) {
+                            1 -> itemList.filter { item ->
+                                item in unknownItems
+                            }
 
-                        2 -> itemList.filter { item ->
-                            isFavoriteRawItem(item)
+                            2 -> itemList.filter { item ->
+                                isFavoriteRawItem(item)
+                            }
+
+                            else -> itemList
                         }
-
-                        else -> itemList
                     }
                 }
-// ✅ מפת “raw -> display” אחת, שמשמשת לכל ה-UI
+            }
+
+            // ✅ מפת raw -> display מחושבת רק כשהרשימה באמת משתנה
             val displayByRaw: Map<String, String> = remember(filtered) {
                 filtered.associateWith { raw: String ->
                     formattedExerciseTitle(raw)
@@ -1793,9 +1920,9 @@ fun ExercisesTabsScreen(
 
                     val itemIsUnknown = item in unknownItems
 
-                    val itemCoachStatus =
+                    val itemCoachStatuses =
                         coachStatuses[item]
-                            ?: ExerciseCoachStatus.NOT_TAUGHT
+                            .orEmpty()
 
                     CompositionLocalProvider(
                         LocalLayoutDirection provides LayoutDirection.Ltr
@@ -1830,7 +1957,7 @@ fun ExercisesTabsScreen(
                                 isFav = isFav,
                                 hasNote = itemHasNote,
                                 isUnknown = itemIsUnknown,
-                                coachStatus = itemCoachStatus,
+                                coachStatuses = itemCoachStatuses,
                                 onInfo = {
                                     pressed = true
                                     explainFromSearch = item
@@ -2132,7 +2259,7 @@ private fun ExerciseRowActionsMenu(
     isFav: Boolean,
     hasNote: Boolean,
     isUnknown: Boolean,
-    coachStatus: ExerciseCoachStatus,
+    coachStatuses: Set<ExerciseCoachStatus>,
     onInfo: () -> Unit,
     onToggleFavorite: () -> Unit,
     onEditNote: () -> Unit,
@@ -2253,25 +2380,21 @@ private fun ExerciseRowActionsMenu(
                     text = {
                         Text(
                             text = tr(
-                                if (
-                                    coachStatus ==
-                                    ExerciseCoachStatus.NOT_TAUGHT
-                                ) {
+                                if (coachStatuses.isEmpty()) {
                                     "✓ לא נלמד"
                                 } else {
                                     "לא נלמד"
                                 },
-                                if (
-                                    coachStatus ==
-                                    ExerciseCoachStatus.NOT_TAUGHT
-                                ) {
+                                if (coachStatuses.isEmpty()) {
                                     "✓ Not taught"
                                 } else {
                                     "Not taught"
                                 }
                             ),
                             style = KmiTypography.action,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                            color =
+                                MaterialTheme.colorScheme
+                                    .onSurfaceVariant
                         )
                     },
                     onClick = {
@@ -2288,16 +2411,16 @@ private fun ExerciseRowActionsMenu(
                         Text(
                             text = tr(
                                 if (
-                                    coachStatus ==
-                                    ExerciseCoachStatus.TAUGHT
+                                    ExerciseCoachStatus.TAUGHT in
+                                    coachStatuses
                                 ) {
                                     "✓ נלמד"
                                 } else {
                                     "נלמד"
                                 },
                                 if (
-                                    coachStatus ==
-                                    ExerciseCoachStatus.TAUGHT
+                                    ExerciseCoachStatus.TAUGHT in
+                                    coachStatuses
                                 ) {
                                     "✓ Taught"
                                 } else {
@@ -2322,16 +2445,16 @@ private fun ExerciseRowActionsMenu(
                         Text(
                             text = tr(
                                 if (
-                                    coachStatus ==
-                                    ExerciseCoachStatus.PRACTICE
+                                    ExerciseCoachStatus.PRACTICED in
+                                    coachStatuses
                                 ) {
                                     "✓ לתרגול"
                                 } else {
                                     "לתרגול"
                                 },
                                 if (
-                                    coachStatus ==
-                                    ExerciseCoachStatus.PRACTICE
+                                    ExerciseCoachStatus.PRACTICED in
+                                    coachStatuses
                                 ) {
                                     "✓ Practice"
                                 } else {
@@ -2346,7 +2469,7 @@ private fun ExerciseRowActionsMenu(
                         expanded = false
 
                         onCoachStatusChange(
-                            ExerciseCoachStatus.PRACTICE
+                            ExerciseCoachStatus.PRACTICED
                         )
                     }
                 )
@@ -2356,16 +2479,16 @@ private fun ExerciseRowActionsMenu(
                         Text(
                             text = tr(
                                 if (
-                                    coachStatus ==
-                                    ExerciseCoachStatus.NEEDS_IMPROVEMENT
+                                    ExerciseCoachStatus.NEEDS_REINFORCEMENT in
+                                    coachStatuses
                                 ) {
                                     "✓ לשיפור"
                                 } else {
                                     "לשיפור"
                                 },
                                 if (
-                                    coachStatus ==
-                                    ExerciseCoachStatus.NEEDS_IMPROVEMENT
+                                    ExerciseCoachStatus.NEEDS_REINFORCEMENT in
+                                    coachStatuses
                                 ) {
                                     "✓ Needs improvement"
                                 } else {
@@ -2380,7 +2503,7 @@ private fun ExerciseRowActionsMenu(
                         expanded = false
 
                         onCoachStatusChange(
-                            ExerciseCoachStatus.NEEDS_IMPROVEMENT
+                            ExerciseCoachStatus.NEEDS_REINFORCEMENT
                         )
                     }
                 )

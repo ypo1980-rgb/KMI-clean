@@ -234,6 +234,8 @@ fun KmiTopBar(
     showTopSearch: Boolean = true,
     showTopShare: Boolean = false,
 
+    titleMaxLines: Int = 1,
+
     isInsideAssistant: Boolean = false,
     onOpenAi: (() -> Unit)? = null,
     onOpenVoiceCommands: (() -> Unit)? = null,
@@ -749,9 +751,15 @@ fun KmiTopBar(
     val shouldShowRolePillBelowTitle =
         showRoleBadge && userRole?.isNotBlank() == true
 
-    // ✅ מצב המשתמש מוצג עכשיו כתג קטן בפינה,
-    // לכן לא צריך לתת לו גובה מרכזי גדול בכותרת.
-    val topBarHeight = if (shouldShowRolePillBelowTitle) 68.dp else 64.dp
+    // ✅ גובה הכותרת מותאם אוטומטית למספר השורות.
+// כותרות רגילות נשארות בדיוק בגובה הקיים.
+// כותרת של 2 שורות מקבלת מקום אמיתי לשתי השורות.
+    val topBarHeight =
+        if (shouldShowRolePillBelowTitle) {
+            68.dp
+        } else {
+            64.dp
+        }
 
     /*
      * צבעי הכותרת מגיעים מערכת הנושא הפעילה,
@@ -966,10 +974,10 @@ fun KmiTopBar(
             Text(
                 text = title,
                 style = KmiTypography.screenTitle,
-                maxLines = 1,
-                softWrap = false,
+                maxLines = titleMaxLines,
+                softWrap = titleMaxLines > 1,
                 overflow =
-                    if (alignTitleEnd) {
+                    if (alignTitleEnd && titleMaxLines == 1) {
                         TextOverflow.Clip
                     } else {
                         TextOverflow.Ellipsis
@@ -984,7 +992,7 @@ fun KmiTopBar(
                 modifier = Modifier
                     .fillMaxWidth()
                     .then(
-                        if (alignTitleEnd) {
+                        if (alignTitleEnd && titleMaxLines == 1) {
                             Modifier.basicMarquee(
                                 iterations = Int.MAX_VALUE
                             )

@@ -841,8 +841,11 @@ fun PaymentsReportScreen(
                         .fillMaxSize()
                         .padding(innerPadding)
                         .navigationBarsPadding()
-                        .verticalScroll(rememberScrollState())
                 ) {
+
+                    // =========================================================
+                    // כותרת משנה כחולה קבועה — לא חלק מהגלילה
+                    // =========================================================
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -907,9 +910,21 @@ fun PaymentsReportScreen(
                         }
                     }
 
-                    Spacer(Modifier.height(14.dp))
+                    // =========================================================
+                    // רק התוכן שמתחת לכותרת המשנה נגלל
+                    // =========================================================
+                    Column(
+                        modifier = Modifier
+                            .weight(1f)
+                            .fillMaxWidth()
+                            .verticalScroll(
+                                rememberScrollState()
+                            )
+                    ) {
 
-                    Card(
+                        Spacer(Modifier.height(14.dp))
+
+                        Card(
                         modifier = Modifier
                             .fillMaxWidth()
                             .padding(horizontal = 16.dp),
@@ -1257,6 +1272,7 @@ fun PaymentsReportScreen(
                         }
 
                         Spacer(Modifier.height(16.dp))
+                    }
                     }
                 }
 

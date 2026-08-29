@@ -14,10 +14,13 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Info
@@ -33,6 +36,10 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.Tab
+import androidx.compose.material3.TabRow
+import androidx.compose.material3.TabRowDefaults
+import androidx.compose.material3.TabRowDefaults.tabIndicatorOffset
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.collectAsState
@@ -60,6 +67,8 @@ import il.kmi.app.privacy.TraineeDisplayNameMapper
 import il.kmi.app.ui.KmiIconSize
 import il.kmi.app.ui.KmiTopBar
 import il.kmi.app.ui.KmiTypography
+import il.yuval.ui.theme.kmiScreenBackgroundBrush
+import il.yuval.ui.theme.kmiSectionHeaderBrush
 import kotlinx.coroutines.launch
 import java.time.format.DateTimeFormatter
 import java.util.Locale
@@ -193,6 +202,128 @@ fun AttendanceGroupStatsScreen(
     var confirmResetAll by remember { mutableStateOf(false) }
     var busy by remember { mutableStateOf(false) }
 
+    @Composable
+    fun AttendanceStatsTopTabs() {
+
+        // סטטיסטיקה היא הטאב הפעיל במסך הזה
+        val selectedIndex = 0
+
+        Surface(
+            modifier = Modifier.fillMaxWidth(),
+            color = Color.Transparent,
+            contentColor = Color.White,
+            tonalElevation = 0.dp,
+            shadowElevation = 0.dp,
+            shape = RectangleShape
+        ) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(54.dp)
+                    .background(
+                        brush = kmiSectionHeaderBrush()
+                    )
+            ) {
+
+                // קו מפריד במרכז
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.Center)
+                        .width(1.dp)
+                        .height(28.dp)
+                        .background(
+                            Color.White.copy(alpha = 0.65f)
+                        )
+                )
+
+                CompositionLocalProvider(
+                    LocalLayoutDirection provides LayoutDirection.Ltr
+                ) {
+                    TabRow(
+                        selectedTabIndex = selectedIndex,
+                        containerColor = Color.Transparent,
+                        contentColor = Color.White,
+                        divider = {},
+                        indicator = { positions ->
+
+                            TabRowDefaults.SecondaryIndicator(
+                                modifier = Modifier
+                                    .tabIndicatorOffset(
+                                        positions[selectedIndex]
+                                    )
+                                    .padding(horizontal = 58.dp)
+                                    .offset(
+                                        x = 19.dp,
+                                        y = (-4).dp
+                                    ),
+                                height = 3.dp,
+                                color = Color.White
+                            )
+                        },
+                        modifier = Modifier.matchParentSize()
+                    ) {
+
+                        // שמאל — סטטיסטיקה
+                        Tab(
+                            selected = true,
+                            onClick = {},
+                            text = {
+                                Text(
+                                    text = tr(
+                                        "סטטיסטיקה",
+                                        "Statistics"
+                                    ),
+                                    style = KmiTypography.caption.copy(
+                                        fontWeight = FontWeight.ExtraBold
+                                    ),
+                                    textAlign = TextAlign.Center,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(start = 38.dp)
+                                )
+                            },
+                            selectedContentColor = Color.White,
+                            unselectedContentColor =
+                                Color.White.copy(alpha = 0.90f)
+                        )
+
+                        // ימין — בחירת אימון
+                        Tab(
+                            selected = false,
+                            onClick = {
+                                onBack()
+                            },
+                            text = {
+                                Text(
+                                    text =
+                                        if (isEnglish) {
+                                            "Select\ntraining"
+                                        } else {
+                                            "בחירת\nאימון"
+                                        },
+                                    style = KmiTypography.caption.copy(
+                                        fontWeight = FontWeight.ExtraBold
+                                    ),
+                                    textAlign = TextAlign.Center,
+                                    maxLines = 2,
+                                    overflow = TextOverflow.Ellipsis,
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(end = 38.dp)
+                                )
+                            },
+                            selectedContentColor = Color.White,
+                            unselectedContentColor =
+                                Color.White.copy(alpha = 0.90f)
+                        )
+                    }
+                }
+            }
+        }
+    }
+
     Scaffold(
         topBar = {
             KmiTopBar(
@@ -241,451 +372,445 @@ fun AttendanceGroupStatsScreen(
         contentWindowInsets = WindowInsets(left = 0)
     ) { p ->
 
-        // רקע כמו מסך הנוכחות
         Box(
             modifier = Modifier
                 .fillMaxSize()
                 .background(
-                    Brush.verticalGradient(
-                        colors =
-                            if (isDarkMode) {
-                                listOf(
-                                    MaterialTheme.colorScheme.background,
-                                    MaterialTheme.colorScheme.surface,
-                                    Color(0xFF10243A),
-                                    Color(0xFF0A3657),
-                                    Color(0xFF041E33)
-                                )
-                            } else {
-                                listOf(
-                                    Color(0xFFF8FBFF),
-                                    Color(0xFFEAF4FF),
-                                    Color(0xFFB7DDF7),
-                                    Color(0xFF1F78B4),
-                                    Color(0xFF062B4A)
-                                )
-                            }
-                    )
+                    brush = kmiScreenBackgroundBrush()
                 )
         ) {
-            LazyColumn(
+            Column(
                 modifier = Modifier
-                    .padding(p)
                     .fillMaxSize()
-                    .padding(horizontal = 16.dp, vertical = 14.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp),
-                contentPadding = PaddingValues(bottom = 120.dp)
+                    .padding(p)
             ) {
-                item {
-                    StatsHeroCard(
-                        branch = branch,
-                        groupKey = groupKey,
-                        avgPct = avgPct,
-                        totalSessions = totalSessions,
-                        isEnglish = isEnglish
-                    )
-                }
 
-                item {
-                    StatsSummaryCard(
-                        avgPct = avgPct,
-                        totalSessions = totalSessions,
-                        avgPresent = avgPresent,
-                        avgTotal = avgTotal,
-                        isEnglish = isEnglish
-                    )
-                }
+                // פס הגראניט הגלובלי
+                AttendanceStatsTopTabs()
 
-                item {
-                    Text(
-                        text =
-                            if (deleteMode) {
-                                tr(
-                                    "בחר דו\"חות למחיקה",
-                                    "Select reports to delete"
-                                )
-                            } else {
-                                tr(
-                                    "דו\"חות אחרונים (שנה אחורה)",
-                                    "Recent reports - last year"
-                                )
-                            },
-                        style = KmiTypography.cardTitle.merge(
-                            screenTextStyle
+                LazyColumn(
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxWidth()
+                        .padding(
+                            horizontal = 16.dp,
+                            vertical = 14.dp
                         ),
-                        color =
-                            if (isDarkMode) {
-                                MaterialTheme.colorScheme.onBackground
-                            } else {
-                                Color(0xFF0F172A)
-                            },
-                        textAlign = screenTextAlign,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 2.dp)
-                    )
-                }
+                    verticalArrangement =
+                        Arrangement.spacedBy(12.dp),
+                    contentPadding =
+                        PaddingValues(bottom = 120.dp)
+                ) {
 
-                if (!hasRealReports) {
                     item {
-                        EmptyAttendanceReportsCard(
+                        StatsHeroCard(
                             branch = branch,
                             groupKey = groupKey,
+                            avgPct = avgPct,
+                            totalSessions = totalSessions,
                             isEnglish = isEnglish
                         )
                     }
-                }
 
-                reportsByMonth.forEach { (ym, monthReports) ->
+                    item {
+                        StatsSummaryCard(
+                            avgPct = avgPct,
+                            totalSessions = totalSessions,
+                            avgPresent = avgPresent,
+                            avgTotal = avgTotal,
+                            isEnglish = isEnglish
+                        )
+                    }
 
-                    // כותרת חודש (לחיצה => קיפול/פתיחה)
-                    item(key = "month_${ym}") {
-                        val monthTitle = remember(ym) {
-                            ym.atDay(1).format(monthTitleFormatter)
-                        }
-
-                        /*
-                         * חודש נחשב פתוח רק כאשר הערך שלו
-                         * הוגדר במפורש כ-true.
-                         */
-                        val isExpanded =
-                            expandedByMonth[ym] == true
-
-                        Surface(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clickable {
-                                    val current =
-                                        expandedByMonth[ym] == true
-
-                                    expandedByMonth[ym] =
-                                        !current
+                    item {
+                        Text(
+                            text =
+                                if (deleteMode) {
+                                    tr(
+                                        "בחר דו\"חות למחיקה",
+                                        "Select reports to delete"
+                                    )
+                                } else {
+                                    tr(
+                                        "דו\"חות אחרונים (שנה אחורה)",
+                                        "Recent reports - last year"
+                                    )
                                 },
-                            shape = RoundedCornerShape(18.dp),
+                            style = KmiTypography.cardTitle.merge(
+                                screenTextStyle
+                            ),
                             color =
                                 if (isDarkMode) {
-                                    MaterialTheme.colorScheme.surfaceVariant
+                                    MaterialTheme.colorScheme.onBackground
                                 } else {
-                                    Color(0xFFF8FBFF)
+                                    Color(0xFF0F172A)
                                 },
-                            tonalElevation = 3.dp,
-                            shadowElevation = 5.dp,
-                            border = BorderStroke(
-                                width = 1.dp,
-                                color =
-                                    if (isDarkMode) {
-                                        MaterialTheme.colorScheme.outline
-                                            .copy(alpha = 0.50f)
-                                    } else {
-                                        Color(0xFFD6E4F2)
-                                    }
+                            textAlign = screenTextAlign,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 2.dp)
+                        )
+                    }
+
+                    if (!hasRealReports) {
+                        item {
+                            EmptyAttendanceReportsCard(
+                                branch = branch,
+                                groupKey = groupKey,
+                                isEnglish = isEnglish
                             )
-                        ) {
-
-                            CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
-                                Row(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(horizontal = 12.dp, vertical = 10.dp),
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(10.dp)
-                                ) {
-                                    if (!isEnglish) {
-                                        Icon(
-                                            imageVector =
-                                                if (isExpanded) {
-                                                    Icons.Filled.ExpandLess
-                                                } else {
-                                                    Icons.Filled.ExpandMore
-                                                },
-                                            contentDescription = null,
-                                            tint = Color(0xFF93C5FD),
-                                            modifier = Modifier.size(
-                                                KmiIconSize.medium
-                                            )
-                                        )
-                                    }
-
-                                    Box(
-                                        modifier = Modifier.weight(1f),
-                                        contentAlignment = if (isEnglish) Alignment.CenterStart else Alignment.CenterEnd
-                                    ) {
-                                        Column(
-                                            modifier = Modifier.fillMaxWidth(),
-                                            horizontalAlignment = if (isEnglish) Alignment.Start else Alignment.End
-                                        ) {
-                                            Text(
-                                                text = monthTitle,
-                                                style =
-                                                    KmiTypography.cardTitle
-                                                        .merge(
-                                                            screenTextStyle
-                                                        )
-                                                        .copy(
-                                                            fontWeight =
-                                                                FontWeight.Bold
-                                                        ),
-                                                color =
-                                                    if (isDarkMode) {
-                                                        MaterialTheme.colorScheme
-                                                            .onSurface
-                                                    } else {
-                                                        Color(0xFF0F172A)
-                                                    },
-                                                textAlign =
-                                                    if (isEnglish) {
-                                                        TextAlign.Start
-                                                    } else {
-                                                        TextAlign.Right
-                                                    },
-                                                modifier =
-                                                    Modifier.fillMaxWidth(),
-                                                maxLines = 2,
-                                                overflow =
-                                                    TextOverflow.Ellipsis
-                                            )
-
-                                            Text(
-                                                text =
-                                                    if (isEnglish) {
-                                                        "${monthReports.size} reports"
-                                                    } else {
-                                                        "${monthReports.size} דו\"חות"
-                                                    },
-                                                style =
-                                                    KmiTypography.caption.merge(
-                                                        screenTextStyle
-                                                    ),
-                                                color =
-                                                    if (isDarkMode) {
-                                                        MaterialTheme.colorScheme
-                                                            .primary
-                                                    } else {
-                                                        Color(0xFF1E3A8A)
-                                                    },
-                                                textAlign =
-                                                    if (isEnglish) {
-                                                        TextAlign.Start
-                                                    } else {
-                                                        TextAlign.Right
-                                                    },
-                                                modifier =
-                                                    Modifier.fillMaxWidth()
-                                            )
-                                        }
-                                    }
-
-                                    if (isEnglish) {
-                                        Icon(
-                                            imageVector = if (isExpanded) Icons.Filled.ExpandLess else Icons.Filled.ExpandMore,
-                                            contentDescription = null,
-                                            tint = Color(0xFF93C5FD)
-                                        )
-                                    }
-                                }
-                            }
                         }
                     }
 
-                    /*
-                     * כל דיווחי החודש מוצגים בתוך משטח
-                     * רציף אחד, עם קו מפריד בין האימונים.
-                     */
-                    val isExpandedNow =
-                        expandedByMonth[ym] == true
+                    reportsByMonth.forEach { (ym, monthReports) ->
 
-                    if (isExpandedNow) {
-                        item(
-                            key = "month_reports_$ym"
-                        ) {
+                        // כותרת חודש (לחיצה => קיפול/פתיחה)
+                        item(key = "month_${ym}") {
+                            val monthTitle = remember(ym) {
+                                ym.atDay(1).format(monthTitleFormatter)
+                            }
+
+                            /*
+                             * חודש נחשב פתוח רק כאשר הערך שלו
+                             * הוגדר במפורש כ-true.
+                             */
+                            val isExpanded =
+                                expandedByMonth[ym] == true
+
                             Surface(
-                                modifier =
-                                    Modifier.fillMaxWidth(),
-                                shape =
-                                    RoundedCornerShape(20.dp),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable {
+                                        val current =
+                                            expandedByMonth[ym] == true
+
+                                        expandedByMonth[ym] =
+                                            !current
+                                    },
+                                shape = RoundedCornerShape(18.dp),
                                 color =
                                     if (isDarkMode) {
-                                        MaterialTheme
-                                            .colorScheme
-                                            .surfaceVariant
+                                        MaterialTheme.colorScheme.surfaceVariant
                                     } else {
                                         Color(0xFFF8FBFF)
                                     },
-                                tonalElevation = 2.dp,
-                                shadowElevation = 4.dp,
+                                tonalElevation = 3.dp,
+                                shadowElevation = 5.dp,
                                 border = BorderStroke(
                                     width = 1.dp,
                                     color =
                                         if (isDarkMode) {
-                                            MaterialTheme
-                                                .colorScheme
-                                                .outline
-                                                .copy(alpha = 0.45f)
+                                            MaterialTheme.colorScheme.outline
+                                                .copy(alpha = 0.50f)
                                         } else {
                                             Color(0xFFD6E4F2)
                                         }
                                 )
                             ) {
-                                Column(
-                                    modifier =
-                                        Modifier.fillMaxWidth()
-                                ) {
-                                    monthReports.forEachIndexed {
-                                            reportIndex,
-                                            report ->
 
-                                        val checked =
-                                            selected[report.id] == true
-
-                                        val detailsExpanded =
-                                            expandedReportDetails[
-                                                report.id
-                                            ] == true
-
-                                        /*
-                                         * רקע מתחלף מדגיש את ההפרדה
-                                         * בין הדוחות בלי ליצור כרטיס
-                                         * נפרד סביב כל אימון.
-                                         */
-                                        val reportBackgroundColor =
-                                            if (isDarkMode) {
-                                                if (
-                                                    reportIndex % 2 == 0
-                                                ) {
-                                                    MaterialTheme
-                                                        .colorScheme
-                                                        .surface
-                                                        .copy(alpha = 0.28f)
-                                                } else {
-                                                    MaterialTheme
-                                                        .colorScheme
-                                                        .primary
-                                                        .copy(alpha = 0.09f)
-                                                }
-                                            } else {
-                                                if (
-                                                    reportIndex % 2 == 0
-                                                ) {
-                                                    Color.White.copy(
-                                                        alpha = 0.42f
-                                                    )
-                                                } else {
-                                                    Color(0xFFE8F4FD)
-                                                        .copy(alpha = 0.88f)
-                                                }
-                                            }
-
-                                        Column(
-                                            modifier = Modifier
-                                                .fillMaxWidth()
-                                                .background(
-                                                    color =
-                                                        reportBackgroundColor
-                                                )
-                                                .padding(
-                                                    top = 4.dp,
-                                                    bottom = 4.dp
-                                                )
-                                        ) {
-                                            Row(
-                                                modifier = Modifier
-                                                    .fillMaxWidth()
-                                                    .padding(
-                                                        horizontal = 8.dp
-                                                    ),
-                                                verticalAlignment =
-                                                    Alignment.CenterVertically,
-                                                horizontalArrangement =
-                                                    Arrangement.spacedBy(
-                                                        8.dp
-                                                    )
-                                            ) {
-                                                if (deleteMode) {
-                                                    Checkbox(
-                                                        checked =
-                                                            checked,
-                                                        onCheckedChange = {
-                                                                value ->
-
-                                                            selected[
-                                                                report.id
-                                                            ] = value
-                                                        }
-                                                    )
-                                                }
-
-                                                ReportRowCard(
-                                                    dateText =
-                                                        report.date
-                                                            .toString(),
-                                                    total =
-                                                        report.totalMembers,
-                                                    present =
-                                                        report.presentCount,
-                                                    absent =
-                                                        report.absentCount,
-                                                    pct =
-                                                        report.percentPresent,
-                                                    isEnglish =
-                                                        isEnglish,
-                                                    isDetailsExpanded =
-                                                        detailsExpanded,
-                                                    onToggleDetails = {
-                                                        expandedReportDetails[
-                                                            report.id
-                                                        ] =
-                                                            !detailsExpanded
+                                CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(horizontal = 12.dp, vertical = 10.dp),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                                    ) {
+                                        if (!isEnglish) {
+                                            Icon(
+                                                imageVector =
+                                                    if (isExpanded) {
+                                                        Icons.Filled.ExpandLess
+                                                    } else {
+                                                        Icons.Filled.ExpandMore
                                                     },
-                                                    modifier =
-                                                        Modifier.weight(1f)
+                                                contentDescription = null,
+                                                tint = Color(0xFF93C5FD),
+                                                modifier = Modifier.size(
+                                                    KmiIconSize.medium
                                                 )
-                                            }
+                                            )
+                                        }
 
-                                            if (detailsExpanded) {
-                                                ReportAttendanceDetailsCard(
-                                                    repo = repo,
-                                                    branch = branch,
-                                                    groupKey = groupKey,
-                                                    date = report.date,
-                                                    isEnglish = isEnglish
+                                        Box(
+                                            modifier = Modifier.weight(1f),
+                                            contentAlignment = if (isEnglish) Alignment.CenterStart else Alignment.CenterEnd
+                                        ) {
+                                            Column(
+                                                modifier = Modifier.fillMaxWidth(),
+                                                horizontalAlignment = if (isEnglish) Alignment.Start else Alignment.End
+                                            ) {
+                                                Text(
+                                                    text = monthTitle,
+                                                    style =
+                                                        KmiTypography.cardTitle
+                                                            .merge(
+                                                                screenTextStyle
+                                                            )
+                                                            .copy(
+                                                                fontWeight =
+                                                                    FontWeight.Bold
+                                                            ),
+                                                    color =
+                                                        if (isDarkMode) {
+                                                            MaterialTheme.colorScheme
+                                                                .onSurface
+                                                        } else {
+                                                            Color(0xFF0F172A)
+                                                        },
+                                                    textAlign =
+                                                        if (isEnglish) {
+                                                            TextAlign.Start
+                                                        } else {
+                                                            TextAlign.Right
+                                                        },
+                                                    modifier =
+                                                        Modifier.fillMaxWidth(),
+                                                    maxLines = 2,
+                                                    overflow =
+                                                        TextOverflow.Ellipsis
+                                                )
+
+                                                Text(
+                                                    text =
+                                                        if (isEnglish) {
+                                                            "${monthReports.size} reports"
+                                                        } else {
+                                                            "${monthReports.size} דו\"חות"
+                                                        },
+                                                    style =
+                                                        KmiTypography.caption.merge(
+                                                            screenTextStyle
+                                                        ),
+                                                    color =
+                                                        if (isDarkMode) {
+                                                            MaterialTheme.colorScheme
+                                                                .primary
+                                                        } else {
+                                                            Color(0xFF1E3A8A)
+                                                        },
+                                                    textAlign =
+                                                        if (isEnglish) {
+                                                            TextAlign.Start
+                                                        } else {
+                                                            TextAlign.Right
+                                                        },
+                                                    modifier =
+                                                        Modifier.fillMaxWidth()
                                                 )
                                             }
+                                        }
+
+                                        if (isEnglish) {
+                                            Icon(
+                                                imageVector = if (isExpanded) Icons.Filled.ExpandLess else Icons.Filled.ExpandMore,
+                                                contentDescription = null,
+                                                tint = Color(0xFF93C5FD)
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        /*
+                         * כל דיווחי החודש מוצגים בתוך משטח
+                         * רציף אחד, עם קו מפריד בין האימונים.
+                         */
+                        val isExpandedNow =
+                            expandedByMonth[ym] == true
+
+                        if (isExpandedNow) {
+                            item(
+                                key = "month_reports_$ym"
+                            ) {
+                                Surface(
+                                    modifier =
+                                        Modifier.fillMaxWidth(),
+                                    shape =
+                                        RoundedCornerShape(20.dp),
+                                    color =
+                                        if (isDarkMode) {
+                                            MaterialTheme
+                                                .colorScheme
+                                                .surfaceVariant
+                                        } else {
+                                            Color(0xFFF8FBFF)
+                                        },
+                                    tonalElevation = 2.dp,
+                                    shadowElevation = 4.dp,
+                                    border = BorderStroke(
+                                        width = 1.dp,
+                                        color =
+                                            if (isDarkMode) {
+                                                MaterialTheme
+                                                    .colorScheme
+                                                    .outline
+                                                    .copy(alpha = 0.45f)
+                                            } else {
+                                                Color(0xFFD6E4F2)
+                                            }
+                                    )
+                                ) {
+                                    Column(
+                                        modifier =
+                                            Modifier.fillMaxWidth()
+                                    ) {
+                                        monthReports.forEachIndexed { reportIndex,
+                                                                      report ->
+
+                                            val checked =
+                                                selected[report.id] == true
+
+                                            val detailsExpanded =
+                                                expandedReportDetails[
+                                                    report.id
+                                                ] == true
 
                                             /*
-                                             * קו מפריד מוצג רק בין
-                                             * האימונים ולא אחרי האחרון.
+                                             * רקע מתחלף מדגיש את ההפרדה
+                                             * בין הדוחות בלי ליצור כרטיס
+                                             * נפרד סביב כל אימון.
                                              */
-                                            if (
-                                                reportIndex <
-                                                monthReports.lastIndex
+                                            val reportBackgroundColor =
+                                                if (isDarkMode) {
+                                                    if (
+                                                        reportIndex % 2 == 0
+                                                    ) {
+                                                        MaterialTheme
+                                                            .colorScheme
+                                                            .surface
+                                                            .copy(alpha = 0.28f)
+                                                    } else {
+                                                        MaterialTheme
+                                                            .colorScheme
+                                                            .primary
+                                                            .copy(alpha = 0.09f)
+                                                    }
+                                                } else {
+                                                    if (
+                                                        reportIndex % 2 == 0
+                                                    ) {
+                                                        Color.White.copy(
+                                                            alpha = 0.42f
+                                                        )
+                                                    } else {
+                                                        Color(0xFFE8F4FD)
+                                                            .copy(alpha = 0.88f)
+                                                    }
+                                                }
+
+                                            Column(
+                                                modifier = Modifier
+                                                    .fillMaxWidth()
+                                                    .background(
+                                                        color =
+                                                            reportBackgroundColor
+                                                    )
+                                                    .padding(
+                                                        top = 4.dp,
+                                                        bottom = 4.dp
+                                                    )
                                             ) {
-                                                Box(
+                                                Row(
                                                     modifier = Modifier
                                                         .fillMaxWidth()
                                                         .padding(
-                                                            horizontal =
-                                                                12.dp
+                                                            horizontal = 8.dp
+                                                        ),
+                                                    verticalAlignment =
+                                                        Alignment.CenterVertically,
+                                                    horizontalArrangement =
+                                                        Arrangement.spacedBy(
+                                                            8.dp
                                                         )
-                                                        .height(1.dp)
-                                                        .background(
-                                                            color =
-                                                                if (
-                                                                    isDarkMode
-                                                                ) {
-                                                                    MaterialTheme
-                                                                        .colorScheme
-                                                                        .primary
-                                                                        .copy(
-                                                                            alpha =
-                                                                                0.48f
+                                                ) {
+                                                    if (deleteMode) {
+                                                        Checkbox(
+                                                            checked =
+                                                                checked,
+                                                            onCheckedChange = { value ->
+
+                                                                selected[
+                                                                    report.id
+                                                                ] = value
+                                                            }
+                                                        )
+                                                    }
+
+                                                    ReportRowCard(
+                                                        dateText =
+                                                            report.date
+                                                                .toString(),
+                                                        total =
+                                                            report.totalMembers,
+                                                        present =
+                                                            report.presentCount,
+                                                        absent =
+                                                            report.absentCount,
+                                                        pct =
+                                                            report.percentPresent,
+                                                        isEnglish =
+                                                            isEnglish,
+                                                        isDetailsExpanded =
+                                                            detailsExpanded,
+                                                        onToggleDetails = {
+                                                            expandedReportDetails[
+                                                                report.id
+                                                            ] =
+                                                                !detailsExpanded
+                                                        },
+                                                        modifier =
+                                                            Modifier.weight(1f)
+                                                    )
+                                                }
+
+                                                if (detailsExpanded) {
+                                                    ReportAttendanceDetailsCard(
+                                                        repo = repo,
+                                                        branch = branch,
+                                                        groupKey = groupKey,
+                                                        date = report.date,
+                                                        isEnglish = isEnglish
+                                                    )
+                                                }
+
+                                                /*
+                                                 * קו מפריד מוצג רק בין
+                                                 * האימונים ולא אחרי האחרון.
+                                                 */
+                                                if (
+                                                    reportIndex <
+                                                    monthReports.lastIndex
+                                                ) {
+                                                    Box(
+                                                        modifier = Modifier
+                                                            .fillMaxWidth()
+                                                            .padding(
+                                                                horizontal =
+                                                                    12.dp
+                                                            )
+                                                            .height(1.dp)
+                                                            .background(
+                                                                color =
+                                                                    if (
+                                                                        isDarkMode
+                                                                    ) {
+                                                                        MaterialTheme
+                                                                            .colorScheme
+                                                                            .primary
+                                                                            .copy(
+                                                                                alpha =
+                                                                                    0.48f
+                                                                            )
+                                                                    } else {
+                                                                        Color(
+                                                                            0xFF9CCAF0
                                                                         )
-                                                                } else {
-                                                                    Color(
-                                                                        0xFF9CCAF0
-                                                                    )
-                                                                }
-                                                        )
-                                                )
+                                                                    }
+                                                            )
+                                                    )
+                                                }
                                             }
                                         }
                                     }
@@ -693,117 +818,80 @@ fun AttendanceGroupStatsScreen(
                             }
                         }
                     }
-                }
 
-                item {
-                    Spacer(Modifier.height(6.dp))
+                    item {
+                        Spacer(Modifier.height(6.dp))
 
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .heightIn(min = 52.dp),
-                        horizontalArrangement =
-                            Arrangement.spacedBy(10.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        // ✅ "מחק דוחות" => מצב בחירה | במצב בחירה => "מחק נבחרים"
-                        OutlinedButton(
-                            onClick = {
-                                if (!hasRealReports) return@OutlinedButton
-
-                                if (!deleteMode) {
-                                    deleteMode = true
-                                    selected.clear()
-                                } else {
-                                    if (selectedIds.isNotEmpty()) {
-                                        confirmDeleteSelected = true
-                                    }
-                                }
-                            },
+                        Row(
                             modifier = Modifier
-                                .weight(1f)
+                                .fillMaxWidth()
                                 .heightIn(min = 52.dp),
-                            shape = RoundedCornerShape(20.dp),
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor =
-                                    if (isDarkMode) {
-                                        MaterialTheme.colorScheme
-                                            .surfaceVariant
-                                    } else {
-                                        Color(0xFFF8FBFF)
-                                    },
-                                contentColor =
-                                    if (isDarkMode) {
-                                        MaterialTheme.colorScheme.onSurface
-                                    } else {
-                                        Color(0xFF0F172A)
-                                    },
-                                disabledContainerColor =
-                                    MaterialTheme.colorScheme
-                                        .surfaceVariant.copy(alpha = 0.55f),
-                                disabledContentColor =
-                                    MaterialTheme.colorScheme
-                                        .onSurfaceVariant.copy(alpha = 0.55f)
-                            ),
-                            enabled = !busy && hasRealReports
+                            horizontalArrangement =
+                                Arrangement.spacedBy(10.dp),
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
-
-                            Icon(
-                                imageVector = Icons.Filled.Delete,
-                                contentDescription = null,
-                                tint = LocalContentColor.current,
-                                modifier = Modifier.size(
-                                    KmiIconSize.medium
-                                )
-                            )
-                            Spacer(Modifier.padding(horizontal = 4.dp))
-                            val label = if (!deleteMode) {
-                                tr("מחק דוחות", "Delete reports")
-                            } else {
-                                tr("מחק נבחרים (${selectedIds.size})", "Delete selected (${selectedIds.size})")
-                            }
-
-                            Text(
-                                text = label,
-                                style = KmiTypography.action.copy(
-                                    fontWeight = FontWeight.SemiBold
-                                ),
-                                color = LocalContentColor.current,
-                                textAlign = TextAlign.Center,
-                                maxLines = 2,
-                                overflow = TextOverflow.Ellipsis
-                            )
-                        }
-
-                        // ✅ ביטול מצב בחירה
-                        if (deleteMode) {
+                            // ✅ "מחק דוחות" => מצב בחירה | במצב בחירה => "מחק נבחרים"
                             OutlinedButton(
                                 onClick = {
-                                    deleteMode = false
-                                    selected.clear()
+                                    if (!hasRealReports) return@OutlinedButton
+
+                                    if (!deleteMode) {
+                                        deleteMode = true
+                                        selected.clear()
+                                    } else {
+                                        if (selectedIds.isNotEmpty()) {
+                                            confirmDeleteSelected = true
+                                        }
+                                    }
                                 },
                                 modifier = Modifier
                                     .weight(1f)
                                     .heightIn(min = 52.dp),
                                 shape = RoundedCornerShape(20.dp),
-                                border = BorderStroke(
-                                    1.dp,
-                                    Color(0xFF93C5FD)
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor =
+                                        if (isDarkMode) {
+                                            MaterialTheme.colorScheme
+                                                .surfaceVariant
+                                        } else {
+                                            Color(0xFFF8FBFF)
+                                        },
+                                    contentColor =
+                                        if (isDarkMode) {
+                                            MaterialTheme.colorScheme.onSurface
+                                        } else {
+                                            Color(0xFF0F172A)
+                                        },
+                                    disabledContainerColor =
+                                        MaterialTheme.colorScheme
+                                            .surfaceVariant.copy(alpha = 0.55f),
+                                    disabledContentColor =
+                                        MaterialTheme.colorScheme
+                                            .onSurfaceVariant.copy(alpha = 0.55f)
                                 ),
-                                colors =
-                                    ButtonDefaults.outlinedButtonColors(
-                                        contentColor =
-                                            if (isDarkMode) {
-                                                MaterialTheme.colorScheme
-                                                    .onBackground
-                                            } else {
-                                                Color(0xFF0F172A)
-                                            }
-                                    ),
-                                enabled = !busy
+                                enabled = !busy && hasRealReports
                             ) {
+
+                                Icon(
+                                    imageVector = Icons.Filled.Delete,
+                                    contentDescription = null,
+                                    tint = LocalContentColor.current,
+                                    modifier = Modifier.size(
+                                        KmiIconSize.medium
+                                    )
+                                )
+                                Spacer(Modifier.padding(horizontal = 4.dp))
+                                val label = if (!deleteMode) {
+                                    tr("מחק דוחות", "Delete reports")
+                                } else {
+                                    tr(
+                                        "מחק נבחרים (${selectedIds.size})",
+                                        "Delete selected (${selectedIds.size})"
+                                    )
+                                }
+
                                 Text(
-                                    text = tr("ביטול", "Cancel"),
+                                    text = label,
                                     style = KmiTypography.action.copy(
                                         fontWeight = FontWeight.SemiBold
                                     ),
@@ -813,108 +901,148 @@ fun AttendanceGroupStatsScreen(
                                     overflow = TextOverflow.Ellipsis
                                 )
                             }
-                        }
 
-                        // ✅ איפוס הכל (כמו שעשית) – מוחק records/sessions/reports (לא מתאמנים)
-                        Button(
-                            onClick = {
-                                if (hasRealReports) {
-                                    confirmResetAll = true
+                            // ✅ ביטול מצב בחירה
+                            if (deleteMode) {
+                                OutlinedButton(
+                                    onClick = {
+                                        deleteMode = false
+                                        selected.clear()
+                                    },
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .heightIn(min = 52.dp),
+                                    shape = RoundedCornerShape(20.dp),
+                                    border = BorderStroke(
+                                        1.dp,
+                                        Color(0xFF93C5FD)
+                                    ),
+                                    colors =
+                                        ButtonDefaults.outlinedButtonColors(
+                                            contentColor =
+                                                if (isDarkMode) {
+                                                    MaterialTheme.colorScheme
+                                                        .onBackground
+                                                } else {
+                                                    Color(0xFF0F172A)
+                                                }
+                                        ),
+                                    enabled = !busy
+                                ) {
+                                    Text(
+                                        text = tr("ביטול", "Cancel"),
+                                        style = KmiTypography.action.copy(
+                                            fontWeight = FontWeight.SemiBold
+                                        ),
+                                        color = LocalContentColor.current,
+                                        textAlign = TextAlign.Center,
+                                        maxLines = 2,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
                                 }
-                            },
-                            modifier = Modifier
-                                .weight(1f)
-                                .heightIn(min = 52.dp),
-                            shape = RoundedCornerShape(20.dp),
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = Color(0xFFEF4444),
-                                contentColor = Color.White,
-                                disabledContainerColor = Color(0xFF475569),
-                                disabledContentColor = Color(0xFFCBD5E1)
-                            ),
-                            enabled = !busy && hasRealReports
-                        ) {
-                            Icon(
-                                imageVector = Icons.Filled.Refresh,
-                                contentDescription = null,
-                                modifier = Modifier.size(
-                                    KmiIconSize.medium
-                                )
-                            )
+                            }
 
-                            Spacer(
-                                Modifier.padding(horizontal = 4.dp)
-                            )
-
-                            Text(
-                                text = tr("איפוס", "Reset"),
-                                style = KmiTypography.action.copy(
-                                    fontWeight = FontWeight.SemiBold
+                            // ✅ איפוס הכל (כמו שעשית) – מוחק records/sessions/reports (לא מתאמנים)
+                            Button(
+                                onClick = {
+                                    if (hasRealReports) {
+                                        confirmResetAll = true
+                                    }
+                                },
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .heightIn(min = 52.dp),
+                                shape = RoundedCornerShape(20.dp),
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = Color(0xFFEF4444),
+                                    contentColor = Color.White,
+                                    disabledContainerColor = Color(0xFF475569),
+                                    disabledContentColor = Color(0xFFCBD5E1)
                                 ),
-                                textAlign = TextAlign.Center,
-                                maxLines = 2,
-                                overflow = TextOverflow.Ellipsis
-                            )
+                                enabled = !busy && hasRealReports
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Filled.Refresh,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(
+                                        KmiIconSize.medium
+                                    )
+                                )
+
+                                Spacer(
+                                    Modifier.padding(horizontal = 4.dp)
+                                )
+
+                                Text(
+                                    text = tr("איפוס", "Reset"),
+                                    style = KmiTypography.action.copy(
+                                        fontWeight = FontWeight.SemiBold
+                                    ),
+                                    textAlign = TextAlign.Center,
+                                    maxLines = 2,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                            }
                         }
                     }
                 }
-            }
 
-            // ===== אישור איפוס הכל =====
-            if (confirmResetAll) {
-                ConfirmDialog(
-                    title = tr("איפוס נוכחות לקבוצה", "Reset group attendance"),
-                    text = tr(
-                        "אזהרה: פעולה זו תמחק את כל נתוני הנוכחות לקבוצה:\n• סימונים\n• שיעורים\n• דו\"חות\n\nמתאמנים ברשימה נשארים.",
-                        "Warning: this action will delete all attendance data for this group:\n• Attendance marks\n• Sessions\n• Reports\n\nThe trainee list will remain."
-                    ),
-                    confirmText = tr("אפס הכל", "Reset all"),
-                    dismissText = tr("ביטול", "Cancel"),
-                    onConfirm = {
-                        confirmResetAll = false
-                        busy = true
-                        scope.launch {
-                            runCatching {
-                                repo.resetAttendanceForGroup(branch, groupKey)
+                // ===== אישור איפוס הכל =====
+                if (confirmResetAll) {
+                    ConfirmDialog(
+                        title = tr("איפוס נוכחות לקבוצה", "Reset group attendance"),
+                        text = tr(
+                            "אזהרה: פעולה זו תמחק את כל נתוני הנוכחות לקבוצה:\n• סימונים\n• שיעורים\n• דו\"חות\n\nמתאמנים ברשימה נשארים.",
+                            "Warning: this action will delete all attendance data for this group:\n• Attendance marks\n• Sessions\n• Reports\n\nThe trainee list will remain."
+                        ),
+                        confirmText = tr("אפס הכל", "Reset all"),
+                        dismissText = tr("ביטול", "Cancel"),
+                        onConfirm = {
+                            confirmResetAll = false
+                            busy = true
+                            scope.launch {
+                                runCatching {
+                                    repo.resetAttendanceForGroup(branch, groupKey)
+                                }
+                                busy = false
+                                deleteMode = false
+                                selected.clear()
                             }
-                            busy = false
-                            deleteMode = false
-                            selected.clear()
-                        }
-                    },
-                    onDismiss = { confirmResetAll = false }
-                )
-            }
+                        },
+                        onDismiss = { confirmResetAll = false }
+                    )
+                }
 
-            // ===== אישור מחיקת דו"חות נבחרים =====
-            if (confirmDeleteSelected) {
-                ConfirmDialog(
-                    title = tr("מחיקת דו\"חות", "Delete reports"),
-                    text = tr(
-                        "למחוק ${selectedIds.size} דו\"חות מסומנים?",
-                        "Delete ${selectedIds.size} selected reports?"
-                    ),
-                    confirmText = tr("מחק", "Delete"),
-                    dismissText = tr("ביטול", "Cancel"),
-                    onConfirm = {
-                        confirmDeleteSelected = false
-                        busy = true
-                        scope.launch {
-                            runCatching {
-                                // ✅ כאן המחיקה האמיתית לפי createdAtMillis
-                                repo.deleteReportsByIds(
-                                    branch = branch,
-                                    groupKey = groupKey,
-                                    reportIds = selectedIds
-                                )
+                // ===== אישור מחיקת דו"חות נבחרים =====
+                if (confirmDeleteSelected) {
+                    ConfirmDialog(
+                        title = tr("מחיקת דו\"חות", "Delete reports"),
+                        text = tr(
+                            "למחוק ${selectedIds.size} דו\"חות מסומנים?",
+                            "Delete ${selectedIds.size} selected reports?"
+                        ),
+                        confirmText = tr("מחק", "Delete"),
+                        dismissText = tr("ביטול", "Cancel"),
+                        onConfirm = {
+                            confirmDeleteSelected = false
+                            busy = true
+                            scope.launch {
+                                runCatching {
+                                    // ✅ כאן המחיקה האמיתית לפי createdAtMillis
+                                    repo.deleteReportsByIds(
+                                        branch = branch,
+                                        groupKey = groupKey,
+                                        reportIds = selectedIds
+                                    )
+                                }
+                                busy = false
+                                deleteMode = false
+                                selected.clear()
                             }
-                            busy = false
-                            deleteMode = false
-                            selected.clear()
-                        }
-                    },
-                    onDismiss = { confirmDeleteSelected = false }
-                )
+                        },
+                        onDismiss = { confirmDeleteSelected = false }
+                    )
+                }
             }
         }
     }
@@ -1167,10 +1295,15 @@ private fun createAttendanceStatsPdf(
     fun drawFooter(canvas: android.graphics.Canvas, pageNumber: Int, totalPages: Int) {
         val footerY = 804f
 
-        canvas.drawLine(0f, footerY, pageWidth.toFloat(), footerY, Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = navy
-            strokeWidth = 2f
-        })
+        canvas.drawLine(
+            0f,
+            footerY,
+            pageWidth.toFloat(),
+            footerY,
+            Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                color = navy
+                strokeWidth = 2f
+            })
 
         drawKmiLogo(canvas, 38f, footerY + 22f, 13f)
 
@@ -1192,13 +1325,27 @@ private fun createAttendanceStatsPdf(
 
     fun drawSummary(canvas: android.graphics.Canvas, top: Float): Float {
         drawRoundRect(canvas, margin, top, pageWidth - margin, top + 122f, lightBlue, 12f)
-        drawRoundRect(canvas, margin, top, pageWidth - margin, top + 122f, borderBlue, 12f, stroke = true)
+        drawRoundRect(
+            canvas,
+            margin,
+            top,
+            pageWidth - margin,
+            top + 122f,
+            borderBlue,
+            12f,
+            stroke = true
+        )
 
         sectionPaint.textAlign = Paint.Align.RIGHT
         canvas.drawText("$branch · $groupKey", pageWidth - margin - 22f, top + 30f, sectionPaint)
 
         labelPaint.textAlign = Paint.Align.RIGHT
-        canvas.drawText(tr("ממוצע נוכחות שנה:", "Year attendance average:"), pageWidth - margin - 22f, top + 58f, labelPaint)
+        canvas.drawText(
+            tr("ממוצע נוכחות שנה:", "Year attendance average:"),
+            pageWidth - margin - 22f,
+            top + 58f,
+            labelPaint
+        )
 
         boldValuePaint.textAlign = Paint.Align.LEFT
         boldValuePaint.textSize = 25f
@@ -1286,7 +1433,12 @@ private fun createAttendanceStatsPdf(
         canvas.drawText(report.date, right - 22f, top + 28f, sectionPaint)
 
         boldValuePaint.textAlign = Paint.Align.RIGHT
-        canvas.drawText(tr("נוכחות: ${report.pct}%", "Attendance: ${report.pct}%"), right - 22f, top + 52f, boldValuePaint)
+        canvas.drawText(
+            tr("נוכחות: ${report.pct}%", "Attendance: ${report.pct}%"),
+            right - 22f,
+            top + 52f,
+            boldValuePaint
+        )
 
         labelPaint.textAlign = Paint.Align.RIGHT
         canvas.drawText(
@@ -1320,7 +1472,8 @@ private fun createAttendanceStatsPdf(
     val totalPages = if (reports.size <= firstPageCapacity) {
         1
     } else {
-        1 + kotlin.math.ceil((reports.size - firstPageCapacity) / nextPageCapacity.toDouble()).toInt()
+        1 + kotlin.math.ceil((reports.size - firstPageCapacity) / nextPageCapacity.toDouble())
+            .toInt()
     }
 
     var pageNumber = 1
@@ -1340,7 +1493,12 @@ private fun createAttendanceStatsPdf(
             y = drawSummary(canvas, y)
         } else {
             sectionPaint.textAlign = Paint.Align.CENTER
-            canvas.drawText(tr("דו״חות נוכחות", "Attendance reports"), pageWidth / 2f, y, sectionPaint)
+            canvas.drawText(
+                tr("דו״חות נוכחות", "Attendance reports"),
+                pageWidth / 2f,
+                y,
+                sectionPaint
+            )
             y += 28f
         }
 
@@ -1348,10 +1506,24 @@ private fun createAttendanceStatsPdf(
 
         if (reports.isEmpty()) {
             drawRoundRect(canvas, margin, y, pageWidth - margin, y + 92f, softBlue, 12f)
-            drawRoundRect(canvas, margin, y, pageWidth - margin, y + 92f, borderBlue, 12f, stroke = true)
+            drawRoundRect(
+                canvas,
+                margin,
+                y,
+                pageWidth - margin,
+                y + 92f,
+                borderBlue,
+                12f,
+                stroke = true
+            )
 
             sectionPaint.textAlign = Paint.Align.CENTER
-            canvas.drawText(tr("אין דוחות נוכחות שמורים", "No saved attendance reports"), pageWidth / 2f, y + 42f, sectionPaint)
+            canvas.drawText(
+                tr("אין דוחות נוכחות שמורים", "No saved attendance reports"),
+                pageWidth / 2f,
+                y + 42f,
+                sectionPaint
+            )
         } else {
             repeat(capacity) {
                 if (reportIndex >= reports.size) return@repeat
@@ -2088,7 +2260,8 @@ private fun ReportAttendanceDetailsCard(
     val members by repo
         .members(branch, groupKey)
         .collectAsState(initial = emptyList())
-    val records by repo.attendanceForDay(branch, groupKey, date).collectAsState(initial = emptyList())
+    val records by repo.attendanceForDay(branch, groupKey, date)
+        .collectAsState(initial = emptyList())
 
     fun String.detailsNameKey(): String = this
         .trim()

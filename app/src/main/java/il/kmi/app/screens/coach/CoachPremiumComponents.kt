@@ -60,22 +60,6 @@ internal fun CoachTopStatsCard(
             Text(
                 text = coachTr(
                     isEnglish,
-                    "רשימת מתאמנים",
-                    "Trainees list"
-                ),
-                style = KmiTypography.sectionTitle.copy(
-                    fontWeight = FontWeight.ExtraBold
-                ),
-                color = MaterialTheme.colorScheme.onSurface,
-                textAlign = coachTextAlign(isEnglish),
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.fillMaxWidth()
-            )
-
-            Text(
-                text = coachTr(
-                    isEnglish,
                     "נתוני נוכחות וקבוצה בזמן אמת",
                     "attendance and group data"
                 ),
@@ -92,7 +76,9 @@ internal fun CoachTopStatsCard(
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Row(
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(86.dp),
                     horizontalArrangement = Arrangement.spacedBy(7.dp)
                 ) {
                     CoachTopStatTile(
@@ -118,7 +104,9 @@ internal fun CoachTopStatsCard(
                 }
 
                 Row(
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(86.dp),
                     horizontalArrangement = Arrangement.spacedBy(7.dp)
                 ) {
                     CoachTopStatTile(
@@ -260,7 +248,7 @@ private fun CoachTopStatTile(
             color = MaterialTheme.colorScheme.outline
                 .copy(alpha = 0.24f)
         ),
-        modifier = modifier.heightIn(min = 72.dp)
+        modifier = modifier.fillMaxHeight()
     ) {
         Column(
             modifier = Modifier

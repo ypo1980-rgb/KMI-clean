@@ -69,6 +69,7 @@ import il.kmi.shared.domain.Belt
 import il.kmi.shared.localization.AppLanguage
 import il.kmi.shared.localization.AppLanguageManager
 import il.yuval.ui.theme.kmiScreenBackgroundBrush
+import il.yuval.ui.theme.kmiSectionHeaderBrush
 import il.kmi.shared.domain.content.ExerciseIdentityRegistry
 import il.kmi.shared.questions.model.util.ExerciseTitleFormatter
 import kotlinx.coroutines.Dispatchers
@@ -193,267 +194,272 @@ fun ProgressScreen(
 
             val rows = mutableListOf<BeltRow>()
 
-        suspend fun countKnownLikeSummaryScreen(belt: Belt): Int {
-            val knownIds = mutableSetOf<String>()
+            suspend fun countKnownLikeSummaryScreen(belt: Belt): Int {
+                val knownIds = mutableSetOf<String>()
 
-            suspend fun checkKnown(
-                topicKey: String,
-                topicTitle: String,
-                index: Int,
-                rawItem: String
-            ) {
-                val statusId = identityStatusIdFor(
-                    belt = belt,
-                    topicKey = topicKey,
-                    topicTitle = topicTitle,
-                    index = index,
-                    rawItem = rawItem
-                )
-
-                val legacyStatusId =
-                    "status_${belt.id}_${topicKey}_${index}_${normalizeStatusPart(rawItem)}"
-
-                val topicSnap = vm.getTopicStatusSnapshot(
-                    belt = belt,
-                    topic = topicKey
-                )
-
-                val value =
-                    topicSnap[statusId]
-                        ?: topicSnap[legacyStatusId]
-                        ?: vm.getItemStatusNullable(
-                            belt = belt,
-                            topic = topicKey,
-                            item = statusId
-                        )
-                        ?: vm.getItemStatusNullable(
-                            belt = belt,
-                            topic = topicKey,
-                            item = legacyStatusId
-                        )
-
-                if (value == true) {
-                    knownIds += "$topicKey::$statusId"
-                }
-            }
-
-            val topicTitles: List<String> = il.kmi.app.domain.ContentRepo
-                .listTopicTitles(belt)
-                .map { topicTitle: String -> topicTitle.trim() }
-                .filter { topicTitle: String -> topicTitle.isNotBlank() }
-
-            for (topicTitle: String in topicTitles) {
-                val directItems: List<String> = SharedContentRepo.getAllItemsFor(
-                    belt = belt,
-                    topicTitle = topicTitle,
-                    subTopicTitle = null
-                )
-                    .map { rawItem: String -> rawItem.trim() }
-                    .filter { rawItem: String -> rawItem.isNotBlank() }
-                    .distinct()
-
-                directItems.forEachIndexed { index: Int, rawItem: String ->
-                    checkKnown(
-                        topicKey = topicTitle,
+                suspend fun checkKnown(
+                    topicKey: String,
+                    topicTitle: String,
+                    index: Int,
+                    rawItem: String
+                ) {
+                    val statusId = identityStatusIdFor(
+                        belt = belt,
+                        topicKey = topicKey,
                         topicTitle = topicTitle,
                         index = index,
                         rawItem = rawItem
                     )
+
+                    val legacyStatusId =
+                        "status_${belt.id}_${topicKey}_${index}_${normalizeStatusPart(rawItem)}"
+
+                    val topicSnap = vm.getTopicStatusSnapshot(
+                        belt = belt,
+                        topic = topicKey
+                    )
+
+                    val value =
+                        topicSnap[statusId]
+                            ?: topicSnap[legacyStatusId]
+                            ?: vm.getItemStatusNullable(
+                                belt = belt,
+                                topic = topicKey,
+                                item = statusId
+                            )
+                            ?: vm.getItemStatusNullable(
+                                belt = belt,
+                                topic = topicKey,
+                                item = legacyStatusId
+                            )
+
+                    if (value == true) {
+                        knownIds += "$topicKey::$statusId"
+                    }
                 }
 
-                suspend fun addSubTopicLikeSummary(
-                    subTopic: SharedContentRepo.SubTopic
-                ) {
-                    val cleanSubTopicTitle = subTopic.title.trim()
-                    val statusTopicKey = "${topicTitle}__${cleanSubTopicTitle}"
+                val topicTitles: List<String> = il.kmi.app.domain.ContentRepo
+                    .listTopicTitles(belt)
+                    .map { topicTitle: String -> topicTitle.trim() }
+                    .filter { topicTitle: String -> topicTitle.isNotBlank() }
 
-                    val subItems: List<String> = subTopic.items
+                for (topicTitle: String in topicTitles) {
+                    val directItems: List<String> = SharedContentRepo.getAllItemsFor(
+                        belt = belt,
+                        topicTitle = topicTitle,
+                        subTopicTitle = null
+                    )
                         .map { rawItem: String -> rawItem.trim() }
                         .filter { rawItem: String -> rawItem.isNotBlank() }
                         .distinct()
 
-                    subItems.forEachIndexed { index: Int, rawItem: String ->
+                    directItems.forEachIndexed { index: Int, rawItem: String ->
                         checkKnown(
-                            topicKey = statusTopicKey,
+                            topicKey = topicTitle,
                             topicTitle = topicTitle,
                             index = index,
                             rawItem = rawItem
                         )
                     }
 
-                    subTopic.subTopics.forEach { nestedSubTopic: SharedContentRepo.SubTopic ->
-                        addSubTopicLikeSummary(nestedSubTopic)
+                    suspend fun addSubTopicLikeSummary(
+                        subTopic: SharedContentRepo.SubTopic
+                    ) {
+                        val cleanSubTopicTitle = subTopic.title.trim()
+                        val statusTopicKey = "${topicTitle}__${cleanSubTopicTitle}"
+
+                        val subItems: List<String> = subTopic.items
+                            .map { rawItem: String -> rawItem.trim() }
+                            .filter { rawItem: String -> rawItem.isNotBlank() }
+                            .distinct()
+
+                        subItems.forEachIndexed { index: Int, rawItem: String ->
+                            checkKnown(
+                                topicKey = statusTopicKey,
+                                topicTitle = topicTitle,
+                                index = index,
+                                rawItem = rawItem
+                            )
+                        }
+
+                        subTopic.subTopics.forEach { nestedSubTopic: SharedContentRepo.SubTopic ->
+                            addSubTopicLikeSummary(nestedSubTopic)
+                        }
+                    }
+
+                    val subTopics: List<SharedContentRepo.SubTopic> =
+                        SharedContentRepo.getSubTopicsFor(
+                            belt = belt,
+                            topicTitle = topicTitle
+                        )
+
+                    subTopics.forEach { subTopic: SharedContentRepo.SubTopic ->
+                        addSubTopicLikeSummary(subTopic)
                     }
                 }
 
-                val subTopics: List<SharedContentRepo.SubTopic> =
-                    SharedContentRepo.getSubTopicsFor(
-                        belt = belt,
-                        topicTitle = topicTitle
-                    )
-
-                subTopics.forEach { subTopic: SharedContentRepo.SubTopic ->
-                    addSubTopicLikeSummary(subTopic)
-                }
+                return knownIds.size
             }
 
-            return knownIds.size
-        }
+            for (belt in beltsToShow) {
+                var done = 0
+                var total = 0
 
-        for (belt in beltsToShow) {
-            var done = 0
-            var total = 0
+                val countedStatusIds = mutableSetOf<String>()
 
-            val countedStatusIds = mutableSetOf<String>()
+                val topicTitles: List<String> = il.kmi.app.domain.ContentRepo
+                    .listTopicTitles(belt)
+                    .map { topicTitle: String -> topicTitle.trim() }
+                    .filter { topicTitle: String -> topicTitle.isNotBlank() }
 
-            val topicTitles: List<String> = il.kmi.app.domain.ContentRepo
-                .listTopicTitles(belt)
-                .map { topicTitle: String -> topicTitle.trim() }
-                .filter { topicTitle: String -> topicTitle.isNotBlank() }
+                for (topicTitle in topicTitles) {
+                    val progressRows = mutableListOf<ProgressExerciseRow>()
 
-            for (topicTitle in topicTitles) {
-                val progressRows = mutableListOf<ProgressExerciseRow>()
-
-                val directItems: List<String> = il.kmi.app.domain.ContentRepo.listItemTitles(
-                    belt = belt,
-                    topicTitle = topicTitle,
-                    subTopicTitle = null
-                )
-                    .map { rawItem: String -> rawItem.trim() }
-                    .filter { rawItem: String -> rawItem.isNotBlank() }
-                    .distinct()
-
-                directItems.forEachIndexed { index: Int, rawItem: String ->
-                    progressRows += ProgressExerciseRow(
-                        sourceTopicTitle = topicTitle,
-                        statusTopicKey = topicTitle,
-                        rawItem = rawItem,
-                        indexInStatusGroup = index
-                    )
-                }
-
-                val subTopicTitles: List<String> = il.kmi.app.domain.ContentRepo
-                    .listSubTopicTitles(
-                        belt = belt,
-                        topicTitle = topicTitle
-                    )
-                    .map { subTopicTitle: String -> subTopicTitle.trim() }
-                    .filter { subTopicTitle: String -> subTopicTitle.isNotBlank() }
-
-                for (subTopicTitle in subTopicTitles) {
-                    val subItems: List<String> = il.kmi.app.domain.ContentRepo.listItemTitles(
+                    val directItems: List<String> = il.kmi.app.domain.ContentRepo.listItemTitles(
                         belt = belt,
                         topicTitle = topicTitle,
-                        subTopicTitle = subTopicTitle
+                        subTopicTitle = null
                     )
                         .map { rawItem: String -> rawItem.trim() }
                         .filter { rawItem: String -> rawItem.isNotBlank() }
                         .distinct()
 
-                    subItems.forEachIndexed { index: Int, rawItem: String ->
+                    directItems.forEachIndexed { index: Int, rawItem: String ->
                         progressRows += ProgressExerciseRow(
                             sourceTopicTitle = topicTitle,
-                            statusTopicKey = "${topicTitle}__${subTopicTitle}",
+                            statusTopicKey = topicTitle,
                             rawItem = rawItem,
                             indexInStatusGroup = index
                         )
                     }
-                }
 
-                val uniqueProgressRows: List<ProgressExerciseRow> =
-                    progressRows.distinctBy { row: ProgressExerciseRow ->
-                        row.rawItem
-                            .replace("\u200F", "")
-                            .replace("\u200E", "")
-                            .replace("\u00A0", " ")
-                            .replace(Regex("\\s+"), " ")
-                            .trim()
-                    }
-
-                for (row in uniqueProgressRows) {
-                    val rawItem = row.rawItem
-                    val display = displayName(rawItem)
-
-                    val excluded = spSettings.getStringSet(
-                        "excluded_${belt.id}_${row.statusTopicKey}",
-                        emptySet()
-                    ) ?: emptySet()
-
-                    if (rawItem in excluded || display in excluded) {
-                        continue
-                    }
-
-                    val identityStatusId = identityStatusIdFor(
-                        belt = belt,
-                        topicKey = row.statusTopicKey,
-                        topicTitle = row.sourceTopicTitle,
-                        index = row.indexInStatusGroup,
-                        rawItem = rawItem
-                    )
-
-                    if (!countedStatusIds.add("${row.statusTopicKey}::$identityStatusId")) {
-                        continue
-                    }
-
-                    total++
-
-                    val summaryTopicSnap: Map<String, Boolean?> =
-                        vm.getTopicStatusSnapshot(
+                    val subTopicTitles: List<String> = il.kmi.app.domain.ContentRepo
+                        .listSubTopicTitles(
                             belt = belt,
-                            topic = row.statusTopicKey
+                            topicTitle = topicTitle
+                        )
+                        .map { subTopicTitle: String -> subTopicTitle.trim() }
+                        .filter { subTopicTitle: String -> subTopicTitle.isNotBlank() }
+
+                    for (subTopicTitle in subTopicTitles) {
+                        val subItems: List<String> = il.kmi.app.domain.ContentRepo.listItemTitles(
+                            belt = belt,
+                            topicTitle = topicTitle,
+                            subTopicTitle = subTopicTitle
+                        )
+                            .map { rawItem: String -> rawItem.trim() }
+                            .filter { rawItem: String -> rawItem.isNotBlank() }
+                            .distinct()
+
+                        subItems.forEachIndexed { index: Int, rawItem: String ->
+                            progressRows += ProgressExerciseRow(
+                                sourceTopicTitle = topicTitle,
+                                statusTopicKey = "${topicTitle}__${subTopicTitle}",
+                                rawItem = rawItem,
+                                indexInStatusGroup = index
+                            )
+                        }
+                    }
+
+                    val uniqueProgressRows: List<ProgressExerciseRow> =
+                        progressRows.distinctBy { row: ProgressExerciseRow ->
+                            row.rawItem
+                                .replace("\u200F", "")
+                                .replace("\u200E", "")
+                                .replace("\u00A0", " ")
+                                .replace(Regex("\\s+"), " ")
+                                .trim()
+                        }
+
+                    for (row in uniqueProgressRows) {
+                        val rawItem = row.rawItem
+                        val display = displayName(rawItem)
+
+                        val excluded = spSettings.getStringSet(
+                            "excluded_${belt.id}_${row.statusTopicKey}",
+                            emptySet()
+                        ) ?: emptySet()
+
+                        if (rawItem in excluded || display in excluded) {
+                            continue
+                        }
+
+                        val identityStatusId = identityStatusIdFor(
+                            belt = belt,
+                            topicKey = row.statusTopicKey,
+                            topicTitle = row.sourceTopicTitle,
+                            index = row.indexInStatusGroup,
+                            rawItem = rawItem
                         )
 
-                    val summaryStatusId = identityStatusIdFor(
-                        belt = belt,
-                        topicKey = row.statusTopicKey,
-                        topicTitle = row.sourceTopicTitle,
-                        index = row.indexInStatusGroup,
-                        rawItem = row.rawItem
-                    )
+                        if (!countedStatusIds.add("${row.statusTopicKey}::$identityStatusId")) {
+                            continue
+                        }
 
-                    val summaryLegacyStatusId =
-                        "status_${belt.id}_${row.statusTopicKey}_${row.indexInStatusGroup}_${normalizeStatusPart(row.rawItem)}"
+                        total++
 
-                    var summaryValue: Boolean? =
-                        summaryTopicSnap[summaryStatusId] ?: summaryTopicSnap[summaryLegacyStatusId]
+                        val summaryTopicSnap: Map<String, Boolean?> =
+                            vm.getTopicStatusSnapshot(
+                                belt = belt,
+                                topic = row.statusTopicKey
+                            )
 
-                    if (summaryValue == null) {
-                        summaryValue = vm.getItemStatusNullable(
+                        val summaryStatusId = identityStatusIdFor(
                             belt = belt,
-                            topic = row.statusTopicKey,
-                            item = summaryStatusId
-                        ) ?: vm.getItemStatusNullable(
-                            belt = belt,
-                            topic = row.statusTopicKey,
-                            item = summaryLegacyStatusId
+                            topicKey = row.statusTopicKey,
+                            topicTitle = row.sourceTopicTitle,
+                            index = row.indexInStatusGroup,
+                            rawItem = row.rawItem
                         )
-                    }
 
-                    if (summaryValue == true) {
-                        done++
+                        val summaryLegacyStatusId =
+                            "status_${belt.id}_${row.statusTopicKey}_${row.indexInStatusGroup}_${
+                                normalizeStatusPart(
+                                    row.rawItem
+                                )
+                            }"
+
+                        var summaryValue: Boolean? =
+                            summaryTopicSnap[summaryStatusId]
+                                ?: summaryTopicSnap[summaryLegacyStatusId]
+
+                        if (summaryValue == null) {
+                            summaryValue = vm.getItemStatusNullable(
+                                belt = belt,
+                                topic = row.statusTopicKey,
+                                item = summaryStatusId
+                            ) ?: vm.getItemStatusNullable(
+                                belt = belt,
+                                topic = row.statusTopicKey,
+                                item = summaryLegacyStatusId
+                            )
+                        }
+
+                        if (summaryValue == true) {
+                            done++
+                        }
                     }
                 }
-            }
 
-            // ✅ לא נוגעים ב-total.
-            // את "יודע" מחשבים באותו מנגנון של מסך הסיכום.
-            done = countKnownLikeSummaryScreen(belt).coerceIn(0, total)
+                // ✅ לא נוגעים ב-total.
+                // את "יודע" מחשבים באותו מנגנון של מסך הסיכום.
+                done = countKnownLikeSummaryScreen(belt).coerceIn(0, total)
 
-            val percent = if (total > 0) {
-                ((done * 100f) / total).toInt().coerceIn(0, 100)
-            } else {
-                0
-            }
+                val percent = if (total > 0) {
+                    ((done * 100f) / total).toInt().coerceIn(0, 100)
+                } else {
+                    0
+                }
 
-            rows.add(
-                BeltRow(
-                    belt = belt,
-                    percent = percent,
-                    done = done,
-                    total = total
+                rows.add(
+                    BeltRow(
+                        belt = belt,
+                        percent = percent,
+                        done = done,
+                        total = total
+                    )
                 )
-            )
-        }
+            }
 
             rows
         }
@@ -475,211 +481,253 @@ fun ProgressScreen(
     ) {
         Scaffold(
             topBar = {
-            il.kmi.app.ui.KmiTopBar(
-                title = tr(
-                    "מד התקדמות",
-                    "Progress"
-                ),
-                onBack = null,
-                onHome = onHome,
-                showTopHome = false,
-                showTopShare = true,
-                currentLang =
-                    if (isEnglish) {
-                        "en"
-                    } else {
-                        "he"
-                    },
-                onToggleLanguage = {
-                    val newLanguage =
+                il.kmi.app.ui.KmiTopBar(
+                    title = tr(
+                        "מד התקדמות",
+                        "Progress"
+                    ),
+                    onBack = null,
+                    onHome = onHome,
+                    showTopHome = false,
+                    showTopShare = true,
+                    currentLang =
                         if (isEnglish) {
-                            AppLanguage.HEBREW
+                            "en"
                         } else {
-                            AppLanguage.ENGLISH
-                        }
-
-                    languageManager.setLanguage(
-                        newLanguage
-                    )
-
-                    (context as? Activity)
-                        ?.recreate()
-                },
-                onShare = {
-                    val pdfFile = createProgressPdf(
-                        context = context,
-                        dir = File(
-                            context.cacheDir,
-                            "pdfs"
-                        ).apply {
-                            mkdirs()
+                            "he"
                         },
-                        progress = beltsData.associate { row ->
-                            row.belt to row.percent
-                        },
-                        isEnglish = isEnglish
-                    )
+                    onToggleLanguage = {
+                        val newLanguage =
+                            if (isEnglish) {
+                                AppLanguage.HEBREW
+                            } else {
+                                AppLanguage.ENGLISH
+                            }
 
-                    val uri = FileProvider.getUriForFile(
-                        context,
-                        "${context.packageName}.fileprovider",
-                        pdfFile
-                    )
-
-                    val sendIntent =
-                        Intent(
-                            Intent.ACTION_SEND
-                        ).apply {
-                            type = "application/pdf"
-
-                            putExtra(
-                                Intent.EXTRA_SUBJECT,
-                                tr(
-                                    "מד התקדמות - KAMI",
-                                    "Progress Report - KAMI"
-                                )
-                            )
-
-                            putExtra(
-                                Intent.EXTRA_STREAM,
-                                uri
-                            )
-
-                            addFlags(
-                                Intent.FLAG_GRANT_READ_URI_PERMISSION
-                            )
-                        }
-
-                    context.startActivity(
-                        Intent.createChooser(
-                            sendIntent,
-                            tr(
-                                "שיתוף PDF",
-                                "Share PDF"
-                            )
-                        )
-                    )
-                }
-            )
-                 },
-        bottomBar = {
-            if (onOpenCarousel != null) {
-                Surface(
-                    modifier = Modifier.fillMaxWidth(),
-                    color = Color.Transparent,
-                    shadowElevation = 0.dp
-                ) {
-                    Button(
-                        onClick = onOpenCarousel,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .navigationBarsPadding()
-                            .padding(
-                                horizontal = 18.dp,
-                                vertical = 10.dp
-                            )
-                            .heightIn(min = 52.dp),
-                        shape = RoundedCornerShape(18.dp),
-                        colors =
-                            ButtonDefaults.buttonColors(
-                                containerColor =
-                                    MaterialTheme
-                                        .colorScheme
-                                        .primary,
-                                contentColor =
-                                    MaterialTheme
-                                        .colorScheme
-                                        .onPrimary
-                            )
-                    ) {
-                        Text(
-                            text =
-                                tr(
-                                    "מעבר למסך התרגילים",
-                                    "Go to Exercises"
-                                ),
-                            style =
-                                KmiTypography.action.copy(
-                                    fontWeight =
-                                        FontWeight.ExtraBold
-                                ),
-                            textAlign =
-                                TextAlign.Center,
-                            maxLines = 2
-                        )
-                    }
-                }
-            }
-        },
-        containerColor = Color.Transparent,
-        contentWindowInsets = WindowInsets(0)
-    ) { padding ->
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(padding)
-                .background(
-                    screenBackgroundBrush
-                )
-        ) {
-            if (beltsData.isEmpty()) {
-                Box(
-                    modifier = Modifier.fillMaxSize(),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Column(
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.spacedBy(14.dp)
-                    ) {
-                        KmiLoadingRings(
-                            text =
-                                tr(
-                                    "טוען נתוני התקדמות...",
-                                    "Loading progress..."
-                                )
+                        languageManager.setLanguage(
+                            newLanguage
                         )
 
-                        Text(
-                            text =
-                                tr(
-                                    "מסדר את נתוני החגורות שלך",
-                                    "Preparing your belt data"
-                                ),
-                            style = KmiTypography.secondary.copy(
-                                fontWeight = FontWeight.SemiBold
-                            ),
-                            color =
-                                MaterialTheme
-                                    .colorScheme
-                                    .onSurfaceVariant,
-                            textAlign = TextAlign.Center,
-                            maxLines = 2
-                        )
-                    }
-                }
-            } else {
-                LazyColumn(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(14.dp),
-                    horizontalAlignment = Alignment.End
-                ) {
-                    items(beltsData) { row ->
-                        ProgressCard(
-                            belt = row.belt,
-                            percent = row.percent,
-                            done = row.done,
-                            total = row.total,
+                        (context as? Activity)
+                            ?.recreate()
+                    },
+                    onShare = {
+                        val pdfFile = createProgressPdf(
+                            context = context,
+                            dir = File(
+                                context.cacheDir,
+                                "pdfs"
+                            ).apply {
+                                mkdirs()
+                            },
+                            progress = beltsData.associate { row ->
+                                row.belt to row.percent
+                            },
                             isEnglish = isEnglish
                         )
+
+                        val uri = FileProvider.getUriForFile(
+                            context,
+                            "${context.packageName}.fileprovider",
+                            pdfFile
+                        )
+
+                        val sendIntent =
+                            Intent(
+                                Intent.ACTION_SEND
+                            ).apply {
+                                type = "application/pdf"
+
+                                putExtra(
+                                    Intent.EXTRA_SUBJECT,
+                                    tr(
+                                        "מד התקדמות - KAMI",
+                                        "Progress Report - KAMI"
+                                    )
+                                )
+
+                                putExtra(
+                                    Intent.EXTRA_STREAM,
+                                    uri
+                                )
+
+                                addFlags(
+                                    Intent.FLAG_GRANT_READ_URI_PERMISSION
+                                )
+                            }
+
+                        context.startActivity(
+                            Intent.createChooser(
+                                sendIntent,
+                                tr(
+                                    "שיתוף PDF",
+                                    "Share PDF"
+                                )
+                            )
+                        )
+                    }
+                )
+            },
+            bottomBar = {
+                if (onOpenCarousel != null) {
+                    Surface(
+                        modifier = Modifier.fillMaxWidth(),
+                        color = Color.Transparent,
+                        shadowElevation = 0.dp
+                    ) {
+                        Button(
+                            onClick = onOpenCarousel,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .navigationBarsPadding()
+                                .padding(
+                                    horizontal = 18.dp,
+                                    vertical = 10.dp
+                                )
+                                .heightIn(min = 52.dp),
+                            shape = RoundedCornerShape(18.dp),
+                            colors =
+                                ButtonDefaults.buttonColors(
+                                    containerColor =
+                                        MaterialTheme
+                                            .colorScheme
+                                            .primary,
+                                    contentColor =
+                                        MaterialTheme
+                                            .colorScheme
+                                            .onPrimary
+                                )
+                        ) {
+                            Text(
+                                text =
+                                    tr(
+                                        "מעבר למסך התרגילים",
+                                        "Go to Exercises"
+                                    ),
+                                style =
+                                    KmiTypography.action.copy(
+                                        fontWeight =
+                                            FontWeight.ExtraBold
+                                    ),
+                                textAlign =
+                                    TextAlign.Center,
+                                maxLines = 2
+                            )
+                        }
+                    }
+                }
+            },
+            containerColor = Color.Transparent,
+            contentWindowInsets = WindowInsets(0)
+        ) { padding ->
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(padding)
+                    .background(
+                        screenBackgroundBrush
+                    )
+            ) {
+
+                // =====================================================
+                // תת־כותרת כחולה קבועה
+                // =====================================================
+
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(54.dp)
+                        .background(
+                            brush = kmiSectionHeaderBrush()
+                        ),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = tr(
+                            "ההישגים שלי לפי חגורות",
+                            "My Achievements by Belt"
+                        ),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 20.dp),
+                        style = KmiTypography.sectionTitle.copy(
+                            fontWeight = FontWeight.ExtraBold
+                        ),
+                        color = Color.White,
+                        textAlign = TextAlign.Center,
+                        maxLines = 1
+                    )
+                }
+
+                // =====================================================
+                // תוכן המסך
+                // רק האזור הזה משתנה / נגלל
+                // =====================================================
+
+                Box(
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxWidth()
+                ) {
+                    if (beltsData.isEmpty()) {
+                        Box(
+                            modifier = Modifier.fillMaxSize(),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Column(
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                verticalArrangement = Arrangement.spacedBy(14.dp)
+                            ) {
+                                KmiLoadingRings(
+                                    text =
+                                        tr(
+                                            "טוען נתוני התקדמות...",
+                                            "Loading progress..."
+                                        )
+                                )
+
+                                Text(
+                                    text =
+                                        tr(
+                                            "מסדר את נתוני החגורות שלך",
+                                            "Preparing your belt data"
+                                        ),
+                                    style = KmiTypography.secondary.copy(
+                                        fontWeight = FontWeight.SemiBold
+                                    ),
+                                    color =
+                                        MaterialTheme
+                                            .colorScheme
+                                            .onSurfaceVariant,
+                                    textAlign = TextAlign.Center,
+                                    maxLines = 2
+                                )
+                            }
+                        }
+                    } else {
+                        LazyColumn(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .padding(16.dp),
+                            verticalArrangement =
+                                Arrangement.spacedBy(14.dp),
+                            horizontalAlignment = Alignment.End
+                        ) {
+                            items(beltsData) { row ->
+                                ProgressCard(
+                                    belt = row.belt,
+                                    percent = row.percent,
+                                    done = row.done,
+                                    total = row.total,
+                                    isEnglish = isEnglish
+                                )
+                            }
+                        }
                     }
                 }
             }
         }
-        }
     }
-
 }
 
 @Composable

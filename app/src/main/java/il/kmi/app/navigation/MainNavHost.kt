@@ -1617,13 +1617,36 @@ fun MainNavHost(
 
             // ----- לוח אימונים חודשי -----
             composable(route = Route.MonthlyCalendar.route) {
+
+                val requestedMode =
+                    nav.previousBackStackEntry
+                        ?.savedStateHandle
+                        ?.get<String>(
+                            "monthly_calendar_mode"
+                        )
+
+                val calendarMode =
+                    if (
+                        requestedMode ==
+                        "summary_date_picker"
+                    ) {
+                        il.kmi.app.screens.MonthlyCalendarMode.SUMMARY_DATE_PICKER
+                    } else {
+                        il.kmi.app.screens.MonthlyCalendarMode.VIEW_ONLY
+                    }
+
                 il.kmi.app.screens.MonthlyCalendarScreen(
                     kmiPrefs = kmiPrefs,
 
-                    // לוח השנה הראשי הוא מצב צפייה בלבד:
-                    // לחיצה על יום מעדכנת את האימונים / החגים המוצגים,
-                    // אך אינה פותחת את מסך הסיכום.
-                    mode = il.kmi.app.screens.MonthlyCalendarMode.VIEW_ONLY,
+                    /*
+                     * לוח רגיל:
+                     * VIEW_ONLY — לחיצה על יום רק מציגה את פרטי היום.
+                     *
+                     * לוח שנפתח מתוך מסך הסיכום:
+                     * SUMMARY_DATE_PICKER — לחיצה על יום בוחרת את
+                     * התאריך וממשיכה למסך הסיכום.
+                     */
+                    mode = calendarMode,
 
                     onBack = {
                         nav.popBackStack()

@@ -67,6 +67,7 @@ import androidx.compose.material.icons.filled.Security
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.graphics.vector.ImageVector
 import il.kmi.app.subscription.KmiAccess
 import il.kmi.app.subscription.AccessMode
@@ -986,10 +987,7 @@ fun BeltQuestionsByTopicScreen(
                 modifier = Modifier
                     .fillMaxWidth()
                     .fillMaxHeight()
-                    .padding(
-                        horizontal = 8.dp,
-                        vertical = 8.dp
-                    ),
+                    .padding(bottom = 8.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 TopicQuestionsModeSwitcher(
@@ -999,7 +997,9 @@ fun BeltQuestionsByTopicScreen(
                 Spacer(Modifier.height(4.dp))
 
                 TopicsBySubjectCard(
-                    modifier = Modifier.weight(1f),
+                    modifier = Modifier
+                        .weight(1f)
+                        .padding(horizontal = 8.dp),
                     currentBelt = effectiveBelt,
                     accessMode = accessMode,
                     hasAccess = hasAccess,
@@ -1087,7 +1087,7 @@ private fun TopicQuestionsModeSwitcher(
 
     Surface(
         modifier = Modifier
-            .fillMaxWidth(0.88f)
+            .fillMaxWidth()
             .padding(bottom = 6.dp),
         color = Color.Transparent,
         shadowElevation = 0.dp,
@@ -1096,15 +1096,14 @@ private fun TopicQuestionsModeSwitcher(
             width = 1.dp,
             color = Color.White.copy(alpha = 0.34f)
         ),
-        shape = RoundedCornerShape(18.dp)
+        shape = RectangleShape
     ) {
         Box(
             modifier = Modifier
                 .fillMaxWidth()
                 .heightIn(min = 48.dp)
                 .background(
-                    brush = kmiSectionHeaderBrush(),
-                    shape = RoundedCornerShape(18.dp)
+                    brush = kmiSectionHeaderBrush()
                 )
         ) {
             Box(
@@ -1128,9 +1127,19 @@ private fun TopicQuestionsModeSwitcher(
                     divider = {},
                     indicator = { positions ->
                         TabRowDefaults.SecondaryIndicator(
-                            modifier =
-                                Modifier.tabIndicatorOffset(
+                            modifier = Modifier
+                                .tabIndicatorOffset(
                                     positions[selectedIndex]
+                                )
+                                .padding(horizontal = 58.dp)
+                                .offset(
+                                    x =
+                                        if (selectedIndex == 0) {
+                                            19.dp
+                                        } else {
+                                            (-19).dp
+                                        },
+                                    y = (-4).dp
                                 ),
                             height = 3.dp,
                             color = Color.White
@@ -1173,7 +1182,13 @@ private fun TopicQuestionsModeSwitcher(
                                     style = KmiTypography.action,
                                     textAlign = TextAlign.Center,
                                     maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis
+                                    overflow = TextOverflow.Ellipsis,
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(
+                                            start = if (mode == tabs.first()) 38.dp else 0.dp,
+                                            end = if (mode == tabs.last()) 38.dp else 0.dp
+                                        )
                                 )
                             },
                             selectedContentColor = Color.White,

@@ -55,6 +55,7 @@ import androidx.compose.ui.unit.dp
 import il.kmi.app.R
 import il.kmi.app.ui.KmiTopBar
 import il.kmi.app.ui.KmiTypography
+import il.yuval.ui.theme.kmiSectionHeaderBrush
 
 @Composable
 fun OnboardingScreen(
@@ -155,7 +156,7 @@ fun OnboardingScreen(
                 )
             }
         ) { padding ->
-            Box(
+            Column(
                 modifier = Modifier
                     .fillMaxSize()
                     .background(
@@ -165,16 +166,20 @@ fun OnboardingScreen(
                     )
                     .padding(padding)
             ) {
-                Column(
+
+                // =====================================================
+                // תת־כותרת כחולה קבועה
+                // =====================================================
+
+                Box(
                     modifier = Modifier
-                        .fillMaxSize()
-                        .padding(
-                            horizontal = 22.dp,
-                            vertical = 8.dp
-                        ),
-                    horizontalAlignment = Alignment.CenterHorizontally
+                        .fillMaxWidth()
+                        .height(58.dp)
+                        .background(
+                            brush = kmiSectionHeaderBrush()
+                        )
                 ) {
-                    OnboardingNavigationHeader(
+                    OnboardingFixedProgressHeader(
                         currentStepIndex = currentStepIndex,
                         stepsCount = steps.size,
                         accentColor = currentStep.accentColor,
@@ -182,39 +187,190 @@ fun OnboardingScreen(
                         allowSkip = allowSkip,
                         onSkip = onSkip
                     )
+                }
 
-                    Spacer(Modifier.height(4.dp))
+                // =====================================================
+                // תוכן ההדרכה
+                // =====================================================
 
-                    AnimatedContent(
-                        targetState = currentStepIndex,
-                        transitionSpec = {
-                            if (targetState > initialState) {
-                                slideIntoContainer(
-                                    towards = AnimatedContentTransitionScope.SlideDirection.Start
-                                ) + fadeIn() togetherWith
-                                        slideOutOfContainer(
-                                            towards = AnimatedContentTransitionScope.SlideDirection.Start
-                                        ) + fadeOut()
-                            } else {
-                                slideIntoContainer(
-                                    towards = AnimatedContentTransitionScope.SlideDirection.End
-                                ) + fadeIn() togetherWith
-                                        slideOutOfContainer(
-                                            towards = AnimatedContentTransitionScope.SlideDirection.End
-                                        ) + fadeOut()
-                            }
-                        },
-                        label = "onboardingStepTransition"
-                    ) { stepIndex ->
-                        val step = steps[stepIndex]
+                Box(
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxWidth()
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(
+                                horizontal = 22.dp,
+                                vertical = 8.dp
+                            ),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
 
-                        OnboardingStepCard(
-                            step = step,
-                            isEnglish = isEnglish
-                        )
+                        AnimatedContent(
+                            targetState = currentStepIndex,
+                            transitionSpec = {
+                                if (targetState > initialState) {
+                                    slideIntoContainer(
+                                        towards = AnimatedContentTransitionScope.SlideDirection.Start
+                                    ) + fadeIn() togetherWith
+                                            slideOutOfContainer(
+                                                towards = AnimatedContentTransitionScope.SlideDirection.Start
+                                            ) + fadeOut()
+                                } else {
+                                    slideIntoContainer(
+                                        towards = AnimatedContentTransitionScope.SlideDirection.End
+                                    ) + fadeIn() togetherWith
+                                            slideOutOfContainer(
+                                                towards = AnimatedContentTransitionScope.SlideDirection.End
+                                            ) + fadeOut()
+                                }
+                            },
+                            label = "onboardingStepTransition"
+                        ) { stepIndex ->
+                            val step = steps[stepIndex]
+
+                            OnboardingStepCard(
+                                step = step,
+                                isEnglish = isEnglish
+                            )
+                        }
                     }
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun OnboardingFixedProgressHeader(
+    currentStepIndex: Int,
+    stepsCount: Int,
+    accentColor: Color,
+    isEnglish: Boolean,
+    allowSkip: Boolean,
+    onSkip: () -> Unit
+) {
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(
+                horizontal = 14.dp,
+                vertical = 4.dp
+            )
+    ) {
+
+        // =====================================================
+        // דלג
+        // =====================================================
+
+        if (allowSkip) {
+            TextButton(
+                onClick = onSkip,
+                modifier = Modifier
+                    .align(
+                        if (isEnglish) {
+                            Alignment.CenterEnd
+                        } else {
+                            Alignment.CenterStart
+                        }
+                    )
+                    .heightIn(min = 36.dp),
+                contentPadding =
+                    androidx.compose.foundation.layout.PaddingValues(
+                        horizontal = 8.dp,
+                        vertical = 0.dp
+                    )
+            ) {
+                Text(
+                    text =
+                        if (isEnglish) {
+                            "Skip"
+                        } else {
+                            "דלג"
+                        },
+                    color = Color.White,
+                    style =
+                        KmiTypography.action.copy(
+                            fontWeight = FontWeight.ExtraBold
+                        ),
+                    maxLines = 1
+                )
+            }
+        }
+
+        // =====================================================
+        // התקדמות בשלבים
+        // =====================================================
+
+        Column(
+            modifier = Modifier.align(Alignment.Center),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(3.dp)
+        ) {
+
+            Row(
+                horizontalArrangement = Arrangement.Center,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                repeat(stepsCount) { index ->
+                    val isSelected =
+                        index == currentStepIndex
+
+                    val isCompleted =
+                        index < currentStepIndex
+
+                    Box(
+                        modifier = Modifier
+                            .padding(horizontal = 2.5.dp)
+                            .then(
+                                if (isSelected) {
+                                    Modifier
+                                        .width(28.dp)
+                                        .height(7.dp)
+                                } else {
+                                    Modifier.size(7.dp)
+                                }
+                            )
+                            .clip(CircleShape)
+                            .background(
+                                when {
+                                    isSelected ->
+                                        accentColor
+
+                                    isCompleted ->
+                                        Color.White.copy(
+                                            alpha = 0.75f
+                                        )
+
+                                    else ->
+                                        Color.White.copy(
+                                            alpha = 0.45f
+                                        )
+                                }
+                            )
+                    )
+                }
+            }
+
+            Text(
+                text =
+                    if (isEnglish) {
+                        "Step ${currentStepIndex + 1} of $stepsCount"
+                    } else {
+                        "שלב ${currentStepIndex + 1} מתוך $stepsCount"
+                    },
+                color = Color.White.copy(
+                    alpha = 0.90f
+                ),
+                style =
+                    KmiTypography.caption.copy(
+                        fontWeight = FontWeight.Bold
+                    ),
+                textAlign = TextAlign.Center,
+                maxLines = 1
+            )
         }
     }
 }

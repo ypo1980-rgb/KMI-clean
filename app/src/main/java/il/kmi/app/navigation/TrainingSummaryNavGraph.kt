@@ -97,6 +97,13 @@ fun NavGraphBuilder.trainingSummaryNavGraph(
                 }
             },
             onOpenCalendar = {
+                nav.currentBackStackEntry
+                    ?.savedStateHandle
+                    ?.set(
+                        "monthly_calendar_mode",
+                        "summary_date_picker"
+                    )
+
                 nav.navigate(Route.MonthlyCalendar.route) {
                     launchSingleTop = true
                 }

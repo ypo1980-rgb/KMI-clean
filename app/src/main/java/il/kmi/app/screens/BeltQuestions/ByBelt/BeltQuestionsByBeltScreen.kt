@@ -85,6 +85,7 @@ import android.widget.Toast
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalDensity
@@ -1593,11 +1594,7 @@ internal fun BeltPangoLayout(
                 Column(
                     modifier = Modifier
                         .align(Alignment.TopCenter)
-                        .fillMaxWidth()
-                        .padding(
-                            horizontal = 14.dp,
-                            vertical = 8.dp
-                        ),
+                        .fillMaxWidth(),
                     horizontalAlignment =
                         Alignment.CenterHorizontally
                 ) {
@@ -1612,17 +1609,23 @@ internal fun BeltPangoLayout(
 
                     Spacer(Modifier.height(4.dp))
 
-                    TopicsCardForBelt(
-                        belt = currentBelt,
-                        lang = langManager.getCurrentLanguage(),
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 14.dp)
+                    ) {
+                        TopicsCardForBelt(
+                            belt = currentBelt,
+                            lang = langManager.getCurrentLanguage(),
                         accessMode = accessMode,
                         onOpenSubscription = onOpenSubscription,
                         onOpenTopic = onOpenTopic,
                         onOpenSubTopic = onOpenSubTopic,
                         onOpenDefenseMenu = onOpenDefenseMenu,
-                        haptic = haptic,
-                        clickSound = clickSound
-                    )
+                            haptic = haptic,
+                            clickSound = clickSound
+                        )
+                    }
                 }
 
                 Box(
@@ -1738,7 +1741,7 @@ private fun BeltQuestionsModeSwitcher(
 
     Surface(
         modifier = Modifier
-            .fillMaxWidth(0.88f)
+            .fillMaxWidth()
             .padding(bottom = 6.dp),
         color = Color.Transparent,
         contentColor = Color.White,
@@ -1751,15 +1754,14 @@ private fun BeltQuestionsModeSwitcher(
                     alpha = 0.34f
                 )
         ),
-        shape = RoundedCornerShape(18.dp)
+        shape = RectangleShape
     ) {
         Box(
             modifier = Modifier
                 .fillMaxWidth()
                 .heightIn(min = 48.dp)
                 .background(
-                    brush = kmiSectionHeaderBrush(),
-                    shape = RoundedCornerShape(18.dp)
+                    brush = kmiSectionHeaderBrush()
                 )
         ) {
             Box(
@@ -1786,9 +1788,19 @@ private fun BeltQuestionsModeSwitcher(
                     divider = {},
                     indicator = { positions ->
                         TabRowDefaults.SecondaryIndicator(
-                            modifier =
-                                Modifier.tabIndicatorOffset(
+                            modifier = Modifier
+                                .tabIndicatorOffset(
                                     positions[selectedIndex]
+                                )
+                                .padding(horizontal = 58.dp)
+                                .offset(
+                                    x =
+                                        if (selectedIndex == 0) {
+                                            19.dp
+                                        } else {
+                                            (-19).dp
+                                        },
+                                    y = (-4).dp
                                 ),
                             height = 3.dp,
                             color = Color.White
@@ -1815,11 +1827,26 @@ private fun BeltQuestionsModeSwitcher(
                                     style = KmiTypography.action,
                                     textAlign = TextAlign.Center,
                                     maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis
+                                    overflow = TextOverflow.Ellipsis,
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(
+                                            start =
+                                                if (mode == BeltQuestionsDisplayMode.BY_TOPIC) {
+                                                    38.dp
+                                                } else {
+                                                    0.dp
+                                                },
+                                            end =
+                                                if (mode == BeltQuestionsDisplayMode.BY_BELT) {
+                                                    38.dp
+                                                } else {
+                                                    0.dp
+                                                }
+                                        )
                                 )
                             },
-                            selectedContentColor =
-                                Color.White,
+                            selectedContentColor = Color.White,
                             unselectedContentColor =
                                 Color.White.copy(
                                     alpha = 0.82f
