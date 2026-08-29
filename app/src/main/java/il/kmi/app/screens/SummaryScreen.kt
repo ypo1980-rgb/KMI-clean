@@ -41,6 +41,7 @@ import il.kmi.app.ui.color
 import il.kmi.app.ui.KmiTypography
 import il.kmi.app.ui.LocalAppIconScale
 import il.kmi.app.ui.loading.KmiLoadingRings
+import il.yuval.ui.theme.kmiScreenBackgroundBrush
 import il.kmi.shared.domain.Belt
 import il.kmi.shared.questions.model.util.ExerciseTitleFormatter
 import java.io.File
@@ -1544,14 +1545,6 @@ fun SummaryScreen(
   */
     val summaryColors = MaterialTheme.colorScheme
 
-    // אותו רקע מדורג שבו משתמשים המסכים הראשיים באפליקציה.
-    val summaryBackgroundColors = listOf(
-        summaryColors.background,
-        summaryColors.surfaceVariant,
-        summaryColors.primaryContainer,
-        summaryColors.background
-    )
-
     val summaryCardColor =
         summaryColors.surface
 
@@ -2549,7 +2542,7 @@ fun SummaryScreen(
                     .fillMaxWidth()
                     .navigationBarsPadding()
                     .padding(
-                        horizontal = 16.dp,
+                        horizontal = 14.dp,
                         vertical = 8.dp
                     ),
                 contentAlignment = Alignment.Center
@@ -2557,64 +2550,34 @@ fun SummaryScreen(
                 Surface(
                     onClick = onBack,
                     modifier = Modifier
-                        .fillMaxWidth(0.90f)
-                        .heightIn(min = 48.dp),
-                    shape = RoundedCornerShape(16.dp),
-                    color = Color.Transparent,
-                    tonalElevation = 0.dp,
-                    shadowElevation = 0.dp,
+                        .fillMaxWidth()
+                        .height(66.dp),
+                    shape = RoundedCornerShape(22.dp),
+                    color = Color(0xFF1B2A3A),
                     border = BorderStroke(
                         width = 1.dp,
-                        color = Color.White.copy(alpha = 0.42f)
-                    )
+                        color = Color(0xFF43D9F5)
+                    ),
+                    tonalElevation = 0.dp,
+                    shadowElevation = 0.dp
                 ) {
                     Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .background(
-                                brush = Brush.horizontalGradient(
-                                    colors = listOf(
-                                        Color(0xFF7F00FF),
-                                        Color(0xFF3F51B5),
-                                        Color(0xFF03A9F4)
-                                    )
-                                )
-                            )
-                            .padding(
-                                horizontal = 18.dp,
-                                vertical = 12.dp
-                            ),
+                        modifier = Modifier.fillMaxSize(),
                         contentAlignment = Alignment.Center
                     ) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.Center
-                        ) {
-                            Icon(
-                                imageVector = Icons.Filled.Star,
-                                contentDescription = null,
-                                tint = Color.White,
-                                modifier = Modifier.size(
-                                    16.dp * LocalAppIconScale.current
-                                )
-                            )
-
-                            Spacer(Modifier.width(8.dp))
-
-                            Text(
-                                text = tr(
-                                    "חזרה למסך הנושאים",
-                                    "Back to topics screen"
-                                ),
-                                style = KmiTypography.action.copy(
+                        Text(
+                            text = tr(
+                                "חזרה למסך הנושאים",
+                                "Back to topics screen"
+                            ),
+                            style =
+                                KmiTypography.sectionTitle.copy(
                                     fontWeight = FontWeight.ExtraBold
                                 ),
-                                color = Color.White,
-                                textAlign = TextAlign.Center,
-                                maxLines = 2
-                            )
-                        }
+                            color = Color(0xFFD8E5F0),
+                            textAlign = TextAlign.Center,
+                            maxLines = 1
+                        )
                     }
                 }
             }
@@ -2627,9 +2590,7 @@ fun SummaryScreen(
                     .fillMaxSize()
                     .padding(innerPadding)
                     .background(
-                        Brush.verticalGradient(
-                            colors = summaryBackgroundColors
-                        )
+                        brush = kmiScreenBackgroundBrush()
                     ),
                 contentAlignment = Alignment.Center
             ) {
@@ -2796,9 +2757,7 @@ fun SummaryScreen(
                 .fillMaxSize()
                 .padding(innerPadding)
                 .background(
-                    Brush.verticalGradient(
-                        colors = summaryBackgroundColors
-                    )
+                    brush = kmiScreenBackgroundBrush()
                 ),
             color = Color.Transparent,
             contentColor = summaryPrimaryText

@@ -73,6 +73,7 @@ import il.kmi.app.privacy.TraineeDisplayNameMapper
 import il.kmi.app.screens.registration.CoachBranchAssignmentsCodec
 import il.kmi.app.ui.KmiPremiumDropdown
 import il.kmi.app.ui.KmiTypography
+import il.yuval.ui.theme.kmiSectionHeaderBrush
 
 //======================================================================
 
@@ -2282,6 +2283,7 @@ fun CoachBroadcastScreen(
                         "שידור הודעה לקבוצה",
                         "Broadcast Message"
                     ),
+                    titleScale = 0.95f,
                     onBack = onBack,
                     onHome = onHome,
                     onOpenDrawer = {
@@ -2338,24 +2340,63 @@ fun CoachBroadcastScreen(
         snackbarHost = { SnackbarHost(snackbarHostState) },
         containerColor = Color.Transparent,
         contentWindowInsets = WindowInsets(left = 0)
-    ) { pad ->
-        Box(
-            modifier = Modifier
-                .padding(pad)
-                .fillMaxSize()
-                .background(gradientBackground)
-                .imePadding()
-                .navigationBarsPadding()
-        ) {
+        ) { pad ->
             Column(
                 modifier = Modifier
+                    .padding(pad)
                     .fillMaxSize()
-                    .verticalScroll(rememberScrollState())
-                    .padding(16.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
+                    .background(gradientBackground)
+                    .imePadding()
+                    .navigationBarsPadding()
             ) {
 
-                Surface(
+                // =====================================================
+                // תת־כותרת קבועה — זהה לשאר המסכים
+                // =====================================================
+
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(54.dp)
+                        .background(
+                            brush = kmiSectionHeaderBrush()
+                        ),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = coachBroadcastTr(
+                            isEnglish,
+                            "פרטי ההודעה",
+                            "Message details"
+                        ),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 20.dp),
+                        style = KmiTypography.sectionTitle.copy(
+                            fontWeight =
+                                androidx.compose.ui.text.font.FontWeight.ExtraBold
+                        ),
+                        color = Color.White,
+                        textAlign = TextAlign.Center,
+                        maxLines = 1
+                    )
+                }
+
+                // =====================================================
+                // רק התוכן שמתחת נגלל
+                // =====================================================
+
+                Column(
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxWidth()
+                        .verticalScroll(rememberScrollState())
+                        .padding(16.dp),
+                    verticalArrangement =
+                        Arrangement.spacedBy(12.dp)
+                ) {
+
+                    Surface(
                     modifier = Modifier.fillMaxWidth(),
                     shape = androidx.compose.foundation.shape.RoundedCornerShape(22.dp),
                     color = cardContainerColor,

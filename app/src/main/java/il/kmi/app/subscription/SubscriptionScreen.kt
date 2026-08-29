@@ -80,6 +80,7 @@ import androidx.compose.ui.graphics.luminance
 import il.kmi.app.ui.KmiIconSize
 import il.kmi.app.ui.KmiTypography
 import il.kmi.app.ui.scaledIconSize
+import il.yuval.ui.theme.kmiScreenBackgroundBrush
 import il.kmi.shared.domain.Explanations
 
 
@@ -167,156 +168,94 @@ private fun PremiumSubscriptionButton(
     text: String,
     onClick: () -> Unit
 ) {
-    val glow = rememberInfiniteTransition(label = "premium_cta_glow")
-    val bubbleOffset = glow.animateFloat(
+    val glow =
+        rememberInfiniteTransition(
+            label = "premium_cta_glow"
+        )
+
+    val bubbleOffset by glow.animateFloat(
         initialValue = -140f,
         targetValue = 320f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(durationMillis = 2600),
-            repeatMode = RepeatMode.Restart
-        ),
+        animationSpec =
+            infiniteRepeatable(
+                animation =
+                    tween(
+                        durationMillis = 2600
+                    ),
+                repeatMode = RepeatMode.Restart
+            ),
         label = "premium_cta_bubble"
     )
 
-    Box(
+    Card(
+        onClick = onClick,
         modifier = Modifier
             .fillMaxWidth()
-            .padding(top = 2.dp, bottom = 2.dp)
+            .height(66.dp),
+        shape = RoundedCornerShape(22.dp),
+        border = BorderStroke(
+            width = 1.dp,
+            color = Color(0xFF43D9F5)
+        ),
+        colors = CardDefaults.cardColors(
+            containerColor = Color.Transparent
+        ),
+        elevation = CardDefaults.cardElevation(
+            defaultElevation = 0.dp
+        )
     ) {
         Box(
             modifier = Modifier
-                .matchParentSize()
-                .padding(horizontal = 10.dp, vertical = 6.dp)
+                .fillMaxSize()
+                .clip(
+                    RoundedCornerShape(22.dp)
+                )
                 .background(
-                    Brush.radialGradient(
-                        colors = listOf(
-                            Color(0xFFB794F6).copy(alpha = 0.38f),
-                            Color(0xFF8B5CF6).copy(alpha = 0.18f),
-                            Color.Transparent
-                        )
-                    ),
-                    shape = RoundedCornerShape(34.dp)
+                    Color(0xFF1B2A3A)
                 )
-        )
-
-        Card(
-            onClick = onClick,
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(78.dp)
-                .shadow(
-                    elevation = 10.dp,
-                    shape = RoundedCornerShape(34.dp),
-                    clip = false
-                ),
-            shape = RoundedCornerShape(34.dp),
-            border = BorderStroke(
-                width = 1.5.dp,
-                brush = Brush.horizontalGradient(
-                    listOf(
-                        Color.White.copy(alpha = 0.55f),
-                        Color(0xFFD8B4FE).copy(alpha = 0.85f),
-                        Color.White.copy(alpha = 0.35f)
-                    )
-                )
-            ),
-            colors = CardDefaults.cardColors(
-                containerColor = Color.Transparent
-            )
         ) {
+
+            // אנימציית האור שנעה לרוחב הכפתור
             Box(
                 modifier = Modifier
-                    .fillMaxSize()
+                    .offset(
+                        x = bubbleOffset.dp
+                    )
+                    .width(110.dp)
+                    .fillMaxHeight()
                     .background(
-                        Brush.horizontalGradient(
-                            colors = listOf(
-                                Color(0xFF7C3AED),
-                                Color(0xFF6D28D9),
-                                Color(0xFF5B21B6)
+                        brush =
+                            Brush.radialGradient(
+                                colors =
+                                    listOf(
+                                        Color.White.copy(
+                                            alpha = 0.26f
+                                        ),
+                                        Color(0xFF43D9F5)
+                                            .copy(
+                                                alpha = 0.12f
+                                            ),
+                                        Color.Transparent
+                                    )
                             )
-                        )
                     )
-                    .clip(RoundedCornerShape(34.dp))
+            )
+
+            Box(
+                modifier = Modifier.fillMaxSize(),
+                contentAlignment = Alignment.Center
             ) {
-                Box(
-                    modifier = Modifier
-                        .matchParentSize()
-                        .background(
-                            Brush.radialGradient(
-                                colors = listOf(
-                                    Color.White.copy(alpha = 0.22f),
-                                    Color.Transparent
-                                ),
-                                radius = 520f
-                            )
-                        )
+                Text(
+                    text = text,
+                    style =
+                        KmiTypography.sectionTitle.copy(
+                            fontWeight =
+                                FontWeight.ExtraBold
+                        ),
+                    color = Color(0xFFD8E5F0),
+                    textAlign = TextAlign.Center,
+                    maxLines = 1
                 )
-
-                Box(
-                    modifier = Modifier
-                        .offset(x = bubbleOffset.value.dp)
-                        .padding(vertical = 6.dp)
-                        .width(120.dp)
-                        .fillMaxHeight()
-                        .background(
-                            Brush.radialGradient(
-                                colors = listOf(
-                                    Color.White.copy(alpha = 0.32f),
-                                    Color.Transparent
-                                )
-                            ),
-                            shape = CircleShape
-                        )
-                )
-
-                Row(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(horizontal = 18.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .size(scaledIconSize(34.dp))
-                            .background(
-                                Color.White.copy(alpha = 0.14f),
-                                shape = CircleShape
-                            ),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text(
-                            text = "👑",
-                            style = KmiTypography.sectionTitle
-                        )
-                    }
-
-                    Text(
-                        text = text,
-                        style = KmiTypography.sectionTitle,
-                        fontWeight = FontWeight.ExtraBold,
-                        color = Color.White,
-                        textAlign = TextAlign.Center,
-                        modifier = Modifier.weight(1f)
-                    )
-
-                    Box(
-                        modifier = Modifier
-                            .size(scaledIconSize(34.dp))
-                            .background(
-                                Color.White.copy(alpha = 0.12f),
-                                shape = CircleShape
-                            ),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(
-                            imageVector = Icons.Filled.ChevronLeft,
-                            contentDescription = null,
-                            tint = Color.White,
-                            modifier = Modifier.size(KmiIconSize.medium)
-                        )
-                    }
-                }
             }
         }
     }
@@ -427,21 +366,6 @@ fun SubscriptionScreen(
     val isDarkMode =
         MaterialTheme.colorScheme.background
             .luminance() < 0.5f
-
-    val screenGradientColors =
-        if (isDarkMode) {
-            listOf(
-                Color(0xFF090D18),
-                Color(0xFF101827),
-                Color(0xFF13263A)
-            )
-        } else {
-            listOf(
-                Color(0xFFF7F2FF),
-                Color(0xFFF2F7FF),
-                Color(0xFFFFFBFE)
-            )
-        }
 
     val mainCardColor =
         if (isDarkMode) {
@@ -635,9 +559,7 @@ fun SubscriptionScreen(
                 .fillMaxSize()
                 .padding(padding)
                 .background(
-                    brush = Brush.verticalGradient(
-                        colors = screenGradientColors
-                    )
+                    brush = kmiScreenBackgroundBrush()
                 )
         ) {
             Column(

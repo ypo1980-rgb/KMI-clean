@@ -235,6 +235,7 @@ fun KmiTopBar(
     showTopShare: Boolean = false,
 
     titleMaxLines: Int = 1,
+    titleScale: Float = 1f,
 
     isInsideAssistant: Boolean = false,
     onOpenAi: (() -> Unit)? = null,
@@ -973,7 +974,14 @@ fun KmiTopBar(
         ) {
             Text(
                 text = title,
-                style = KmiTypography.screenTitle,
+                style = KmiTypography.screenTitle.copy(
+                    fontSize =
+                        KmiTypography.screenTitle.fontSize *
+                                titleScale,
+                    lineHeight =
+                        KmiTypography.screenTitle.lineHeight *
+                                titleScale
+                ),
                 maxLines = titleMaxLines,
                 softWrap = titleMaxLines > 1,
                 overflow =

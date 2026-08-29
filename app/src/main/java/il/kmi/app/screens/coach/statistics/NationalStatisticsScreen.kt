@@ -73,6 +73,7 @@ import il.kmi.app.ui.KmiIconSize
 import il.kmi.app.ui.KmiTopBar
 import il.kmi.app.ui.KmiTypography
 import il.kmi.app.ui.loading.KmiLoadingRings
+import il.yuval.ui.theme.kmiScreenBackgroundBrush
 import il.kmi.shared.localization.AppLanguage
 import il.kmi.shared.localization.AppLanguageManager
 import java.io.File
@@ -278,15 +279,7 @@ fun NationalStatisticsScreen(
                 modifier = Modifier
                     .fillMaxSize()
                     .background(
-                        Brush.verticalGradient(
-                            colors = listOf(
-                                MaterialTheme.colorScheme.background,
-                                MaterialTheme.colorScheme.surface,
-                                MaterialTheme.colorScheme.primaryContainer.copy(
-                                    alpha = 0.55f
-                                )
-                            )
-                        )
+                        brush = kmiScreenBackgroundBrush()
                     )
                     .padding(innerPadding)
             ) {

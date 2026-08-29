@@ -460,13 +460,8 @@ fun AttendanceScreen(
     @Composable
     fun AttendanceTopTabs() {
 
-        // 0 = סטטיסטיקה
-        // 1 = בחירת אימון
-        val selectedIndex = 1
-
         Surface(
-            modifier = Modifier
-                .fillMaxWidth(),
+            modifier = Modifier.fillMaxWidth(),
             color = Color.Transparent,
             contentColor = Color.White,
             tonalElevation = 0.dp,
@@ -482,136 +477,167 @@ fun AttendanceScreen(
                     )
             ) {
 
-                // קו מפריד בין שני הטאבים
+                // =====================================================
+                // שני טאבים קבועים 50% / 50%
+                // =====================================================
+                CompositionLocalProvider(
+                    LocalLayoutDirection provides LayoutDirection.Ltr
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxSize()
+                    ) {
+
+                        // =================================================
+                        // שמאל — סטטיסטיקה
+                        // הכותרת מוזזת מעט לכיוון מרכז המסך
+                        // =================================================
+                        Box(
+                            modifier = Modifier
+                                .weight(1f)
+                                .fillMaxHeight()
+                                .clickable {
+                                    onOpenGroupStats(
+                                        effectiveBranchRaw,
+                                        effectiveGroupRaw
+                                    )
+                                },
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = tr(
+                                    "סטטיסטיקה",
+                                    "Statistics"
+                                ),
+                                style = KmiTypography.caption.copy(
+                                    fontWeight = FontWeight.ExtraBold
+                                ),
+                                color = Color.White,
+                                textAlign = TextAlign.Center,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                modifier = Modifier.offset(
+                                    x = 16.dp
+                                )
+                            )
+                        }
+
+                        // =================================================
+                        // ימין — בחירת אימון
+                        // החץ נמצא בתוך הטאב אבל אינו מזיז את הכותרת
+                        // =================================================
+                        Box(
+                            modifier = Modifier
+                                .weight(1f)
+                                .fillMaxHeight()
+                                .clickable {
+                                    isTrainingSelectionExpanded =
+                                        !isTrainingSelectionExpanded
+                                }
+                        ) {
+
+                            // הכותרת — מעט לכיוון מרכז המסך
+                            Text(
+                                text =
+                                    if (isEnglish) {
+                                        "Select\ntraining"
+                                    } else {
+                                        "בחירת\nאימון"
+                                    },
+                                style = KmiTypography.caption.copy(
+                                    fontWeight = FontWeight.ExtraBold
+                                ),
+                                color = Color.White,
+                                textAlign = TextAlign.Center,
+                                maxLines = 2,
+                                overflow = TextOverflow.Ellipsis,
+                                modifier = Modifier
+                                    .align(Alignment.Center)
+                                    .offset(
+                                        x = (-16).dp
+                                    )
+                            )
+
+                            // קו לבן מתחת לכותרת
+                            Box(
+                                modifier = Modifier
+                                    .align(Alignment.BottomCenter)
+                                    .offset(
+                                        x = (-16).dp
+                                    )
+                                    .padding(bottom = 5.dp)
+                                    .width(50.dp)
+                                    .height(3.dp)
+                                    .background(
+                                        color = Color.White,
+                                        shape = RoundedCornerShape(999.dp)
+                                    )
+                            )
+
+                            // =================================================
+                            // החץ — בתוך הטאב של בחירת אימון
+                            // שכבה עצמאית ולכן לא מזיז את הכותרת
+                            // =================================================
+                            Surface(
+                                onClick = {
+                                    isTrainingSelectionExpanded =
+                                        !isTrainingSelectionExpanded
+                                },
+                                modifier = Modifier
+                                    .align(Alignment.CenterEnd)
+                                    .offset(
+                                        x = (-124).dp
+                                    )
+                                    .size(34.dp),
+                                shape = CircleShape,
+                                color = Color.White.copy(
+                                    alpha = 0.16f
+                                ),
+                                border = BorderStroke(
+                                    width = 1.dp,
+                                    color = Color.White.copy(
+                                        alpha = 0.45f
+                                    )
+                                ),
+                                tonalElevation = 0.dp,
+                                shadowElevation = 0.dp
+                            ) {
+                                Box(
+                                    modifier = Modifier.fillMaxSize(),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text(
+                                        text =
+                                            if (isTrainingSelectionExpanded) {
+                                                "⌃"
+                                            } else {
+                                                "⌄"
+                                            },
+                                        style = KmiTypography.action.copy(
+                                            fontWeight =
+                                                FontWeight.ExtraBold
+                                        ),
+                                        color = Color.White,
+                                        textAlign = TextAlign.Center,
+                                        maxLines = 1
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // =====================================================
+                // קו הפרדה — מרכז פיזי מדויק
+                // =====================================================
                 Box(
                     modifier = Modifier
                         .align(Alignment.Center)
                         .width(1.dp)
-                        .height(28.dp)
+                        .height(30.dp)
                         .background(
                             Color.White.copy(alpha = 0.65f)
                         )
                 )
-
-                CompositionLocalProvider(
-                    LocalLayoutDirection provides LayoutDirection.Ltr
-                ) {
-                    TabRow(
-                        selectedTabIndex = selectedIndex,
-                        containerColor = Color.Transparent,
-                        contentColor = Color.White,
-                        divider = {},
-                        indicator = { positions ->
-                            TabRowDefaults.SecondaryIndicator(
-                                modifier = Modifier
-                                    .tabIndicatorOffset(
-                                        positions[selectedIndex]
-                                    )
-                                    .padding(horizontal = 58.dp)
-                                    .offset(
-                                        x = (-19).dp,
-                                        y = (-7).dp
-                                    ),
-                                height = 3.dp,
-                                color = Color.White
-                            )
-                        },
-                        modifier = Modifier.matchParentSize()
-                    ) {
-
-                        // שמאל — סטטיסטיקה
-                        Tab(
-                            selected = false,
-                            onClick = {
-                                onOpenGroupStats(
-                                    effectiveBranchRaw,
-                                    effectiveGroupRaw
-                                )
-                            },
-                            text = {
-                                Text(
-                                    text = tr(
-                                        "סטטיסטיקה",
-                                        "Statistics"
-                                    ),
-                                    style = KmiTypography.caption.copy(
-                                        fontWeight = FontWeight.ExtraBold
-                                    ),
-                                    textAlign = TextAlign.Center,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis,
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(start = 38.dp)
-                                )
-                            },
-                            selectedContentColor = Color.White,
-                            unselectedContentColor =
-                                Color.White.copy(alpha = 0.90f)
-                        )
-
-// ימין — בחירת אימון
-                        Tab(
-                            selected = true,
-                            onClick = {
-                                isTrainingSelectionExpanded =
-                                    !isTrainingSelectionExpanded
-                            },
-                            text = {
-                                Row(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(end = 38.dp),
-                                    horizontalArrangement = Arrangement.Center,
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-
-                                    Text(
-                                        text =
-                                            if (isEnglish) {
-                                                "Select\ntraining"
-                                            } else {
-                                                "בחירת\nאימון"
-                                            },
-                                        style = KmiTypography.caption.copy(
-                                            fontWeight = FontWeight.ExtraBold
-                                        ),
-                                        textAlign = TextAlign.Center,
-                                        maxLines = 2,
-                                        overflow = TextOverflow.Ellipsis
-                                    )
-
-                                    Spacer(Modifier.width(5.dp))
-
-                                    Box(
-                                        modifier = Modifier
-                                            .height(40.dp)
-                                            .width(32.dp),
-                                        contentAlignment = Alignment.Center
-                                    ) {
-                                        Text(
-                                            text =
-                                                if (isTrainingSelectionExpanded) {
-                                                    "⌃"
-                                                } else {
-                                                    "⌄"
-                                                },
-                                            style = KmiTypography.action.copy(
-                                                fontWeight = FontWeight.ExtraBold
-                                            ),
-                                            color = Color.White,
-                                            textAlign = TextAlign.Center,
-                                            maxLines = 1
-                                        )
-                                    }
-                                }
-                            },
-                            selectedContentColor = Color.White,
-                            unselectedContentColor =
-                                Color.White.copy(alpha = 0.90f)
-                        )
-                    }
-                }
             }
         }
     }

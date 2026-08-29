@@ -74,6 +74,7 @@ import il.kmi.app.ui.KmiPremiumDropdown
 import il.kmi.app.ui.KmiTopBar
 import il.kmi.app.ui.KmiTypography
 import il.yuval.ui.theme.kmiSectionHeaderBrush
+import il.yuval.ui.theme.kmiScreenBackgroundBrush
 import il.kmi.shared.localization.AppLanguage
 import il.kmi.shared.localization.AppLanguageManager
 import kotlinx.coroutines.flow.collectLatest
@@ -1056,14 +1057,7 @@ fun CoachTraineesScreen(
     }
 
     val backgroundBrush =
-        Brush.verticalGradient(
-            colors = listOf(
-                MaterialTheme.colorScheme.background,
-                MaterialTheme.colorScheme.surfaceVariant,
-                MaterialTheme.colorScheme.primaryContainer,
-                MaterialTheme.colorScheme.background
-            )
-        )
+        kmiScreenBackgroundBrush()
 
     // --- טעינת מתאמנים אמיתיים + חישוב אחוז נוכחות לכל מתאמן ---
     val app = ctx.applicationContext as Application
@@ -2764,119 +2758,74 @@ fun CoachTraineesScreen(
         },
         bottomBar = {
             if (!showStatsSheet && !isKeyboardVisible) {
-                val statsBubbleTransition = rememberInfiniteTransition(
-                    label = "coachStatsBubbleTransition"
-                )
-
-                val statsBubbleOffset by statsBubbleTransition.animateFloat(
-                    initialValue = -120f,
-                    targetValue = 320f,
-                    animationSpec = infiniteRepeatable(
-                        animation = tween(
-                            durationMillis = 2600,
-                            easing = FastOutSlowInEasing
-                        ),
-                        repeatMode = RepeatMode.Restart
-                    ),
-                    label = "coachStatsBubbleOffset"
-                )
 
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .background(
-                            brush = Brush.verticalGradient(
-                                colors = listOf(
-                                    Color(0xFF1E4B86),
-                                    Color(0xFF0EA5E9)
-                                )
-                            )
-                        )
-                        .padding(horizontal = 12.dp, vertical = 6.dp)
+                        .padding(
+                            horizontal = 14.dp,
+                            vertical = 8.dp
+                        ),
+                    contentAlignment = Alignment.Center
                 ) {
                     Surface(
-                        onClick = { showStatsSheet = true },
-                        shape = RoundedCornerShape(15.dp),
-                        shadowElevation = 0.dp,
-                        tonalElevation = 0.dp,
+                        onClick = {
+                            showStatsSheet = true
+                        },
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(44.dp)
-                            .border(
-                                width = 1.dp,
-                                brush = Brush.linearGradient(
-                                    colors = listOf(
-                                        Color.White.copy(alpha = 0.72f),
-                                        Color.White.copy(alpha = 0.18f),
-                                        Color.White.copy(alpha = 0.72f)
-                                    )
-                                ),
-                                shape = RoundedCornerShape(15.dp)
-                            )
+                            .height(66.dp),
+                        shape = RoundedCornerShape(22.dp),
+                        color = Color(0xFF1B2A3A),
+                        border = BorderStroke(
+                            width = 1.dp,
+                            color = Color(0xFF43D9F5)
+                        ),
+                        tonalElevation = 0.dp,
+                        shadowElevation = 0.dp
                     ) {
                         Box(
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .background(
-                                    Brush.linearGradient(
-                                        colors = listOf(
-                                            Color(0xFF7F00FF),
-                                            Color(0xFF3F51B5),
-                                            Color(0xFF03A9F4)
-                                        )
+                            modifier = Modifier.fillMaxSize(),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Row(
+                                verticalAlignment =
+                                    Alignment.CenterVertically,
+                                horizontalArrangement =
+                                    Arrangement.Center
+                            ) {
+                                Icon(
+                                    imageVector =
+                                        Icons.Filled.Assessment,
+                                    contentDescription = null,
+                                    tint = Color(0xFFD8E5F0),
+                                    modifier = Modifier.size(
+                                        KmiIconSize.small
                                     )
                                 )
-                        ) {
-                            Box(
-                                modifier = Modifier
-                                    .offset(x = statsBubbleOffset.dp)
-                                    .size(96.dp)
-                                    .background(
-                                        Brush.radialGradient(
-                                            listOf(
-                                                Color.White.copy(alpha = 0.34f),
-                                                Color.Transparent
-                                            )
+
+                                Spacer(
+                                    modifier = Modifier.width(6.dp)
+                                )
+
+                                Text(
+                                    text =
+                                        coachTr(
+                                            isEnglish,
+                                            "סטטיסטיקה",
+                                            "Statistics"
                                         ),
-                                        shape =
-                                            CircleShape
-                                    )
-                            )
-
-                            Box(
-                                modifier = Modifier.fillMaxSize(),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.Center
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Filled.Assessment,
-                                        contentDescription = null,
-                                        tint = Color.White,
-                                        modifier = Modifier.size(
-                                            KmiIconSize.small
-                                        )
-                                    )
-
-                                    Spacer(Modifier.width(6.dp))
-
-                                    Text(
-                                        text =
-                                            coachTr(
-                                                isEnglish,
-                                                "סטטיסטיקה",
-                                                "Statistics"
-                                            ),
-                                        fontWeight =
-                                            FontWeight.ExtraBold,
-                                        color = Color.White,
-                                        style = KmiTypography.action,
-                                        maxLines = 1,
-                                        overflow = TextOverflow.Ellipsis
-                                    )
-                                }
+                                    style =
+                                        KmiTypography.sectionTitle.copy(
+                                            fontWeight =
+                                                FontWeight.ExtraBold
+                                        ),
+                                    color = Color(0xFFD8E5F0),
+                                    textAlign = TextAlign.Center,
+                                    maxLines = 1,
+                                    overflow =
+                                        TextOverflow.Ellipsis
+                                )
                             }
                         }
                     }

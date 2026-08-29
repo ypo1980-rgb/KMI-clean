@@ -47,6 +47,7 @@ import androidx.compose.ui.unit.dp
 import il.kmi.app.screens.coach.statistics.NationalStatisticsScreen
 import il.kmi.app.ui.KmiTypography
 import il.yuval.ui.theme.kmiSectionHeaderBrush
+import il.yuval.ui.theme.kmiScreenBackgroundBrush
 import java.io.File
 import java.io.FileOutputStream
 
@@ -105,16 +106,7 @@ internal fun CoachGroupStatsPremiumScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .background(
-                    Brush.verticalGradient(
-                        colors = listOf(
-                            MaterialTheme.colorScheme.background,
-                            MaterialTheme.colorScheme.surface,
-                            MaterialTheme.colorScheme.primaryContainer,
-                            MaterialTheme.colorScheme.primary.copy(
-                                alpha = 0.34f
-                            )
-                        )
-                    )
+                    brush = kmiScreenBackgroundBrush()
                 )
                 // גם התצוגה הארצית נמצאת מתחת
                 // לאותו KmiTopBar חיצוני.
@@ -185,16 +177,8 @@ internal fun CoachGroupStatsPremiumScreen(
             MaterialTheme.colorScheme.outlineVariant
         }
 
-    val statsBgBrush = Brush.verticalGradient(
-        colors = listOf(
-            MaterialTheme.colorScheme.background,
-            MaterialTheme.colorScheme.surface,
-            MaterialTheme.colorScheme.primaryContainer,
-            MaterialTheme.colorScheme.primary.copy(
-                alpha = 0.34f
-            )
-        )
-    )
+    val statsBgBrush =
+        kmiScreenBackgroundBrush()
 
     val minAge = profiles.map { it.age }.filter { it > 0 }.minOrNull()?.toString() ?: "—"
     val maxAge = profiles.map { it.age }.filter { it > 0 }.maxOrNull()?.toString() ?: "—"

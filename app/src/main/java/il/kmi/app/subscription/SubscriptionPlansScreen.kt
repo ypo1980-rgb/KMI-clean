@@ -70,6 +70,7 @@ import androidx.compose.foundation.layout.navigationBarsPadding
 import il.kmi.app.ui.KmiIconSize
 import il.kmi.app.ui.KmiTypography
 import il.kmi.app.ui.scaledIconSize
+import il.yuval.ui.theme.kmiScreenBackgroundBrush
 
 //==================================================================
 
@@ -390,34 +391,8 @@ fun SubscriptionPlansScreen(
         }
     }
 
-    val isDarkMode =
-        isSystemInDarkTheme()
-
     val subscriptionBackgroundBrush =
-        if (isDarkMode) {
-            Brush.verticalGradient(
-                colors =
-                    listOf(
-                        MaterialTheme
-                            .colorScheme
-                            .background,
-                        MaterialTheme
-                            .colorScheme
-                            .surface,
-                        Color(0xFF041E33)
-                    )
-            )
-        } else {
-            Brush.verticalGradient(
-                colors =
-                    listOf(
-                        Color(0xFFF8FBFF),
-                        Color(0xFFEAF4FF),
-                        Color(0xFFD7E9FF),
-                        Color(0xFF0EA5D7)
-                    )
-            )
-        }
+        kmiScreenBackgroundBrush()
 
     Scaffold(
         containerColor = Color.Transparent,
@@ -739,22 +714,42 @@ fun SubscriptionPlansScreen(
 
                 Spacer(modifier = Modifier.height(12.dp))
 
-                OutlinedButton(
+                androidx.compose.material3.Surface(
                     onClick = onBack,
                     modifier = Modifier
                         .fillMaxWidth()
-                        .heightIn(min = 48.dp),
-                    shape = RoundedCornerShape(24.dp)
+                        .height(66.dp),
+                    shape = RoundedCornerShape(22.dp),
+                    color = Color(0xFF1B2A3A),
+                    border = BorderStroke(
+                        width = 1.dp,
+                        color = Color(0xFF43D9F5)
+                    ),
+                    tonalElevation = 0.dp,
+                    shadowElevation = 0.dp
                 ) {
-                    Text(
-                        text =
-                            if (isEnglish) {
-                                "Back to subscription screen"
-                            } else {
-                                "חזרה למסך ניהול המנוי"
-                            },
-                        style = KmiTypography.action
-                    )
+                    Box(
+                        modifier = Modifier.fillMaxSize(),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text =
+                                if (isEnglish) {
+                                    "Back to subscription screen"
+                                } else {
+                                    "חזרה למסך ניהול המנוי"
+                                },
+                            style =
+                                KmiTypography.sectionTitle.copy(
+                                    fontWeight =
+                                        FontWeight.ExtraBold
+                                ),
+                            color = Color(0xFFD8E5F0),
+                            textAlign = TextAlign.Center,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
                 }
 
                 Spacer(modifier = Modifier.height(8.dp))
