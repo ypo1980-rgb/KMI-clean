@@ -1296,7 +1296,10 @@ fun CoachTraineesScreen(
                 }
             }
 
-            fun beltFromDoc(doc: com.google.firebase.firestore.DocumentSnapshot): String {
+            fun beltFromDoc(
+                doc: com.google.firebase.firestore.DocumentSnapshot
+            ): String {
+
                 val raw = (
                         doc.getString("belt")
                             ?: doc.getString("currentBelt")
@@ -1318,36 +1321,72 @@ fun CoachTraineesScreen(
                     .replace("-", " ")
                     .trim()
 
+                val isBlackBelt =
+                    clean.contains("black") ||
+                            clean.contains("שחור")
+
+                if (isBlackBelt) {
+
+                    val danFromText =
+                        Regex("""(?:dan|דאן)\s*(\d{1,2})""")
+                            .find(clean)
+                            ?.groupValues
+                            ?.getOrNull(1)
+                            ?.toIntOrNull()
+
+                    val danFromAnyNumber =
+                        Regex("""\b(\d{1,2})\b""")
+                            .find(clean)
+                            ?.groupValues
+                            ?.getOrNull(1)
+                            ?.toIntOrNull()
+
+                    val dan =
+                        (danFromText ?: danFromAnyNumber ?: 1)
+                            .coerceIn(1, 10)
+
+                    return "שחורה דאן $dan"
+                }
+
                 return when {
-                    clean == "white" || clean.contains("white") || clean == "לבנה" || clean.contains(
-                        "לבנ"
-                    ) -> "לבנה"
+                    clean == "white" ||
+                            clean.contains("white") ||
+                            clean == "לבנה" ||
+                            clean.contains("לבנ") ->
+                        "לבנה"
 
-                    clean == "yellow" || clean.contains("yellow") || clean == "צהובה" || clean.contains(
-                        "צהוב"
-                    ) -> "צהובה"
+                    clean == "yellow" ||
+                            clean.contains("yellow") ||
+                            clean == "צהובה" ||
+                            clean.contains("צהוב") ->
+                        "צהובה"
 
-                    clean == "orange" || clean.contains("orange") || clean == "כתומה" || clean.contains(
-                        "כתומ"
-                    ) -> "כתומה"
+                    clean == "orange" ||
+                            clean.contains("orange") ||
+                            clean == "כתומה" ||
+                            clean.contains("כתומ") ->
+                        "כתומה"
 
-                    clean == "green" || clean.contains("green") || clean == "ירוקה" || clean.contains(
-                        "ירוק"
-                    ) -> "ירוקה"
+                    clean == "green" ||
+                            clean.contains("green") ||
+                            clean == "ירוקה" ||
+                            clean.contains("ירוק") ->
+                        "ירוקה"
 
-                    clean == "blue" || clean.contains("blue") || clean == "כחולה" || clean.contains(
-                        "כחול"
-                    ) -> "כחולה"
+                    clean == "blue" ||
+                            clean.contains("blue") ||
+                            clean == "כחולה" ||
+                            clean.contains("כחול") ->
+                        "כחולה"
 
-                    clean == "brown" || clean.contains("brown") || clean == "חומה" || clean.contains(
-                        "חומ"
-                    ) -> "חומה"
+                    clean == "brown" ||
+                            clean.contains("brown") ||
+                            clean == "חומה" ||
+                            clean.contains("חומ") ->
+                        "חומה"
 
-                    clean == "black" || clean.contains("black") || clean == "שחורה" || clean.contains(
-                        "שחור"
-                    ) -> "שחורה"
-
-                    else -> beltHeb(raw)
+                    else ->
+                        beltHeb(raw)
                 }
             }
 
@@ -1804,216 +1843,565 @@ fun CoachTraineesScreen(
                     }
             }.getOrNull().orEmpty()
 
-            val mergedUserDocs = userDocs
-                .groupBy { doc ->
-                    val emailKey = normalizeEmailForMerge(primaryEmailFromDoc(doc))
-                    val phoneKey = normalizePhoneForMerge(primaryPhoneFromDoc(doc))
-                    val nameKey = (
+            /*
+    * =========================================================
+    * איחוד אמיתי של מסמכי users
+    *
+    * אותו מתאמן נחשב זהה כאשר יש:
+    * 1. אותו מייל, או
+    * 2. אותו טלפון מנורמל.
+    *
+    * לא בוחרים עוד מסמך אחד בלבד.
+    * מאחדים את השדות מכל המסמכים של אותו אדם.
+    * =========================================================
+    */
+
+            val identityGroups =
+                mutableListOf<
+                        MutableList<
+                                com.google.firebase.firestore.DocumentSnapshot
+                                >
+                        >()
+
+            userDocs.forEach { doc ->
+
+                val docEmail =
+                    normalizeEmailForMerge(
+                        primaryEmailFromDoc(doc)
+                    )
+
+                val docPhone =
+                    normalizePhoneForMerge(
+                        primaryPhoneFromDoc(doc)
+                    )
+
+                val docName =
+                    (
                             doc.getString("fullName")
                                 ?: doc.getString("name")
                                 ?: doc.getString("displayName")
-                                ?: doc.id
+                                ?: ""
                             ).normKey()
 
-                    when {
-                        emailKey.isNotBlank() -> "email:$emailKey"
-                        phoneKey.isNotBlank() -> "phone:$phoneKey"
-                        else -> "name:$nameKey"
-                    }
-                }
-                .map { (_, docs) ->
-                    docs.maxWithOrNull(
-                        compareBy<com.google.firebase.firestore.DocumentSnapshot> {
-                            /*
-                             * נותנים עדיפות למסמך המכיל
-                             * את נתוני הפרופיל המלאים.
-                             */
-                            var profileScore = 0
+                /*
+                 * מחפשים קבוצה שכבר מכילה מסמך
+                 * עם אותו מייל או אותו טלפון.
+                 */
+                val matchingGroup =
+                    identityGroups.firstOrNull { group ->
 
-                            if (
-                                beltFromDoc(it).isNotBlank()
-                            ) {
-                                profileScore += 4
-                            }
+                        group.any { existing ->
 
-                            if (ageFromDoc(it) > 0) {
-                                profileScore += 3
-                            }
+                            val existingEmail =
+                                normalizeEmailForMerge(
+                                    primaryEmailFromDoc(existing)
+                                )
 
-                            if (
-                                seniorityFromDoc(it)
-                                    .isNotBlank()
-                            ) {
-                                profileScore += 2
-                            }
+                            val existingPhone =
+                                normalizePhoneForMerge(
+                                    primaryPhoneFromDoc(existing)
+                                )
 
-                            if (
-                                primaryEmailFromDoc(it)
-                                    .isNotBlank()
-                            ) {
-                                profileScore += 1
-                            }
-
-                            if (
-                                primaryPhoneFromDoc(it)
-                                    .isNotBlank()
-                            ) {
-                                profileScore += 1
-                            }
-
-                            profileScore
-                        }.thenBy {
-                            if (
+                            val existingName =
                                 (
-                                        it.getString("fullName")
-                                            ?: it.getString("name")
-                                            ?: it.getString(
+                                        existing.getString("fullName")
+                                            ?: existing.getString("name")
+                                            ?: existing.getString(
                                                 "displayName"
                                             )
                                             ?: ""
-                                        ).isNotBlank()
-                            ) {
-                                1
-                            } else {
-                                0
-                            }
-                        }.thenBy {
-                            it.id
+                                        ).normKey()
+
+                            val sameEmail =
+                                docEmail.isNotBlank() &&
+                                        existingEmail.isNotBlank() &&
+                                        docEmail == existingEmail
+
+                            val samePhone =
+                                docPhone.isNotBlank() &&
+                                        existingPhone.isNotBlank() &&
+                                        docPhone == existingPhone
+
+                            /*
+                             * שם משמש fallback רק כאשר
+                             * לשתי הרשומות אין שום מזהה אמין.
+                             */
+                            val sameNameWithoutIdentity =
+                                docEmail.isBlank() &&
+                                        docPhone.isBlank() &&
+                                        existingEmail.isBlank() &&
+                                        existingPhone.isBlank() &&
+                                        docName.isNotBlank() &&
+                                        docName == existingName
+
+                            sameEmail ||
+                                    samePhone ||
+                                    sameNameWithoutIdentity
                         }
-                    ) ?: docs.first()
+                    }
+
+                if (matchingGroup != null) {
+                    matchingGroup.add(doc)
+                } else {
+                    identityGroups.add(
+                        mutableListOf(doc)
+                    )
                 }
+            }
 
-            for (doc in mergedUserDocs) {
-                val n = (doc.getString("fullName")
-                    ?: doc.getString("name")
-                    ?: doc.getString("displayName")
-                    ?: continue).normKey()
+            /*
+             * מיזוג קבוצות שעשויות להתחבר בעקיפין:
+             *
+             * A = אותו מייל כמו B
+             * B = אותו טלפון כמו C
+             *
+             * לכן בסוף גם A,B,C הם אותו מתאמן.
+             */
+            var didMergeGroups: Boolean
 
-                val email = primaryEmailFromDoc(doc)
-                val phone = primaryPhoneFromDoc(doc)
+            do {
+                didMergeGroups = false
 
-                val belt = beltFromDoc(doc)
-                val age = ageFromDoc(doc)
-                val seniority = seniorityFromDoc(doc)
+                outer@ for (
+                firstIndex in identityGroups.indices
+                ) {
+                    for (
+                    secondIndex in
+                    firstIndex + 1 until identityGroups.size
+                    ) {
 
-                fun readStringMap(fieldName: String): Map<String, String> {
-                    val raw = doc.get(fieldName) as? Map<*, *> ?: emptyMap<Any, Any>()
-                    return raw.entries.associate { entry ->
-                        entry.key.toString() to entry.value.toString()
+                        val firstGroup =
+                            identityGroups[firstIndex]
+
+                        val secondGroup =
+                            identityGroups[secondIndex]
+
+                        val shouldMerge =
+                            firstGroup.any { firstDoc ->
+
+                                val firstEmail =
+                                    normalizeEmailForMerge(
+                                        primaryEmailFromDoc(firstDoc)
+                                    )
+
+                                val firstPhone =
+                                    normalizePhoneForMerge(
+                                        primaryPhoneFromDoc(firstDoc)
+                                    )
+
+                                secondGroup.any { secondDoc ->
+
+                                    val secondEmail =
+                                        normalizeEmailForMerge(
+                                            primaryEmailFromDoc(
+                                                secondDoc
+                                            )
+                                        )
+
+                                    val secondPhone =
+                                        normalizePhoneForMerge(
+                                            primaryPhoneFromDoc(
+                                                secondDoc
+                                            )
+                                        )
+
+                                    val sameEmail =
+                                        firstEmail.isNotBlank() &&
+                                                secondEmail.isNotBlank() &&
+                                                firstEmail ==
+                                                secondEmail
+
+                                    val samePhone =
+                                        firstPhone.isNotBlank() &&
+                                                secondPhone.isNotBlank() &&
+                                                firstPhone ==
+                                                secondPhone
+
+                                    sameEmail || samePhone
+                                }
+                            }
+
+                        if (shouldMerge) {
+                            firstGroup.addAll(secondGroup)
+
+                            identityGroups.removeAt(
+                                secondIndex
+                            )
+
+                            didMergeGroups = true
+                            break@outer
+                        }
                     }
                 }
+            } while (didMergeGroups)
 
-                fun readCoachEntryMap(fieldName: String): Map<String, CoachDateEntry> {
-                    val raw = doc.get(fieldName) as? Map<*, *> ?: emptyMap<Any, Any>()
 
-                    return raw.entries.associate { entry ->
-                        val key = entry.key.toString()
+            fun readStringMapFromDoc(
+                doc:
+                com.google.firebase.firestore.DocumentSnapshot,
+                fieldName: String
+            ): Map<String, String> {
+
+                val raw =
+                    doc.get(fieldName) as? Map<*, *>
+                        ?: return emptyMap()
+
+                return raw.entries
+                    .mapNotNull { entry ->
+
+                        val key =
+                            entry.key
+                                ?.toString()
+                                ?.trim()
+                                .orEmpty()
+
+                        val value =
+                            entry.value
+                                ?.toString()
+                                ?.trim()
+                                .orEmpty()
+
+                        if (
+                            key.isBlank() ||
+                            value.isBlank()
+                        ) {
+                            null
+                        } else {
+                            key to value
+                        }
+                    }
+                    .toMap()
+            }
+
+
+            fun readCoachEntryMapFromDoc(
+                doc:
+                com.google.firebase.firestore.DocumentSnapshot,
+                fieldName: String
+            ): Map<String, CoachDateEntry> {
+
+                val raw =
+                    doc.get(fieldName) as? Map<*, *>
+                        ?: return emptyMap()
+
+                return raw.entries
+                    .mapNotNull { entry ->
+
+                        val key =
+                            entry.key
+                                ?.toString()
+                                ?.trim()
+                                .orEmpty()
+
+                        if (key.isBlank()) {
+                            return@mapNotNull null
+                        }
 
                         val parsed =
-                            when (val value = entry.value) {
-                                is Map<*, *> -> CoachDateEntry(
-                                    date =
-                                        value["date"]
-                                            ?.toString()
-                                            .orEmpty(),
-                                    description =
-                                        value["description"]
-                                            ?.toString()
-                                            .orEmpty()
-                                )
+                            when (
+                                val value = entry.value
+                            ) {
 
-                                // ✅ תאימות לאחור: אם בעבר נשמר רק תאריך כמחרוזת
-                                is String -> CoachDateEntry(
-                                    date = value,
-                                    description = ""
-                                )
+                                is Map<*, *> ->
+                                    CoachDateEntry(
+                                        date =
+                                            value["date"]
+                                                ?.toString()
+                                                .orEmpty(),
+                                        description =
+                                            value["description"]
+                                                ?.toString()
+                                                .orEmpty()
+                                    )
 
-                                else -> CoachDateEntry()
+                                // תאימות לאחור
+                                is String ->
+                                    CoachDateEntry(
+                                        date = value,
+                                        description = ""
+                                    )
+
+                                else ->
+                                    CoachDateEntry()
                             }
 
                         key to parsed
                     }
-                }
+                    .toMap()
+            }
 
-                val beltAwardDates = readStringMap("beltAwardDates")
-                val beltAwardDescriptions = readStringMap("beltAwardDescriptions")
-                val coachNotes = doc.getString("coachNotes").orEmpty()
-                val seminarDates = readCoachEntryMap("seminarDates")
-                val campDates = readCoachEntryMap("campDates")
-                val certificationDates = readCoachEntryMap("certificationDates")
 
-                val mergedFireUserInfo = FireUserInfo(
-                    userDocId = doc.id,
-                    email = email,
-                    phone = phone,
-                    age = age,
-                    beltHeb = belt,
-                    seniority = seniority,
-                    beltAwardDates = beltAwardDates,
-                    beltAwardDescriptions =
-                        beltAwardDescriptions,
-                    coachNotes = coachNotes,
-                    seminarDates = seminarDates,
-                    campDates = campDates,
-                    certificationDates =
-                        certificationDates
-                )
-
-                val normalizedEmail =
-                    normalizeEmailForMerge(email)
-
-                val normalizedPhone =
-                    normalizePhoneForMerge(phone)
+            /*
+             * =========================================================
+             * בונים מידע מאוחד מכל קבוצת מסמכים.
+             * =========================================================
+             */
+            identityGroups.forEach { docs ->
 
                 /*
-                 * mergedUserDocs מכיל רק מסמך ראשי אחד,
-                 * אבל userDocs עדיין מכיל את כל המסמכים
-                 * המקוריים. מאתרים את כל המסמכים השייכים
-                 * לאותו מייל או טלפון ושומרים את המידע
-                 * המאוחד תחת כל שמות הכינוי שלהם.
+                 * המסמך הראשי משמש רק בשביל userDocId.
+                 * שאר השדות נלקחים מכל המסמכים.
                  */
-                val matchingIdentityDocuments =
-                    userDocs.filter { candidate ->
-                        val candidateEmail =
-                            normalizeEmailForMerge(
-                                primaryEmailFromDoc(candidate)
+                val primaryDoc =
+                    docs.maxWithOrNull(
+                        compareBy<
+                                com.google.firebase.firestore.DocumentSnapshot
+                                > { doc ->
+
+                            var score = 0
+
+                            if (
+                                beltFromDoc(doc).isNotBlank()
+                            ) {
+                                score += 4
+                            }
+
+                            if (ageFromDoc(doc) > 0) {
+                                score += 3
+                            }
+
+                            if (
+                                seniorityFromDoc(doc)
+                                    .isNotBlank()
+                            ) {
+                                score += 2
+                            }
+
+                            if (
+                                primaryEmailFromDoc(doc)
+                                    .isNotBlank()
+                            ) {
+                                score += 1
+                            }
+
+                            if (
+                                primaryPhoneFromDoc(doc)
+                                    .isNotBlank()
+                            ) {
+                                score += 1
+                            }
+
+                            score
+                        }
+                    ) ?: docs.first()
+
+
+                val email =
+                    docs
+                        .asSequence()
+                        .map {
+                            primaryEmailFromDoc(it)
+                                .trim()
+                        }
+                        .firstOrNull {
+                            it.isNotBlank()
+                        }
+                        .orEmpty()
+
+
+                val phone =
+                    docs
+                        .asSequence()
+                        .map {
+                            primaryPhoneFromDoc(it)
+                                .trim()
+                        }
+                        .firstOrNull {
+                            it.isNotBlank()
+                        }
+                        .orEmpty()
+
+
+                /*
+                 * אם החגורה קיימת באחד המסמכים –
+                 * לוקחים אותה.
+                 */
+                val belt =
+                    docs
+                        .asSequence()
+                        .map {
+                            beltFromDoc(it)
+                                .trim()
+                        }
+                        .filter {
+                            it.isNotBlank()
+                        }
+                        /*
+                         * מעדיפים ערך מפורט יותר,
+                         * למשל "שחורה דאן 2"
+                         * על פני "שחורה".
+                         */
+                        .maxByOrNull {
+                            it.length
+                        }
+                        .orEmpty()
+
+
+                val age =
+                    docs
+                        .asSequence()
+                        .map {
+                            ageFromDoc(it)
+                        }
+                        .firstOrNull {
+                            it > 0
+                        }
+                        ?: 0
+
+
+                val seniority =
+                    docs
+                        .asSequence()
+                        .map {
+                            seniorityFromDoc(it)
+                                .trim()
+                        }
+                        .firstOrNull {
+                            it.isNotBlank()
+                        }
+                        .orEmpty()
+
+
+                /*
+                 * מאחדים Maps מכל המסמכים
+                 * במקום לקחת אותם רק ממסמך אחד.
+                 */
+                val beltAwardDates =
+                    buildMap<String, String> {
+                        docs.forEach { doc ->
+                            putAll(
+                                readStringMapFromDoc(
+                                    doc,
+                                    "beltAwardDates"
+                                )
                             )
-
-                        val candidatePhone =
-                            normalizePhoneForMerge(
-                                primaryPhoneFromDoc(candidate)
-                            )
-
-                        when {
-                            normalizedEmail.isNotBlank() ->
-                                candidateEmail ==
-                                        normalizedEmail
-
-                            normalizedPhone.isNotBlank() ->
-                                candidatePhone ==
-                                        normalizedPhone
-
-                            else ->
-                                candidate.id == doc.id
                         }
                     }
 
+
+                val beltAwardDescriptions =
+                    buildMap<String, String> {
+                        docs.forEach { doc ->
+                            putAll(
+                                readStringMapFromDoc(
+                                    doc,
+                                    "beltAwardDescriptions"
+                                )
+                            )
+                        }
+                    }
+
+
+                val seminarDates =
+                    buildMap<String, CoachDateEntry> {
+                        docs.forEach { doc ->
+                            putAll(
+                                readCoachEntryMapFromDoc(
+                                    doc,
+                                    "seminarDates"
+                                )
+                            )
+                        }
+                    }
+
+
+                val campDates =
+                    buildMap<String, CoachDateEntry> {
+                        docs.forEach { doc ->
+                            putAll(
+                                readCoachEntryMapFromDoc(
+                                    doc,
+                                    "campDates"
+                                )
+                            )
+                        }
+                    }
+
+
+                val certificationDates =
+                    buildMap<String, CoachDateEntry> {
+                        docs.forEach { doc ->
+                            putAll(
+                                readCoachEntryMapFromDoc(
+                                    doc,
+                                    "certificationDates"
+                                )
+                            )
+                        }
+                    }
+
+
+                val coachNotes =
+                    docs
+                        .asSequence()
+                        .map {
+                            it.getString("coachNotes")
+                                .orEmpty()
+                                .trim()
+                        }
+                        .firstOrNull {
+                            it.isNotBlank()
+                        }
+                        .orEmpty()
+
+
+                val mergedFireUserInfo =
+                    FireUserInfo(
+                        userDocId =
+                            primaryDoc.id,
+                        email =
+                            email,
+                        phone =
+                            phone,
+                        age =
+                            age,
+                        beltHeb =
+                            belt,
+                        seniority =
+                            seniority,
+                        beltAwardDates =
+                            beltAwardDates,
+                        beltAwardDescriptions =
+                            beltAwardDescriptions,
+                        coachNotes =
+                            coachNotes,
+                        seminarDates =
+                            seminarDates,
+                        campDates =
+                            campDates,
+                        certificationDates =
+                            certificationDates
+                    )
+
+
+                /*
+                 * כל השמות מכל המסמכים מקבלים
+                 * את אותו מידע מאוחד.
+                 *
+                 * כך גם אם group_members מכיל
+                 * שם מגרסה אחרת של אותו משתמש,
+                 * הוא מתחבר לאותו פרופיל.
+                 */
                 val identityNameKeys =
-                    matchingIdentityDocuments
+                    docs
                         .mapNotNull { candidate ->
+
                             (
-                                    candidate.getString("fullName")
-                                        ?: candidate.getString("name")
+                                    candidate.getString(
+                                        "fullName"
+                                    )
+                                        ?: candidate.getString(
+                                            "name"
+                                        )
                                         ?: candidate.getString(
                                             "displayName"
                                         )
                                     )
                                 ?.normKey()
-                                ?.takeIf { key ->
-                                    key.isNotBlank()
+                                ?.takeIf {
+                                    it.isNotBlank()
                                 }
                         }
-                        .plus(n)
                         .distinct()
 
                 identityNameKeys.forEach { nameKey ->
@@ -3015,9 +3403,10 @@ fun CoachTraineesScreen(
                                                         .onSurface,
                                                 textAlign =
                                                     TextAlign.Center,
-                                                maxLines = 1,
+                                                maxLines = 2,
+                                                softWrap = true,
                                                 overflow =
-                                                    TextOverflow.Ellipsis
+                                                    TextOverflow.Clip
                                             )
 
                                             Text(

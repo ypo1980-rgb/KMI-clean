@@ -459,8 +459,13 @@ private fun createTrainingManagementPdf(
     val cardTop =
         KmiPdfHeader.CONTENT_TOP + 14f
 
+    /*
+     * הכרטיס מכיל 5 שדות.
+     * כל שדה תופס כ־64px כולל label, value והרווח שאחריו.
+     * משאירים גם מרווח תחתון אחרי השדה האחרון.
+     */
     val cardBottom =
-        cardTop + 286f
+        cardTop + 350f
 
     canvas.drawRoundRect(
         margin,

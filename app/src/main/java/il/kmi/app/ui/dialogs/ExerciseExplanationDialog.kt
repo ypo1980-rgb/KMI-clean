@@ -52,15 +52,91 @@ fun ExerciseExplanationDialog(
     onEditNote: () -> Unit,
     onDeleteNote: () -> Unit = {},
     onToggleFavorite: () -> Unit,
-    backgroundBrush: Brush = Brush.verticalGradient(
-        colors = listOf(
-            Color.White,
-            lerp(Color.White, accentColor, 0.10f),
-            lerp(Color.White, accentColor, 0.05f),
-            Color.White
-        )
-    )
+    backgroundBrush: Brush? = null
 ) {
+    /*
+     * מקור אמת גלובלי לצבע החגורה.
+     *
+     * כל מסך שפותח ExerciseExplanationDialog מקבל
+     * אוטומטית את צבע החגורה והרקע המתאים,
+     * בלי לבצע מיפוי מקומי בכל מסך.
+     */
+    val resolvedAccentColor =
+        remember(beltLabel, accentColor) {
+            when {
+                beltLabel.contains("לבנה") ||
+                        beltLabel.contains(
+                            "White",
+                            ignoreCase = true
+                        ) ->
+                    Color(0xFFD1D5DB)
+
+                beltLabel.contains("צהובה") ||
+                        beltLabel.contains(
+                            "Yellow",
+                            ignoreCase = true
+                        ) ->
+                    Color(0xFFFACC15)
+
+                beltLabel.contains("כתומה") ||
+                        beltLabel.contains(
+                            "Orange",
+                            ignoreCase = true
+                        ) ->
+                    Color(0xFFF97316)
+
+                beltLabel.contains("ירוקה") ||
+                        beltLabel.contains(
+                            "Green",
+                            ignoreCase = true
+                        ) ->
+                    Color(0xFF22C55E)
+
+                beltLabel.contains("כחולה") ||
+                        beltLabel.contains(
+                            "Blue",
+                            ignoreCase = true
+                        ) ->
+                    Color(0xFF3B82F6)
+
+                beltLabel.contains("חומה") ||
+                        beltLabel.contains(
+                            "Brown",
+                            ignoreCase = true
+                        ) ->
+                    Color(0xFF8B5A2B)
+
+                beltLabel.contains("שחורה") ||
+                        beltLabel.contains(
+                            "Black",
+                            ignoreCase = true
+                        ) ->
+                    Color(0xFF111111)
+
+                else ->
+                    accentColor
+            }
+        }
+
+    val resolvedBackgroundBrush =
+        backgroundBrush
+            ?: Brush.verticalGradient(
+                colors = listOf(
+                    Color.White,
+                    lerp(
+                        Color.White,
+                        resolvedAccentColor,
+                        0.10f
+                    ),
+                    lerp(
+                        Color.White,
+                        resolvedAccentColor,
+                        0.05f
+                    ),
+                    Color.White
+                )
+            )
+
     var localIsFavorite by remember(title, beltLabel) {
         mutableStateOf(isFavorite)
     }
@@ -118,7 +194,7 @@ fun ExerciseExplanationDialog(
     }
 
     val softBorderColor =
-        accentColor.copy(
+        resolvedAccentColor.copy(
             alpha = if (isDarkTheme) 0.34f else 0.16f
         )
 
@@ -140,7 +216,7 @@ fun ExerciseExplanationDialog(
                         )
                     } else {
                         Modifier.background(
-                            brush = backgroundBrush,
+                            brush = resolvedBackgroundBrush,
                             shape = RoundedCornerShape(34.dp)
                         )
                     }
@@ -232,7 +308,7 @@ fun ExerciseExplanationDialog(
                             if (isDarkTheme) {
                                 MaterialTheme.colorScheme.onSurface
                             } else {
-                                accentColor
+                                resolvedAccentColor
                             },
                         maxLines = 2
                     )
@@ -247,7 +323,7 @@ fun ExerciseExplanationDialog(
                             color =
                                 if (noteText.isNotBlank()) {
                                     if (isDarkTheme) {
-                                        accentColor.copy(alpha = 0.24f)
+                                        resolvedAccentColor.copy(alpha = 0.24f)
                                     } else {
                                         MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)
                                     }
@@ -264,7 +340,7 @@ fun ExerciseExplanationDialog(
                                     if (isDarkTheme) {
                                         MaterialTheme.colorScheme.outlineVariant
                                     } else {
-                                        accentColor.copy(alpha = 0.13f)
+                                        resolvedAccentColor.copy(alpha = 0.13f)
                                     }
                             ),
                             shadowElevation = if (isDarkTheme) 0.dp else 2.dp,
@@ -325,7 +401,7 @@ fun ExerciseExplanationDialog(
                                         if (isDarkTheme) {
                                             MaterialTheme.colorScheme.outlineVariant
                                         } else {
-                                            accentColor.copy(alpha = 0.13f)
+                                            resolvedAccentColor.copy(alpha = 0.13f)
                                         }
                                     }
                             ),
@@ -400,7 +476,9 @@ fun ExerciseExplanationDialog(
                 )
 
                 if (noteText.isNotBlank()) {
-                    HorizontalDivider(color = accentColor.copy(alpha = 0.18f))
+                    HorizontalDivider(
+                        color = resolvedAccentColor.copy(alpha = 0.18f)
+                    )
 
                     Row(
                         modifier = Modifier.fillMaxWidth(),
@@ -434,7 +512,7 @@ fun ExerciseExplanationDialog(
                                 if (isDarkTheme) {
                                     MaterialTheme.colorScheme.onSurface
                                 } else {
-                                    accentColor
+                                    resolvedAccentColor
                                 }
                         )
 
@@ -452,7 +530,7 @@ fun ExerciseExplanationDialog(
                                     if (isDarkTheme) {
                                         MaterialTheme.colorScheme.surfaceVariant
                                     } else {
-                                        accentColor.copy(alpha = 0.10f)
+                                        resolvedAccentColor.copy(alpha = 0.10f)
                                     },
                                 border = BorderStroke(
                                     width = 1.dp,
@@ -460,7 +538,7 @@ fun ExerciseExplanationDialog(
                                         if (isDarkTheme) {
                                             MaterialTheme.colorScheme.outlineVariant
                                         } else {
-                                            accentColor.copy(alpha = 0.16f)
+                                            resolvedAccentColor.copy(alpha = 0.16f)
                                         }
                                 ),
                                 shadowElevation = if (isDarkTheme) 0.dp else 1.dp,
@@ -481,7 +559,7 @@ fun ExerciseExplanationDialog(
                                             if (isDarkTheme) {
                                                 MaterialTheme.colorScheme.onSurfaceVariant
                                             } else {
-                                                accentColor
+                                                resolvedAccentColor
                                             },
                                         modifier = Modifier.size(20.dp)
                                     )
@@ -559,7 +637,7 @@ fun ExerciseExplanationDialog(
                         if (isDarkTheme) {
                             MaterialTheme.colorScheme.surfaceVariant
                         } else {
-                            accentColor.copy(alpha = 0.12f)
+                            resolvedAccentColor.copy(alpha = 0.12f)
                         },
                     border = BorderStroke(
                         width = 1.dp,
@@ -567,10 +645,11 @@ fun ExerciseExplanationDialog(
                             if (isDarkTheme) {
                                 MaterialTheme.colorScheme.outlineVariant
                             } else {
-                                accentColor.copy(alpha = 0.18f)
+                                resolvedAccentColor.copy(alpha = 0.18f)
                             }
                     ),
-                    shadowElevation = if (isDarkTheme) 0.dp else 1.dp,
+                    tonalElevation = 0.dp,
+                    shadowElevation = 0.dp,
                     modifier = Modifier
                         .heightIn(min = 42.dp)
                         .widthIn(min = 104.dp)
@@ -600,7 +679,7 @@ fun ExerciseExplanationDialog(
                                 if (isDarkTheme) {
                                     MaterialTheme.colorScheme.onSurfaceVariant
                                 } else {
-                                    accentColor
+                                    resolvedAccentColor
                                 },
                             textAlign = TextAlign.Center,
                             maxLines = 2

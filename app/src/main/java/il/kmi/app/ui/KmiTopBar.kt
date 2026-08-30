@@ -74,6 +74,8 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import il.kmi.app.search.GlobalExerciseSearchDialog
 import il.kmi.app.search.GlobalExerciseSearchEngine
 import il.kmi.app.search.ExerciseSearchSelectionResolver
+import il.kmi.app.ui.dialogs.ExerciseExplanationDialog
+import il.kmi.app.ui.dialogs.ExerciseNoteEditorDialog
 import androidx.compose.ui.AbsoluteAlignment
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.IntOffset
@@ -696,11 +698,12 @@ fun KmiTopBar(
             }
 
         /*
-         * מעבירים את התרגיל לכרטיס ההסבר החיצוני והגדול.
-         * לא מפעילים את ExercisePremiumSearchDialog המקומי,
-         * משום שזהו הכרטיס הקטן שאיננו רוצים להציג.
+         * החיפוש הגלובלי כבר נסגר למעלה.
+         *
+         * כעת פותחים את דיאלוג ההסבר הגדול של התרגיל
+         * ומשאירים אותו פתוח עד שהמשתמש סוגר אותו.
          */
-        showPremiumExerciseDialog = false
+        showPremiumExerciseDialog = true
 
         onPickSearchResult?.invoke(
             selected.stableKey
@@ -1579,6 +1582,163 @@ fun KmiTopBar(
                 openGlobalExerciseSearchResult(
                     result
                 )
+            }
+        )
+    }
+
+    // =====================================================
+// דיאלוג הסבר על תרגיל שנבחר בחיפוש הגלובלי
+// =====================================================
+    if (
+        showPremiumExerciseDialog &&
+        premiumExerciseTitle.isNotBlank()
+    ) {
+        ExerciseExplanationDialog(
+            title = premiumExerciseTitle,
+            beltLabel = premiumExerciseBeltName,
+            explanation = premiumExerciseExplanation,
+            noteText = premiumExerciseUserNote,
+            isFavorite = premiumExerciseIsFavorite,
+            accentColor = MaterialTheme.colorScheme.primary,
+            isEnglish = isEnglish,
+            onDismiss = {
+                showPremiumExerciseDialog = false
+            },
+            onEditNote = {
+                premiumExerciseEditText =
+                    premiumExerciseUserNote
+
+                showPremiumEditDialog = true
+            },
+            onDeleteNote = {
+                val noteRoleKey =
+                    if (userIsCoach) {
+                        "coach"
+                    } else {
+                        "trainee"
+                    }
+
+                val notePrefsKey =
+                    "$premiumExerciseStableKey::$noteRoleKey"
+
+                ctx.getSharedPreferences(
+                    "kmi_exercise_user_notes",
+                    Context.MODE_PRIVATE
+                )
+                    .edit()
+                    .remove(notePrefsKey)
+                    .apply()
+
+                premiumExerciseUserNote = ""
+                premiumExerciseEditText = ""
+            },
+            onToggleFavorite = {
+                val prefs =
+                    ctx.getSharedPreferences(
+                        "kmi_global_favorites",
+                        Context.MODE_PRIVATE
+                    )
+
+                val current =
+                    prefs.getStringSet(
+                        "favorite_exercises",
+                        emptySet()
+                    )
+                        ?.toMutableSet()
+                        ?: mutableSetOf()
+
+                premiumExerciseIsFavorite =
+                    if (
+                        current.contains(
+                            premiumExerciseStableKey
+                        )
+                    ) {
+                        current.remove(
+                            premiumExerciseStableKey
+                        )
+                        false
+                    } else {
+                        current.add(
+                            premiumExerciseStableKey
+                        )
+                        true
+                    }
+
+                prefs.edit()
+                    .putStringSet(
+                        "favorite_exercises",
+                        current
+                    )
+                    .apply()
+            }
+        )
+    }
+
+
+// =====================================================
+// עריכת הערה לתרגיל
+// =====================================================
+    if (showPremiumEditDialog) {
+        ExerciseNoteEditorDialog(
+            exerciseTitle = premiumExerciseTitle,
+            noteText = premiumExerciseEditText,
+            isEnglish = isEnglish,
+            accentColor = MaterialTheme.colorScheme.primary,
+            onNoteChange = {
+                premiumExerciseEditText = it
+            },
+            onDismiss = {
+                showPremiumEditDialog = false
+            },
+            onSave = {
+                val noteRoleKey =
+                    if (userIsCoach) {
+                        "coach"
+                    } else {
+                        "trainee"
+                    }
+
+                val notePrefsKey =
+                    "$premiumExerciseStableKey::$noteRoleKey"
+
+                ctx.getSharedPreferences(
+                    "kmi_exercise_user_notes",
+                    Context.MODE_PRIVATE
+                )
+                    .edit()
+                    .putString(
+                        notePrefsKey,
+                        premiumExerciseEditText.trim()
+                    )
+                    .apply()
+
+                premiumExerciseUserNote =
+                    premiumExerciseEditText.trim()
+
+                showPremiumEditDialog = false
+            },
+            onDelete = {
+                val noteRoleKey =
+                    if (userIsCoach) {
+                        "coach"
+                    } else {
+                        "trainee"
+                    }
+
+                val notePrefsKey =
+                    "$premiumExerciseStableKey::$noteRoleKey"
+
+                ctx.getSharedPreferences(
+                    "kmi_exercise_user_notes",
+                    Context.MODE_PRIVATE
+                )
+                    .edit()
+                    .remove(notePrefsKey)
+                    .apply()
+
+                premiumExerciseUserNote = ""
+                premiumExerciseEditText = ""
+                showPremiumEditDialog = false
             }
         )
     }

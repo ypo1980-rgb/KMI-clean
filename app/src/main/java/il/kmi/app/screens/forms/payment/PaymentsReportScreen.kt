@@ -104,8 +104,13 @@ private fun PaymentsPremiumLoading(
     )
 }
 
+private const val DEFAULT_MEMBERSHIP_REQUIRED_AMOUNT = 150.0
+
 private fun paymentNowDateText(): String {
-    return SimpleDateFormat("dd/MM/yyyy", Locale.getDefault()).format(Date())
+    return SimpleDateFormat(
+        "dd/MM/yyyy",
+        Locale.getDefault()
+    ).format(Date())
 }
 
 private fun paymentCurrentYear(): Int {
@@ -119,15 +124,20 @@ private fun paymentStatusFromAmount(
     paidAmount: Double,
     requiredAmount: Double
 ): PaymentStatus {
+
+    val effectiveRequiredAmount =
+        requiredAmount.takeIf { it > 0.0 }
+            ?: DEFAULT_MEMBERSHIP_REQUIRED_AMOUNT
+
     return when {
-        paidAmount <= 0.0 -> PaymentStatus.UNPAID
+        paidAmount <= 0.0 ->
+            PaymentStatus.UNPAID
 
-        // אם לא הוגדר סכום נדרש במסמך התשלום / המשתמש,
-        // לא מכניסים סכום קשיח. תשלום חיובי ייחשב כשולם.
-        requiredAmount <= 0.0 -> PaymentStatus.PAID
+        paidAmount < effectiveRequiredAmount ->
+            PaymentStatus.PARTIAL
 
-        paidAmount < requiredAmount -> PaymentStatus.PARTIAL
-        else -> PaymentStatus.PAID
+        else ->
+            PaymentStatus.PAID
     }
 }
 
@@ -203,7 +213,7 @@ private fun PaymentReportItem.demoSafePhone(
             "מוסתר בהדגמה"
         }
     } else {
-        phone.trim()
+        normalizePaymentPhone(phone)
     }
 }
 
@@ -317,7 +327,22 @@ private data class PaymentUserBundle(
 )
 
 private fun normalizePaymentPhone(raw: String): String {
-    return raw.filter { it.isDigit() }
+    val digits =
+        raw.filter { it.isDigit() }
+
+    return when {
+        digits.startsWith("00972") &&
+                digits.length > 5 -> {
+            "0" + digits.removePrefix("00972")
+        }
+
+        digits.startsWith("972") &&
+                digits.length > 3 -> {
+            "0" + digits.removePrefix("972")
+        }
+
+        else -> digits
+    }
 }
 
 private fun DocumentSnapshot.paymentUserEmail(): String {
@@ -388,12 +413,16 @@ private fun DocumentSnapshot.paymentUserBranch(): String {
 }
 
 private fun DocumentSnapshot.paymentRequiredAmountFromAny(): Double {
-    return getDouble("requiredAmount")
-        ?: getDouble("membershipRequiredAmount")
-        ?: getDouble("membershipFee")
-        ?: getDouble("annualMembershipFee")
-        ?: getDouble("feeAmount")
-        ?: 0.0
+    val storedAmount =
+        getDouble("requiredAmount")
+            ?: getDouble("membershipRequiredAmount")
+            ?: getDouble("membershipFee")
+            ?: getDouble("annualMembershipFee")
+            ?: getDouble("feeAmount")
+
+    return storedAmount
+        ?.takeIf { it > 0.0 }
+        ?: DEFAULT_MEMBERSHIP_REQUIRED_AMOUNT
 }
 
 private fun DocumentSnapshot.isPaymentRelevantTrainee(): Boolean {
@@ -522,10 +551,24 @@ private suspend fun loadRealPaymentsReportItems(): List<PaymentReportItem> {
                     ?: paymentDoc?.getString("traineeName").validDisplayNameOrNull()
                     ?: paymentDoc?.getString("trainee_name").validDisplayNameOrNull()
                     ?: userDoc.paymentUserName(),
-                branchName = paymentDoc?.getString("branchName").cleanPaymentText()
-                    .ifBlank { userDoc.paymentUserBranch() },
-                phone = paymentDoc?.getString("phone").cleanPaymentText()
-                    .ifBlank { userDoc.paymentUserPhone() },
+                branchName =
+                    paymentDoc
+                        ?.getString("branchName")
+                        .cleanPaymentText()
+                        .ifBlank {
+                            userDoc.paymentUserBranch()
+                        },
+
+                phone =
+                    normalizePaymentPhone(
+                        paymentDoc
+                            ?.getString("phone")
+                            .cleanPaymentText()
+                            .ifBlank {
+                                userDoc.paymentUserPhone()
+                            }
+                    ),
+
                 requiredAmount = requiredAmount,
                 paidAmount = paidAmount,
                 status = status,

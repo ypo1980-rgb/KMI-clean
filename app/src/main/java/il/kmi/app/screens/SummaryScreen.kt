@@ -1008,9 +1008,7 @@ private fun SummaryMiniProgressChip(
 ) {
     Surface(
         modifier =
-            modifier.heightIn(
-                min = 84.dp
-            ),
+            modifier.height(84.dp),
         shape = RoundedCornerShape(18.dp),
         color = color
             .copy(alpha = 0.12f)
@@ -1024,7 +1022,8 @@ private fun SummaryMiniProgressChip(
     ) {
         Column(
             modifier = Modifier
-                .fillMaxSize()
+                .fillMaxWidth()
+                .height(84.dp)
                 .padding(horizontal = 6.dp, vertical = 8.dp),
             verticalArrangement = Arrangement.Center,
             horizontalAlignment = Alignment.CenterHorizontally
@@ -2861,13 +2860,10 @@ fun SummaryScreen(
                     )
                 }
 
-                loadError?.let { err ->
-                    Text(
-                        text = tr("שגיאה: $err", "Error: $err"),
-                        color = Color(0xFFC62828),
-                        modifier = Modifier.padding(8.dp)
-                    )
-                }
+                /*
+   * שגיאות Firestore נשמרות ב-loadError לצורכי מצב פנימי,
+   * אך איננו מציגים למשתמש הודעות מערכת טכניות גולמיות.
+   */
 
                 if (showProgress) {
                     Spacer(Modifier.height(8.dp))

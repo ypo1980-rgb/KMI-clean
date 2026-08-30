@@ -437,7 +437,7 @@ object UserProgressRepository {
                     "beltId",
                     cleanBeltId
                 )
-                .get(Source.SERVER)
+                .get(Source.DEFAULT)
                 .await()
 
         /*
@@ -653,7 +653,7 @@ object UserProgressRepository {
             firestore
                 .collection("users")
                 .document(coachUid)
-                .get(Source.SERVER)
+                .get(Source.DEFAULT)
                 .await()
 
         if (!coachDocument.exists()) {
@@ -725,7 +725,7 @@ object UserProgressRepository {
         val usersSnapshot =
             firestore
                 .collection("users")
-                .get(Source.SERVER)
+                .get(Source.DEFAULT)
                 .await()
 
         val traineeUids =
@@ -848,7 +848,7 @@ object UserProgressRepository {
                     "beltId",
                     cleanBeltId
                 )
-                .get(Source.SERVER)
+                .get(Source.DEFAULT)
                 .await()
 
         /*
