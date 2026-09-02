@@ -188,13 +188,6 @@ fun NavGraphBuilder.trainingNavGraph(
             vm = vm,
             kmiPrefs = kmiPrefs,
 
-            onNext = {
-                nav.navigate(Route.Topics.route) {
-                    launchSingleTop = true
-                    restoreState = true
-                }
-            },
-
             onBackHome = {
                 nav.navigate(Route.Home.route) {
                     popUpTo(Route.Home.route) { inclusive = true }

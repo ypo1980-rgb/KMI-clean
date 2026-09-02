@@ -1258,7 +1258,6 @@ private fun beltTopicImageFor(belt: Belt, topicTitle: String): Int? {
 fun BeltQuestionsByBeltScreen(
     vm: KmiViewModel,
     kmiPrefs: KmiPrefs,
-    onNext: () -> Unit,
     onBackHome: () -> Unit,
     onOpenByTopic: () -> Unit,
     onOpenSubscription: () -> Unit,
@@ -1278,7 +1277,6 @@ fun BeltQuestionsByBeltScreen(
     BeltPangoLayout(
         vm = vm,
         kmiPrefs = kmiPrefs,
-        onNext = onNext,
         onBackHome = onBackHome,
         onOpenByTopic = onOpenByTopic,
         onOpenSubscription = onOpenSubscription,
@@ -1303,7 +1301,6 @@ fun BeltQuestionsByBeltScreen(
 internal fun BeltPangoLayout(
     vm: KmiViewModel,
     kmiPrefs: KmiPrefs,
-    onNext: () -> Unit,
     onBackHome: () -> Unit,
     onOpenByTopic: () -> Unit,
     onOpenSubscription: () -> Unit,
@@ -1639,11 +1636,8 @@ internal fun BeltPangoLayout(
                         onIndexChange = { selectedIndex ->
                             currentIndex = selectedIndex
                         },
-                        onCenterTap = onNext,
                         haptic = haptic,
-                        clickSound = clickSound,
-                        inputEnabled = true,
-                        reverseSwipeDirection = true
+                        clickSound = clickSound
                     )
                 }
 
@@ -1739,18 +1733,21 @@ private fun BeltQuestionsModeSwitcher(
         }
         .coerceAtLeast(0)
 
+    val headerContentColor =
+        Color.White
+
     Surface(
         modifier = Modifier
             .fillMaxWidth()
             .padding(bottom = 6.dp),
         color = Color.Transparent,
-        contentColor = Color.White,
+        contentColor = headerContentColor,
         shadowElevation = 0.dp,
         tonalElevation = 0.dp,
         border = BorderStroke(
             width = 1.dp,
             color =
-                Color.White.copy(
+                headerContentColor.copy(
                     alpha = 0.34f
                 )
         ),
@@ -1771,7 +1768,7 @@ private fun BeltQuestionsModeSwitcher(
                     .width(1.dp)
                     .height(24.dp)
                     .background(
-                        Color.White.copy(
+                        headerContentColor.copy(
                             alpha = 0.65f
                         )
                     )
@@ -1784,7 +1781,7 @@ private fun BeltQuestionsModeSwitcher(
                 TabRow(
                     selectedTabIndex = selectedIndex,
                     containerColor = Color.Transparent,
-                    contentColor = Color.White,
+                    contentColor = headerContentColor,
                     divider = {},
                     indicator = { positions ->
                         TabRowDefaults.SecondaryIndicator(
@@ -1803,7 +1800,7 @@ private fun BeltQuestionsModeSwitcher(
                                     y = (-4).dp
                                 ),
                             height = 3.dp,
-                            color = Color.White
+                            color = headerContentColor
                         )
                     },
                     modifier =
@@ -1846,9 +1843,9 @@ private fun BeltQuestionsModeSwitcher(
                                         )
                                 )
                             },
-                            selectedContentColor = Color.White,
+                            selectedContentColor = headerContentColor,
                             unselectedContentColor =
-                                Color.White.copy(
+                                headerContentColor.copy(
                                     alpha = 0.82f
                                 )
                         )
@@ -1948,16 +1945,16 @@ private fun TopicsCardForBelt(
     val readableBeltAccent =
         when {
             belt == Belt.BLACK && isDarkTheme ->
-                Color.White
+                MaterialTheme.colorScheme.onSurface
 
             belt == Belt.WHITE && isDarkTheme ->
-                Color.White
+                MaterialTheme.colorScheme.onSurface
 
             belt == Belt.WHITE ->
-                Color(0xFF64748B)
+                MaterialTheme.colorScheme.onSurfaceVariant
 
             belt == Belt.YELLOW && !isDarkTheme ->
-                Color(0xFFC98A00)
+                MaterialTheme.colorScheme.tertiary
 
             else ->
                 belt.color
@@ -3072,17 +3069,12 @@ private fun TopicsCardForBelt(
 /* ------------------------------- קרוסלת חגורות ------------------------------- */
 
 @Composable
-@Suppress("UNUSED_PARAMETER")
 private fun BeltArcPicker(
     belts: List<Belt>,
     currentIndex: Int,
     onIndexChange: (Int) -> Unit,
-    onCenterTap: () -> Unit,
-    onCenterProgress: (Float) -> Unit = {},
     haptic: (Boolean) -> Unit,
-    clickSound: () -> Unit,
-    inputEnabled: Boolean = true,
-    reverseSwipeDirection: Boolean = false
+    clickSound: () -> Unit
 ) {
     val big = 120.dp
     val small = 68.dp
@@ -3111,10 +3103,6 @@ private fun BeltArcPicker(
                 .coerceIn(0, belts.lastIndex)
                 .toFloat()
         )
-    }
-
-    LaunchedEffect(center.value) {
-        onCenterProgress(center.value)
     }
 
     val scope = rememberCoroutineScope()
@@ -3160,103 +3148,73 @@ private fun BeltArcPicker(
                 .zIndex(if (isCenter) 2f else 1f)
 
             val gestures =
-                if (!inputEnabled) {
-                    Modifier
-                } else {
-                    Modifier
-                        .pointerInput(
-                            belts,
-                            index,
-                            currentIndex,
-                            reverseSwipeDirection
-                        ) {
-                            var dragUpdateJob: Job? = null
+                Modifier.pointerInput(
+                    belts,
+                    index,
+                    currentIndex
+                ) {
+                    var dragUpdateJob: Job? = null
 
-                            detectHorizontalDragGestures(
-                                onDragEnd = {
-                                    /*
-                                     * מבטל עדכון ישן שטרם הסתיים,
-                                     * כדי שלא יחזיר את הקרוסלה אחורה.
-                                     */
-                                    dragUpdateJob?.cancel()
-                                    dragUpdateJob = null
+                    detectHorizontalDragGestures(
+                        onDragEnd = {
+                            dragUpdateJob?.cancel()
+                            dragUpdateJob = null
 
-                                    val selectedIndex =
-                                        center.value
-                                            .roundToInt()
-                                            .coerceIn(
-                                                0,
-                                                belts.lastIndex
-                                            )
+                            val selectedIndex =
+                                center.value
+                                    .roundToInt()
+                                    .coerceIn(
+                                        0,
+                                        belts.lastIndex
+                                    )
 
-                                    val selectionChanged =
-                                        selectedIndex != currentIndex
+                            val selectionChanged =
+                                selectedIndex != currentIndex
 
-                                    scope.launch {
-                                        /*
-                                         * קודם מצמידים את העיגול למיקום
-                                         * המדויק ורק לאחר מכן מעדכנים
-                                         * את הכותרת ותוכן החגורה.
-                                         */
-                                        center.snapTo(
-                                            selectedIndex.toFloat()
-                                        )
+                            scope.launch {
+                                center.snapTo(
+                                    selectedIndex.toFloat()
+                                )
 
-                                        onIndexChange(selectedIndex)
+                                onIndexChange(selectedIndex)
 
-                                        if (selectionChanged) {
-                                            clickSound()
-                                            haptic(true)
-                                        }
-                                    }
-                                },
-                                onDragCancel = {
-                                    /*
-                                     * אם המחווה בוטלה, חוזרים לחגורה
-                                     * שמוצגת בכותרת ולא נשארים בין חגורות.
-                                     */
-                                    dragUpdateJob?.cancel()
-                                    dragUpdateJob = null
-
-                                    scope.launch {
-                                        center.snapTo(
-                                            currentIndex
-                                                .coerceIn(
-                                                    0,
-                                                    belts.lastIndex
-                                                )
-                                                .toFloat()
-                                        )
-                                    }
-                                }
-                            ) { _, dragAmount ->
-                                val direction =
-                                    if (reverseSwipeDirection) {
-                                        -1f
-                                    } else {
-                                        1f
-                                    }
-
-                                val delta =
-                                    (dragAmount / stepPx) *
-                                            direction
-
-                                val nextPosition =
-                                    (center.value + delta)
-                                        .coerceIn(
-                                            0f,
-                                            belts.lastIndex.toFloat()
-                                        )
-
-                                /*
-                                 * בכל תנועה נשמרת רק הפעולה האחרונה.
-                                 */
-                                dragUpdateJob?.cancel()
-                                dragUpdateJob = scope.launch {
-                                    center.snapTo(nextPosition)
+                                if (selectionChanged) {
+                                    clickSound()
+                                    haptic(true)
                                 }
                             }
+                        },
+                        onDragCancel = {
+                            dragUpdateJob?.cancel()
+                            dragUpdateJob = null
+
+                            scope.launch {
+                                center.snapTo(
+                                    currentIndex
+                                        .coerceIn(
+                                            0,
+                                            belts.lastIndex
+                                        )
+                                        .toFloat()
+                                )
+                            }
                         }
+                    ) { _, dragAmount ->
+                        val delta =
+                            (dragAmount / stepPx) * -1f
+
+                        val nextPosition =
+                            (center.value + delta)
+                                .coerceIn(
+                                    0f,
+                                    belts.lastIndex.toFloat()
+                                )
+
+                        dragUpdateJob?.cancel()
+                        dragUpdateJob = scope.launch {
+                            center.snapTo(nextPosition)
+                        }
+                    }
                 }
 
             Box(
@@ -3356,7 +3314,17 @@ private fun RotatingOrbitRing(
      * השינוי בעוצמת הגוונים מאפשר לראות את תנועת הסיבוב,
      * בלי להציג צבעים שאינם קשורים לחגורה.
      */
-    val ringColors = remember(base) {
+    val onSurface =
+        MaterialTheme.colorScheme.onSurface
+
+    val onSurfaceVariant =
+        MaterialTheme.colorScheme.onSurfaceVariant
+
+    val ringColors = remember(
+        base,
+        onSurface,
+        onSurfaceVariant
+    ) {
         val opaqueBase = base.copy(alpha = 1f)
 
         fun darker(factor: Float): Color {
@@ -3369,31 +3337,23 @@ private fun RotatingOrbitRing(
         }
 
         when {
-            /*
-             * בצבעים כהים מאוד אי אפשר ליצור גוון כהה נוסף
-             * שעדיין יהיה נראה, ולכן משתמשים באפור־שחור.
-             */
             opaqueBase.luminance() < 0.05f -> {
                 listOf(
-                    Color(0xFF111827),
-                    Color(0xFF374151),
-                    Color(0xFF1F2937),
-                    Color(0xFF4B5563),
-                    Color(0xFF111827)
+                    onSurface.copy(alpha = 0.55f),
+                    onSurface.copy(alpha = 0.82f),
+                    onSurfaceVariant,
+                    onSurface.copy(alpha = 0.70f),
+                    onSurface.copy(alpha = 0.55f)
                 )
             }
 
-            /*
-             * אם חגורה לבנה תוחזר בעתיד לקרוסלה,
-             * הטבעת שלה תוצג בגוונים אפורים.
-             */
             opaqueBase.luminance() > 0.88f -> {
                 listOf(
-                    Color(0xFF9CA3AF),
-                    Color(0xFF6B7280),
-                    Color(0xFF4B5563),
-                    Color(0xFF6B7280),
-                    Color(0xFF9CA3AF)
+                    onSurfaceVariant.copy(alpha = 0.72f),
+                    onSurfaceVariant,
+                    onSurface.copy(alpha = 0.78f),
+                    onSurfaceVariant,
+                    onSurfaceVariant.copy(alpha = 0.72f)
                 )
             }
 

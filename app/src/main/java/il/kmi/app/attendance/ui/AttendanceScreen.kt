@@ -24,7 +24,6 @@ import androidx.compose.material.icons.filled.Assessment
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material3.*
-import androidx.compose.material3.TabRowDefaults.tabIndicatorOffset
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -66,12 +65,6 @@ import il.kmi.shared.questions.model.util.ExerciseTitleFormatter
 import il.kmi.app.screens.parseSearchKey
 import android.app.Activity
 import androidx.compose.foundation.BorderStroke
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.expandVertically
-import androidx.compose.animation.shrinkVertically
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
@@ -1484,10 +1477,13 @@ fun AttendanceScreen(
                                                         } else {
                                                             "›"
                                                         },
-                                                    style = KmiTypography.metric.copy(
-                                                        fontWeight =
-                                                            FontWeight.Bold
-                                                    ),
+                                                    style =
+                                                        KmiTypography.metric.copy(
+                                                            fontWeight =
+                                                                FontWeight.Bold,
+                                                            textDirection =
+                                                                TextDirection.Ltr
+                                                        ),
                                                     color = Color.White
                                                 )
                                             }
@@ -1530,7 +1526,9 @@ fun AttendanceScreen(
                                                     style =
                                                         KmiTypography.metric.copy(
                                                             fontWeight =
-                                                                FontWeight.Bold
+                                                                FontWeight.Bold,
+                                                            textDirection =
+                                                                TextDirection.Ltr
                                                         ),
                                                     color =
                                                         if (canMoveToNextMonth) {
@@ -2835,7 +2833,6 @@ private fun AttendanceSelectionCard(
 
         val navy = android.graphics.Color.rgb(2, 43, 74)
         val textDark = android.graphics.Color.rgb(15, 23, 42)
-        val textMuted = android.graphics.Color.rgb(100, 116, 139)
 
         val regularTypeface =
             Typeface.create(Typeface.SANS_SERIF, Typeface.NORMAL)
@@ -3020,42 +3017,132 @@ private fun AttendanceSelectionCard(
                 rowBg
             )
 
-            val statusText = when (state.statusByMemberId[member.id]) {
-                AttendanceStatus.PRESENT -> tr("הגיע", "Present")
-                AttendanceStatus.ABSENT -> tr("לא הגיע", "Absent")
-                AttendanceStatus.EXCUSED -> tr("מוצדק", "Excused")
-                else -> tr("לא סומן", "Not marked")
-            }
+            val attendanceStatus =
+                state.statusByMemberId[member.id]
 
-            paint.color = android.graphics.Color.rgb(15, 23, 42)
-            paint.textAlign = if (isEnglish) Paint.Align.LEFT else Paint.Align.RIGHT
-            val pdfDisplayName =
+            val statusText =
+                when (attendanceStatus) {
+                    AttendanceStatus.PRESENT ->
+                        tr("הגיע", "Present")
+
+                    AttendanceStatus.ABSENT ->
+                        tr("לא הגיע", "Absent")
+
+                    AttendanceStatus.EXCUSED ->
+                        tr("מוצדק", "Excused")
+
+                    else ->
+                        tr("לא סומן", "Not marked")
+                }
+
+            val statusColor =
+                when (attendanceStatus) {
+                    AttendanceStatus.PRESENT ->
+                        android.graphics.Color.rgb(
+                            22,
+                            163,
+                            74
+                        )
+
+                    AttendanceStatus.ABSENT ->
+                        android.graphics.Color.rgb(
+                            220,
+                            38,
+                            38
+                        )
+
+                    else ->
+                        android.graphics.Color.rgb(
+                            71,
+                            85,
+                            105
+                        )
+                }
+
+            paint.color =
+                android.graphics.Color.rgb(
+                    15,
+                    23,
+                    42
+                )
+            paint.textAlign =
+                if (isEnglish) {
+                    Paint.Align.LEFT
+                } else {
+                    Paint.Align.RIGHT
+                }
+
+            val mappedName =
                 TraineeDisplayNameMapper.displayName(
                     realName = member.displayName,
                     stableKey = member.id.toString(),
                     isEnglish = isEnglish
-                ).ifBlank {
-                    tr(
-                        "מתאמן ללא שם",
-                        "Unnamed trainee"
-                    )
+                ).trim()
+
+            val isDemoDisplayName =
+                mappedName.startsWith("מתאמן ") ||
+                        mappedName.startsWith("Trainee ")
+
+            val pdfDisplayName =
+                when {
+                    isDemoDisplayName -> {
+                        if (isEnglish) {
+                            "Trainee ${index + 1}"
+                        } else {
+                            "מתאמן ${index + 1}"
+                        }
+                    }
+
+                    mappedName.isNotBlank() ->
+                        mappedName
+
+                    else ->
+                        tr(
+                            "מתאמן ללא שם",
+                            "Unnamed trainee"
+                        )
                 }
 
             canvas.drawText(
                 pdfDisplayName.take(38),
-                if (isEnglish) margin + 16f else pageWidth - margin - 16f,
+                if (isEnglish) {
+                    margin + 16f
+                } else {
+                    pageWidth - margin - 16f
+                },
                 y,
                 paint
             )
 
-            paint.typeface = Typeface.create(Typeface.SANS_SERIF, Typeface.BOLD)
+            paint.color = statusColor
+            paint.typeface =
+                Typeface.create(
+                    Typeface.SANS_SERIF,
+                    Typeface.BOLD
+                )
+
             canvas.drawText(
                 statusText,
-                if (isEnglish) pageWidth - margin - 140f else margin + 140f,
+                if (isEnglish) {
+                    pageWidth - margin - 140f
+                } else {
+                    margin + 140f
+                },
                 y,
                 paint
             )
-            paint.typeface = Typeface.create(Typeface.SANS_SERIF, Typeface.NORMAL)
+
+            paint.color =
+                android.graphics.Color.rgb(
+                    15,
+                    23,
+                    42
+                )
+            paint.typeface =
+                Typeface.create(
+                    Typeface.SANS_SERIF,
+                    Typeface.NORMAL
+                )
 
             y += 34f
         }

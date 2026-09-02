@@ -11,6 +11,8 @@ import androidx.compose.animation.core.tween
 import android.media.MediaPlayer
 import android.widget.VideoView
 import androidx.compose.foundation.background
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -22,6 +24,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -39,6 +42,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -50,6 +54,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.PaddingValues
@@ -67,6 +72,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import il.kmi.app.ui.scaledIconSize
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.core.net.toUri
 import il.kmi.app.ui.KmiTypography
@@ -89,6 +95,13 @@ fun KmiStartupLoadingScreen(
     onFinished: () -> Unit
 ) {
     val context = LocalContext.current
+
+    val layoutDirection =
+        if (isEnglish) {
+            LayoutDirection.Ltr
+        } else {
+            LayoutDirection.Rtl
+        }
 
     val stages = remember {
         listOf(
@@ -228,12 +241,13 @@ fun KmiStartupLoadingScreen(
     val textSecondary = colorScheme.onSurfaceVariant
     val progressTextColor = colorScheme.primary
     val progressTrackColor = colorScheme.surfaceVariant
-    val progressFillColor = Color(0xFF0FA36B)
+    val progressFillColor =
+        colorScheme.primary
     val videoBackgroundColor =
         if (isDarkTheme) {
             colorScheme.surfaceContainerHighest
         } else {
-            Color(0xFF0F1A26)
+            colorScheme.inverseSurface
         }
 
     /*
@@ -254,11 +268,17 @@ fun KmiStartupLoadingScreen(
             R.drawable.kmi_startup_loading_bg
         }
 
-    BoxWithConstraints(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(colorScheme.background)
+    CompositionLocalProvider(
+        LocalLayoutDirection provides
+                layoutDirection
     ) {
+        BoxWithConstraints(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(
+                    colorScheme.background
+                )
+        ) {
         Image(
             painter = painterResource(
                 id = loadingBackgroundRes
@@ -268,18 +288,29 @@ fun KmiStartupLoadingScreen(
             contentScale = ContentScale.Crop
         )
 
-        val isCompactHeight = maxHeight < 760.dp
-        val isVeryCompactHeight = maxHeight < 690.dp
+            val availableScreenHeight =
+                maxHeight
+
+            val isCompactHeight =
+                availableScreenHeight < 760.dp
+
+            val isVeryCompactHeight =
+                availableScreenHeight < 690.dp
 
         val horizontalPadding = if (isCompactHeight) 18.dp else 22.dp
 
         // מיקומים יחסיים לפי גובה המסך, כדי שהמסך ייראה אחיד בין מכשירים
-        val videoTopSpace =
-            if (isVeryCompactHeight) maxHeight * 0.145f
-            else if (isCompactHeight) maxHeight * 0.155f
-            else maxHeight * 0.165f
+            val videoTopSpace =
+                if (isVeryCompactHeight) {
+                    availableScreenHeight * 0.145f
+                } else if (isCompactHeight) {
+                    availableScreenHeight * 0.155f
+                } else {
+                    availableScreenHeight * 0.165f
+                }
 
-        val cardTopSpace = maxHeight * 0.550f
+            val cardTopSpace =
+                availableScreenHeight * 0.550f
 
         val videoWidth =
             if (isVeryCompactHeight) 184.dp else if (isCompactHeight) 198.dp else 214.dp
@@ -290,7 +321,10 @@ fun KmiStartupLoadingScreen(
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(horizontal = horizontalPadding)
+                .navigationBarsPadding()
+                .padding(
+                    horizontal = horizontalPadding
+                )
         ) {
             Box(
                 contentAlignment = Alignment.TopCenter,
@@ -372,7 +406,17 @@ fun KmiStartupLoadingScreen(
                 modifier = Modifier
                     .align(Alignment.TopCenter)
                     .offset(y = cardTopSpace)
-                    .fillMaxWidth(0.96f),
+                    .fillMaxWidth(0.96f)
+                    .heightIn(
+                        max =
+                            (
+                                    availableScreenHeight -
+                                            cardTopSpace -
+                                            12.dp
+                                    ).coerceAtLeast(
+                                    180.dp
+                                )
+                    ),
                 shape = RoundedCornerShape(22.dp),
                 color = cardBg,
                 tonalElevation = 0.dp,
@@ -381,11 +425,24 @@ fun KmiStartupLoadingScreen(
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
+                        .verticalScroll(
+                            rememberScrollState()
+                        )
                         .padding(
                             start = 14.dp,
                             end = 14.dp,
-                            top = if (isCompactHeight) 10.dp else 12.dp,
-                            bottom = if (isCompactHeight) 4.dp else 6.dp
+                            top =
+                                if (isCompactHeight) {
+                                    10.dp
+                                } else {
+                                    12.dp
+                                },
+                            bottom =
+                                if (isCompactHeight) {
+                                    4.dp
+                                } else {
+                                    6.dp
+                                }
                         )
                 ) {
                     Row(
@@ -538,6 +595,7 @@ fun KmiStartupLoadingScreen(
                 }
             }
         }
+        }
     }
 }
 
@@ -546,7 +604,10 @@ private fun KmiLoopingStartupVideo(
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
-    var videoViewRef: VideoView? = null
+
+    var videoViewRef by remember {
+        mutableStateOf<VideoView?>(null)
+    }
 
     val videoUri =
         remember(context) {
@@ -557,6 +618,7 @@ private fun KmiLoopingStartupVideo(
     DisposableEffect(Unit) {
         onDispose {
             videoViewRef?.stopPlayback()
+            videoViewRef = null
         }
     }
 
@@ -613,11 +675,17 @@ private fun LoadingChecklist(
                 label = "stageFade"
             )
 
-            val iconTint = when {
-                done -> accent
-                active -> Color(0xFFFFD166)
-                else -> textSecondary
-            }
+            val iconTint =
+                when {
+                    done ->
+                        accent
+
+                    active ->
+                        MaterialTheme.colorScheme.tertiary
+
+                    else ->
+                        textSecondary
+                }
 
             Row(
                 modifier = Modifier

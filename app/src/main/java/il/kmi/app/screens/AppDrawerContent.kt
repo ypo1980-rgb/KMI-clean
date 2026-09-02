@@ -1,9 +1,8 @@
-@file:OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
+@file:OptIn(ExperimentalMaterial3Api::class)
 
 package il.kmi.app.screens.drawer
 
 import android.content.Intent
-import android.net.Uri
 import android.widget.Toast
 import androidx.browser.customtabs.CustomTabsIntent
 import androidx.compose.foundation.BorderStroke
@@ -18,7 +17,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.ExpandMore
-import androidx.compose.material.icons.outlined.Logout
+import androidx.compose.material.icons.automirrored.outlined.Logout
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.*
@@ -58,13 +57,17 @@ import androidx.compose.foundation.layout.WindowInsets
 import il.kmi.app.screens.admin.AdminAccess
 import il.kmi.app.ui.KmiIconSize
 import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material.icons.filled.OpenInNew
+import androidx.compose.material.icons.automirrored.filled.OpenInNew
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.material.icons.filled.AccessibilityNew
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.material.icons.filled.Assessment
+import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.Campaign
+import androidx.compose.material.icons.filled.Description
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Groups
 import androidx.compose.material.icons.filled.Language
 import androidx.compose.material.icons.filled.Person
@@ -74,6 +77,13 @@ import il.kmi.app.ui.KmiTypography
 import il.kmi.app.voicecommands.VoiceDrawerDestination
 import kotlinx.coroutines.delay
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.core.net.toUri
+import il.yuval.ui.theme.kmiOnSuccessContainerColor
+import il.yuval.ui.theme.kmiSectionHeaderBrush
+import il.yuval.ui.theme.kmiSectionHeaderContentColor
+import il.yuval.ui.theme.kmiSuccessColor
+import il.yuval.ui.theme.kmiSuccessContainerColor
+import kotlin.time.Duration.Companion.milliseconds
 
 //===========================================================================
 
@@ -183,6 +193,15 @@ fun AppDrawerContent(
     val contextLang = LocalContext.current
     val scope = rememberCoroutineScope()
 
+    val drawerContentColor =
+        kmiSectionHeaderContentColor()
+
+    val dialogContainerColor =
+        MaterialTheme.colorScheme.tertiaryContainer
+
+    val dialogContentColor =
+        MaterialTheme.colorScheme.onTertiaryContainer
+
     // ✅ ה-Drawer לא מחליט לבד מה השפה.
     // הוא מקבל isEnglish ישירות מ-MainApp.
     val drawerLayoutDirection =
@@ -227,8 +246,25 @@ fun AppDrawerContent(
             clean.contains("Forum", ignoreCase = true) ||
                     clean.contains("פורום") -> Icons.Filled.Groups
 
+            clean.contains("Edit Profile", ignoreCase = true) ||
+                    clean.contains("עריכת פרופיל") ->
+                Icons.Filled.Edit
+
             clean.contains("Profile", ignoreCase = true) ||
-                    clean.contains("פרופיל") -> Icons.Filled.Person
+                    clean.contains("פרופיל") ->
+                Icons.Filled.Person
+
+            clean.contains("Calendar", ignoreCase = true) ||
+                    clean.contains("לוח שנה") ->
+                Icons.Filled.CalendarMonth
+
+            clean.contains("Training Summary", ignoreCase = true) ||
+                    clean.contains("סיכום אימון") ->
+                Icons.Filled.Description
+
+            clean.contains("Accessibility", ignoreCase = true) ||
+                    clean.contains("נגישות") ->
+                Icons.Filled.AccessibilityNew
 
             clean.contains("Language", ignoreCase = true) ||
                     clean.contains("שפה") -> Icons.Filled.Language
@@ -243,7 +279,7 @@ fun AppDrawerContent(
                     clean.contains("משתמשים") -> Icons.Filled.Groups
 
             clean.contains("Logout", ignoreCase = true) ||
-                    clean.contains("התנתקות") -> Icons.Outlined.Logout
+                    clean.contains("התנתקות") -> Icons.AutoMirrored.Outlined.Logout
 
             else -> null
         }
@@ -256,11 +292,14 @@ fun AppDrawerContent(
     ) {
         Surface(
             shape = CircleShape,
-            color = Color.White.copy(alpha = 0.12f),
+            color =
+                kmiSectionHeaderContentColor()
+                    .copy(alpha = 0.12f),
             border =
                 BorderStroke(
                     1.dp,
-                    Color.White.copy(alpha = 0.18f)
+                    kmiSectionHeaderContentColor()
+                        .copy(alpha = 0.18f)
                 ),
             tonalElevation = 0.dp,
             shadowElevation = 0.dp,
@@ -276,7 +315,8 @@ fun AppDrawerContent(
                     Icon(
                         imageVector = icon,
                         contentDescription = null,
-                        tint = Color.White,
+                        tint =
+                            kmiSectionHeaderContentColor(),
                         modifier = Modifier.size(KmiIconSize.small)
                     )
                 }
@@ -296,13 +336,13 @@ fun AppDrawerContent(
         Surface(
             modifier = modifier,
             shape = CircleShape,
-            color = Color(0xFF25D366),
+            color = kmiSuccessContainerColor(),
             tonalElevation = 0.dp,
             shadowElevation = 0.dp,
             border =
                 BorderStroke(
                     1.dp,
-                    Color.White.copy(alpha = 0.55f)
+                    kmiSuccessColor()
                 )
         ) {
             Box(
@@ -316,7 +356,8 @@ fun AppDrawerContent(
                     style = KmiTypography.caption.copy(
                         fontWeight = FontWeight.Black
                     ),
-                    color = Color.White,
+                    color =
+                        kmiOnSuccessContainerColor(),
                     textAlign = TextAlign.Center,
                     maxLines = 1
                 )
@@ -622,15 +663,12 @@ fun AppDrawerContent(
             scroll.scrollTo(0)
         }
 
-        val drawerBackgroundColor =
-            Color(0xFF102A43)
-
         Box(
             modifier =
                 Modifier
                     .fillMaxSize()
                     .background(
-                        drawerBackgroundColor
+                        brush = kmiSectionHeaderBrush()
                     )
         ) {
 
@@ -641,10 +679,9 @@ fun AppDrawerContent(
                 title: String,
                 subtitle: String? = null,
                 onClick: () -> Unit,
-                twoLineTitle: Boolean = false,
                 titleTextStyle: TextStyle =
                     KmiTypography.cardTitle.copy(
-                        color = Color.White,
+                        color = drawerContentColor,
                         fontWeight = FontWeight.ExtraBold
                     )
             ) {
@@ -696,7 +733,10 @@ fun AppDrawerContent(
                                     softWrap = true,
                                     overflow = TextOverflow.Ellipsis,
                                     style = KmiTypography.secondary.copy(
-                                        color = Color.White.copy(alpha = 0.72f),
+                                        color =
+                                            drawerContentColor.copy(
+                                                alpha = 0.72f
+                                            ),
                                         fontWeight = FontWeight.SemiBold
                                     ),
                                     textAlign = TextAlign.Right,
@@ -713,7 +753,7 @@ fun AppDrawerContent(
 
                     HorizontalDivider(
                         thickness = 1.dp,
-                        color = Color.White.copy(alpha = 0.10f)
+                        color = drawerContentColor.copy(alpha = 0.10f)
                     )
                 }
             }
@@ -725,10 +765,9 @@ fun AppDrawerContent(
                 title: String,
                 subtitle: String? = null,
                 onClick: () -> Unit,
-                twoLineTitle: Boolean = false,
                 titleTextStyle: TextStyle =
                     KmiTypography.cardTitle.copy(
-                        color = Color.White,
+                        color = drawerContentColor,
                         fontWeight = FontWeight.ExtraBold
                     )
             ) {
@@ -780,7 +819,7 @@ fun AppDrawerContent(
                                     softWrap = true,
                                     overflow = TextOverflow.Ellipsis,
                                     style = KmiTypography.secondary.copy(
-                                        color = Color.White.copy(alpha = 0.72f),
+                                        color = drawerContentColor.copy(alpha = 0.72f),
                                         fontWeight = FontWeight.SemiBold
                                     ),
                                     textAlign = TextAlign.Start,
@@ -797,7 +836,8 @@ fun AppDrawerContent(
 
                     HorizontalDivider(
                         thickness = 1.dp,
-                        color = Color.White.copy(alpha = 0.10f)
+                        color =
+                            drawerContentColor.copy(alpha = 0.10f)
                     )
                 }
             }
@@ -840,7 +880,7 @@ fun AppDrawerContent(
                                 text = title,
                                 style =
                                     KmiTypography.cardTitle.copy(
-                                        color = Color.White,
+                                        color = drawerContentColor,
                                         fontWeight =
                                             FontWeight.ExtraBold
                                     ),
@@ -857,7 +897,7 @@ fun AppDrawerContent(
                                     text = subtitle,
                                     style = KmiTypography.secondary.copy(
                                         color =
-                                            Color.White.copy(alpha = 0.82f),
+                                            drawerContentColor.copy(alpha = 0.82f),
                                         fontWeight = FontWeight.Medium
                                     ),
                                     textAlign = TextAlign.Right,
@@ -873,7 +913,7 @@ fun AppDrawerContent(
                     if (showDivider) {
                         HorizontalDivider(
                             thickness = 1.dp,
-                            color = Color.White.copy(alpha = 0.12f)
+                            color = drawerContentColor.copy(alpha = 0.12f)
                         )
                     }
                 }
@@ -905,7 +945,7 @@ fun AppDrawerContent(
                         Icon(
                             imageVector = icon,
                             contentDescription = null,
-                            tint = Color(0xFFFF8AD8),
+                            tint = MaterialTheme.colorScheme.primary,
                             modifier = Modifier.size(KmiIconSize.medium)
                         )
 
@@ -920,7 +960,7 @@ fun AppDrawerContent(
                                 text = title,
                                 style =
                                     KmiTypography.cardTitle.copy(
-                                        color = Color.White,
+                                        color = drawerContentColor,
                                         fontWeight =
                                             FontWeight.ExtraBold
                                     ),
@@ -937,7 +977,7 @@ fun AppDrawerContent(
                                     text = subtitle,
                                     style = KmiTypography.secondary.copy(
                                         color =
-                                            Color.White.copy(alpha = 0.82f),
+                                            drawerContentColor.copy(alpha = 0.82f),
                                         fontWeight = FontWeight.Medium
                                     ),
                                     textAlign = TextAlign.Start,
@@ -953,7 +993,7 @@ fun AppDrawerContent(
                     if (showDivider) {
                         HorizontalDivider(
                             thickness = 1.dp,
-                            color = Color.White.copy(alpha = 0.12f)
+                            color = drawerContentColor.copy(alpha = 0.12f)
                         )
                     }
                 }
@@ -965,7 +1005,7 @@ fun AppDrawerContent(
                 Column(
                     modifier = Modifier.fillMaxWidth()
                 ) {
-                        // ←—— כותרת + כפתור X קבועים מעל אזור הגלילה ——→
+                    // ←—— כותרת + כפתור X קבועים מעל אזור הגלילה ——→
                     val topInset =
                         WindowInsets.statusBars
                             .asPaddingValues()
@@ -987,23 +1027,23 @@ fun AppDrawerContent(
                             Alignment.CenterVertically
                     ) {
                         Text(
-                                text = tr("תפריט", "Menu"),
-                                style = KmiTypography.screenTitle,
-                                color = Color.White,
-                                maxLines = 1
+                            text = tr("תפריט", "Menu"),
+                            style = KmiTypography.screenTitle,
+                            color = drawerContentColor,
+                            maxLines = 1
+                        )
+                        IconButton(
+                            onClick = onClose,
+                            modifier = Modifier.size(40.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Filled.Close,
+                                contentDescription = tr("סגור תפריט", "Close menu"),
+                                tint = drawerContentColor,
+                                modifier = Modifier.size(KmiIconSize.medium)
                             )
-                            IconButton(
-                                onClick = onClose,
-                                modifier = Modifier.size(40.dp)
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Filled.Close,
-                                    contentDescription = tr("סגור תפריט", "Close menu"),
-                                    tint = Color.White,
-                                    modifier = Modifier.size(KmiIconSize.medium)
-                                )
-                            }
                         }
+                    }
 
                     Column(
                         modifier =
@@ -1021,312 +1061,10 @@ fun AppDrawerContent(
                             Alignment.Start
                     ) {
 
-                            //------------------------------------------------------------------------
-                            // ===== כפתורי מאמן — ורק למאמן =====
-                            if (isCoach) {
-                                Spacer(Modifier.height(8.dp))
-
-                                Column(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(horizontal = 10.dp)
-                                        .clip(RoundedCornerShape(24.dp))
-                                        .background(
-                                            brush = Brush.verticalGradient(
-                                                colors = listOf(
-                                                    Color(0xFF1E1B4B).copy(alpha = 0.92f),
-                                                    Color(0xFF312E81).copy(alpha = 0.78f),
-                                                    Color(0xFF1D4ED8).copy(alpha = 0.36f)
-                                                )
-                                            )
-                                        )
-                                        .border(
-                                            width = 1.dp,
-                                            color = Color(0xFFFF8AD8).copy(alpha = 0.22f),
-                                            shape = RoundedCornerShape(24.dp)
-                                        )
-                                        .padding(vertical = 6.dp)
-                                ) {
-                                    Row(
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .padding(horizontal = 16.dp, vertical = 8.dp),
-                                        verticalAlignment = Alignment.CenterVertically
-                                    ) {
-
-                                        Spacer(Modifier.width(10.dp))
-
-                                        Column(
-                                            modifier = Modifier.weight(1f),
-                                            horizontalAlignment = if (isEnglish) Alignment.Start else Alignment.End
-                                        ) {
-                                            Text(
-                                                text = tr(
-                                                    "אזור מאמן",
-                                                    "Coach area"
-                                                ),
-                                                style =
-                                                    KmiTypography.sectionTitle.copy(
-                                                        fontWeight =
-                                                            FontWeight.Black
-                                                    ),
-                                                color = Color.White,
-                                                textAlign =
-                                                    if (isEnglish) {
-                                                        TextAlign.Start
-                                                    } else {
-                                                        TextAlign.Right
-                                                    },
-                                                maxLines = 1,
-                                                modifier =
-                                                    Modifier.fillMaxWidth()
-                                            )
-                                        }
-                                    }
-
-                                    HorizontalDivider(
-                                        modifier = Modifier.padding(
-                                            horizontal = 16.dp,
-                                            vertical = 4.dp
-                                        ),
-                                        thickness = 1.dp,
-                                        color = Color.White.copy(alpha = 0.16f)
-                                    )
-
-                                    if (isEnglish) {
-                                        CoachLineItemEn(
-                                            title = "Mark Attendance",
-                                            icon = Icons.Filled.Assessment,
-                                            onClick = {
-                                                onClose()
-
-                                                runCatching {
-                                                    onOpenCoachAttendance()
-                                                }.onFailure {
-                                                    Toast.makeText(
-                                                        contextLang,
-                                                        tr(
-                                                            "לא ניתן לפתוח דו״ח נוכחות כרגע",
-                                                            "Unable to open attendance report right now"
-                                                        ),
-                                                        Toast.LENGTH_SHORT
-                                                    ).show()
-                                                }
-                                            }
-                                        )
-                                        CoachLineItemEn(
-                                            title = "Send Message",
-                                            icon = Icons.Filled.Campaign,
-                                            onClick = {
-                                                onClose()
-                                                onOpenCoachBroadcast()
-                                            }
-                                        )
-                                        CoachLineItemEn(
-                                            title = "Trainees List",
-                                            icon = Icons.Filled.Groups,
-                                            onClick = {
-                                                onClose()
-                                                onOpenCoachTrainees()
-                                            }
-                                        )
-                                        CoachLineItemEn(
-                                            title = "Payments Report",
-                                            icon = Icons.Filled.Assessment,
-                                            onClick = {
-                                                onClose()
-                                                onOpenCoachPaymentsReport()
-                                            }
-                                        )
-                                        CoachLineItemEn(
-                                            title = "Internal Belt Exam",
-                                            icon = Icons.Filled.WorkspacePremium,
-                                            showDivider = false,
-                                            onClick = {
-                                                onClose()
-                                                onOpenCoachInternalExam()
-                                            }
-                                        )
-                                    } else {
-                                        CoachLineItemHe(
-                                            title = "עדכון נוכחות",
-                                            icon = Icons.Filled.Assessment,
-                                            onClick = {
-                                                onClose()
-
-                                                runCatching {
-                                                    onOpenCoachAttendance()
-                                                }.onFailure {
-                                                    Toast.makeText(
-                                                        contextLang,
-                                                        tr(
-                                                            "לא ניתן לפתוח דו״ח נוכחות כרגע",
-                                                            "Unable to open attendance report right now"
-                                                        ),
-                                                        Toast.LENGTH_SHORT
-                                                    ).show()
-                                                }
-                                            }
-                                        )
-                                        CoachLineItemHe(
-                                            title = "שליחת הודעה",
-                                            icon = Icons.Filled.Campaign,
-                                            onClick = {
-                                                onClose()
-                                                onOpenCoachBroadcast()
-                                            }
-                                        )
-                                        CoachLineItemHe(
-                                            title = "רשימת מתאמנים",
-                                            icon = Icons.Filled.Groups,
-                                            onClick = {
-                                                onClose()
-                                                onOpenCoachTrainees()
-                                            }
-                                        )
-                                        CoachLineItemHe(
-                                            title = "דו״ח תשלומים",
-                                            icon = Icons.Filled.Assessment,
-                                            onClick = {
-                                                onClose()
-                                                onOpenCoachPaymentsReport()
-                                            }
-                                        )
-                                        CoachLineItemHe(
-                                            title = "מבחן פנימי לחגורה",
-                                            icon = Icons.Filled.WorkspacePremium,
-                                            showDivider = false,
-                                            onClick = {
-                                                onClose()
-                                                onOpenCoachInternalExam()
-                                            }
-                                        )
-                                    }
-                                }
-
-                                Spacer(Modifier.height(10.dp))
-                            }
-
-                            // ===== אזור מנהל – רק למנהל =====
-                            if (effectiveIsAdmin) {
-                                Spacer(Modifier.height(6.dp))
-
-                                Column(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(horizontal = 10.dp)
-                                        .clip(RoundedCornerShape(24.dp))
-                                        .background(
-                                            brush = Brush.verticalGradient(
-                                                colors = listOf(
-                                                    Color(0xFF163524).copy(alpha = 0.96f),
-                                                    Color(0xFF1F5A3D).copy(alpha = 0.82f),
-                                                    Color(0xFF1F7A57).copy(alpha = 0.42f)
-                                                )
-                                            )
-                                        )
-                                        .border(
-                                            width = 1.dp,
-                                            color = Color(0xFF7DFFB3).copy(alpha = 0.24f),
-                                            shape = RoundedCornerShape(24.dp)
-                                        )
-                                        .padding(vertical = 6.dp)
-                                ) {
-                                    Row(
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .padding(horizontal = 16.dp, vertical = 8.dp),
-                                        verticalAlignment = Alignment.CenterVertically
-                                    ) {
-                                        Column(
-                                            modifier = Modifier.weight(1f),
-                                            horizontalAlignment = if (isEnglish) Alignment.Start else Alignment.End
-                                        ) {
-                                            Text(
-                                                text = tr(
-                                                    "אזור מנהל",
-                                                    "Admin area"
-                                                ),
-                                                style =
-                                                    KmiTypography.sectionTitle.copy(
-                                                        fontWeight =
-                                                            FontWeight.Black
-                                                    ),
-                                                color = Color.White,
-                                                textAlign =
-                                                    if (isEnglish) {
-                                                        TextAlign.Start
-                                                    } else {
-                                                        TextAlign.Right
-                                                    },
-                                                maxLines = 1,
-                                                modifier =
-                                                    Modifier.fillMaxWidth()
-                                            )
-                                        }
-                                    }
-
-                                    HorizontalDivider(
-                                        modifier = Modifier.padding(
-                                            horizontal = 16.dp,
-                                            vertical = 4.dp
-                                        ),
-                                        thickness = 1.dp,
-                                        color = Color.White.copy(alpha = 0.16f)
-                                    )
-
-                                    if (isEnglish) {
-                                        CoachLineItemEn(
-                                            title = "Manage Users",
-                                            subtitle = "View all app users",
-                                            icon = Icons.Filled.Groups,
-                                            showDivider = true,
-                                            onClick = {
-                                                onClose()
-                                                onOpenAdminUsers()
-                                            }
-                                        )
-
-                                        CoachLineItemEn(
-                                            title = "Control Center & Logs",
-                                            subtitle = "Activity, errors and app diagnostics",
-                                            icon = Icons.Filled.Assessment,
-                                            showDivider = false,
-                                            onClick = {
-                                                onClose()
-                                                onOpenAdminDiagnostics()
-                                            }
-                                        )
-                                    } else {
-                                        CoachLineItemHe(
-                                            title = "ניהול משתמשים",
-                                            subtitle = "צפייה בכל המשתמשים\nבאפליקציה",
-                                            icon = Icons.Filled.Groups,
-                                            showDivider = true,
-                                            onClick = {
-                                                onClose()
-                                                onOpenAdminUsers()
-                                            }
-                                        )
-
-                                        CoachLineItemHe(
-                                            title = "מרכז בקרה ולוגים",
-                                            subtitle = "ניתוח פעילות, תקלות\nושימוש באפליקציה",
-                                            icon = Icons.Filled.Assessment,
-                                            showDivider = false,
-                                            onClick = {
-                                                onClose()
-                                                onOpenAdminDiagnostics()
-                                            }
-                                        )
-                                    }
-                                }
-
-                                Spacer(Modifier.height(8.dp))
-                            }
-
-                            // ===== אזור מתאמן =====
-                            Spacer(Modifier.height(6.dp))
+                        //------------------------------------------------------------------------
+                        // ===== כפתורי מאמן — ורק למאמן =====
+                        if (isCoach) {
+                            Spacer(Modifier.height(8.dp))
 
                             Column(
                                 modifier = Modifier
@@ -1335,16 +1073,22 @@ fun AppDrawerContent(
                                     .clip(RoundedCornerShape(24.dp))
                                     .background(
                                         brush = Brush.verticalGradient(
-                                            colors = listOf(
-                                                Color(0xFF153A63).copy(alpha = 0.94f),
-                                                Color(0xFF1D5C96).copy(alpha = 0.82f),
-                                                Color(0xFF2F83C8).copy(alpha = 0.42f)
+                                            colors =                                                 listOf(
+                                                MaterialTheme.colorScheme
+                                                    .primaryContainer
+                                                    .copy(alpha = 0.92f),
+                                                MaterialTheme.colorScheme
+                                                    .primary
+                                                    .copy(alpha = 0.78f),
+                                                MaterialTheme.colorScheme
+                                                    .secondary
+                                                    .copy(alpha = 0.36f)
                                             )
                                         )
                                     )
                                     .border(
                                         width = 1.dp,
-                                        color = Color(0xFF8FD3FF).copy(alpha = 0.24f),
+                                        color = MaterialTheme.colorScheme.primary.copy(alpha = 0.22f),
                                         shape = RoundedCornerShape(24.dp)
                                     )
                                     .padding(vertical = 6.dp)
@@ -1364,15 +1108,15 @@ fun AppDrawerContent(
                                     ) {
                                         Text(
                                             text = tr(
-                                                "אזור מתאמן",
-                                                "Trainee area"
+                                                "אזור מאמן",
+                                                "Coach area"
                                             ),
                                             style =
                                                 KmiTypography.sectionTitle.copy(
                                                     fontWeight =
                                                         FontWeight.Black
                                                 ),
-                                            color = Color.White,
+                                            color = drawerContentColor,
                                             textAlign =
                                                 if (isEnglish) {
                                                     TextAlign.Start
@@ -1392,378 +1136,764 @@ fun AppDrawerContent(
                                         vertical = 4.dp
                                     ),
                                     thickness = 1.dp,
-                                    color = Color.White.copy(alpha = 0.16f)
+                                    color = drawerContentColor.copy(alpha = 0.16f)
                                 )
 
-                                // ✅ הפרופיל שלי — מסך אמת שמציג נתונים מהמשתמש / Firestore / Preferences
                                 if (isEnglish) {
-                                    DrawerLineItemEn(
-                                        leading = {
-                                            Icon(
-                                                imageVector = Icons.Filled.Person,
-                                                contentDescription = null,
-                                                tint = Color.White
-                                            )
-                                        },
-                                        title = "My Profile",
-                                        subtitle = "View your personal K.M.I details",
+                                    CoachLineItemEn(
+                                        title = "Mark Attendance",
+                                        icon = Icons.Filled.Assessment,
                                         onClick = {
                                             onClose()
-                                            onOpenMyProfile()
-                                        }
-                                    )
-                                } else {
-                                    DrawerLineItemHe(
-                                        leading = {
-                                            Icon(
-                                                imageVector = Icons.Filled.Person,
-                                                contentDescription = null,
-                                                tint = Color.White
-                                            )
-                                        },
-                                        title = "הפרופיל שלי",
-                                        subtitle = "צפייה בפרטים האישיים שלך",
-                                        onClick = {
-                                            onClose()
-                                            onOpenMyProfile()
-                                        }
-                                    )
-                                }
 
-                                // ===== כפתור ראשון: אודות אבי אביסידון =====
-                                if (isEnglish) {
-                                    DrawerLineItemEn(
-                                        title = "About Avi Avisidon",
-                                        subtitle = "Head of the method",
-                                        onClick = {
-                                            onClose()
-                                            onOpenAboutAvi()
-                                        }
-                                    )
-                                } else {
-                                    DrawerLineItemHe(
-                                        title = "אודות אבי אביסידון",
-                                        subtitle = "ראש השיטה",
-                                        onClick = {
-                                            onClose()
-                                            onOpenAboutAvi()
-                                        }
-                                    )
-                                }
-
-                                // ===== אודות המאמנים ברשת =====
-                                if (isEnglish) {
-                                    DrawerLineItemEn(
-                                        title = "About Network Coaches",
-                                        subtitle = "Ranks, experience and certifications",
-                                        onClick = {
-                                            onClose()
-                                            onOpenAboutNetworkCoaches()
-                                        }
-                                    )
-                                } else {
-                                    DrawerLineItemHe(
-                                        title = "אודות המאמנים ברשת",
-                                        subtitle = "דרגות, ותק, הכשרות והסמכות",
-                                        onClick = {
-                                            onClose()
-                                            onOpenAboutNetworkCoaches()
-                                        }
-                                    )
-                                }
-
-                                val showHiddenAboutItems = false
-
-                                if (showHiddenAboutItems) {
-
-                                    if (isEnglish) {
-                                        DrawerLineItemEn(
-                                            title = "About Itzik Biton",
-                                            subtitle = "Senior coach",
-                                            onClick = {
-                                                onClose()
-                                                onOpenAboutItzik()
-                                            }
-                                        )
-                                    } else {
-                                        DrawerLineItemHe(
-                                            title = "אודות איציק ביטון",
-                                            subtitle = "מאמן בכיר",
-                                            onClick = {
-                                                onClose()
-                                                onOpenAboutItzik()
-                                            }
-                                        )
-                                    }
-
-                                    if (isEnglish) {
-                                        DrawerLineItemEn(
-                                            title = "About the Network",
-                                            subtitle = "Knockout",
-                                            onClick = {
-                                                onClose()
-                                                onOpenAboutNetwork()
-                                            }
-                                        )
-                                    } else {
-                                        DrawerLineItemHe(
-                                            title = "אודות הרשת",
-                                            subtitle = "Knockout",
-                                            onClick = {
-                                                onClose()
-                                                onOpenAboutNetwork()
-                                            }
-                                        )
-                                    }
-
-                                }
-
-                                if (isEnglish) {
-                                    DrawerLineItemEn(
-                                        title = "About the Method",
-                                        subtitle = "KAMI",
-                                        onClick = {
-                                            onClose()
-                                            onOpenAboutMethod()
-                                        }
-                                    )
-                                } else {
-                                    DrawerLineItemHe(
-                                        title = "אודות השיטה",
-                                        subtitle = "KAMI",
-                                        onClick = {
-                                            onClose()
-                                            onOpenAboutMethod()
-                                        }
-                                    )
-                                }
-
-                                if (isEnglish) {
-                                    DrawerLineItemEn(
-                                        title = "Exercises – Demo",
-                                        subtitle = "Short demo videos for exercises",
-                                        onClick = { showDemoVideos = true }
-                                    )
-                                } else {
-                                    DrawerLineItemHe(
-                                        title = "תרגילים – הדגמה",
-                                        subtitle = "סרטוני הסבר קצרים לתרגילים",
-                                        onClick = { showDemoVideos = true }
-                                    )
-                                }
-
-                                val context = LocalContext.current
-                                if (isEnglish) {
-                                    DrawerLineItemEn(
-                                        title = "Forms & Payments",
-                                        twoLineTitle = true,
-                                        onClick = {
-                                            showFormsPaymentsDialog = true
-                                        }
-                                    )
-                                } else {
-                                    DrawerLineItemHe(
-                                        title = "טפסים ותשלומים",
-                                        twoLineTitle = true,
-                                        onClick = {
-                                            showFormsPaymentsDialog = true
-                                        }
-                                    )
-                                }
-
-                                if (isEnglish) {
-                                    DrawerLineItemEn(
-                                        title = "Contact Us",
-                                        subtitle = "Leave details and we will get back to you",
-                                        onClick = {
-                                            onClose()
-                                            onOpenContactUs()
-                                        }
-                                    )
-                                } else {
-                                    DrawerLineItemHe(
-                                        title = "צור קשר",
-                                        subtitle = "השאירו פרטים ונחזור אליכם",
-                                        onClick = {
-                                            onClose()
-                                            onOpenContactUs()
-                                        }
-                                    )
-                                }
-
-                                if (isEnglish) {
-                                    DrawerLineItemEn(
-                                        title = "Branch Forum",
-                                        trailing = {
-                                            DrawerUnreadBadge(forumUnreadCount)
-                                        },
-                                        onClick = {
-                                            onClose()
-                                            onOpenForum()
-                                        }
-                                    )
-                                } else {
-                                    DrawerLineItemHe(
-                                        title = "פורום הסניף",
-                                        trailing = {
-                                            DrawerUnreadBadge(forumUnreadCount)
-                                        },
-                                        onClick = {
-                                            onClose()
-                                            onOpenForum()
-                                        }
-                                    )
-                                }
-
-                                if (isEnglish) {
-                                    DrawerLineItemEn(
-                                        leading = {
-                                            Icon(
-                                                imageVector = Icons.Filled.Language,
-                                                contentDescription = null,
-                                                tint = Color.White
-                                            )
-                                        },
-                                        title = "Language / שפה",
-                                        onClick = {
-                                            val newLang = AppLanguage.HEBREW
-
-                                            // ✅ רק MainApp שומר ומעדכן את ה-State.
-                                            // לא שומרים כאן ישירות כדי למנוע כפילות וערכים ישנים.
-                                            onLanguageChanged(newLang)
-
-                                            onClose()
-
-                                            scope.launch {
-                                                delay(180)
-
+                                            runCatching {
+                                                onOpenCoachAttendance()
+                                            }.onFailure {
                                                 Toast.makeText(
                                                     contextLang,
-                                                    "שפה: עברית",
+                                                    tr(
+                                                        "לא ניתן לפתוח דו״ח נוכחות כרגע",
+                                                        "Unable to open attendance report right now"
+                                                    ),
                                                     Toast.LENGTH_SHORT
                                                 ).show()
                                             }
                                         }
                                     )
-                                } else {
-                                    DrawerLineItemHe(
-                                        leading = {
-                                            Icon(
-                                                imageVector = Icons.Filled.Language,
-                                                contentDescription = null,
-                                                tint = Color.White
-                                            )
-                                        },
-                                        title = "שפה / Language",
+                                    CoachLineItemEn(
+                                        title = "Send Message",
+                                        icon = Icons.Filled.Campaign,
                                         onClick = {
-                                            val newLang = AppLanguage.ENGLISH
-
-                                            // ✅ רק MainApp שומר ומעדכן את ה-State.
-                                            // לא שומרים כאן ישירות כדי למנוע כפילות וערכים ישנים.
-                                            onLanguageChanged(newLang)
-
+                                            onClose()
+                                            onOpenCoachBroadcast()
+                                        }
+                                    )
+                                    CoachLineItemEn(
+                                        title = "Trainees List",
+                                        icon = Icons.Filled.Groups,
+                                        onClick = {
+                                            onClose()
+                                            onOpenCoachTrainees()
+                                        }
+                                    )
+                                    CoachLineItemEn(
+                                        title = "Payments Report",
+                                        icon = Icons.Filled.Assessment,
+                                        onClick = {
+                                            onClose()
+                                            onOpenCoachPaymentsReport()
+                                        }
+                                    )
+                                    CoachLineItemEn(
+                                        title = "Internal Belt Exam",
+                                        icon = Icons.Filled.WorkspacePremium,
+                                        showDivider = false,
+                                        onClick = {
+                                            onClose()
+                                            onOpenCoachInternalExam()
+                                        }
+                                    )
+                                } else {
+                                    CoachLineItemHe(
+                                        title = "עדכון נוכחות",
+                                        icon = Icons.Filled.Assessment,
+                                        onClick = {
                                             onClose()
 
-                                            scope.launch {
-                                                delay(180)
-
+                                            runCatching {
+                                                onOpenCoachAttendance()
+                                            }.onFailure {
                                                 Toast.makeText(
                                                     contextLang,
-                                                    "Language: English",
+                                                    tr(
+                                                        "לא ניתן לפתוח דו״ח נוכחות כרגע",
+                                                        "Unable to open attendance report right now"
+                                                    ),
                                                     Toast.LENGTH_SHORT
                                                 ).show()
                                             }
                                         }
                                     )
-                                }
-
-                                if (isEnglish) {
-                                    DrawerLineItemEn(
-                                        title = "Manage Subscription",
+                                    CoachLineItemHe(
+                                        title = "שליחת הודעה",
+                                        icon = Icons.Filled.Campaign,
                                         onClick = {
                                             onClose()
-                                            onOpenSubscriptions()
+                                            onOpenCoachBroadcast()
                                         }
                                     )
-                                } else {
-                                    DrawerLineItemHe(
-                                        title = "ניהול מנוי",
+                                    CoachLineItemHe(
+                                        title = "רשימת מתאמנים",
+                                        icon = Icons.Filled.Groups,
                                         onClick = {
                                             onClose()
-                                            onOpenSubscriptions()
+                                            onOpenCoachTrainees()
                                         }
                                     )
-                                }
-
-                                if (isEnglish) {
-                                    DrawerLineItemEn(
-                                        title = "⭐ Rate Us ⭐",
+                                    CoachLineItemHe(
+                                        title = "דו״ח תשלומים",
+                                        icon = Icons.Filled.Assessment,
                                         onClick = {
                                             onClose()
-                                            onOpenRateUs()
+                                            onOpenCoachPaymentsReport()
                                         }
                                     )
-                                } else {
-                                    DrawerLineItemHe(
-                                        title = "⭐ דרגו אותנו ⭐",
+                                    CoachLineItemHe(
+                                        title = "מבחן פנימי לחגורה",
+                                        icon = Icons.Filled.WorkspacePremium,
+                                        showDivider = false,
                                         onClick = {
                                             onClose()
-                                            onOpenRateUs()
+                                            onOpenCoachInternalExam()
                                         }
                                     )
                                 }
+                            }
 
-                                if (isEnglish) {
-                                    DrawerLineItemEn(
-                                        leading = {
-                                            Icon(
-                                                imageVector = Icons.Outlined.Logout,
-                                                contentDescription = null,
-                                                tint = Color.White
+                            Spacer(Modifier.height(10.dp))
+                        }
+
+                        // ===== אזור מנהל – רק למנהל =====
+                        if (effectiveIsAdmin) {
+                            Spacer(Modifier.height(6.dp))
+
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 10.dp)
+                                    .clip(RoundedCornerShape(24.dp))
+                                    .background(
+                                        brush = Brush.verticalGradient(
+                                            colors =                                                 listOf(
+                                                kmiSuccessContainerColor()
+                                                    .copy(alpha = 0.96f),
+                                                kmiSuccessColor()
+                                                    .copy(alpha = 0.82f),
+                                                kmiSuccessColor()
+                                                    .copy(alpha = 0.42f)
                                             )
-                                        },
-                                        title = "Logout",
+                                        )
+                                    )
+                                    .border(
+                                        width = 1.dp,
+                                        color =
+                                            kmiSuccessColor()
+                                                .copy(alpha = 0.24f),
+                                        shape = RoundedCornerShape(24.dp)
+                                    )
+                                    .padding(vertical = 6.dp)
+                            ) {
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(horizontal = 16.dp, vertical = 8.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Column(
+                                        modifier = Modifier.weight(1f),
+                                        horizontalAlignment = if (isEnglish) Alignment.Start else Alignment.End
+                                    ) {
+                                        Text(
+                                            text = tr(
+                                                "אזור מנהל",
+                                                "Admin area"
+                                            ),
+                                            style =
+                                                KmiTypography.sectionTitle.copy(
+                                                    fontWeight =
+                                                        FontWeight.Black
+                                                ),
+                                            color = drawerContentColor,
+                                            textAlign =
+                                                if (isEnglish) {
+                                                    TextAlign.Start
+                                                } else {
+                                                    TextAlign.Right
+                                                },
+                                            maxLines = 1,
+                                            modifier =
+                                                Modifier.fillMaxWidth()
+                                        )
+                                    }
+                                }
+
+                                HorizontalDivider(
+                                    modifier = Modifier.padding(
+                                        horizontal = 16.dp,
+                                        vertical = 4.dp
+                                    ),
+                                    thickness = 1.dp,
+                                    color = drawerContentColor.copy(alpha = 0.16f)
+                                )
+
+                                if (isEnglish) {
+                                    CoachLineItemEn(
+                                        title = "Manage Users",
+                                        subtitle = "View all app users",
+                                        icon = Icons.Filled.Groups,
+                                        showDivider = true,
                                         onClick = {
                                             onClose()
-                                            onLogout()
+                                            onOpenAdminUsers()
+                                        }
+                                    )
+
+                                    CoachLineItemEn(
+                                        title = "Control Center & Logs",
+                                        subtitle = "Activity, errors and app diagnostics",
+                                        icon = Icons.Filled.Assessment,
+                                        showDivider = false,
+                                        onClick = {
+                                            onClose()
+                                            onOpenAdminDiagnostics()
                                         }
                                     )
                                 } else {
-                                    DrawerLineItemHe(
-                                        leading = {
-                                            Icon(
-                                                imageVector = Icons.Outlined.Logout,
-                                                contentDescription = null,
-                                                tint = Color.White
-                                            )
-                                        },
-                                        title = "התנתקות",
+                                    CoachLineItemHe(
+                                        title = "ניהול משתמשים",
+                                        subtitle = "צפייה בכל המשתמשים\nבאפליקציה",
+                                        icon = Icons.Filled.Groups,
+                                        showDivider = true,
                                         onClick = {
                                             onClose()
-                                            onLogout()
+                                            onOpenAdminUsers()
+                                        }
+                                    )
+
+                                    CoachLineItemHe(
+                                        title = "מרכז בקרה ולוגים",
+                                        subtitle = "ניתוח פעילות, תקלות\nושימוש באפליקציה",
+                                        icon = Icons.Filled.Assessment,
+                                        showDivider = false,
+                                        onClick = {
+                                            onClose()
+                                            onOpenAdminDiagnostics()
                                         }
                                     )
                                 }
                             }
 
                             Spacer(Modifier.height(8.dp))
-                            Text(
-                                text = "© KAMI",
-                                style = KmiTypography.caption,
-                                color = Color(0xFFB8C4DA),
-                                textAlign = if (isEnglish) TextAlign.Start else TextAlign.End,
-                                modifier = Modifier.fillMaxWidth()
+                        }
+
+                        // ===== אזור מתאמן =====
+                        Spacer(Modifier.height(6.dp))
+
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 10.dp)
+                                .clip(RoundedCornerShape(24.dp))
+                                .background(
+                                    brush = Brush.verticalGradient(
+                                        colors =                                             listOf(
+                                            MaterialTheme.colorScheme
+                                                .secondaryContainer
+                                                .copy(alpha = 0.94f),
+                                            MaterialTheme.colorScheme
+                                                .secondary
+                                                .copy(alpha = 0.82f),
+                                            MaterialTheme.colorScheme
+                                                .tertiary
+                                                .copy(alpha = 0.42f)
+                                        )
+                                    )
+                                )
+                                .border(
+                                    width = 1.dp,
+                                    color =
+                                        MaterialTheme.colorScheme
+                                            .secondary
+                                            .copy(alpha = 0.24f),
+                                    shape = RoundedCornerShape(24.dp)
+                                )
+                                .padding(vertical = 6.dp)
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 16.dp, vertical = 8.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+
+                                Spacer(Modifier.width(10.dp))
+
+                                Column(
+                                    modifier = Modifier.weight(1f),
+                                    horizontalAlignment = if (isEnglish) Alignment.Start else Alignment.End
+                                ) {
+                                    Text(
+                                        text = tr(
+                                            "אזור מתאמן",
+                                            "Trainee area"
+                                        ),
+                                        style =
+                                            KmiTypography.sectionTitle.copy(
+                                                fontWeight =
+                                                    FontWeight.Black
+                                            ),
+                                        color = drawerContentColor,
+                                        textAlign =
+                                            if (isEnglish) {
+                                                TextAlign.Start
+                                            } else {
+                                                TextAlign.Right
+                                            },
+                                        maxLines = 1,
+                                        modifier =
+                                            Modifier.fillMaxWidth()
+                                    )
+                                }
+                            }
+
+                            HorizontalDivider(
+                                modifier = Modifier.padding(
+                                    horizontal = 16.dp,
+                                    vertical = 4.dp
+                                ),
+                                thickness = 1.dp,
+                                color = drawerContentColor.copy(alpha = 0.16f)
                             )
-                            Spacer(Modifier.height(8.dp))
-                        } // end scroll Column
+
+                            // ✅ הפרופיל שלי — מסך אמת שמציג נתונים מהמשתמש / Firestore / Preferences
+                            if (isEnglish) {
+                                DrawerLineItemEn(
+                                    leading = {
+                                        Icon(
+                                            imageVector = Icons.Filled.Person,
+                                            contentDescription = null,
+                                            tint = drawerContentColor
+                                        )
+                                    },
+                                    title = "My Profile",
+                                    subtitle = "View your personal K.M.I details",
+                                    onClick = {
+                                        onClose()
+                                        onOpenMyProfile()
+                                    }
+                                )
+                            } else {
+                                DrawerLineItemHe(
+                                    leading = {
+                                        Icon(
+                                            imageVector = Icons.Filled.Person,
+                                            contentDescription = null,
+                                            tint = drawerContentColor
+                                        )
+                                    },
+                                    title = "הפרופיל שלי",
+                                    subtitle = "צפייה בפרטים האישיים שלך",
+                                    onClick = {
+                                        onClose()
+                                        onOpenMyProfile()
+                                    }
+                                )
+                            }
+
+                            if (isEnglish) {
+                                DrawerLineItemEn(
+                                    title = "Edit Profile",
+                                    subtitle = "Update your personal details",
+                                    onClick = {
+                                        onClose()
+                                        onOpenEditProfile()
+                                    }
+                                )
+
+                                DrawerLineItemEn(
+                                    title = "Monthly Calendar",
+                                    subtitle = "Trainings, holidays and summaries",
+                                    onClick = {
+                                        onClose()
+                                        onOpenMonthlyCalendar()
+                                    }
+                                )
+
+                                DrawerLineItemEn(
+                                    title = "Training Summary",
+                                    subtitle = "Add or view a training summary",
+                                    onClick = {
+                                        onClose()
+                                        onOpenTrainingSummary()
+                                    }
+                                )
+
+                                DrawerLineItemEn(
+                                    title = "Accessibility",
+                                    subtitle = "Display and accessibility settings",
+                                    onClick = {
+                                        onClose()
+                                        onOpenAccessibility()
+                                    }
+                                )
+                            } else {
+                                DrawerLineItemHe(
+                                    title = "עריכת פרופיל",
+                                    subtitle = "עדכון הפרטים האישיים שלך",
+                                    onClick = {
+                                        onClose()
+                                        onOpenEditProfile()
+                                    }
+                                )
+
+                                DrawerLineItemHe(
+                                    title = "לוח שנה חודשי",
+                                    subtitle = "אימונים, חגים וסיכומים",
+                                    onClick = {
+                                        onClose()
+                                        onOpenMonthlyCalendar()
+                                    }
+                                )
+
+                                DrawerLineItemHe(
+                                    title = "סיכום אימון",
+                                    subtitle = "הוספה או צפייה בסיכום אימון",
+                                    onClick = {
+                                        onClose()
+                                        onOpenTrainingSummary()
+                                    }
+                                )
+
+                                DrawerLineItemHe(
+                                    title = "נגישות",
+                                    subtitle = "הגדרות תצוגה ונגישות",
+                                    onClick = {
+                                        onClose()
+                                        onOpenAccessibility()
+                                    }
+                                )
+                            }
+
+                            // ===== כפתור ראשון: אודות אבי אביסידון =====
+                            if (isEnglish) {
+                                DrawerLineItemEn(
+                                    title = "About Avi Avisidon",
+                                    subtitle = "Head of the method",
+                                    onClick = {
+                                        onClose()
+                                        onOpenAboutAvi()
+                                    }
+                                )
+                            } else {
+                                DrawerLineItemHe(
+                                    title = "אודות אבי אביסידון",
+                                    subtitle = "ראש השיטה",
+                                    onClick = {
+                                        onClose()
+                                        onOpenAboutAvi()
+                                    }
+                                )
+                            }
+
+                            // ===== אודות המאמנים ברשת =====
+                            if (isEnglish) {
+                                DrawerLineItemEn(
+                                    title = "About Network Coaches",
+                                    subtitle = "Ranks, experience and certifications",
+                                    onClick = {
+                                        onClose()
+                                        onOpenAboutNetworkCoaches()
+                                    }
+                                )
+                            } else {
+                                DrawerLineItemHe(
+                                    title = "אודות המאמנים ברשת",
+                                    subtitle = "דרגות, ותק, הכשרות והסמכות",
+                                    onClick = {
+                                        onClose()
+                                        onOpenAboutNetworkCoaches()
+                                    }
+                                )
+                            }
+
+                            val showHiddenAboutItems = false
+
+                            if (showHiddenAboutItems) {
+
+                                if (isEnglish) {
+                                    DrawerLineItemEn(
+                                        title = "About Itzik Biton",
+                                        subtitle = "Senior coach",
+                                        onClick = {
+                                            onClose()
+                                            onOpenAboutItzik()
+                                        }
+                                    )
+                                } else {
+                                    DrawerLineItemHe(
+                                        title = "אודות איציק ביטון",
+                                        subtitle = "מאמן בכיר",
+                                        onClick = {
+                                            onClose()
+                                            onOpenAboutItzik()
+                                        }
+                                    )
+                                }
+
+                                if (isEnglish) {
+                                    DrawerLineItemEn(
+                                        title = "About the Network",
+                                        subtitle = "Knockout",
+                                        onClick = {
+                                            onClose()
+                                            onOpenAboutNetwork()
+                                        }
+                                    )
+                                } else {
+                                    DrawerLineItemHe(
+                                        title = "אודות הרשת",
+                                        subtitle = "Knockout",
+                                        onClick = {
+                                            onClose()
+                                            onOpenAboutNetwork()
+                                        }
+                                    )
+                                }
+
+                            }
+
+                            if (isEnglish) {
+                                DrawerLineItemEn(
+                                    title = "About the Method",
+                                    subtitle = "KAMI",
+                                    onClick = {
+                                        onClose()
+                                        onOpenAboutMethod()
+                                    }
+                                )
+                            } else {
+                                DrawerLineItemHe(
+                                    title = "אודות השיטה",
+                                    subtitle = "KAMI",
+                                    onClick = {
+                                        onClose()
+                                        onOpenAboutMethod()
+                                    }
+                                )
+                            }
+
+                            if (isEnglish) {
+                                DrawerLineItemEn(
+                                    title = "Exercises – Demo",
+                                    subtitle = "Short demo videos for exercises",
+                                    onClick = { showDemoVideos = true }
+                                )
+                            } else {
+                                DrawerLineItemHe(
+                                    title = "תרגילים – הדגמה",
+                                    subtitle = "סרטוני הסבר קצרים לתרגילים",
+                                    onClick = { showDemoVideos = true }
+                                )
+                            }
+
+                            if (isEnglish) {
+                                DrawerLineItemEn(
+                                    title = "Forms & Payments",
+                                    onClick = {
+                                        showFormsPaymentsDialog = true
+                                    }
+                                )
+                            } else {
+                                DrawerLineItemHe(
+                                    title = "טפסים ותשלומים",
+                                    onClick = {
+                                        showFormsPaymentsDialog = true
+                                    }
+                                )
+                            }
+
+                            if (isEnglish) {
+                                DrawerLineItemEn(
+                                    title = "Contact Us",
+                                    subtitle = "Leave details and we will get back to you",
+                                    onClick = {
+                                        onClose()
+                                        onOpenContactUs()
+                                    }
+                                )
+                            } else {
+                                DrawerLineItemHe(
+                                    title = "צור קשר",
+                                    subtitle = "השאירו פרטים ונחזור אליכם",
+                                    onClick = {
+                                        onClose()
+                                        onOpenContactUs()
+                                    }
+                                )
+                            }
+
+                            if (isEnglish) {
+                                DrawerLineItemEn(
+                                    title = "Branch Forum",
+                                    trailing = {
+                                        DrawerUnreadBadge(forumUnreadCount)
+                                    },
+                                    onClick = {
+                                        onClose()
+                                        onOpenForum()
+                                    }
+                                )
+                            } else {
+                                DrawerLineItemHe(
+                                    title = "פורום הסניף",
+                                    trailing = {
+                                        DrawerUnreadBadge(forumUnreadCount)
+                                    },
+                                    onClick = {
+                                        onClose()
+                                        onOpenForum()
+                                    }
+                                )
+                            }
+
+                            if (isEnglish) {
+                                DrawerLineItemEn(
+                                    leading = {
+                                        Icon(
+                                            imageVector = Icons.Filled.Language,
+                                            contentDescription = null,
+                                            tint = drawerContentColor
+                                        )
+                                    },
+                                    title = "Language / שפה",
+                                    onClick = {
+                                        val newLang = AppLanguage.HEBREW
+
+                                        // ✅ רק MainApp שומר ומעדכן את ה-State.
+                                        // לא שומרים כאן ישירות כדי למנוע כפילות וערכים ישנים.
+                                        onLanguageChanged(newLang)
+
+                                        onClose()
+
+                                        scope.launch {
+                                            delay(180.milliseconds)
+
+                                            Toast.makeText(
+                                                contextLang,
+                                                "שפה: עברית",
+                                                Toast.LENGTH_SHORT
+                                            ).show()
+                                        }
+                                    }
+                                )
+                            } else {
+                                DrawerLineItemHe(
+                                    leading = {
+                                        Icon(
+                                            imageVector = Icons.Filled.Language,
+                                            contentDescription = null,
+                                            tint = drawerContentColor
+                                        )
+                                    },
+                                    title = "שפה / Language",
+                                    onClick = {
+                                        val newLang = AppLanguage.ENGLISH
+
+                                        // ✅ רק MainApp שומר ומעדכן את ה-State.
+                                        // לא שומרים כאן ישירות כדי למנוע כפילות וערכים ישנים.
+                                        onLanguageChanged(newLang)
+
+                                        onClose()
+
+                                        scope.launch {
+                                            delay(180.milliseconds)
+
+                                            Toast.makeText(
+                                                contextLang,
+                                                "Language: English",
+                                                Toast.LENGTH_SHORT
+                                            ).show()
+                                        }
+                                    }
+                                )
+                            }
+
+                            if (isEnglish) {
+                                DrawerLineItemEn(
+                                    title = "Manage Subscription",
+                                    onClick = {
+                                        onClose()
+                                        onOpenSubscriptions()
+                                    }
+                                )
+                            } else {
+                                DrawerLineItemHe(
+                                    title = "ניהול מנוי",
+                                    onClick = {
+                                        onClose()
+                                        onOpenSubscriptions()
+                                    }
+                                )
+                            }
+
+                            if (isEnglish) {
+                                DrawerLineItemEn(
+                                    title = "⭐ Rate Us ⭐",
+                                    onClick = {
+                                        onClose()
+                                        onOpenRateUs()
+                                    }
+                                )
+                            } else {
+                                DrawerLineItemHe(
+                                    title = "⭐ דרגו אותנו ⭐",
+                                    onClick = {
+                                        onClose()
+                                        onOpenRateUs()
+                                    }
+                                )
+                            }
+
+                            if (isEnglish) {
+                                DrawerLineItemEn(
+                                    leading = {
+                                        Icon(
+                                            imageVector = Icons.AutoMirrored.Outlined.Logout,
+                                            contentDescription = null,
+                                            tint = drawerContentColor
+                                        )
+                                    },
+                                    title = "Logout",
+                                    onClick = {
+                                        onClose()
+                                        onLogout()
+                                    }
+                                )
+                            } else {
+                                DrawerLineItemHe(
+                                    leading = {
+                                        Icon(
+                                            imageVector = Icons.AutoMirrored.Outlined.Logout,
+                                            contentDescription = null,
+                                            tint = drawerContentColor
+                                        )
+                                    },
+                                    title = "התנתקות",
+                                    onClick = {
+                                        onClose()
+                                        onLogout()
+                                    }
+                                )
+                            }
+                        }
+
+                        Spacer(Modifier.height(8.dp))
+                        Text(
+                            text = "© KAMI",
+                            style = KmiTypography.caption,
+                            color =
+                                drawerContentColor.copy(alpha = 0.72f),
+                            textAlign = if (isEnglish) TextAlign.Start else TextAlign.End,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                        Spacer(Modifier.height(8.dp))
+                    } // end scroll Column
                 } // end drawer content Column
 
                 // ─────────────────────────────────────────────
                 // 📄💳 דיאלוג: טפסים ותשלומים
                 // ─────────────────────────────────────────────
                 if (showFormsPaymentsDialog) {
-                    val ctx = LocalContext.current
-
                     AlertDialog(
                         onDismissRequest = { showFormsPaymentsDialog = false },
                         title = {
@@ -1772,7 +1902,7 @@ fun AppDrawerContent(
                                 style = KmiTypography.screenTitle.copy(
                                     fontWeight = FontWeight.ExtraBold
                                 ),
-                                color = Color.White,
+                                color = drawerContentColor,
                                 textAlign = if (isEnglish) TextAlign.Start else TextAlign.End,
                                 modifier = Modifier.fillMaxWidth()
                             )
@@ -1788,8 +1918,8 @@ fun AppDrawerContent(
                                         showFormsListDialog = true
                                     },
                                     shape = RoundedCornerShape(18.dp),
-                                    color = Color.White.copy(alpha = 0.10f),
-                                    border = BorderStroke(1.dp, Color.White.copy(alpha = 0.18f)),
+                                    color = drawerContentColor.copy(alpha = 0.10f),
+                                    border = BorderStroke(1.dp, drawerContentColor.copy(alpha = 0.18f)),
                                     modifier = Modifier.fillMaxWidth()
                                 ) {
                                     Column(
@@ -1799,7 +1929,7 @@ fun AppDrawerContent(
                                     ) {
                                         Text(
                                             text = tr("טפסים", "Forms"),
-                                            color = Color.White,
+                                            color = drawerContentColor,
                                             style = KmiTypography.cardTitle.copy(
                                                 fontWeight = FontWeight.ExtraBold
                                             )
@@ -1810,7 +1940,7 @@ fun AppDrawerContent(
                                                 "פתיחת טופס ההרשמה הקיים לעמותה",
                                                 "Open the existing association registration form"
                                             ),
-                                            color = Color.White.copy(alpha = 0.78f),
+                                            color = drawerContentColor.copy(alpha = 0.78f),
                                             style = KmiTypography.secondary
                                         )
                                     }
@@ -1823,8 +1953,8 @@ fun AppDrawerContent(
                                         onOpenMembershipPayment()
                                     },
                                     shape = RoundedCornerShape(18.dp),
-                                    color = Color.White.copy(alpha = 0.10f),
-                                    border = BorderStroke(1.dp, Color.White.copy(alpha = 0.18f)),
+                                    color = drawerContentColor.copy(alpha = 0.10f),
+                                    border = BorderStroke(1.dp, drawerContentColor.copy(alpha = 0.18f)),
                                     modifier = Modifier.fillMaxWidth()
                                 ) {
                                     Column(
@@ -1834,7 +1964,7 @@ fun AppDrawerContent(
                                     ) {
                                         Text(
                                             text = tr("תשלומים", "Payments"),
-                                            color = Color.White,
+                                            color = drawerContentColor,
                                             style = KmiTypography.cardTitle.copy(
                                                 fontWeight = FontWeight.ExtraBold
                                             )
@@ -1845,7 +1975,7 @@ fun AppDrawerContent(
                                                 "פתיחת טופס תשלום דמי חבר לעמותה",
                                                 "Open the membership fee payment form"
                                             ),
-                                            color = Color.White.copy(alpha = 0.78f),
+                                            color = drawerContentColor.copy(alpha = 0.78f),
                                             style = KmiTypography.secondary
                                         )
                                     }
@@ -1863,13 +1993,13 @@ fun AppDrawerContent(
                                     style = KmiTypography.action.copy(
                                         fontWeight = FontWeight.Bold
                                     ),
-                                    color = Color.White
+                                    color = drawerContentColor
                                 )
                             }
                         },
-                        containerColor = Color(0xFF0E1630),
-                        titleContentColor = Color.White,
-                        textContentColor = Color.White
+                        containerColor = dialogContainerColor,
+                        titleContentColor = drawerContentColor,
+                        textContentColor = drawerContentColor
                     )
                 }
 
@@ -1893,14 +2023,14 @@ fun AppDrawerContent(
                             },
                             shape = RoundedCornerShape(18.dp),
                             color = if (enabled) {
-                                Color.White.copy(alpha = 0.10f)
+                                drawerContentColor.copy(alpha = 0.10f)
                             } else {
-                                Color.White.copy(alpha = 0.06f)
+                                drawerContentColor.copy(alpha = 0.06f)
                             },
                             border = BorderStroke(
                                 1.dp,
-                                if (enabled) Color.White.copy(alpha = 0.18f)
-                                else Color.White.copy(alpha = 0.10f)
+                                if (enabled) drawerContentColor.copy(alpha = 0.18f)
+                                else drawerContentColor.copy(alpha = 0.10f)
                             ),
                             modifier = Modifier.fillMaxWidth()
                         ) {
@@ -1912,9 +2042,9 @@ fun AppDrawerContent(
                                 Text(
                                     text = title,
                                     color = if (enabled) {
-                                        Color.White
+                                        drawerContentColor
                                     } else {
-                                        Color.White.copy(alpha = 0.72f)
+                                        drawerContentColor.copy(alpha = 0.72f)
                                     },
                                     style = KmiTypography.cardTitle.copy(
                                         fontWeight = FontWeight.ExtraBold
@@ -1926,9 +2056,9 @@ fun AppDrawerContent(
                                 Text(
                                     text = subtitle,
                                     color = if (enabled) {
-                                        Color.White.copy(alpha = 0.78f)
+                                        drawerContentColor.copy(alpha = 0.78f)
                                     } else {
-                                        Color.White.copy(alpha = 0.55f)
+                                        drawerContentColor.copy(alpha = 0.55f)
                                     },
                                     style = KmiTypography.secondary,
                                     textAlign = cardTextAlign,
@@ -1946,7 +2076,7 @@ fun AppDrawerContent(
                                 style = KmiTypography.screenTitle.copy(
                                     fontWeight = FontWeight.ExtraBold
                                 ),
-                                color = Color.White,
+                                color = drawerContentColor,
                                 textAlign = if (isEnglish) TextAlign.Start else TextAlign.End,
                                 modifier = Modifier.fillMaxWidth()
                             )
@@ -1968,7 +2098,7 @@ fun AppDrawerContent(
                                     enabled = true,
                                     onClick = {
                                         val uri =
-                                            Uri.parse("https://10nokout.com/files/Kami-Register.pdf")
+                                            "https://10nokout.com/files/Kami-Register.pdf".toUri()
                                         try {
                                             CustomTabsIntent.Builder()
                                                 .setShowTitle(true)
@@ -2009,13 +2139,13 @@ fun AppDrawerContent(
                                     style = KmiTypography.action.copy(
                                         fontWeight = FontWeight.Bold
                                     ),
-                                    color = Color.White
+                                    color = drawerContentColor
                                 )
                             }
                         },
-                        containerColor = Color(0xFF0E1630),
-                        titleContentColor = Color.White,
-                        textContentColor = Color.White
+                        containerColor = dialogContainerColor,
+                        titleContentColor = drawerContentColor,
+                        textContentColor = drawerContentColor
                     )
                 }
 
@@ -2063,7 +2193,7 @@ fun AppDrawerContent(
                                     style = KmiTypography.action.copy(
                                         fontWeight = FontWeight.Bold
                                     ),
-                                    color = Color(0xFFDC2626)
+                                    color = MaterialTheme.colorScheme.error
                                 )
                             }
                         },
@@ -2115,7 +2245,7 @@ fun AppDrawerContent(
                                 style = KmiTypography.screenTitle.copy(
                                     fontWeight = FontWeight.ExtraBold
                                 ),
-                                color = Color.White,
+                                color = drawerContentColor,
                                 textAlign = if (isEnglish) TextAlign.Start else TextAlign.End,
                                 modifier = Modifier.fillMaxWidth()
                             )
@@ -2130,13 +2260,13 @@ fun AppDrawerContent(
                                     onValueChange = { query = it },
                                     singleLine = true,
                                     textStyle = KmiTypography.body.copy(
-                                        color = Color.White
+                                        color = drawerContentColor
                                     ),
                                     placeholder = {
                                         Text(
                                             text = tr("חיפוש…", "Search…"),
                                             style = KmiTypography.secondary,
-                                            color = Color.White.copy(
+                                            color = drawerContentColor.copy(
                                                 alpha = 0.65f
                                             )
                                         )
@@ -2153,7 +2283,7 @@ fun AppDrawerContent(
                                     items(filtered, key = { it.id }) { v ->
                                         Surface(
                                             onClick = {
-                                                val uri = Uri.parse(v.url)
+                                                val uri = v.url.toUri()
                                                 try {
                                                     CustomTabsIntent.Builder()
                                                         .setShowTitle(true)
@@ -2182,10 +2312,10 @@ fun AppDrawerContent(
                                                 onClose() // סוגר גם את התפריט אחרי פתיחה
                                             },
                                             shape = RoundedCornerShape(18.dp),
-                                            color = Color.White.copy(alpha = 0.10f),
+                                            color = drawerContentColor.copy(alpha = 0.10f),
                                             border = BorderStroke(
                                                 1.dp,
-                                                Color.White.copy(alpha = 0.18f)
+                                                drawerContentColor.copy(alpha = 0.18f)
                                             ),
                                             tonalElevation = 0.dp,
                                             shadowElevation = 0.dp,
@@ -2200,7 +2330,7 @@ fun AppDrawerContent(
                                                 Icon(
                                                     imageVector = Icons.Filled.PlayArrow,
                                                     contentDescription = null,
-                                                    tint = Color.White,
+                                                    tint = drawerContentColor,
                                                     modifier = Modifier.size(KmiIconSize.medium)
                                                 )
                                                 Spacer(Modifier.width(10.dp))
@@ -2208,7 +2338,7 @@ fun AppDrawerContent(
                                                 Column(modifier = Modifier.weight(1f)) {
                                                     Text(
                                                         text = v.titleFor(isEnglish),
-                                                        color = Color.White,
+                                                        color = drawerContentColor,
                                                         style = KmiTypography.cardTitle.copy(
                                                             fontWeight = FontWeight.ExtraBold
                                                         ),
@@ -2223,7 +2353,7 @@ fun AppDrawerContent(
                                                     )
                                                     Text(
                                                         text = v.source,
-                                                        color = Color.White.copy(alpha = 0.75f),
+                                                        color = drawerContentColor.copy(alpha = 0.75f),
                                                         style = KmiTypography.caption,
                                                         textAlign = if (isEnglish) {
                                                             TextAlign.Start
@@ -2235,9 +2365,9 @@ fun AppDrawerContent(
                                                 }
 
                                                 Icon(
-                                                    imageVector = Icons.Filled.OpenInNew,
+                                                    imageVector = Icons.AutoMirrored.Filled.OpenInNew,
                                                     contentDescription = null,
-                                                    tint = Color.White.copy(alpha = 0.85f),
+                                                    tint = drawerContentColor.copy(alpha = 0.85f),
                                                     modifier = Modifier.size(KmiIconSize.small)
                                                 )
                                             }
@@ -2257,13 +2387,13 @@ fun AppDrawerContent(
                                     style = KmiTypography.action.copy(
                                         fontWeight = FontWeight.Bold
                                     ),
-                                    color = Color.White
+                                    color = drawerContentColor
                                 )
                             }
                         },
-                        containerColor = Color(0xFF0E1630), // מתאים לגרדיאנט שלך
-                        titleContentColor = Color.White,
-                        textContentColor = Color.White
+                        containerColor = dialogContainerColor, // מתאים לגרדיאנט שלך
+                        titleContentColor = dialogContentColor,
+                        textContentColor = dialogContentColor
                     )
                 }
 
@@ -2319,8 +2449,12 @@ private fun DrawerScrollAffordance(
                 .background(
                     brush = Brush.verticalGradient(
                         0f to Color.Transparent,
-                        0.6f to Color.White.copy(alpha = 0.07f),
-                        1f to Color.White.copy(alpha = 0.15f)
+                        0.6f to
+                                kmiSectionHeaderContentColor()
+                                    .copy(alpha = 0.07f),
+                        1f to
+                                kmiSectionHeaderContentColor()
+                                    .copy(alpha = 0.15f)
                     )
                 )
                 .padding(bottom = 8.dp),
@@ -2328,14 +2462,19 @@ private fun DrawerScrollAffordance(
         ) {
             Surface(
                 shape = CircleShape,
-                color = Color.White.copy(alpha = 0.92f),
+                color =
+                    kmiSectionHeaderContentColor()
+                        .copy(alpha = 0.92f),
                 tonalElevation = 0.dp,
                 shadowElevation = 0.dp
             ) {
                 Icon(
                     imageVector = Icons.Filled.ExpandMore,
                     contentDescription = null,
-                    tint = Color(0xFF2E3A59).copy(alpha = alpha),
+                    tint =
+                        MaterialTheme.colorScheme
+                            .onSurfaceVariant
+                            .copy(alpha = alpha),
                     modifier = Modifier
                         .size(KmiIconSize.extraLarge)
                         .offset(y = offsetY.dp)

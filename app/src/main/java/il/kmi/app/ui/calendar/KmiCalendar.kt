@@ -20,7 +20,10 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Description
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -36,7 +39,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -110,11 +112,7 @@ fun KmiCalendarMonthHeader(
                 Surface(
                     onClick = {
                         onVisibleMonthChange(
-                            if (isEnglish) {
-                                visibleMonth.minusMonths(1)
-                            } else {
-                                visibleMonth.plusMonths(1)
-                            }
+                            visibleMonth.minusMonths(1)
                         )
                     },
                     shape = CircleShape,
@@ -158,11 +156,7 @@ fun KmiCalendarMonthHeader(
                 Surface(
                     onClick = {
                         onVisibleMonthChange(
-                            if (isEnglish) {
-                                visibleMonth.plusMonths(1)
-                            } else {
-                                visibleMonth.minusMonths(1)
-                            }
+                            visibleMonth.plusMonths(1)
                         )
                     },
                     shape = CircleShape,
@@ -203,58 +197,29 @@ fun KmiCalendarMonth(
     markers: KmiCalendarMarkers = KmiCalendarMarkers(),
     showMonthHeader: Boolean = true
 ) {
-    val colorScheme = MaterialTheme.colorScheme
-    val isDarkTheme =
-        colorScheme.background.luminance() < 0.5f
+    val colorScheme =
+        MaterialTheme.colorScheme
 
     val calendarSectionColor =
-        if (isDarkTheme) {
-            Color.White.copy(alpha = 0.08f)
-        } else {
-            colorScheme.surface
-        }
+        colorScheme.surface.copy(alpha = 0.92f)
 
     val calendarSectionBorderColor =
-        if (isDarkTheme) {
-            Color.White.copy(alpha = 0.10f)
-        } else {
-            colorScheme.outline.copy(alpha = 0.20f)
-        }
+        colorScheme.outlineVariant
 
     val primaryTextColor =
-        if (isDarkTheme) {
-            Color.White
-        } else {
-            colorScheme.onSurface
-        }
+        colorScheme.onSurface
 
     val weekDayTextColor =
-        if (isDarkTheme) {
-            Color(0xFF67E8F9)
-        } else {
-            colorScheme.primary
-        }
+        colorScheme.secondary
 
     val selectedDayColor =
-        if (isDarkTheme) {
-            Color(0xFF22D3EE)
-        } else {
-            colorScheme.primary
-        }
+        colorScheme.secondary
 
     val selectedDayTextColor =
-        if (isDarkTheme) {
-            Color(0xFF031226)
-        } else {
-            colorScheme.onPrimary
-        }
+        colorScheme.onSecondary
 
     val todayBackgroundColor =
-        if (isDarkTheme) {
-            Color.White.copy(alpha = 0.14f)
-        } else {
-            colorScheme.primaryContainer.copy(alpha = 0.55f)
-        }
+        colorScheme.secondaryContainer.copy(alpha = 0.72f)
 
     val firstDayOfMonth = remember(visibleMonth) {
         visibleMonth.atDay(1)
@@ -329,12 +294,7 @@ fun KmiCalendarMonth(
             shape = RoundedCornerShape(20.dp),
             color = calendarSectionColor,
             tonalElevation = 0.dp,
-            shadowElevation =
-                if (isDarkTheme) {
-                    0.dp
-                } else {
-                    1.dp
-                },
+            shadowElevation = 0.dp,
             border = BorderStroke(
                 width = 1.dp,
                 color = calendarSectionBorderColor
@@ -366,12 +326,7 @@ fun KmiCalendarMonth(
             shape = RoundedCornerShape(24.dp),
             color = calendarSectionColor,
             tonalElevation = 0.dp,
-            shadowElevation =
-                if (isDarkTheme) {
-                    0.dp
-                } else {
-                    1.dp
-                },
+            shadowElevation = 0.dp,
             border = BorderStroke(
                 width = 1.dp,
                 color = calendarSectionBorderColor
@@ -478,8 +433,7 @@ fun KmiCalendarMonth(
 
                                             if (
                                                 hasTraining ||
-                                                hasHoliday ||
-                                                hasSummary
+                                                hasHoliday
                                             ) {
                                                 Row(
                                                     modifier = Modifier
@@ -494,25 +448,71 @@ fun KmiCalendarMonth(
                                                 ) {
                                                     if (hasTraining) {
                                                         CalendarMarkerDot(
-                                                            color = Color(
-                                                                0xFF3FA7FF
-                                                            )
+                                                            color =
+                                                                colorScheme.secondary
                                                         )
                                                     }
 
                                                     if (hasHoliday) {
                                                         CalendarMarkerDot(
-                                                            color = Color(
-                                                                0xFFFF4D6D
-                                                            )
+                                                            color =
+                                                                colorScheme.error
                                                         )
                                                     }
+                                                }
+                                            }
 
-                                                    if (hasSummary) {
-                                                        CalendarMarkerDot(
-                                                            color = Color(
-                                                                0xFFA78BFA
+                                            /*
+                                             * סיכום אימון:
+                                             * אייקון מסמך נפרד מהנקודות של
+                                             * אימון / חג.
+                                             */
+                                            if (hasSummary) {
+                                                Surface(
+                                                    modifier =
+                                                        Modifier
+                                                            .align(
+                                                                Alignment.TopEnd
                                                             )
+                                                            .padding(
+                                                                top = 1.dp,
+                                                                end = 1.dp
+                                                            )
+                                                            .size(14.dp),
+                                                    shape = RoundedCornerShape(4.dp),
+                                                    color =
+                                                        if (isSelected) {
+                                                            selectedDayTextColor
+                                                                .copy(alpha = 0.96f)
+                                                        } else {
+                                                            colorScheme.primary
+                                                        },
+                                                    tonalElevation = 0.dp,
+                                                    shadowElevation = 0.dp
+                                                ) {
+                                                    Box(
+                                                        modifier =
+                                                            Modifier.fillMaxSize(),
+                                                        contentAlignment =
+                                                            Alignment.Center
+                                                    ) {
+                                                        Icon(
+                                                            imageVector =
+                                                                Icons.Filled.Description,
+                                                            contentDescription =
+                                                                if (isEnglish) {
+                                                                    "Training summary"
+                                                                } else {
+                                                                    "סיכום אימון"
+                                                                },
+                                                            tint =
+                                                                if (isSelected) {
+                                                                    selectedDayColor
+                                                                } else {
+                                                                    colorScheme.onPrimary
+                                                                },
+                                                            modifier =
+                                                                Modifier.size(9.dp)
                                                         )
                                                     }
                                                 }
@@ -526,6 +526,14 @@ fun KmiCalendarMonth(
                 }
             }
         }
+
+        Spacer(
+            Modifier.height(2.dp)
+        )
+
+        KmiCalendarLegend(
+            isEnglish = isEnglish
+        )
     }
 }
 
@@ -563,16 +571,11 @@ fun KmiCalendarPickerDialog(
         )
     }
 
-    val colorScheme = MaterialTheme.colorScheme
-    val isDarkTheme =
-        colorScheme.background.luminance() < 0.5f
+    val colorScheme =
+        MaterialTheme.colorScheme
 
     val dialogContainerColor =
-        if (isDarkTheme) {
-            Color(0xFF061832).copy(alpha = 0.96f)
-        } else {
-            colorScheme.surface.copy(alpha = 0.98f)
-        }
+        colorScheme.surface.copy(alpha = 0.98f)
 
     Dialog(
         onDismissRequest = onDismiss
@@ -594,21 +597,11 @@ fun KmiCalendarPickerDialog(
                     .background(
                         Brush.verticalGradient(
                             colors =
-                                if (isDarkTheme) {
-                                    listOf(
-                                        Color(0xFF07152E),
-                                        Color(0xFF0B1E48),
-                                        Color(0xFF103C89),
-                                        Color(0xFF18BDEB)
-                                    )
-                                } else {
-                                    listOf(
-                                        Color(0xFFEFFBFF),
-                                        Color(0xFFDBF4FF),
-                                        Color(0xFFBAE6FD),
-                                        Color(0xFF38BDF8)
-                                    )
-                                }
+                                listOf(
+                                    colorScheme.primary,
+                                    colorScheme.secondary,
+                                    colorScheme.tertiary
+                                )
                         )
                     )
                     .padding(1.dp)
@@ -692,16 +685,11 @@ private fun CalendarDialogHeader(
     selectedTitle: String,
     isEnglish: Boolean
 ) {
-    val colorScheme = MaterialTheme.colorScheme
-    val isDarkTheme =
-        colorScheme.background.luminance() < 0.5f
+    val colorScheme =
+        MaterialTheme.colorScheme
 
     val headerAccentColor =
-        if (isDarkTheme) {
-            Color(0xFFBFDBFE)
-        } else {
-            colorScheme.primary
-        }
+        colorScheme.secondary
 
     Row(
         modifier = Modifier.fillMaxWidth(),
@@ -710,11 +698,8 @@ private fun CalendarDialogHeader(
         Surface(
             shape = CircleShape,
             color =
-                if (isDarkTheme) {
-                    Color.White.copy(alpha = 0.09f)
-                } else {
-                    colorScheme.primaryContainer.copy(alpha = 0.55f)
-                },
+                colorScheme.secondaryContainer
+                    .copy(alpha = 0.72f),
             tonalElevation = 0.dp,
             shadowElevation = 0.dp,
             border = BorderStroke(
@@ -786,19 +771,15 @@ private fun CalendarDialogActions(
     onDismiss: () -> Unit,
     onToday: () -> Unit
 ) {
-    val colorScheme = MaterialTheme.colorScheme
-    val isDarkTheme =
-        colorScheme.background.luminance() < 0.5f
+    val colorScheme =
+        MaterialTheme.colorScheme
 
     Surface(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(18.dp),
         color =
-            if (isDarkTheme) {
-                Color.White.copy(alpha = 0.07f)
-            } else {
-                colorScheme.surfaceVariant.copy(alpha = 0.55f)
-            },
+            colorScheme.surfaceVariant
+                .copy(alpha = 0.72f),
         tonalElevation = 0.dp,
         shadowElevation = 0.dp,
         border = BorderStroke(
@@ -832,11 +813,7 @@ private fun CalendarDialogActions(
                             "ביטול"
                         },
                     color =
-                        if (isDarkTheme) {
-                            Color(0xFFBFDBFE)
-                        } else {
-                            colorScheme.primary
-                        },
+                        colorScheme.primary,
                     style =
                         KmiTypography.action.copy(
                             fontWeight = FontWeight.ExtraBold
@@ -851,11 +828,7 @@ private fun CalendarDialogActions(
                 onClick = onToday,
                 shape = RoundedCornerShape(999.dp),
                 color =
-                    if (isDarkTheme) {
-                        Color(0xFF22D3EE)
-                    } else {
-                        colorScheme.primary
-                    },
+                    colorScheme.secondary,
                 tonalElevation = 0.dp,
                 shadowElevation = 0.dp
             ) {
@@ -874,11 +847,7 @@ private fun CalendarDialogActions(
                                 "היום"
                             },
                         color =
-                            if (isDarkTheme) {
-                                Color(0xFF04101F)
-                            } else {
-                                colorScheme.onPrimary
-                            },
+                            colorScheme.onSecondary,
                         style =
                             KmiTypography.action.copy(
                                 fontWeight = FontWeight.Black
@@ -888,6 +857,185 @@ private fun CalendarDialogActions(
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun KmiCalendarLegend(
+    isEnglish: Boolean,
+    modifier: Modifier = Modifier
+) {
+    val colorScheme =
+        MaterialTheme.colorScheme
+
+    val textColor =
+        colorScheme.onSurfaceVariant
+
+    Surface(
+        modifier =
+            modifier.fillMaxWidth(),
+        shape =
+            RoundedCornerShape(16.dp),
+        color =
+            colorScheme.surface.copy(alpha = 0.82f),
+        tonalElevation = 0.dp,
+        shadowElevation = 0.dp,
+        border =
+            BorderStroke(
+                width = 1.dp,
+                color =
+                    colorScheme.outlineVariant
+            )
+    ) {
+        Row(
+            modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .padding(
+                        horizontal = 12.dp,
+                        vertical = 8.dp
+                    ),
+            horizontalArrangement =
+                Arrangement.SpaceEvenly,
+            verticalAlignment =
+                Alignment.CenterVertically
+        ) {
+
+            /*
+             * אימון
+             */
+            CalendarLegendDotItem(
+                color =
+                    colorScheme.secondary,
+                text =
+                    if (isEnglish) {
+                        "Training"
+                    } else {
+                        "אימון"
+                    },
+                textColor =
+                    textColor
+            )
+
+            /*
+             * חג / מועד
+             */
+            CalendarLegendDotItem(
+                color =
+                    colorScheme.error,
+                text =
+                    if (isEnglish) {
+                        "Holiday"
+                    } else {
+                        "חג / מועד"
+                    },
+                textColor =
+                    textColor
+            )
+
+            /*
+             * סיכום אימון
+             */
+            CalendarLegendSummaryItem(
+                text =
+                    if (isEnglish) {
+                        "Summary"
+                    } else {
+                        "סיכום אימון"
+                    },
+                textColor =
+                    textColor
+            )
+        }
+    }
+}
+
+@Composable
+private fun CalendarLegendDotItem(
+    color: Color,
+    text: String,
+    textColor: Color
+) {
+    Row(
+        verticalAlignment =
+            Alignment.CenterVertically,
+        horizontalArrangement =
+            Arrangement.spacedBy(5.dp)
+    ) {
+        Box(
+            modifier =
+                Modifier
+                    .size(7.dp)
+                    .background(
+                        color = color,
+                        shape = CircleShape
+                    )
+        )
+
+        Text(
+            text = text,
+            color = textColor,
+            style =
+                KmiTypography.caption.copy(
+                    fontWeight =
+                        FontWeight.SemiBold
+                ),
+            maxLines = 1
+        )
+    }
+}
+
+@Composable
+private fun CalendarLegendSummaryItem(
+    text: String,
+    textColor: Color
+) {
+    Row(
+        verticalAlignment =
+            Alignment.CenterVertically,
+        horizontalArrangement =
+            Arrangement.spacedBy(5.dp)
+    ) {
+
+        Surface(
+            modifier =
+                Modifier.size(16.dp),
+            shape =
+                RoundedCornerShape(4.dp),
+            color =
+                MaterialTheme.colorScheme.primary,
+            tonalElevation = 0.dp,
+            shadowElevation = 0.dp
+        ) {
+            Box(
+                modifier =
+                    Modifier.fillMaxSize(),
+                contentAlignment =
+                    Alignment.Center
+            ) {
+                Icon(
+                    imageVector =
+                        Icons.Filled.Description,
+                    contentDescription =
+                        null,
+                    tint =
+                        MaterialTheme.colorScheme.onPrimary,
+                    modifier =
+                        Modifier.size(10.dp)
+                )
+            }
+        }
+
+        Text(
+            text = text,
+            color = textColor,
+            style =
+                KmiTypography.caption.copy(
+                    fontWeight =
+                        FontWeight.SemiBold
+                ),
+            maxLines = 1
+        )
     }
 }
 

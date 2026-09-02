@@ -11,6 +11,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.FormatListBulleted
 import androidx.compose.material.icons.filled.Mic
+import androidx.compose.material.icons.filled.PictureAsPdf
 import androidx.compose.material.icons.automirrored.filled.ReceiptLong
 import androidx.compose.material.icons.filled.SportsMma
 import androidx.compose.material.icons.filled.Warning
@@ -63,6 +64,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.vector.ImageVector
+import il.yuval.ui.theme.kmiSuccessColor
 
 //============================================================================
 
@@ -82,8 +84,9 @@ private data class QuickMenuItemUi(
     val isLocked: Boolean
 )
 
+@Composable
 private fun quickMenuLockTint(): Color {
-    return Color(0xFFF59E0B)
+    return MaterialTheme.colorScheme.primary
 }
 
 @Composable
@@ -93,9 +96,20 @@ private fun ModernGlowFab(
     isEnglish: Boolean,
     onClick: () -> Unit
 ) {
-    val shape = RoundedCornerShape(22.dp)
+    val shape =
+        RoundedCornerShape(22.dp)
 
-    val pulse = rememberInfiniteTransition(label = "quickFabPulse")
+    val accentContentColor =
+        if (accentColor.luminance() < 0.55f) {
+            Color.White
+        } else {
+            Color.Black
+        }
+
+    val pulse =
+        rememberInfiniteTransition(
+            label = "quickFabPulse"
+        )
     val haloAlpha by pulse.animateFloat(
         initialValue = 0.18f,
         targetValue = 0.34f,
@@ -215,7 +229,9 @@ private fun ModernGlowFab(
                         .background(
                             Brush.verticalGradient(
                                 listOf(
-                                    Color.White.copy(alpha = 0.18f),
+                                    accentContentColor.copy(
+                                        alpha = 0.18f
+                                    ),
                                     Color.Transparent
                                 )
                             )
@@ -238,7 +254,7 @@ private fun ModernGlowFab(
                                 "פתח תפריט מהיר"
                             }
                         },
-                    tint = Color.White,
+                    tint = accentContentColor,
                     modifier = Modifier
                         .size(KmiIconSize.large)
                         .graphicsLayer { rotationZ = iconRotation }
@@ -255,6 +271,13 @@ private fun SideRailQuickMenuTrigger(
     isEnglish: Boolean,
     onClick: () -> Unit
 ) {
+    val accentContentColor =
+        if (accentColor.luminance() < 0.55f) {
+            Color.White
+        } else {
+            Color.Black
+        }
+
     val iconRotation by animateFloatAsState(
         targetValue = if (expanded) 180f else 0f,
         animationSpec = spring(
@@ -308,7 +331,9 @@ private fun SideRailQuickMenuTrigger(
                     .background(
                         Brush.horizontalGradient(
                             colors = listOf(
-                                Color.White.copy(alpha = 0.22f),
+                                accentContentColor.copy(
+                                    alpha = 0.22f
+                                ),
                                 Color.Transparent
                             )
                         )
@@ -331,7 +356,7 @@ private fun SideRailQuickMenuTrigger(
                             "פתח תפריט מהיר"
                         }
                     },
-                tint = Color.White,
+                tint = accentContentColor,
                 modifier = Modifier
                     .size(KmiIconSize.large)
                     .graphicsLayer {
@@ -360,7 +385,6 @@ fun FloatingQuickMenu(
     onPractice: () -> Unit = {},
     onSummary: () -> Unit,
     onVoice: () -> Unit,
-    @Suppress("UNUSED_PARAMETER")
     onPdf: () -> Unit
 ) {
     val ctx = LocalContext.current
@@ -440,7 +464,8 @@ fun FloatingQuickMenu(
         onAllLists,
         onPractice,
         onSummary,
-        onVoice
+        onVoice,
+        onPdf
     ) {
         buildList {
         add(
@@ -494,6 +519,15 @@ fun FloatingQuickMenu(
                     title = tr("עוזר קולי", "Voice Assistant"),
                     icon = Icons.Filled.Mic,
                     action = onVoice,
+                    isLocked = isMenuLocked
+                )
+            )
+
+            add(
+                QuickMenuItemUi(
+                    title = tr("חומרי PDF", "PDF Materials"),
+                    icon = Icons.Filled.PictureAsPdf,
+                    action = onPdf,
                     isLocked = isMenuLocked
                 )
             )
@@ -686,22 +720,22 @@ private fun PremiumQuickMenuPanel(
      * בחגורה כהה משתמשים בצבע הטקסט של ערכת הנושא,
      * כדי למנוע שחור על רקע שחור.
      */
-    val readableAccent = when {
-        isDarkMode && accentColor.luminance() < 0.45f ->
-            colorScheme.onSurface
+    val readableAccent =
+        when {
+            accentColor == Belt.GREEN.color ->
+                kmiSuccessColor()
 
-        isDarkMode && accentColor == Belt.GREEN.color ->
-            Color(0xFF6EE7A0)
+            isDarkMode &&
+                    accentColor.luminance() < 0.45f ->
+                colorScheme.onSurface
 
-        !isDarkMode && accentColor == Belt.GREEN.color ->
-            Color(0xFF16A34A)
+            !isDarkMode &&
+                    accentColor.luminance() > 0.78f ->
+                colorScheme.onSurfaceVariant
 
-        !isDarkMode && accentColor.luminance() > 0.78f ->
-            Color(0xFF9A6A00)
-
-        else ->
-            accentColor
-    }
+            else ->
+                accentColor
+        }
 
     val borderAccent =
         if (

@@ -3,7 +3,6 @@ package il.kmi.app.screens
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.core.*
-import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -11,22 +10,16 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.Image
-import androidx.compose.ui.graphics.drawscope.withTransform
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
 import il.kmi.app.R
-import androidx.compose.animation.core.Easing
-import android.view.animation.OvershootInterpolator
 import androidx.compose.ui.graphics.graphicsLayer
 import android.content.Context
 import androidx.compose.ui.platform.LocalContext
@@ -35,6 +28,7 @@ import il.kmi.shared.localization.AppLanguage
 import il.kmi.shared.localization.AppLanguageManager
 import il.kmi.shared.domain.Belt
 import android.content.SharedPreferences
+import androidx.core.content.edit
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.draw.clip
@@ -48,17 +42,14 @@ import il.kmi.app.ui.KmiTypography
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
 import il.kmi.app.FcmTokenManager
+import il.kmi.app.ui.loading.KmiLoadingRings
+import il.yuval.ui.theme.kmiBeltColor
+import il.yuval.ui.theme.kmiGraniteActionBrush
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
 
 
 //=======================================================================
-
-private fun overshootEasing(): Easing =
-    Easing { progress ->
-        OvershootInterpolator(2f)
-            .getInterpolation(progress)
-    }
 
 private data class IntroRankDisplay(
     val id: String,
@@ -67,17 +58,6 @@ private data class IntroRankDisplay(
     val baseBelt: Belt,
     val color: Color
 )
-
-/** ✅ NEW: צבע חגורה (כדי לצייר בלי "רקע לבן" מהתמונה) */
-private fun beltColor(belt: Belt): Color = when (belt) {
-    Belt.WHITE  -> Color(0xFFF5F5F5)
-    Belt.YELLOW -> Color(0xFFFFEB3B)
-    Belt.ORANGE -> Color(0xFFFF9800)
-    Belt.GREEN  -> Color(0xFF4CAF50)
-    Belt.BLUE   -> Color(0xFF2196F3)
-    Belt.BROWN  -> Color(0xFF6D4C41)
-    Belt.BLACK  -> Color(0xFF111111)
-}
 
 /**
  * מחזיר את תמונת החגורה המעוצבת למסך הפתיחה.
@@ -138,28 +118,79 @@ private fun introBeltDrawableRes(
     }
 }
 
-private fun introRankFromId(rawId: String?): IntroRankDisplay? {
+private fun introRankFromId(
+    rawId: String?
+): IntroRankDisplay? {
+    fun rank(
+        id: String,
+        he: String,
+        en: String,
+        belt: Belt
+    ): IntroRankDisplay {
+        return IntroRankDisplay(
+            id = id,
+            he = he,
+            en = en,
+            baseBelt = belt,
+            color = kmiBeltColor(belt)
+        )
+    }
+
     return when (rawId?.trim().orEmpty()) {
-        "white" -> IntroRankDisplay("white", "לבנה", "White belt", Belt.WHITE, beltColor(Belt.WHITE))
-        "yellow" -> IntroRankDisplay("yellow", "צהובה", "Yellow belt", Belt.YELLOW, beltColor(Belt.YELLOW))
-        "orange" -> IntroRankDisplay("orange", "כתומה", "Orange belt", Belt.ORANGE, beltColor(Belt.ORANGE))
-        "green" -> IntroRankDisplay("green", "ירוקה", "Green belt", Belt.GREEN, beltColor(Belt.GREEN))
-        "blue" -> IntroRankDisplay("blue", "כחולה", "Blue belt", Belt.BLUE, beltColor(Belt.BLUE))
-        "brown" -> IntroRankDisplay("brown", "חומה", "Brown belt", Belt.BROWN, beltColor(Belt.BROWN))
+        "white" ->
+            rank("white", "לבנה", "White belt", Belt.WHITE)
+
+        "yellow" ->
+            rank("yellow", "צהובה", "Yellow belt", Belt.YELLOW)
+
+        "orange" ->
+            rank("orange", "כתומה", "Orange belt", Belt.ORANGE)
+
+        "green" ->
+            rank("green", "ירוקה", "Green belt", Belt.GREEN)
+
+        "blue" ->
+            rank("blue", "כחולה", "Blue belt", Belt.BLUE)
+
+        "brown" ->
+            rank("brown", "חומה", "Brown belt", Belt.BROWN)
 
         "black",
         "שחורה",
-        "שחורה דאן 1" -> IntroRankDisplay("black", "שחורה דאן 1", "Black belt Dan 1", Belt.BLACK, beltColor(Belt.BLACK))
+        "שחורה דאן 1" ->
+            rank(
+                "black",
+                "שחורה דאן 1",
+                "Black belt Dan 1",
+                Belt.BLACK
+            )
 
-        "black_dan_2" -> IntroRankDisplay("black_dan_2", "שחורה דאן 2", "Black belt Dan 2", Belt.BLACK, beltColor(Belt.BLACK))
-        "black_dan_3" -> IntroRankDisplay("black_dan_3", "שחורה דאן 3", "Black belt Dan 3", Belt.BLACK, beltColor(Belt.BLACK))
-        "black_dan_4" -> IntroRankDisplay("black_dan_4", "שחורה דאן 4", "Black belt Dan 4", Belt.BLACK, beltColor(Belt.BLACK))
-        "black_dan_5" -> IntroRankDisplay("black_dan_5", "שחורה דאן 5", "Black belt Dan 5", Belt.BLACK, beltColor(Belt.BLACK))
-        "black_dan_6" -> IntroRankDisplay("black_dan_6", "שחורה דאן 6", "Black belt Dan 6", Belt.BLACK, beltColor(Belt.BLACK))
-        "black_dan_7" -> IntroRankDisplay("black_dan_7", "שחורה דאן 7", "Black belt Dan 7", Belt.BLACK, beltColor(Belt.BLACK))
-        "black_dan_8" -> IntroRankDisplay("black_dan_8", "שחורה דאן 8", "Black belt Dan 8", Belt.BLACK, beltColor(Belt.BLACK))
-        "black_dan_9" -> IntroRankDisplay("black_dan_9", "שחורה דאן 9", "Black belt Dan 9", Belt.BLACK, beltColor(Belt.BLACK))
-        "black_dan_10" -> IntroRankDisplay("black_dan_10", "שחורה דאן 10", "Black belt Dan 10", Belt.BLACK, beltColor(Belt.BLACK))
+        "black_dan_2" ->
+            rank("black_dan_2", "שחורה דאן 2", "Black belt Dan 2", Belt.BLACK)
+
+        "black_dan_3" ->
+            rank("black_dan_3", "שחורה דאן 3", "Black belt Dan 3", Belt.BLACK)
+
+        "black_dan_4" ->
+            rank("black_dan_4", "שחורה דאן 4", "Black belt Dan 4", Belt.BLACK)
+
+        "black_dan_5" ->
+            rank("black_dan_5", "שחורה דאן 5", "Black belt Dan 5", Belt.BLACK)
+
+        "black_dan_6" ->
+            rank("black_dan_6", "שחורה דאן 6", "Black belt Dan 6", Belt.BLACK)
+
+        "black_dan_7" ->
+            rank("black_dan_7", "שחורה דאן 7", "Black belt Dan 7", Belt.BLACK)
+
+        "black_dan_8" ->
+            rank("black_dan_8", "שחורה דאן 8", "Black belt Dan 8", Belt.BLACK)
+
+        "black_dan_9" ->
+            rank("black_dan_9", "שחורה דאן 9", "Black belt Dan 9", Belt.BLACK)
+
+        "black_dan_10" ->
+            rank("black_dan_10", "שחורה דאן 10", "Black belt Dan 10", Belt.BLACK)
 
         else -> null
     }
@@ -250,7 +281,9 @@ private suspend fun fetchAndPersistFullNameIfMissing(
         ?.trim()
         ?.takeIf { it.isNotEmpty() }
     if (!authName.isNullOrBlank()) {
-        userSp.edit().putString("fullName", authName).apply()
+        userSp.edit {
+            putString("fullName", authName)
+        }
         return authName
     }
 
@@ -270,7 +303,9 @@ private suspend fun fetchAndPersistFullNameIfMissing(
             ?.takeIf { it.isNotEmpty() }
 
         if (!fullName.isNullOrBlank()) {
-            userSp.edit().putString("fullName", fullName).apply()
+            userSp.edit {
+                putString("fullName", fullName)
+            }
             fullName
         } else {
             null
@@ -373,224 +408,6 @@ private fun googleLoginErrorMessage(
     }
 }
 
-/** ✅ REPLACE: חגורה מצוירת על הרקע (בלי תמונה עם לבן) */
-@Composable
-private fun BeltBadge(
-    rank: IntroRankDisplay,
-    lang: AppLanguage,
-    modifier: Modifier = Modifier
-) {
-    val belt = rank.baseBelt
-
-    val beltTextColor = when (belt) {
-        Belt.WHITE -> Color(0xFFE0E0E0)
-        else -> rank.color
-    }
-
-    fun beltDrawableResOrNull(b: Belt): Int? = when (b) {
-        Belt.WHITE  -> R.drawable.intro_belt_white
-        Belt.YELLOW -> R.drawable.intro_belt_yellow
-        Belt.ORANGE -> R.drawable.intro_belt_orange
-        Belt.GREEN  -> R.drawable.intro_belt_green
-        Belt.BLUE   -> R.drawable.intro_belt_blue
-        Belt.BROWN  -> R.drawable.intro_belt_brown
-        Belt.BLACK  -> R.drawable.intro_belt_black
-    }
-
-    val res = beltDrawableResOrNull(belt)
-
-    Column(
-        modifier = modifier.fillMaxWidth(),
-        horizontalAlignment = Alignment.CenterHorizontally
-    ) {
-        Text(
-            text = if (lang == AppLanguage.ENGLISH) rank.en else rank.he,
-            color = beltTextColor,
-            style =
-                KmiTypography.sectionTitle.copy(
-                    fontWeight = FontWeight.Bold
-                ),
-            textAlign = TextAlign.Center
-        )
-
-        Spacer(Modifier.height(6.dp))
-
-        if (res != null) {
-            Image(
-                painter = painterResource(id = res),
-                contentDescription = if (lang == AppLanguage.ENGLISH) rank.en else rank.he,
-                modifier = Modifier
-                    .size(56.dp)
-                    .graphicsLayer {
-                        scaleX = 1.55f
-                        scaleY = 1.55f
-
-                        compositingStrategy =
-                            androidx.compose.ui.graphics.CompositingStrategy.Offscreen
-
-                        if (belt == Belt.WHITE) {
-                            shadowElevation = 6f
-                            shape = androidx.compose.foundation.shape.RoundedCornerShape(6.dp)
-                            clip = false
-                        }
-                    },
-                contentScale = ContentScale.Fit,
-                colorFilter = if (belt == Belt.WHITE) null
-                else androidx.compose.ui.graphics.ColorFilter.tint(
-                    Color.White,
-                    blendMode = androidx.compose.ui.graphics.BlendMode.Modulate
-                )
-            )
-        } else {
-            Canvas(modifier = Modifier.size(width = 92.dp, height = 26.dp)) {
-                val w = size.width
-                val h = size.height
-                drawRoundRect(
-                    color = rank.color,
-                    topLeft = Offset(0f, 0f),
-                    size = Size(w, h),
-                    cornerRadius = androidx.compose.ui.geometry.CornerRadius(h * 0.45f, h * 0.45f)
-                )
-            }
-        }
-    }
-}
-
-@Composable
-private fun PremiumIntroButtonLoading(
-    loadingText: String
-) {
-    val infiniteTransition = rememberInfiniteTransition(
-        label = "premiumIntroButtonLoading"
-    )
-
-    val outerRotation by infiniteTransition.animateFloat(
-        initialValue = 0f,
-        targetValue = 360f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(
-                durationMillis = 1200,
-                easing = LinearEasing
-            )
-        ),
-        label = "premiumIntroButtonOuterRotation"
-    )
-
-    val middleRotation by infiniteTransition.animateFloat(
-        initialValue = 360f,
-        targetValue = 0f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(
-                durationMillis = 1500,
-                easing = LinearEasing
-            )
-        ),
-        label = "premiumIntroButtonMiddleRotation"
-    )
-
-    val innerRotation by infiniteTransition.animateFloat(
-        initialValue = 0f,
-        targetValue = 360f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(
-                durationMillis = 900,
-                easing = LinearEasing
-            )
-        ),
-        label = "premiumIntroButtonInnerRotation"
-    )
-
-    Row(
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(8.dp)
-    ) {
-        Box(
-            modifier = Modifier.size(30.dp),
-            contentAlignment = Alignment.Center
-        ) {
-            Surface(
-                modifier = Modifier
-                    .size(28.dp)
-                    .graphicsLayer {
-                        rotationZ = outerRotation
-                    },
-                shape = CircleShape,
-                color = Color.Transparent,
-                shadowElevation = 0.dp,
-                tonalElevation = 0.dp,
-                border = BorderStroke(
-                    width = 3.dp,
-                    brush = Brush.sweepGradient(
-                        colors = listOf(
-                            Color.Transparent,
-                            Color.White,
-                            Color(0xFFBFE7FF),
-                            Color.Transparent
-                        )
-                    )
-                )
-            ) {}
-
-            Surface(
-                modifier = Modifier
-                    .size(20.dp)
-                    .graphicsLayer {
-                        rotationZ = middleRotation
-                    },
-                shape = CircleShape,
-                color = Color.Transparent,
-                shadowElevation = 0.dp,
-                tonalElevation = 0.dp,
-                border = BorderStroke(
-                    width = 2.dp,
-                    brush = Brush.sweepGradient(
-                        colors = listOf(
-                            Color.Transparent,
-                            Color(0xFFFFD166),
-                            Color.White,
-                            Color.Transparent
-                        )
-                    )
-                )
-            ) {}
-
-            Surface(
-                modifier = Modifier
-                    .size(12.dp)
-                    .graphicsLayer {
-                        rotationZ = innerRotation
-                    },
-                shape = CircleShape,
-                color = Color.Transparent,
-                shadowElevation = 0.dp,
-                tonalElevation = 0.dp,
-                border = BorderStroke(
-                    width = 2.dp,
-                    brush = Brush.sweepGradient(
-                        colors = listOf(
-                            Color.Transparent,
-                            Color.White,
-                            Color(0xFFBFE7FF),
-                            Color.Transparent
-                        )
-                    )
-                )
-            ) {}
-        }
-
-        Text(
-            text = loadingText,
-            style =
-                KmiTypography.caption.copy(
-                    fontWeight = FontWeight.Bold
-                ),
-            color = Color.White,
-            textAlign = TextAlign.Center,
-            maxLines = 1
-        )
-    }
-}
-
 @Composable
 private fun IntroWelcomeImageScreen(
     isEnglish: Boolean,
@@ -613,18 +430,12 @@ private fun IntroWelcomeImageScreen(
         colorScheme.background.luminance() < 0.5f
 
     val cardBackground =
-        if (isDarkTheme) {
-            colorScheme.surface.copy(alpha = 0.94f)
-        } else {
-            Color.White.copy(alpha = 0.88f)
-        }
+        colorScheme.surface.copy(
+            alpha = if (isDarkTheme) 0.94f else 0.88f
+        )
 
     val primaryTextColor =
-        if (isDarkTheme) {
-            colorScheme.onSurface
-        } else {
-            Color(0xFF172033)
-        }
+        colorScheme.onSurface
 
     BoxWithConstraints(
         modifier = Modifier
@@ -759,14 +570,10 @@ private fun IntroWelcomeImageScreen(
                         color =
                             when (rank.baseBelt) {
                                 Belt.WHITE ->
-                                    Color(0xFF98A2B3)
+                                    colorScheme.onSurfaceVariant
 
                                 Belt.BLACK ->
-                                    if (isDarkTheme) {
-                                        Color.White
-                                    } else {
-                                        Color(0xFF111827)
-                                    }
+                                    colorScheme.onSurface
 
                                 else ->
                                     rank.color
@@ -862,12 +669,7 @@ private fun IntroWelcomeImageScreen(
                     )
                     .clip(RoundedCornerShape(24.dp))
                     .background(
-                        Brush.horizontalGradient(
-                            listOf(
-                                Color(0xFF12A8F4),
-                                Color(0xFF4C18D8)
-                            )
-                        )
+                        brush = kmiGraniteActionBrush()
                     )
                     .clickable(
                         enabled =
@@ -887,21 +689,9 @@ private fun IntroWelcomeImageScreen(
                 contentAlignment = Alignment.Center
             ) {
                 if (isGoogleLoading || isProfileStatusLoading) {
-                    PremiumIntroButtonLoading(
-                        loadingText =
-                            when {
-                                isGoogleLoading && isEnglish ->
-                                    "Signing in..."
-
-                                isGoogleLoading ->
-                                    "מתחבר..."
-
-                                isEnglish ->
-                                    "Loading..."
-
-                                else ->
-                                    "טוען..."
-                            }
+                    KmiLoadingRings(
+                        size = 34.dp,
+                        text = null
                     )
                 } else {
                     Text(
@@ -953,9 +743,7 @@ private fun IntroWelcomeImageScreen(
                         .clip(RoundedCornerShape(20.dp))
                         .background(cardBackground)
                         .clickable(
-                            enabled =
-                                !isGoogleLoading &&
-                                        !isProfileStatusLoading
+                            enabled = !isGoogleLoading
                         ) {
                             onRegularClick()
                         }
@@ -1033,16 +821,20 @@ private suspend fun completeGoogleLoginAfterFirebaseAuth(
     GoogleAuthManager.logUiStage(
         context = ctx,
         stage = "intro_profile_check_finished",
-        message = "isComplete=${profileStatus.isComplete}, canEnterApp=${profileStatus.canEnterApp}, missingFields=${profileStatus.missingFields.joinToString("|")}"
+        message = "isComplete=${profileStatus.isComplete}, canEnterApp=${profileStatus.canEnterApp}, missingFields=${
+            profileStatus.missingFields.joinToString(
+                "|"
+            )
+        }"
     )
 
-    userSp.edit()
-        .putBoolean(SUPPRESS_NEXT_DRAWER_OPEN_KEY, true)
-        .apply()
+    userSp.edit {
+        putBoolean(SUPPRESS_NEXT_DRAWER_OPEN_KEY, true)
+    }
 
-    legacySp.edit()
-        .putBoolean(SUPPRESS_NEXT_DRAWER_OPEN_KEY, true)
-        .apply()
+    legacySp.edit {
+        putBoolean(SUPPRESS_NEXT_DRAWER_OPEN_KEY, true)
+    }
 
     GoogleAuthManager.logUiStage(
         context = ctx,
@@ -1093,7 +885,6 @@ fun IntroScreen(
     onProfileComplete: () -> Unit = onContinue,
     onProfileMissing: () -> Unit = onContinue
 ) {
-    var startAnim by remember { mutableStateOf(false) }
     var isGoogleLoading by remember { mutableStateOf(false) }
     var googleError by remember { mutableStateOf<String?>(null) }
 
@@ -1248,33 +1039,6 @@ fun IntroScreen(
         }
     }
 
-    val alpha by animateFloatAsState(
-        targetValue = if (startAnim) 1f else 0f,
-        animationSpec = tween(durationMillis = 2000, easing = FastOutSlowInEasing),
-        label = "fadeIn"
-    )
-
-    val scale by animateFloatAsState(
-        targetValue = if (startAnim) 1f else 0.7f,
-        animationSpec =
-            tween(
-                durationMillis = 2000,
-                easing = overshootEasing()
-            ),
-        label = "scaleIn"
-    )
-
-    val infiniteTransition = rememberInfiniteTransition(label = "gradientAnim")
-    val gradientShift by infiniteTransition.animateFloat(
-        initialValue = 0f,
-        targetValue = 1000f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(10_000, easing = LinearEasing),
-            repeatMode = RepeatMode.Reverse
-        ),
-        label = "gradientShift"
-    )
-
     LaunchedEffect(Unit) {
         GoogleAuthManager.logUiStage(
             context = ctx,
@@ -1282,7 +1046,6 @@ fun IntroScreen(
             message = "currentUserUid=${FirebaseAuth.getInstance().currentUser?.uid.orEmpty()}, currentUserEmail=${FirebaseAuth.getInstance().currentUser?.email.orEmpty()}, isAnonymous=${FirebaseAuth.getInstance().currentUser?.isAnonymous}"
         )
 
-        startAnim = true
         KmiAccess.ensureTrialStarted(userSp)
 
         GoogleAuthManager.logUiStage(
@@ -1298,14 +1061,26 @@ fun IntroScreen(
         lang = currentLang
     )
 
-    val dynamicGreeting = remember(dynamicGreeting0, fetchedName, currentLang) {
-        if (!fetchedName.isNullOrBlank()) {
-            val first = fetchedName!!.trim().split(' ', limit = 2).first()
-            if (currentLang == AppLanguage.ENGLISH) "Hello, $first" else "שלום $first"
-        } else {
-            dynamicGreeting0
+    val dynamicGreeting =
+        remember(
+            dynamicGreeting0,
+            fetchedName,
+            currentLang
+        ) {
+            fetchedName
+                ?.trim()
+                ?.takeIf { it.isNotEmpty() }
+                ?.split(' ', limit = 2)
+                ?.firstOrNull()
+                ?.let { first ->
+                    if (currentLang == AppLanguage.ENGLISH) {
+                        "Hello, $first"
+                    } else {
+                        "שלום $first"
+                    }
+                }
+                ?: dynamicGreeting0
         }
-    }
 
     val startGoogleLogin: () -> Unit = {
         GoogleAuthManager.logUiStage(
@@ -1425,13 +1200,13 @@ fun IntroScreen(
             message = "isGoogleLoading=$isGoogleLoading, googleFlowLocked=$googleFlowLocked, currentUserUid=${FirebaseAuth.getInstance().currentUser?.uid.orEmpty()}, isAnonymous=${FirebaseAuth.getInstance().currentUser?.isAnonymous}"
         )
 
-        userSp.edit()
-            .putBoolean(SUPPRESS_NEXT_DRAWER_OPEN_KEY, true)
-            .apply()
+        userSp.edit {
+            putBoolean(SUPPRESS_NEXT_DRAWER_OPEN_KEY, true)
+        }
 
-        legacySp.edit()
-            .putBoolean(SUPPRESS_NEXT_DRAWER_OPEN_KEY, true)
-            .apply()
+        legacySp.edit {
+            putBoolean(SUPPRESS_NEXT_DRAWER_OPEN_KEY, true)
+        }
 
         GoogleAuthManager.logUiStage(
             context = ctx,
@@ -1443,19 +1218,19 @@ fun IntroScreen(
 
     val continueExistingUser: () -> Unit = {
         if (canContinueWithoutLogin) {
-            userSp.edit()
-                .putBoolean(
+            userSp.edit {
+                putBoolean(
                     SUPPRESS_NEXT_DRAWER_OPEN_KEY,
                     true
                 )
-                .apply()
+            }
 
-            legacySp.edit()
-                .putBoolean(
+            legacySp.edit {
+                putBoolean(
                     SUPPRESS_NEXT_DRAWER_OPEN_KEY,
                     true
                 )
-                .apply()
+            }
 
             GoogleAuthManager.logUiStage(
                 context = ctx,
@@ -1484,59 +1259,4 @@ fun IntroScreen(
         onContinueClick = continueExistingUser,
         onRegularClick = openRegularLogin
     )
-}
-
-/** איור וקטורי עם הגבלה דינמית של סקייל כדי שלא ייחתך מהמסך */
-@Composable
-private fun FightersIllustration() {
-    Canvas(modifier = Modifier.fillMaxSize()) {
-        val w = size.width
-        val h = size.height
-
-        // זה הסקייל שתרצה "באידיאל" (היה 1.30 ואז הקטנו 2×5% ≈ 1.235)
-        val desiredScale = 1.235f
-
-        // שוליים מינימליים מסביב כדי שלא ייגע בגבולות (אפשר לכוונן)
-        val pad = 24.dp.toPx()
-
-        // סקייל מקסימלי שמבטיח שהאיור נשאר בתוך הקנבס + שוליים
-        val maxScaleW = (w - 2 * pad) / w
-        val maxScaleH = (h - 2 * pad) / h
-        val safeScale = minOf(desiredScale, maxScaleW.coerceAtMost(1f), maxScaleH.coerceAtMost(1f))
-
-        withTransform({
-            // ממרכזים ומגדילים עד הגבול הבטוח
-            scale(scaleX = safeScale, scaleY = safeScale, pivot = Offset(w / 2f, h / 2f))
-        }) {
-            // “שמש” מאחור
-            drawOval(
-                color = Color.White.copy(alpha = 0.12f),
-                topLeft = Offset(w * 0.15f, h * 0.05f),
-                size = Size(w * 0.7f, h * 0.7f)
-            )
-
-            // סילואטות מינימליות
-            val pathLeft = Path().apply {
-                moveTo(w * 0.30f, h * 0.65f)
-                cubicTo(w * 0.28f, h * 0.58f, w * 0.36f, h * 0.45f, w * 0.42f, h * 0.40f)
-                cubicTo(w * 0.46f, h * 0.37f, w * 0.48f, h * 0.32f, w * 0.46f, h * 0.28f)
-                cubicTo(w * 0.44f, h * 0.23f, w * 0.38f, h * 0.22f, w * 0.36f, h * 0.26f)
-                cubicTo(w * 0.34f, h * 0.30f, w * 0.36f, h * 0.35f, w * 0.34f, h * 0.40f)
-                cubicTo(w * 0.31f, h * 0.48f, w * 0.28f, h * 0.55f, w * 0.30f, h * 0.65f)
-                close()
-            }
-            drawPath(pathLeft, color = Color.White.copy(alpha = 0.85f))
-
-            val pathRight = Path().apply {
-                moveTo(w * 0.70f, h * 0.70f)
-                cubicTo(w * 0.72f, h * 0.60f, w * 0.68f, h * 0.50f, w * 0.62f, h * 0.45f)
-                cubicTo(w * 0.58f, h * 0.42f, w * 0.56f, h * 0.36f, w * 0.58f, h * 0.32f)
-                cubicTo(w * 0.60f, h * 0.28f, w * 0.66f, h * 0.28f, w * 0.68f, h * 0.32f)
-                cubicTo(w * 0.70f, h * 0.36f, w * 0.68f, h * 0.40f, w * 0.70f, h * 0.46f)
-                cubicTo(w * 0.73f, h * 0.54f, w * 0.76f, h * 0.60f, w * 0.70f, h * 0.70f)
-                close()
-            }
-            drawPath(pathRight, color = Color.White.copy(alpha = 0.85f))
-        }
-    }
 }

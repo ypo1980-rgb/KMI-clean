@@ -17,7 +17,13 @@ interface TrainingSummaryRepo {
         limit: Long = 30
     ): List<TrainingSummaryEntity>
 
-    // ✅ חדש: מחזיר רק את התאריכים שיש בהם סיכום בטווח (למשל חודש)
+    suspend fun loadForOwnerAndDate(
+        ownerUid: String,
+        ownerRole: SummaryAuthorRole,
+        dateIso: String
+    ): TrainingSummaryEntity?
+
+    // ✅ מחזיר רק את התאריכים שיש בהם סיכום בטווח (למשל חודש)
     suspend fun listDatesForOwnerBetween(
         ownerUid: String,
         ownerRole: SummaryAuthorRole,
@@ -85,6 +91,49 @@ class FirestoreTrainingSummaryRepo(
         return snap.documents.mapNotNull { doc ->
             fromDoc(doc.id, doc.data ?: return@mapNotNull null)
         }
+    }
+
+    override suspend fun loadForOwnerAndDate(
+        ownerUid: String,
+        ownerRole: SummaryAuthorRole,
+        dateIso: String
+    ): TrainingSummaryEntity? {
+
+        val uid = ownerUid.trim()
+        require(uid.isNotEmpty()) {
+            "ownerUid is required"
+        }
+
+        val cleanDate = dateIso.trim()
+
+        if (cleanDate.isBlank()) {
+            return null
+        }
+
+        val snap =
+            db.collection("users")
+                .document(uid)
+                .collection(
+                    colName(ownerRole)
+                )
+                .whereEqualTo(
+                    "dateIso",
+                    cleanDate
+                )
+                .limit(1)
+                .get()
+                .await()
+
+        val doc =
+            snap.documents
+                .firstOrNull()
+                ?: return null
+
+        return fromDoc(
+            doc.id,
+            doc.data
+                ?: return null
+        )
     }
 
     // ✅ חדש: תאריכים בלבד בחודש/טווח

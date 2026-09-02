@@ -20,10 +20,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ChevronLeft
-import androidx.compose.material.icons.filled.Star
-import androidx.compose.material.icons.outlined.StarBorder
-import androidx.compose.material3.AlertDialog
+import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.platform.LocalLayoutDirection
@@ -31,13 +28,10 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.State
@@ -55,10 +49,6 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import il.kmi.shared.domain.Belt
-import java.net.URLDecoder
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -72,16 +62,25 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import android.content.Intent
-import android.net.Uri
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.runtime.mutableIntStateOf
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-import androidx.compose.ui.graphics.luminance
+import androidx.core.net.toUri
 import il.kmi.app.ui.KmiIconSize
 import il.kmi.app.ui.KmiTypography
 import il.kmi.app.ui.scaledIconSize
+import il.yuval.ui.theme.kmiGraniteActionBrush
+import il.yuval.ui.theme.kmiGraniteActionHighlightColor
+import il.yuval.ui.theme.kmiOnSuccessContainerColor
 import il.yuval.ui.theme.kmiScreenBackgroundBrush
-import il.kmi.shared.domain.Explanations
+import il.yuval.ui.theme.kmiSectionHeaderBrush
+import il.yuval.ui.theme.kmiSectionHeaderContentColor
+import il.yuval.ui.theme.kmiSuccessColor
+import il.yuval.ui.theme.kmiSuccessContainerColor
+import kotlin.time.Duration.Companion.milliseconds
 
 
 /* ------------------------------
@@ -133,32 +132,6 @@ private fun rememberAuthState(ctx: Context): State<Boolean> {
     return state
 }
 
-private const val DEV_ADMIN_CODE = "040483455"   // 👈 קוד אדמין פנימי בלבד
-
-/* ------------------------------
-   Parser למפתח תרגיל מהחיפוש
-   ------------------------------ */
-
-// "belt|topic|item" / "belt::topic::item" / "belt/topic/item"
-private fun parseKey(key: String): Triple<Belt, String, String> {
-    fun dec(s: String): String =
-        runCatching { URLDecoder.decode(s, "UTF-8") }.getOrDefault(s)
-
-    val parts0: List<String> = when {
-        '|'  in key -> key.split('|',  limit = 3)
-        "::" in key -> key.split("::", limit = 3)
-        '/'  in key -> key.split('/',  limit = 3)
-        else        -> listOf("", "", "")
-    }
-    val parts: List<String> = (parts0 + listOf("", "", "")).take(3)
-
-    val belt: Belt  = Belt.fromId(parts[0]) ?: Belt.WHITE
-    val topic: String = dec(parts[1])
-    val item: String  = dec(parts[2])
-
-    return Triple(belt, topic, item)
-}
-
 /* ------------------------------
    מסך ניהול מנוי
    ------------------------------ */
@@ -190,12 +163,13 @@ private fun PremiumSubscriptionButton(
     Card(
         onClick = onClick,
         modifier = Modifier
-            .fillMaxWidth()
-            .height(66.dp),
+            .fillMaxWidth(),
         shape = RoundedCornerShape(22.dp),
         border = BorderStroke(
             width = 1.dp,
-            color = Color(0xFF43D9F5)
+            color =
+                kmiSectionHeaderContentColor()
+                    .copy(alpha = 0.68f)
         ),
         colors = CardDefaults.cardColors(
             containerColor = Color.Transparent
@@ -206,12 +180,17 @@ private fun PremiumSubscriptionButton(
     ) {
         Box(
             modifier = Modifier
-                .fillMaxSize()
+                .fillMaxWidth()
+                .heightIn(min = 58.dp)
                 .clip(
                     RoundedCornerShape(22.dp)
                 )
                 .background(
-                    Color(0xFF1B2A3A)
+                    brush = kmiGraniteActionBrush()
+                )
+                .padding(
+                    horizontal = 16.dp,
+                    vertical = 10.dp
                 )
         ) {
 
@@ -228,13 +207,9 @@ private fun PremiumSubscriptionButton(
                             Brush.radialGradient(
                                 colors =
                                     listOf(
-                                        Color.White.copy(
-                                            alpha = 0.26f
-                                        ),
-                                        Color(0xFF43D9F5)
-                                            .copy(
-                                                alpha = 0.12f
-                                            ),
+                                        kmiGraniteActionHighlightColor(),
+                                        kmiGraniteActionHighlightColor()
+                                            .copy(alpha = 0.16f),
                                         Color.Transparent
                                     )
                             )
@@ -242,7 +217,9 @@ private fun PremiumSubscriptionButton(
             )
 
             Box(
-                modifier = Modifier.fillMaxSize(),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(min = 38.dp),
                 contentAlignment = Alignment.Center
             ) {
                 Text(
@@ -252,7 +229,8 @@ private fun PremiumSubscriptionButton(
                             fontWeight =
                                 FontWeight.ExtraBold
                         ),
-                    color = Color(0xFFD8E5F0),
+                    color =
+                        kmiSectionHeaderContentColor(),
                     textAlign = TextAlign.Center,
                     maxLines = 1
                 )
@@ -263,26 +241,31 @@ private fun PremiumSubscriptionButton(
 
 @Composable
 private fun StatusIcon(active: Boolean) {
+    val containerColor =
+        if (active) {
+            kmiSuccessContainerColor()
+        } else {
+            MaterialTheme.colorScheme.errorContainer
+        }
+
+    val contentColor =
+        if (active) {
+            kmiOnSuccessContainerColor()
+        } else {
+            MaterialTheme.colorScheme.onErrorContainer
+        }
 
     Box(
         modifier = Modifier
             .size(scaledIconSize(62.dp))
             .background(
-                if (active) {
+                brush =
                     Brush.radialGradient(
                         listOf(
-                            Color(0xFFD1FAE5),
-                            Color(0xFFECFDF5)
+                            containerColor,
+                            containerColor.copy(alpha = 0.72f)
                         )
-                    )
-                } else {
-                    Brush.radialGradient(
-                        listOf(
-                            Color(0xFFFEE2E2),
-                            Color(0xFFFFF1F2)
-                        )
-                    )
-                },
+                    ),
                 shape = CircleShape
             ),
         contentAlignment = Alignment.Center
@@ -290,7 +273,7 @@ private fun StatusIcon(active: Boolean) {
         Text(
             text = if (active) "✓" else "!",
             fontWeight = FontWeight.ExtraBold,
-            color = if (active) Color(0xFF166534) else Color(0xFFDC2626),
+            color = contentColor,
             style = KmiTypography.sectionTitle
         )
     }
@@ -303,17 +286,18 @@ private fun openGooglePlaySubscriptions(
 ) {
     val safeProductId = productId?.takeIf { it.isNotBlank() }
 
-    val deepLink = if (safeProductId != null) {
-        Uri.parse(
-            "https://play.google.com/store/account/subscriptions" +
-                    "?sku=$safeProductId&package=$packageName"
-        )
-    } else {
-        Uri.parse(
-            "https://play.google.com/store/account/subscriptions" +
-                    "?package=$packageName"
-        )
-    }
+    val deepLink =
+        if (safeProductId != null) {
+            (
+                    "https://play.google.com/store/account/subscriptions" +
+                            "?sku=$safeProductId&package=$packageName"
+                    ).toUri()
+        } else {
+            (
+                    "https://play.google.com/store/account/subscriptions" +
+                            "?package=$packageName"
+                    ).toUri()
+        }
 
     val intent = Intent(Intent.ACTION_VIEW, deepLink).apply {
         addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
@@ -343,6 +327,8 @@ fun SubscriptionScreen(
     onOpenPlans: () -> Unit,
     onOpenHome: () -> Unit,
 ) {
+    BackHandler(onBack = onBack)
+
     val ctx = LocalContext.current
     val activity = ctx as? Activity
 
@@ -359,33 +345,12 @@ fun SubscriptionScreen(
     val layoutDirection =
         if (isEnglish) LayoutDirection.Ltr else LayoutDirection.Rtl
 
-    /*
-     * מצב התצוגה נקבע מערכת הנושא הפעילה באפליקציה,
-     * ולא מהגדרת המצב הכהה של מערכת ההפעלה.
-     */
-    val isDarkMode =
-        MaterialTheme.colorScheme.background
-            .luminance() < 0.5f
-
     val mainCardColor =
-        if (isDarkMode) {
-            MaterialTheme.colorScheme.surface
-        } else {
-            Color.White
-        }
+        MaterialTheme.colorScheme.surface
 
     val innerCardColor =
-        if (isDarkMode) {
-            MaterialTheme.colorScheme.surfaceVariant
-        } else {
-            Color(0xFFF8FAFC)
-        }
+        MaterialTheme.colorScheme.surfaceVariant
 
-    // דיאלוג קוד למפתח (מנהל אפליקציה)
-    var showDevDialog by rememberSaveable { mutableStateOf(false) }
-    var devCode by rememberSaveable { mutableStateOf("") }
-
-    // ---------- זיהוי מנהל לפי kmi_user/is_manager ----------
     val userSp = remember {
         ctx.getSharedPreferences("kmi_user", Context.MODE_PRIVATE)
     }
@@ -393,15 +358,6 @@ fun SubscriptionScreen(
     val subsSp = remember {
         ctx.getSharedPreferences("kmi_subs", Context.MODE_PRIVATE)
     }
-
-    var isAdmin by remember {
-        mutableStateOf(KmiAccess.isAdmin(userSp))
-    }
-
-    val isAuthed by rememberAuthState(ctx)
-
-    // גם במצב אדמין אנחנו ממשיכים למסך המנוי הרגיל.
-    // בזמן בדיקות אדמין לא עוקף מנוי, כדי שנוכל לבדוק נעילה/פתיחה לפי Google Play.
 
     // עטיפה ב-runCatching כדי שלא יפיל את האפליקציה במקרה של שגיאה.
     // חשוב:
@@ -422,7 +378,9 @@ fun SubscriptionScreen(
     val restoreScope = rememberCoroutineScope()
     var restoreInProgress by rememberSaveable { mutableStateOf(false) }
 
-    var subscriptionUiRefreshTick by remember { mutableStateOf(0) }
+    var subscriptionUiRefreshTick by remember {
+        mutableIntStateOf(0)
+    }
 
     DisposableEffect(userSp, subsSp) {
         val listener = SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
@@ -528,27 +486,45 @@ fun SubscriptionScreen(
 
     val renewalLabel = formatDate(savedAccessUntil)
 
-// חיפוש: דיאלוג מקומי אחרי בחירה מהחיפוש (כשזמין)
-    var pickedKey by rememberSaveable { mutableStateOf<String?>(null) }
-
     Scaffold(
         topBar = {
             val isAuthed by rememberAuthState(ctx)
 
-            if (!isAuthed) {
-                TopAppBar(title = { Text("ניהול מנוי") })
-            } else {
-                il.kmi.app.ui.KmiTopBar(
-                    title = if (isEnglish) "Subscription" else "ניהול מנוי",
-                    lockSearch = false,
-                    onPickSearchResult = { key -> pickedKey = key },
-                    showBottomActions = true,
-                    showTopHome = false,
-                    centerTitle = true,
-                    onHome = onOpenHome,
-                    extraActions = { }
-                )
-            }
+            il.kmi.app.ui.KmiTopBar(
+                title =
+                    if (isEnglish) {
+                        "Subscription"
+                    } else {
+                        "ניהול מנוי"
+                    },
+                lockSearch = !isAuthed,
+                showTopSearch = isAuthed,
+                showBottomActions = isAuthed,
+                showTopHome = false,
+                centerTitle = true,
+                onHome = onOpenHome,
+                currentLang =
+                    if (isEnglish) {
+                        "en"
+                    } else {
+                        "he"
+                    },
+                onToggleLanguage = {
+                    val newLanguage =
+                        if (
+                            langManager.getCurrentLanguage() ==
+                            il.kmi.shared.localization.AppLanguage.HEBREW
+                        ) {
+                            il.kmi.shared.localization.AppLanguage.ENGLISH
+                        } else {
+                            il.kmi.shared.localization.AppLanguage.HEBREW
+                        }
+
+                    langManager.setLanguage(newLanguage)
+                    (ctx as? Activity)?.recreate()
+                },
+                extraActions = { }
+            )
         }
     ) { padding ->
 
@@ -566,6 +542,7 @@ fun SubscriptionScreen(
                 modifier = Modifier
                     .fillMaxSize()
                     .verticalScroll(scrollState)
+                    .navigationBarsPadding()
                     .padding(horizontal = 16.dp, vertical = 14.dp),
                 verticalArrangement = Arrangement.spacedBy(16.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
@@ -574,11 +551,7 @@ fun SubscriptionScreen(
                 Card(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .heightIn(min = 120.dp)
-                        .shadow(
-                            elevation = 16.dp,
-                            shape = RoundedCornerShape(28.dp)
-                        ),
+                        .heightIn(min = 120.dp),
                     shape = RoundedCornerShape(26.dp),
                     colors = CardDefaults.cardColors(
                         containerColor = Color.Transparent
@@ -588,13 +561,7 @@ fun SubscriptionScreen(
                         modifier = Modifier
                             .fillMaxWidth()
                             .background(
-                                Brush.horizontalGradient(
-                                    listOf(
-                                        Color(0xFF7C3AED),
-                                        Color(0xFF6D28D9),
-                                        Color(0xFF5B21B6)
-                                    )
-                                )
+                                brush = kmiSectionHeaderBrush()
                             )
                             .padding(horizontal = 16.dp, vertical = 16.dp)
                     ) {
@@ -607,7 +574,7 @@ fun SubscriptionScreen(
                                 text = if (isEnglish) "KMI Subscription" else "ניהול מנוי KAMI",
                                 style = KmiTypography.sectionTitle,
                                 fontWeight = FontWeight.ExtraBold,
-                                color = Color.White,
+                                color = kmiSectionHeaderContentColor(),
                                 modifier = Modifier.fillMaxWidth(),
                                 textAlign = TextAlign.Center,
                                 maxLines = 1
@@ -620,7 +587,9 @@ fun SubscriptionScreen(
                                     "כאן אפשר לבדוק סטטוס מנוי, לרכוש מנוי חדש או לשחזר רכישות קיימות."
                                 },
                                 style = KmiTypography.caption,
-                                color = Color.White.copy(alpha = 0.92f),
+                                color =
+                                    kmiSectionHeaderContentColor()
+                                        .copy(alpha = 0.92f),
                                 modifier = Modifier.fillMaxWidth(),
                                 textAlign = TextAlign.Center
                             )
@@ -630,11 +599,7 @@ fun SubscriptionScreen(
 
                 Card(
                     modifier = Modifier
-                        .fillMaxWidth()
-                        .shadow(
-                            elevation = 10.dp,
-                            shape = RoundedCornerShape(26.dp)
-                        ),
+                        .fillMaxWidth(),
                     shape = RoundedCornerShape(26.dp),
                     colors = CardDefaults.cardColors(
                         containerColor = mainCardColor,
@@ -672,7 +637,12 @@ fun SubscriptionScreen(
                                             text = if (effectiveActive) "פעיל" else "לא פעיל",
                                             style = KmiTypography.screenTitle,
                                             fontWeight = FontWeight.ExtraBold,
-                                            color = if (effectiveActive) Color(0xFF16A34A) else Color(0xFFDC2626),
+                                            color =
+                                                if (effectiveActive) {
+                                                    kmiSuccessColor()
+                                                } else {
+                                                    MaterialTheme.colorScheme.error
+                                                },
                                             textAlign = TextAlign.Right,
                                             modifier = Modifier.fillMaxWidth()
                                         )
@@ -680,16 +650,29 @@ fun SubscriptionScreen(
                                         Card(
                                             shape = RoundedCornerShape(20.dp),
                                             colors = CardDefaults.cardColors(
-                                                containerColor = if (effectiveActive) {
-                                                    Color(0xFFDCFCE7)
-                                                } else {
-                                                    Color(0xFFFEE2E2)
-                                                }
+                                                containerColor =
+                                                    if (effectiveActive) {
+                                                        kmiSuccessContainerColor()
+                                                    } else {
+                                                        MaterialTheme.colorScheme
+                                                            .errorContainer
+                                                    }
                                             )
                                         ) {
                                             Text(
-                                                text = if (effectiveActive) "מנוי פעיל" else "אין מנוי פעיל",
-                                                color = if (effectiveActive) Color(0xFF166534) else Color(0xFFB91C1C),
+                                                text =
+                                                    if (effectiveActive) {
+                                                        "מנוי פעיל"
+                                                    } else {
+                                                        "אין מנוי פעיל"
+                                                    },
+                                                color =
+                                                    if (effectiveActive) {
+                                                        kmiOnSuccessContainerColor()
+                                                    } else {
+                                                        MaterialTheme.colorScheme
+                                                            .onErrorContainer
+                                                    },
                                                 style = KmiTypography.action,
                                                 fontWeight = FontWeight.Bold,
                                                 modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
@@ -717,10 +700,20 @@ fun SubscriptionScreen(
                                         )
 
                                         Text(
-                                            text = if (effectiveActive) "Active" else "Inactive",
+                                            text =
+                                                if (effectiveActive) {
+                                                    "Active"
+                                                } else {
+                                                    "Inactive"
+                                                },
                                             style = KmiTypography.screenTitle,
                                             fontWeight = FontWeight.ExtraBold,
-                                            color = if (effectiveActive) Color(0xFF16A34A) else Color(0xFFDC2626),
+                                            color =
+                                                if (effectiveActive) {
+                                                    kmiSuccessColor()
+                                                } else {
+                                                    MaterialTheme.colorScheme.error
+                                                },
                                             textAlign = TextAlign.Left,
                                             modifier = Modifier.fillMaxWidth()
                                         )
@@ -728,16 +721,29 @@ fun SubscriptionScreen(
                                         Card(
                                             shape = RoundedCornerShape(20.dp),
                                             colors = CardDefaults.cardColors(
-                                                containerColor = if (effectiveActive) {
-                                                    Color(0xFFDCFCE7)
-                                                } else {
-                                                    Color(0xFFFEE2E2)
-                                                }
+                                                containerColor =
+                                                    if (effectiveActive) {
+                                                        kmiSuccessContainerColor()
+                                                    } else {
+                                                        MaterialTheme.colorScheme
+                                                            .errorContainer
+                                                    }
                                             )
                                         ) {
                                             Text(
-                                                text = if (effectiveActive) "Subscription active" else "No active subscription",
-                                                color = if (effectiveActive) Color(0xFF166534) else Color(0xFFB91C1C),
+                                                text =
+                                                    if (effectiveActive) {
+                                                        "Subscription active"
+                                                    } else {
+                                                        "No active subscription"
+                                                    },
+                                                color =
+                                                    if (effectiveActive) {
+                                                        kmiOnSuccessContainerColor()
+                                                    } else {
+                                                        MaterialTheme.colorScheme
+                                                            .onErrorContainer
+                                                    },
                                                 style = KmiTypography.action,
                                                 fontWeight = FontWeight.Bold,
                                                 modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
@@ -894,7 +900,10 @@ fun SubscriptionScreen(
                                     modifier = Modifier.fillMaxWidth(),
                                     shape = RoundedCornerShape(18.dp),
                                     colors = CardDefaults.cardColors(
-                                        containerColor = Color(0xFFFFF1F2)
+                                        containerColor =
+                                            MaterialTheme.colorScheme.errorContainer,
+                                        contentColor =
+                                            MaterialTheme.colorScheme.onErrorContainer
                                     )
                                 ) {
                                     Column(
@@ -905,15 +914,29 @@ fun SubscriptionScreen(
                                         horizontalAlignment = Alignment.CenterHorizontally
                                     ) {
                                         Text(
-                                            text = if (isEnglish) "Connection error" else "שגיאת חיבור",
-                                            color = Color(0xFFB91C1C),
+                                            text =
+                                                if (isEnglish) {
+                                                    "Connection error"
+                                                } else {
+                                                    "שגיאת חיבור"
+                                                },
+                                            color =
+                                                MaterialTheme.colorScheme
+                                                    .onErrorContainer,
                                             style = KmiTypography.action,
                                             fontWeight = FontWeight.Bold
                                         )
 
                                         Text(
-                                            text = state.error ?: "",
-                                            color = Color(0xFFDC2626),
+                                            text =
+                                                if (isEnglish) {
+                                                    "The billing service is temporarily unavailable. Please try again later."
+                                                } else {
+                                                    "שירות הרכישה אינו זמין כרגע. נסה שוב מאוחר יותר."
+                                                },
+                                            color =
+                                                MaterialTheme.colorScheme
+                                                    .onErrorContainer,
                                             style = KmiTypography.body,
                                             textAlign = TextAlign.Center
                                         )
@@ -931,11 +954,7 @@ fun SubscriptionScreen(
 
                 Card(
                     modifier = Modifier
-                        .fillMaxWidth()
-                        .shadow(
-                            elevation = 10.dp,
-                            shape = RoundedCornerShape(24.dp)
-                        ),
+                        .fillMaxWidth(),
                     shape = RoundedCornerShape(24.dp),
                     colors = CardDefaults.cardColors(
                         containerColor = mainCardColor,
@@ -1033,9 +1052,9 @@ fun SubscriptionScreen(
 
                                         runCatching {
                                             repo.startConnection()
-                                            delay(700)
+                                            delay(700.milliseconds)
                                             repo.refreshPurchases()
-                                            delay(900)
+                                            delay(900.milliseconds)
 
                                             // ✅ מכריח את מסך ניהול המנוי לקרוא שוב את הנתונים שנשמרו
                                             subscriptionUiRefreshTick++
@@ -1067,210 +1086,6 @@ fun SubscriptionScreen(
                             )
                         }
                     }
-                }
-
-                // ---------- אזור נסתר: קוד מנהל ----------
-// הוסתר לגרסת בדיקות/משתמשים.
-// פתיחת תכנים מתבצעת עכשיו דרך מנוי Google Play בלבד.
-// אם בעתיד תרצה להחזיר כלי בדיקה פנימי, אפשר להפעיל את showDevUnlockOnlyForAdmin.
-                val showDevUnlockOnlyForAdmin = false
-
-                if (showDevUnlockOnlyForAdmin) {
-                    var secretTapCount by remember { mutableStateOf(0) }
-                    var lastTapTime by remember { mutableStateOf(0L) }
-
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(180.dp)
-                            .clickable {
-                                val now = System.currentTimeMillis()
-
-                                secretTapCount =
-                                    if (now - lastTapTime <= 3000L) secretTapCount + 1 else 1
-                                lastTapTime = now
-
-                                if (secretTapCount >= 5) {
-                                    secretTapCount = 0
-                                    showDevDialog = true
-                                }
-                            }
-                    )
-                }
-
-                // ---------- דיאלוג הסבר + כוכבית (אם פתוח) ----------
-                pickedKey?.let { key ->
-                    val (b, t, itemRaw) = parseKey(key)
-
-                    val ctx2 = LocalContext.current
-                    val spFav = remember(ctx2) {
-                        ctx2.getSharedPreferences("kmi_settings", Context.MODE_PRIVATE)
-                    }
-                    val favKey = remember(b, t) { "fav_${b.id}_$t" }
-
-                    var favSet by remember(favKey) {
-                        mutableStateOf(
-                            spFav.getStringSet(favKey, emptySet())
-                                ?.toMutableSet<String>()
-                                ?: mutableSetOf<String>()
-                        )
-                    }
-                    val isFav2 = favSet.contains(itemRaw)
-
-                    fun toggleFavorite() {
-                        val s: MutableSet<String> = favSet.toMutableSet()
-                        if (!s.add(itemRaw)) s.remove(itemRaw)
-                        favSet = s
-                        spFav.edit().putStringSet(favKey, s).apply()
-                    }
-
-                    val explanation = remember(b, itemRaw) {
-                        Explanations.get(b, itemRaw).ifBlank {
-                            val alt = itemRaw.substringAfter(":", itemRaw).trim()
-                            Explanations.get(b, alt)
-                        }
-                    }.ifBlank { "לא נמצא הסבר עבור \"$itemRaw\"." }
-
-                    AlertDialog(
-                        onDismissRequest = { pickedKey = null },
-                        title = {
-                            Box(Modifier.fillMaxWidth()) {
-                                IconButton(
-                                    onClick = { toggleFavorite() },
-                                    modifier = Modifier.align(Alignment.CenterStart)
-                                ) {
-                                    if (isFav2) {
-                                        Icon(
-                                            imageVector = Icons.Filled.Star,
-                                            contentDescription = "הסר ממועדפים",
-                                            tint = Color(0xFFFFC107)
-                                        )
-                                    } else {
-                                        Icon(
-                                            imageVector = Icons.Outlined.StarBorder,
-                                            contentDescription = "הוסף למועדפים"
-                                        )
-                                    }
-                                }
-
-                                Column(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .align(Alignment.CenterEnd),
-                                    horizontalAlignment = Alignment.End
-                                ) {
-                                    Text(
-                                        text = itemRaw,
-                                        style = KmiTypography.sectionTitle,
-                                        fontWeight = FontWeight.Bold,
-                                        textAlign = TextAlign.Right
-                                    )
-                                    Text(
-                                        text = "(${b.heb}${if (t.isNotBlank()) " · $t" else ""})",
-                                        style = KmiTypography.secondary,
-                                        textAlign = TextAlign.Right
-                                    )
-                                }
-                            }
-                        },
-                        text = {
-                            Text(
-                                text = explanation,
-                                style = KmiTypography.body,
-                                color = MaterialTheme.colorScheme.onSurface,
-                                textAlign = TextAlign.Right
-                            )
-                        },
-                        confirmButton = {
-                            TextButton(onClick = { pickedKey = null }) {
-                                Text("סגור")
-                            }
-                        }
-                    )
-                }
-
-                // ---------- דיאלוג קוד למפתח (DEV) ----------
-                if (showDevDialog) {
-                    AlertDialog(
-                        onDismissRequest = { showDevDialog = false },
-                        title = {
-                            Text(
-                                text = "קוד גישה",
-                                style = KmiTypography.sectionTitle,
-                                fontWeight = FontWeight.Bold
-                            )
-                        },
-                        text = {
-                            Column(
-                                verticalArrangement = Arrangement.spacedBy(8.dp)
-                            ) {
-                                Text(
-                                    text = "קוד אדמין מסמן את המשתמש כמנהל, אך בזמן בדיקות פתיחת התכנים מתבצעת לפי מנוי Google Play פעיל בלבד.",
-                                    style = KmiTypography.body,
-                                    color = MaterialTheme.colorScheme.onSurface
-                                )
-                                OutlinedTextField(
-                                    value = devCode,
-                                    onValueChange = { devCode = it },
-                                    singleLine = true,
-                                    label = { Text("קוד גישה") },
-                                    visualTransformation = PasswordVisualTransformation(),
-                                    modifier = Modifier.fillMaxWidth()
-                                )
-                            }
-                        },
-                        confirmButton = {
-                            TextButton(
-                                onClick = {
-                                    val code = devCode.trim()
-
-                                    when {
-                                        code == DEV_ADMIN_CODE -> {
-                                            KmiAccess.setAdmin(userSp, true)
-                                            isAdmin = true
-                                            showDevDialog = false
-                                            devCode = ""
-                                            Toast.makeText(
-                                                ctx,
-                                                "מצב מנהל הופעל. פתיחת תכנים עדיין תלויה במנוי פעיל בזמן בדיקות.",
-                                                Toast.LENGTH_LONG
-                                            ).show()
-                                        }
-
-                                        KmiAccess.tryDevUnlock(userSp, code) -> {
-                                            showDevDialog = false
-                                            devCode = ""
-                                            Toast.makeText(
-                                                ctx,
-                                                "קוד בודק הופעל במכשיר זה.",
-                                                Toast.LENGTH_LONG
-                                            ).show()
-                                        }
-
-                                        else -> {
-                                            Toast.makeText(
-                                                ctx,
-                                                "קוד שגוי.",
-                                                Toast.LENGTH_SHORT
-                                            ).show()
-                                        }
-                                    }
-                                }
-                            ) {
-                                Text("אישור")
-                            }
-                        },
-                        dismissButton = {
-                            TextButton(
-                                onClick = {
-                                    showDevDialog = false
-                                    devCode = ""
-                                }
-                            ) {
-                                Text("בטל")
-                            }
-                        }
-                    )
                 }
             }
         }
@@ -1342,7 +1157,8 @@ private fun PremiumActionRow(
             )
 
             Icon(
-                imageVector = Icons.Filled.ChevronLeft,
+                imageVector =
+                    Icons.AutoMirrored.Filled.ArrowForward,
                 contentDescription = null,
                 tint = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.size(KmiIconSize.medium)

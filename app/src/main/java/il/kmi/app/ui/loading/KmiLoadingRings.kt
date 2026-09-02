@@ -54,8 +54,12 @@ private fun KmiLoadingRing(
 @Composable
 fun KmiLoadingRings(
     modifier: Modifier = Modifier,
-    text: String? = null
+    text: String? = null,
+    size: Dp = 82.dp
 ) {
+    val scale =
+        size.value / 82f
+
     val infiniteTransition =
         rememberInfiniteTransition(
             label = "kmiLoadingRings"
@@ -108,16 +112,18 @@ fun KmiLoadingRings(
         horizontalAlignment =
             Alignment.CenterHorizontally,
         verticalArrangement =
-            Arrangement.spacedBy(14.dp)
+            Arrangement.spacedBy(
+                14.dp * scale
+            )
     ) {
         Box(
-            modifier = Modifier.size(82.dp),
+            modifier = Modifier.size(size),
             contentAlignment =
                 Alignment.Center
         ) {
             KmiLoadingRing(
-                size = 76.dp,
-                width = 5.dp,
+                size = 76.dp * scale,
+                width = 5.dp * scale,
                 rotation = outerRotation,
                 colors = listOf(
                     Color.Transparent,
@@ -128,8 +134,8 @@ fun KmiLoadingRings(
             )
 
             KmiLoadingRing(
-                size = 62.dp,
-                width = 4.dp,
+                size = 62.dp * scale,
+                width = 4.dp * scale,
                 rotation = middleRotation,
                 colors = listOf(
                     Color.Transparent,
@@ -140,8 +146,8 @@ fun KmiLoadingRings(
             )
 
             KmiLoadingRing(
-                size = 48.dp,
-                width = 3.5.dp,
+                size = 48.dp * scale,
+                width = 3.5.dp * scale,
                 rotation = innerRotation,
                 colors = listOf(
                     Color.Transparent,
@@ -152,7 +158,10 @@ fun KmiLoadingRings(
             )
 
             Surface(
-                modifier = Modifier.size(25.dp),
+                modifier =
+                    Modifier.size(
+                        25.dp * scale
+                    ),
                 shape = CircleShape,
                 color =
                     MaterialTheme
@@ -161,7 +170,9 @@ fun KmiLoadingRings(
                 shadowElevation = 0.dp,
                 tonalElevation = 0.dp,
                 border = BorderStroke(
-                    width = 1.dp,
+                    width =
+                        (1.dp * scale)
+                            .coerceAtLeast(0.5.dp),
                     color =
                         MaterialTheme
                             .colorScheme

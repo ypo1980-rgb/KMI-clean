@@ -8,6 +8,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.luminance
+import il.kmi.shared.domain.Belt
 
 private val DarkColors = darkColorScheme(
     /*
@@ -169,10 +170,62 @@ fun kmiSectionHeaderContentColor(): Color {
 }
 
 /**
+ * צבע הצלחה גלובלי.
+ *
+ * משמש לסטטוס פעיל, אישור והצלחה ואינו תלוי
+ * בצבע tertiary שמשמש באפליקציה להדגשה תכלת.
+ */
+@Composable
+fun kmiSuccessColor(): Color {
+    val isDarkMode =
+        MaterialTheme.colorScheme.background
+            .luminance() < 0.5f
+
+    return if (isDarkMode) {
+        Color(0xFF4ADE80)
+    } else {
+        Color(0xFF15803D)
+    }
+}
+
+/**
+ * רקע גלובלי לרכיבי הצלחה.
+ */
+@Composable
+fun kmiSuccessContainerColor(): Color {
+    val isDarkMode =
+        MaterialTheme.colorScheme.background
+            .luminance() < 0.5f
+
+    return if (isDarkMode) {
+        Color(0xFF123D27)
+    } else {
+        Color(0xFFDCFCE7)
+    }
+}
+
+/**
+ * צבע תוכן גלובלי מעל רקע הצלחה.
+ */
+@Composable
+fun kmiOnSuccessContainerColor(): Color {
+    val isDarkMode =
+        MaterialTheme.colorScheme.background
+            .luminance() < 0.5f
+
+    return if (isDarkMode) {
+        Color(0xFFBBF7D0)
+    } else {
+        Color(0xFF166534)
+    }
+}
+
+/**
  * גרדיאנט הגרניט הגלובלי לכפתורי הפעולה התחתונים.
  *
  * זהו הגרדיאנט הסגול־כחול־תכלת המקורי.
  */
+
 @Composable
 fun kmiGraniteActionBrush(): Brush {
     return Brush.linearGradient(
@@ -192,6 +245,23 @@ fun kmiGraniteActionHighlightColor(): Color {
     return Color.White.copy(
         alpha = 0.45f
     )
+}
+
+/**
+ * מקור האמת הגלובלי לצבעי החגורות.
+ */
+fun kmiBeltColor(
+    belt: Belt
+): Color {
+    return when (belt) {
+        Belt.WHITE -> Color(0xFFF5F5F5)
+        Belt.YELLOW -> Color(0xFFFFD54F)
+        Belt.ORANGE -> Color(0xFFFF9800)
+        Belt.GREEN -> Color(0xFF2E7D32)
+        Belt.BLUE -> Color(0xFF1565C0)
+        Belt.BROWN -> Color(0xFF6D4C41)
+        Belt.BLACK -> Color(0xFF111111)
+    }
 }
 
 @Composable

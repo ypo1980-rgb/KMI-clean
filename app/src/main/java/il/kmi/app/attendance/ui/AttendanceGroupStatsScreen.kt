@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
@@ -52,7 +53,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
@@ -67,6 +67,8 @@ import il.kmi.app.privacy.TraineeDisplayNameMapper
 import il.kmi.app.ui.KmiIconSize
 import il.kmi.app.ui.KmiTopBar
 import il.kmi.app.ui.KmiTypography
+import il.kmi.app.ui.pdf.KmiPdfFooter
+import il.kmi.app.ui.pdf.KmiPdfHeader
 import il.yuval.ui.theme.kmiScreenBackgroundBrush
 import il.yuval.ui.theme.kmiSectionHeaderBrush
 import kotlinx.coroutines.launch
@@ -96,7 +98,6 @@ import java.time.LocalDate
 
 //=========================================================================
 
-@Suppress("UNUSED_PARAMETER")
 @Composable
 fun AttendanceGroupStatsScreen(
     repo: AttendanceRepository,
@@ -128,9 +129,6 @@ fun AttendanceGroupStatsScreen(
         TextStyle(
             textDirection = screenTextDirection
         )
-
-    val isDarkMode =
-        MaterialTheme.colorScheme.background.luminance() < 0.5f
 
     val reports by repo
         .reportsLastYear(branch, groupKey)
@@ -327,7 +325,12 @@ fun AttendanceGroupStatsScreen(
     Scaffold(
         topBar = {
             KmiTopBar(
-                title = tr("סטטיסטיקת נוכחות", "Attendance statistics"),
+                title =
+                    tr(
+                        "סטטיסטיקת נוכחות",
+                        "Attendance statistics"
+                    ),
+                onBack = onBack,
 
                 /*
                  * אייקוני הבית והחיפוש מוצגים בשורת
@@ -392,6 +395,7 @@ fun AttendanceGroupStatsScreen(
                     modifier = Modifier
                         .weight(1f)
                         .fillMaxWidth()
+                        .navigationBarsPadding()
                         .padding(
                             horizontal = 16.dp,
                             vertical = 14.dp
@@ -440,11 +444,7 @@ fun AttendanceGroupStatsScreen(
                                 screenTextStyle
                             ),
                             color =
-                                if (isDarkMode) {
-                                    MaterialTheme.colorScheme.onBackground
-                                } else {
-                                    Color(0xFF0F172A)
-                                },
+                                MaterialTheme.colorScheme.onBackground,
                             textAlign = screenTextAlign,
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -489,22 +489,15 @@ fun AttendanceGroupStatsScreen(
                                     },
                                 shape = RoundedCornerShape(18.dp),
                                 color =
-                                    if (isDarkMode) {
-                                        MaterialTheme.colorScheme.surfaceVariant
-                                    } else {
-                                        Color(0xFFF8FBFF)
-                                    },
+                                    MaterialTheme.colorScheme.surfaceVariant,
                                 tonalElevation = 3.dp,
                                 shadowElevation = 5.dp,
                                 border = BorderStroke(
                                     width = 1.dp,
                                     color =
-                                        if (isDarkMode) {
-                                            MaterialTheme.colorScheme.outline
-                                                .copy(alpha = 0.50f)
-                                        } else {
-                                            Color(0xFFD6E4F2)
-                                        }
+                                        MaterialTheme.colorScheme.outline.copy(
+                                            alpha = 0.50f
+                                        )
                                 )
                             ) {
 
@@ -525,7 +518,7 @@ fun AttendanceGroupStatsScreen(
                                                         Icons.Filled.ExpandMore
                                                     },
                                                 contentDescription = null,
-                                                tint = Color(0xFF93C5FD),
+                                                tint = MaterialTheme.colorScheme.primary,
                                                 modifier = Modifier.size(
                                                     KmiIconSize.medium
                                                 )
@@ -552,12 +545,7 @@ fun AttendanceGroupStatsScreen(
                                                                     FontWeight.Bold
                                                             ),
                                                     color =
-                                                        if (isDarkMode) {
-                                                            MaterialTheme.colorScheme
-                                                                .onSurface
-                                                        } else {
-                                                            Color(0xFF0F172A)
-                                                        },
+                                                        MaterialTheme.colorScheme.onSurface,
                                                     textAlign =
                                                         if (isEnglish) {
                                                             TextAlign.Start
@@ -583,12 +571,7 @@ fun AttendanceGroupStatsScreen(
                                                             screenTextStyle
                                                         ),
                                                     color =
-                                                        if (isDarkMode) {
-                                                            MaterialTheme.colorScheme
-                                                                .primary
-                                                        } else {
-                                                            Color(0xFF1E3A8A)
-                                                        },
+                                                        MaterialTheme.colorScheme.primary,
                                                     textAlign =
                                                         if (isEnglish) {
                                                             TextAlign.Start
@@ -605,7 +588,8 @@ fun AttendanceGroupStatsScreen(
                                             Icon(
                                                 imageVector = if (isExpanded) Icons.Filled.ExpandLess else Icons.Filled.ExpandMore,
                                                 contentDescription = null,
-                                                tint = Color(0xFF93C5FD)
+                                                tint =
+                                                    MaterialTheme.colorScheme.primary
                                             )
                                         }
                                     }
@@ -630,26 +614,15 @@ fun AttendanceGroupStatsScreen(
                                     shape =
                                         RoundedCornerShape(20.dp),
                                     color =
-                                        if (isDarkMode) {
-                                            MaterialTheme
-                                                .colorScheme
-                                                .surfaceVariant
-                                        } else {
-                                            Color(0xFFF8FBFF)
-                                        },
+                                        MaterialTheme.colorScheme.surfaceVariant,
                                     tonalElevation = 2.dp,
                                     shadowElevation = 4.dp,
                                     border = BorderStroke(
                                         width = 1.dp,
                                         color =
-                                            if (isDarkMode) {
-                                                MaterialTheme
-                                                    .colorScheme
-                                                    .outline
-                                                    .copy(alpha = 0.45f)
-                                            } else {
-                                                Color(0xFFD6E4F2)
-                                            }
+                                            MaterialTheme.colorScheme.outline.copy(
+                                                alpha = 0.45f
+                                            )
                                     )
                                 ) {
                                     Column(
@@ -673,31 +646,18 @@ fun AttendanceGroupStatsScreen(
                                              * נפרד סביב כל אימון.
                                              */
                                             val reportBackgroundColor =
-                                                if (isDarkMode) {
-                                                    if (
-                                                        reportIndex % 2 == 0
-                                                    ) {
-                                                        MaterialTheme
-                                                            .colorScheme
-                                                            .surface
-                                                            .copy(alpha = 0.28f)
-                                                    } else {
-                                                        MaterialTheme
-                                                            .colorScheme
-                                                            .primary
-                                                            .copy(alpha = 0.09f)
-                                                    }
+                                                if (
+                                                    reportIndex % 2 == 0
+                                                ) {
+                                                    MaterialTheme
+                                                        .colorScheme
+                                                        .surface
+                                                        .copy(alpha = 0.42f)
                                                 } else {
-                                                    if (
-                                                        reportIndex % 2 == 0
-                                                    ) {
-                                                        Color.White.copy(
-                                                            alpha = 0.42f
-                                                        )
-                                                    } else {
-                                                        Color(0xFFE8F4FD)
-                                                            .copy(alpha = 0.88f)
-                                                    }
+                                                    MaterialTheme
+                                                        .colorScheme
+                                                        .primaryContainer
+                                                        .copy(alpha = 0.34f)
                                                 }
 
                                             Column(
@@ -793,21 +753,13 @@ fun AttendanceGroupStatsScreen(
                                                             .height(1.dp)
                                                             .background(
                                                                 color =
-                                                                    if (
-                                                                        isDarkMode
-                                                                    ) {
-                                                                        MaterialTheme
-                                                                            .colorScheme
-                                                                            .primary
-                                                                            .copy(
-                                                                                alpha =
-                                                                                    0.48f
-                                                                            )
-                                                                    } else {
-                                                                        Color(
-                                                                            0xFF9CCAF0
+                                                                    MaterialTheme
+                                                                        .colorScheme
+                                                                        .primary
+                                                                        .copy(
+                                                                            alpha =
+                                                                                0.42f
                                                                         )
-                                                                    }
                                                             )
                                                     )
                                                 }
@@ -850,18 +802,9 @@ fun AttendanceGroupStatsScreen(
                                 shape = RoundedCornerShape(20.dp),
                                 colors = ButtonDefaults.buttonColors(
                                     containerColor =
-                                        if (isDarkMode) {
-                                            MaterialTheme.colorScheme
-                                                .surfaceVariant
-                                        } else {
-                                            Color(0xFFF8FBFF)
-                                        },
+                                        MaterialTheme.colorScheme.surfaceVariant,
                                     contentColor =
-                                        if (isDarkMode) {
-                                            MaterialTheme.colorScheme.onSurface
-                                        } else {
-                                            Color(0xFF0F172A)
-                                        },
+                                        MaterialTheme.colorScheme.onSurface,
                                     disabledContainerColor =
                                         MaterialTheme.colorScheme
                                             .surfaceVariant.copy(alpha = 0.55f),
@@ -914,18 +857,15 @@ fun AttendanceGroupStatsScreen(
                                         .heightIn(min = 52.dp),
                                     shape = RoundedCornerShape(20.dp),
                                     border = BorderStroke(
-                                        1.dp,
-                                        Color(0xFF93C5FD)
+                                        width = 1.dp,
+                                        color =
+                                            MaterialTheme.colorScheme.primary
                                     ),
                                     colors =
                                         ButtonDefaults.outlinedButtonColors(
                                             contentColor =
-                                                if (isDarkMode) {
-                                                    MaterialTheme.colorScheme
-                                                        .onBackground
-                                                } else {
-                                                    Color(0xFF0F172A)
-                                                }
+                                                MaterialTheme.colorScheme
+                                                    .onBackground
                                         ),
                                     enabled = !busy
                                 ) {
@@ -953,12 +893,21 @@ fun AttendanceGroupStatsScreen(
                                     .weight(1f)
                                     .heightIn(min = 52.dp),
                                 shape = RoundedCornerShape(20.dp),
-                                colors = ButtonDefaults.buttonColors(
-                                    containerColor = Color(0xFFEF4444),
-                                    contentColor = Color.White,
-                                    disabledContainerColor = Color(0xFF475569),
-                                    disabledContentColor = Color(0xFFCBD5E1)
-                                ),
+                                colors =
+                                    ButtonDefaults.buttonColors(
+                                        containerColor =
+                                            MaterialTheme.colorScheme.error,
+                                        contentColor =
+                                            MaterialTheme.colorScheme.onError,
+                                        disabledContainerColor =
+                                            MaterialTheme.colorScheme
+                                                .surfaceVariant,
+                                        disabledContentColor =
+                                            MaterialTheme.colorScheme
+                                                .onSurfaceVariant.copy(
+                                                    alpha = 0.55f
+                                                )
+                                    ),
                                 enabled = !busy && hasRealReports
                             ) {
                                 Icon(
@@ -1145,8 +1094,6 @@ private fun createAttendanceStatsPdf(
         textAlign = align
     }
 
-    val titlePaint = paint(29f, android.graphics.Color.WHITE, bold)
-    val subTitlePaint = paint(14f, android.graphics.Color.WHITE, regular)
     val sectionPaint = paint(17f, blue, bold)
     val labelPaint = paint(10.5f, blue, bold)
     val valuePaint = paint(12.5f, textDark, regular)
@@ -1172,155 +1119,40 @@ private fun createAttendanceStatsPdf(
         canvas.drawRoundRect(left, top, right, bottom, radius, radius, p)
     }
 
-    fun drawKmiLogo(canvas: android.graphics.Canvas, cx: Float, cy: Float, radius: Float) {
-        val outer = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = navy }
-        val inner = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = android.graphics.Color.WHITE }
-        val text = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = navy
-            typeface = bold
-            textSize = radius * 0.62f
-            textAlign = Paint.Align.CENTER
-        }
+    fun drawHeader(
+        canvas: android.graphics.Canvas
+    ) {
+        canvas.drawColor(
+            android.graphics.Color.WHITE
+        )
 
-        canvas.drawCircle(cx, cy, radius, outer)
-        canvas.drawCircle(cx, cy, radius - 4f, inner)
-        canvas.drawText("KAMI", cx, cy + radius * 0.22f, text)
-    }
-
-    fun drawHeader(canvas: android.graphics.Canvas) {
-        canvas.drawColor(android.graphics.Color.WHITE)
-
-        val headerBottom = 122f
-
-        /*
-         * הכותרת מיושרת לצד הימני של האזור הכחול.
-         *
-         * כך הטקסט נשאר כולו בתוך הרקע הכחול
-         * ולא מתקרב לאלכסון ולאזור הלבן.
-         */
-        val headerTextRight =
-            pageWidth.toFloat() - 34f
-
-        canvas.drawPath(android.graphics.Path().apply {
-            moveTo(pageWidth.toFloat(), 0f)
-            lineTo(pageWidth.toFloat(), headerBottom)
-            lineTo(178f, headerBottom)
-            lineTo(238f, 0f)
-            close()
-        }, Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = navy
-        })
-
-        canvas.drawPath(android.graphics.Path().apply {
-            moveTo(208f, headerBottom)
-            lineTo(224f, headerBottom)
-            lineTo(284f, 0f)
-            lineTo(268f, 0f)
-            close()
-        }, Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = android.graphics.Color.rgb(
-                36,
-                103,
-                158
-            )
-        })
-
-        canvas.drawPath(android.graphics.Path().apply {
-            moveTo(230f, headerBottom)
-            lineTo(238f, headerBottom)
-            lineTo(298f, 0f)
-            lineTo(290f, 0f)
-            close()
-        }, Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = android.graphics.Color.rgb(
-                128,
-                183,
-                220
-            )
-        })
-
-        drawKmiLogo(
+        KmiPdfHeader.draw(
+            context = context,
             canvas = canvas,
-            cx = 78f,
-            cy = 58f,
-            radius = 42f
-        )
-
-        titlePaint.textAlign =
-            Paint.Align.RIGHT
-
-        subTitlePaint.textAlign =
-            Paint.Align.RIGHT
-
-        canvas.drawText(
-            tr(
-                "סטטיסטיקת נוכחות",
-                "Attendance statistics"
-            ),
-            headerTextRight,
-            52f,
-            titlePaint
-        )
-
-        canvas.drawText(
-            tr(
-                "דו״ח נוכחות קבוצתי",
-                "Group attendance report"
-            ),
-            headerTextRight,
-            78f,
-            subTitlePaint
-        )
-
-        smallPaint.textAlign =
-            Paint.Align.RIGHT
-
-        canvas.drawText(
-            tr(
-                "תאריך הפקה:",
-                "Generated:"
-            ) + " " +
-                    SimpleDateFormat(
-                        "dd/MM/yyyy",
-                        Locale.getDefault()
-                    ).format(
-                        Date()
-                    ),
-            pageWidth - 34f,
-            142f,
-            smallPaint
+            pageWidth = pageWidth,
+            isEnglish = isEnglish,
+            titleHebrew = "סטטיסטיקת נוכחות",
+            titleEnglish = "Attendance Statistics",
+            subtitleHebrew =
+                "$branch · $groupKey",
+            subtitleEnglish =
+                "$branch · $groupKey"
         )
     }
 
-    fun drawFooter(canvas: android.graphics.Canvas, pageNumber: Int, totalPages: Int) {
-        val footerY = 804f
-
-        canvas.drawLine(
-            0f,
-            footerY,
-            pageWidth.toFloat(),
-            footerY,
-            Paint(Paint.ANTI_ALIAS_FLAG).apply {
-                color = navy
-                strokeWidth = 2f
-            })
-
-        drawKmiLogo(canvas, 38f, footerY + 22f, 13f)
-
-        smallPaint.textAlign = Paint.Align.LEFT
-        canvas.drawText("Together We Protect", 62f, footerY + 25f, smallPaint)
-
-        smallPaint.textAlign = Paint.Align.CENTER
-        canvas.drawText(
-            tr("עמוד $pageNumber מתוך $totalPages", "Page $pageNumber of $totalPages"),
-            pageWidth / 2f,
-            footerY + 25f,
-            smallPaint
+    fun drawFooter(
+        canvas: android.graphics.Canvas,
+        pageNumber: Int,
+        totalPages: Int
+    ) {
+        KmiPdfFooter.draw(
+            canvas = canvas,
+            pageWidth = pageWidth,
+            pageHeight = pageHeight,
+            pageNumber = pageNumber,
+            totalPages = totalPages,
+            isEnglish = isEnglish
         )
-
-        smallPaint.textAlign = Paint.Align.RIGHT
-        canvas.drawText("Krav Maga Israel", pageWidth - 66f, footerY + 18f, smallPaint)
-        canvas.drawText("www.kmi.org.il", pageWidth - 66f, footerY + 31f, smallPaint)
     }
 
     fun drawSummary(canvas: android.graphics.Canvas, top: Float): Float {
@@ -1467,7 +1299,7 @@ private fun createAttendanceStatsPdf(
     }
 
     val firstPageCapacity = 5
-    val nextPageCapacity = 7
+    val nextPageCapacity = 6
 
     val totalPages = if (reports.size <= firstPageCapacity) {
         1
@@ -1487,7 +1319,8 @@ private fun createAttendanceStatsPdf(
 
         drawHeader(canvas)
 
-        var y = 136f
+        var y =
+            KmiPdfHeader.CONTENT_TOP
 
         if (pageNumber == 1) {
             y = drawSummary(canvas, y)
@@ -1527,6 +1360,18 @@ private fun createAttendanceStatsPdf(
         } else {
             repeat(capacity) {
                 if (reportIndex >= reports.size) return@repeat
+
+                val nextCardBottom =
+                    y + 82f
+
+                if (
+                    nextCardBottom >
+                    pageHeight -
+                    KmiPdfFooter
+                        .CONTENT_BOTTOM_PADDING
+                ) {
+                    return@repeat
+                }
 
                 y = drawReportCard(
                     canvas = canvas,
@@ -1600,30 +1445,19 @@ private fun EmptyAttendanceReportsCard(
     val layoutDirection =
         if (isEnglish) LayoutDirection.Ltr else LayoutDirection.Rtl
 
-    val isDarkMode =
-        MaterialTheme.colorScheme.surface.luminance() < 0.5f
-
     Surface(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(24.dp),
         color =
-            if (isDarkMode) {
-                MaterialTheme.colorScheme.surfaceVariant
-            } else {
-                Color(0xFFF8FBFF)
-            },
+            MaterialTheme.colorScheme.surfaceVariant,
         tonalElevation = 3.dp,
         shadowElevation = 5.dp,
         border = BorderStroke(
             width = 1.dp,
             color =
-                if (isDarkMode) {
-                    MaterialTheme.colorScheme.outline.copy(
-                        alpha = 0.50f
-                    )
-                } else {
-                    Color(0xFFD6E4F2)
-                }
+                MaterialTheme.colorScheme.outline.copy(
+                    alpha = 0.50f
+                )
         )
     ) {
 
@@ -1633,10 +1467,14 @@ private fun EmptyAttendanceReportsCard(
                     .fillMaxWidth()
                     .background(
                         Brush.linearGradient(
-                            listOf(
-                                Color.White.copy(alpha = 0.08f),
-                                Color(0xFF1D4ED8).copy(alpha = 0.18f)
-                            )
+                            colors =
+                                listOf(
+                                    MaterialTheme.colorScheme.surfaceVariant,
+                                    MaterialTheme.colorScheme
+                                        .primaryContainer.copy(
+                                            alpha = 0.42f
+                                        )
+                                )
                         )
                     )
                     .padding(horizontal = 16.dp, vertical = 16.dp),
@@ -1645,7 +1483,8 @@ private fun EmptyAttendanceReportsCard(
                 Icon(
                     imageVector = Icons.Filled.Info,
                     contentDescription = null,
-                    tint = Color(0xFF38BDF8),
+                    tint =
+                        MaterialTheme.colorScheme.primary,
                     modifier = Modifier
                         .size(KmiIconSize.large)
                         .padding(
@@ -1673,11 +1512,7 @@ private fun EmptyAttendanceReportsCard(
                                 fontWeight = FontWeight.Bold
                             ),
                         color =
-                            if (isDarkMode) {
-                                MaterialTheme.colorScheme.onSurface
-                            } else {
-                                Color(0xFF0F172A)
-                            },
+                            MaterialTheme.colorScheme.onSurface,
                         textAlign = align,
                         modifier = Modifier.fillMaxWidth()
                     )
@@ -1691,12 +1526,7 @@ private fun EmptyAttendanceReportsCard(
                             textStyle
                         ),
                         color =
-                            if (isDarkMode) {
-                                MaterialTheme.colorScheme
-                                    .onSurfaceVariant
-                            } else {
-                                Color(0xFF1E3A8A)
-                            },
+                            MaterialTheme.colorScheme.onSurfaceVariant,
                         textAlign = align,
                         modifier = Modifier.fillMaxWidth()
                     )
@@ -1713,11 +1543,7 @@ private fun EmptyAttendanceReportsCard(
                                     FontWeight.SemiBold
                             ),
                         color =
-                            if (isDarkMode) {
-                                Color(0xFFE0F2FE)
-                            } else {
-                                Color(0xFF1E3A8A)
-                            },
+                            MaterialTheme.colorScheme.primary,
                         textAlign = align,
                         maxLines = 2,
                         overflow = TextOverflow.Ellipsis,
@@ -1750,43 +1576,26 @@ private fun StatsHeroCard(
             }
     )
 
-    val isDarkMode =
-        MaterialTheme.colorScheme.surface.luminance() < 0.5f
-
     val heroTitleColor =
-        if (isDarkMode) {
-            MaterialTheme.colorScheme.onSurface
-        } else {
-            Color(0xFF0F172A)
-        }
+        MaterialTheme.colorScheme.onSurface
 
     val heroSecondaryColor =
-        if (isDarkMode) {
-            MaterialTheme.colorScheme.onSurfaceVariant
-        } else {
-            Color(0xFF1E3A8A)
-        }
+        MaterialTheme.colorScheme.onSurfaceVariant
 
     Surface(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(26.dp),
         color =
-            if (isDarkMode) {
-                MaterialTheme.colorScheme.surfaceVariant
-            } else {
-                Color.White.copy(alpha = 0.10f)
-            },
+            MaterialTheme.colorScheme.surfaceVariant.copy(
+                alpha = 0.96f
+            ),
         tonalElevation = 0.dp,
         border = BorderStroke(
             width = 1.dp,
             color =
-                if (isDarkMode) {
-                    MaterialTheme.colorScheme.outline.copy(
-                        alpha = 0.50f
-                    )
-                } else {
-                    Color.White.copy(alpha = 0.16f)
-                }
+                MaterialTheme.colorScheme.outline.copy(
+                    alpha = 0.50f
+                )
         )
     ) {
         Column(
@@ -1795,17 +1604,10 @@ private fun StatsHeroCard(
                 .background(
                     Brush.verticalGradient(
                         colors =
-                            if (isDarkMode) {
-                                listOf(
-                                    MaterialTheme.colorScheme.surfaceVariant,
-                                    MaterialTheme.colorScheme.surface
-                                )
-                            } else {
-                                listOf(
-                                    Color(0xFFFFFFFF),
-                                    Color(0xFFF3F8FD)
-                                )
-                            }
+                            listOf(
+                                MaterialTheme.colorScheme.surfaceVariant,
+                                MaterialTheme.colorScheme.surface
+                            )
                     )
                 )
                 .padding(horizontal = 16.dp, vertical = 14.dp),
@@ -1880,11 +1682,7 @@ private fun StatsHeroCard(
                         fontWeight = FontWeight.Black
                     ),
                 color =
-                    if (isDarkMode) {
-                        Color(0xFF67E8F9)
-                    } else {
-                        Color(0xFF0891B2)
-                    },
+                    MaterialTheme.colorScheme.primary,
                 textAlign = align,
                 modifier = Modifier.fillMaxWidth(),
                 maxLines = 2,
@@ -1901,10 +1699,11 @@ private fun StatsGlowIcon() {
             .size(KmiIconSize.hero)
             .background(
                 brush = Brush.radialGradient(
-                    colors = listOf(
-                        Color(0xFF38BDF8),
-                        Color(0xFF1E40AF)
-                    )
+                    colors =
+                        listOf(
+                            MaterialTheme.colorScheme.primary,
+                            MaterialTheme.colorScheme.tertiary
+                        )
                 ),
                 shape = CircleShape
             ),
@@ -1913,7 +1712,8 @@ private fun StatsGlowIcon() {
         Icon(
             imageVector = Icons.Filled.Warning,
             contentDescription = null,
-            tint = Color.White,
+            tint =
+                MaterialTheme.colorScheme.onPrimary,
             modifier = Modifier.size(
                 KmiIconSize.large
             )
@@ -1942,30 +1742,19 @@ private fun StatsSummaryCard(
             }
     )
 
-    val isDarkMode =
-        MaterialTheme.colorScheme.surface.luminance() < 0.5f
-
     Surface(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(26.dp),
         color =
-            if (isDarkMode) {
-                MaterialTheme.colorScheme.surfaceVariant
-            } else {
-                Color(0xFFF8FBFF)
-            },
+            MaterialTheme.colorScheme.surfaceVariant,
         tonalElevation = 4.dp,
         shadowElevation = 6.dp,
         border = BorderStroke(
             width = 1.dp,
             color =
-                if (isDarkMode) {
-                    MaterialTheme.colorScheme.outline.copy(
-                        alpha = 0.50f
-                    )
-                } else {
-                    Color(0xFFD6E4F2)
-                }
+                MaterialTheme.colorScheme.outline.copy(
+                    alpha = 0.50f
+                )
         )
     ) {
         Column(
@@ -1974,17 +1763,10 @@ private fun StatsSummaryCard(
                 .background(
                     Brush.verticalGradient(
                         colors =
-                            if (isDarkMode) {
-                                listOf(
-                                    MaterialTheme.colorScheme.surfaceVariant,
-                                    MaterialTheme.colorScheme.surface
-                                )
-                            } else {
-                                listOf(
-                                    Color(0xFFFFFFFF),
-                                    Color(0xFFF3F8FD)
-                                )
-                            }
+                            listOf(
+                                MaterialTheme.colorScheme.surfaceVariant,
+                                MaterialTheme.colorScheme.surface
+                            )
                     )
                 )
                 .padding(16.dp),
@@ -2002,11 +1784,7 @@ private fun StatsSummaryCard(
                         fontWeight = FontWeight.Black
                     ),
                 color =
-                    if (isDarkMode) {
-                        MaterialTheme.colorScheme.onSurface
-                    } else {
-                        Color(0xFF0F172A)
-                    },
+                    MaterialTheme.colorScheme.onSurface,
                 textAlign = align,
                 modifier = Modifier.fillMaxWidth()
             )
@@ -2071,9 +1849,6 @@ private fun ReportRowCard(
         textDirection = if (isEnglish) TextDirection.Ltr else TextDirection.Rtl
     )
 
-    val isDarkMode =
-        MaterialTheme.colorScheme.surface.luminance() < 0.5f
-
     /*
      * אין מסגרת נפרדת לכל אימון.
      *
@@ -2115,11 +1890,7 @@ private fun ReportRowCard(
                         fontWeight = FontWeight.Black
                     ),
                 color =
-                    if (isDarkMode) {
-                        MaterialTheme.colorScheme.onSurface
-                    } else {
-                        Color(0xFF0F172A)
-                    },
+                    MaterialTheme.colorScheme.onSurface,
                 textAlign = align,
                 modifier = Modifier.fillMaxWidth()
             )
@@ -2158,11 +1929,7 @@ private fun ReportRowCard(
                         fontWeight = FontWeight.Black
                     ),
                 color =
-                    if (isDarkMode) {
-                        Color(0xFF67E8F9)
-                    } else {
-                        Color(0xFF0891B2)
-                    },
+                    MaterialTheme.colorScheme.primary,
                 textAlign = align,
                 modifier = Modifier.fillMaxWidth()
             )
@@ -2176,20 +1943,13 @@ private fun ReportRowCard(
                 border = BorderStroke(
                     width = 1.dp,
                     color =
-                        if (isDarkMode) {
-                            MaterialTheme.colorScheme.outline
-                        } else {
-                            Color(0xFF93C5FD)
-                        }
+                        MaterialTheme.colorScheme.primary
                 ),
-                colors = ButtonDefaults.outlinedButtonColors(
-                    contentColor =
-                        if (isDarkMode) {
+                colors =
+                    ButtonDefaults.outlinedButtonColors(
+                        contentColor =
                             MaterialTheme.colorScheme.onSurface
-                        } else {
-                            Color(0xFF0F172A)
-                        }
-                )
+                    )
             ) {
                 Icon(
                     imageVector =
@@ -2254,9 +2014,6 @@ private fun ReportAttendanceDetailsCard(
             }
     )
 
-    val isDarkMode =
-        MaterialTheme.colorScheme.surface.luminance() < 0.5f
-
     val members by repo
         .members(branch, groupKey)
         .collectAsState(initial = emptyList())
@@ -2289,6 +2046,15 @@ private fun ReportAttendanceDetailsCard(
             .filterNot { it.displayName.isDemoOrPlaceholderDetailsName() }
             .distinctBy { it.displayName.detailsNameKey() }
     }
+
+    val demoIndexByMemberId =
+        remember(realMembers) {
+            realMembers
+                .mapIndexed { index, member ->
+                    member.id to index
+                }
+                .toMap()
+        }
 
     val statusByMemberId = remember(records) {
         records.associate { it.memberId to it.status }
@@ -2323,6 +2089,10 @@ private fun ReportAttendanceDetailsCard(
         return TraineeDisplayNameMapper.displayName(
             realName = member.displayName,
             stableKey = member.id.toString(),
+            demoIndex =
+                demoIndexByMemberId[
+                    member.id
+                ],
             isEnglish = isEnglish
         ).ifBlank {
             tr(
@@ -2336,22 +2106,14 @@ private fun ReportAttendanceDetailsCard(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(22.dp),
         color =
-            if (isDarkMode) {
-                MaterialTheme.colorScheme.surface
-            } else {
-                Color(0xFFEAF2FF)
-            },
+            MaterialTheme.colorScheme.surface,
         tonalElevation = 0.dp,
         border = BorderStroke(
             width = 1.dp,
             color =
-                if (isDarkMode) {
-                    MaterialTheme.colorScheme.outline.copy(
-                        alpha = 0.50f
-                    )
-                } else {
-                    Color(0xFFD6E4F2)
-                }
+                MaterialTheme.colorScheme.outline.copy(
+                    alpha = 0.50f
+                )
         )
     ) {
         Column(
@@ -2372,11 +2134,7 @@ private fun ReportAttendanceDetailsCard(
                         fontWeight = FontWeight.Black
                     ),
                 color =
-                    if (isDarkMode) {
-                        MaterialTheme.colorScheme.onSurface
-                    } else {
-                        Color(0xFF0F172A)
-                    },
+                    MaterialTheme.colorScheme.onSurface,
                 textAlign = align,
                 modifier = Modifier.fillMaxWidth()
             )
@@ -2388,7 +2146,8 @@ private fun ReportAttendanceDetailsCard(
                     "אין מתאמנים שסומנו הגיעו",
                     "No trainees marked present"
                 ),
-                color = Color(0xFF22C55E),
+                color =
+                    MaterialTheme.colorScheme.tertiary,
                 isEnglish = isEnglish
             )
 
@@ -2399,7 +2158,8 @@ private fun ReportAttendanceDetailsCard(
                     "אין מתאמנים שלא הגיעו",
                     "No absent trainees"
                 ),
-                color = Color(0xFFEF4444),
+                color =
+                    MaterialTheme.colorScheme.error,
                 isEnglish = isEnglish
             )
         }
@@ -2425,30 +2185,19 @@ private fun AttendanceStatusSection(
             }
     )
 
-    val isDarkMode =
-        MaterialTheme.colorScheme.surface.luminance() < 0.5f
-
     Surface(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(18.dp),
         color =
-            if (isDarkMode) {
-                MaterialTheme.colorScheme.surfaceVariant
-            } else {
-                Color.White
-            },
+            MaterialTheme.colorScheme.surfaceVariant,
         tonalElevation = 2.dp,
         shadowElevation = 2.dp,
         border = BorderStroke(
             width = 1.dp,
             color =
-                if (isDarkMode) {
-                    MaterialTheme.colorScheme.outline.copy(
-                        alpha = 0.45f
-                    )
-                } else {
-                    Color(0xFFD6E4F2)
-                }
+                MaterialTheme.colorScheme.outline.copy(
+                    alpha = 0.45f
+                )
         )
     ) {
         Column(
@@ -2477,11 +2226,7 @@ private fun AttendanceStatusSection(
                         textStyle
                     ),
                     color =
-                        if (isDarkMode) {
-                            MaterialTheme.colorScheme.onSurfaceVariant
-                        } else {
-                            Color(0xFF334155)
-                        },
+                        MaterialTheme.colorScheme.onSurfaceVariant,
                     textAlign = align,
                     modifier = Modifier.fillMaxWidth()
                 )
@@ -2493,11 +2238,7 @@ private fun AttendanceStatusSection(
                             textStyle
                         ),
                         color =
-                            if (isDarkMode) {
-                                MaterialTheme.colorScheme.onSurface
-                            } else {
-                                Color(0xFF0F172A)
-                            },
+                            MaterialTheme.colorScheme.onSurface,
                         textAlign = align,
                         modifier = Modifier.fillMaxWidth()
                     )
@@ -2513,28 +2254,19 @@ private fun StatBox(
     value: String,
     modifier: Modifier = Modifier
 ) {
-    val isDarkMode =
-        MaterialTheme.colorScheme.surface.luminance() < 0.5f
-
     Surface(
         modifier = modifier,
         shape = RoundedCornerShape(18.dp),
         color =
-            if (isDarkMode) {
-                MaterialTheme.colorScheme.surfaceVariant
-            } else {
-                Color.White.copy(alpha = 0.80f)
-            },
+            MaterialTheme.colorScheme.surfaceVariant.copy(
+                alpha = 0.80f
+            ),
         border = BorderStroke(
             width = 1.dp,
             color =
-                if (isDarkMode) {
-                    MaterialTheme.colorScheme.outline.copy(
-                        alpha = 0.45f
-                    )
-                } else {
-                    Color(0xFFD6E4F2)
-                }
+                MaterialTheme.colorScheme.outline.copy(
+                    alpha = 0.45f
+                )
         )
     ) {
         Column(
@@ -2553,11 +2285,7 @@ private fun StatBox(
                 text = value,
                 style = KmiTypography.metric,
                 color =
-                    if (isDarkMode) {
-                        MaterialTheme.colorScheme.onSurface
-                    } else {
-                        Color(0xFF0F172A)
-                    },
+                    MaterialTheme.colorScheme.onSurface,
                 textAlign = TextAlign.Center,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
@@ -2567,11 +2295,7 @@ private fun StatBox(
                 text = label,
                 style = KmiTypography.caption,
                 color =
-                    if (isDarkMode) {
-                        MaterialTheme.colorScheme.onSurfaceVariant
-                    } else {
-                        Color(0xFF334155)
-                    },
+                    MaterialTheme.colorScheme.onSurfaceVariant,
                 textAlign = TextAlign.Center,
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis
@@ -2586,30 +2310,20 @@ private fun MiniReportStat(
     value: String,
     modifier: Modifier = Modifier
 ) {
-    val isDarkMode =
-        MaterialTheme.colorScheme.surface.luminance() < 0.5f
 
     Surface(
         modifier = modifier,
         shape = RoundedCornerShape(14.dp),
         color =
-            if (isDarkMode) {
-                MaterialTheme.colorScheme.surfaceVariant
-            } else {
-                Color.White
-            },
+            MaterialTheme.colorScheme.surfaceVariant,
         tonalElevation = 2.dp,
         shadowElevation = 2.dp,
         border = BorderStroke(
             width = 1.dp,
             color =
-                if (isDarkMode) {
-                    MaterialTheme.colorScheme.outline.copy(
-                        alpha = 0.45f
-                    )
-                } else {
-                    Color(0xFFD6E4F2)
-                }
+                MaterialTheme.colorScheme.outline.copy(
+                    alpha = 0.45f
+                )
         )
     ) {
         Column(
@@ -2630,11 +2344,7 @@ private fun MiniReportStat(
                     fontWeight = FontWeight.Black
                 ),
                 color =
-                    if (isDarkMode) {
-                        MaterialTheme.colorScheme.onSurface
-                    } else {
-                        Color(0xFF0F172A)
-                    },
+                    MaterialTheme.colorScheme.onSurface,
                 textAlign = TextAlign.Center,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
@@ -2644,11 +2354,7 @@ private fun MiniReportStat(
                 text = label,
                 style = KmiTypography.caption,
                 color =
-                    if (isDarkMode) {
-                        MaterialTheme.colorScheme.onSurfaceVariant
-                    } else {
-                        Color(0xFF334155)
-                    },
+                    MaterialTheme.colorScheme.onSurfaceVariant,
                 textAlign = TextAlign.Center,
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis

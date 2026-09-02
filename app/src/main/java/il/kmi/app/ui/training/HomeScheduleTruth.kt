@@ -62,6 +62,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import il.kmi.shared.domain.Belt
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CalendarMonth
@@ -73,7 +74,10 @@ import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Surface
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.material3.TextButton
@@ -189,7 +193,8 @@ private fun SummarySectionHeader(
     title: String,
     subtitle: String,
     icon: ImageVector,
-    isEnglish: Boolean
+    isEnglish: Boolean,
+    accentColor: Color? = null
 ) {
     val layoutDirection =
         if (isEnglish) {
@@ -284,19 +289,39 @@ private fun SummarySectionHeader(
                         .size(42.dp)
                         .background(
                             brush =
-                                Brush.radialGradient(
-                                    listOf(
-                                        MaterialTheme
-                                            .colorScheme
-                                            .secondary,
-                                        MaterialTheme
-                                            .colorScheme
-                                            .primary,
-                                        MaterialTheme
-                                            .colorScheme
-                                            .tertiary
+                                if (accentColor != null) {
+                                    Brush.radialGradient(
+                                        colors =
+                                            listOf(
+                                                lerp(
+                                                    Color.White,
+                                                    accentColor,
+                                                    0.35f
+                                                ),
+                                                accentColor,
+                                                lerp(
+                                                    accentColor,
+                                                    Color.Black,
+                                                    0.18f
+                                                )
+                                            )
                                     )
-                                ),
+                                } else {
+                                    Brush.radialGradient(
+                                        colors =
+                                            listOf(
+                                                MaterialTheme
+                                                    .colorScheme
+                                                    .secondary,
+                                                MaterialTheme
+                                                    .colorScheme
+                                                    .primary,
+                                                MaterialTheme
+                                                    .colorScheme
+                                                    .tertiary
+                                            )
+                                    )
+                                },
                             shape =
                                 CircleShape
                         ),
@@ -316,6 +341,267 @@ private fun SummarySectionHeader(
                         )
                 )
             }
+        }
+    }
+}
+
+@Composable
+private fun PremiumSummaryAccentCard(
+    accentColor: Color,
+    modifier: Modifier = Modifier,
+    content: @Composable ColumnScope.() -> Unit
+) {
+    val surface =
+        MaterialTheme.colorScheme.surface
+
+    val backgroundBrush =
+        Brush.verticalGradient(
+            colors =
+                listOf(
+                    lerp(
+                        surface,
+                        accentColor,
+                        0.035f
+                    ),
+                    surface,
+                    lerp(
+                        surface,
+                        accentColor,
+                        0.065f
+                    )
+                )
+        )
+
+    Surface(
+        modifier =
+            modifier.fillMaxWidth(),
+        shape =
+            RoundedCornerShape(26.dp),
+        color =
+            Color.Transparent,
+        tonalElevation = 0.dp,
+        shadowElevation = 5.dp,
+        border =
+            BorderStroke(
+                width = 1.dp,
+                color =
+                    accentColor.copy(
+                        alpha = 0.30f
+                    )
+            )
+    ) {
+        Box(
+            modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .background(
+                        brush = backgroundBrush
+                    )
+        ) {
+
+            /*
+             * Glow עליון עדין.
+             */
+            Box(
+                modifier =
+                    Modifier
+                        .align(
+                            Alignment.TopStart
+                        )
+                        .size(130.dp)
+                        .background(
+                            brush =
+                                Brush.radialGradient(
+                                    colors =
+                                        listOf(
+                                            accentColor.copy(
+                                                alpha = 0.13f
+                                            ),
+                                            Color.Transparent
+                                        )
+                                ),
+                            shape = CircleShape
+                        )
+            )
+
+            /*
+             * Glow תחתון.
+             */
+            Box(
+                modifier =
+                    Modifier
+                        .align(
+                            Alignment.BottomEnd
+                        )
+                        .size(170.dp)
+                        .background(
+                            brush =
+                                Brush.radialGradient(
+                                    colors =
+                                        listOf(
+                                            accentColor.copy(
+                                                alpha = 0.10f
+                                            ),
+                                            Color.Transparent
+                                        )
+                                ),
+                            shape = CircleShape
+                        )
+            )
+
+            /*
+             * קו Premium עליון.
+             */
+            Box(
+                modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .height(3.dp)
+                        .background(
+                            brush =
+                                Brush.horizontalGradient(
+                                    colors =
+                                        listOf(
+                                            Color.Transparent,
+                                            accentColor.copy(
+                                                alpha = 0.55f
+                                            ),
+                                            accentColor,
+                                            accentColor.copy(
+                                                alpha = 0.55f
+                                            ),
+                                            Color.Transparent
+                                        )
+                                )
+                        )
+            )
+
+            Column(
+                modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .padding(
+                            start = 18.dp,
+                            end = 18.dp,
+                            top = 18.dp,
+                            bottom = 16.dp
+                        ),
+                verticalArrangement =
+                    Arrangement.spacedBy(
+                        12.dp
+                    ),
+                content = content
+            )
+        }
+    }
+}
+
+@Composable
+private fun PremiumSaveRibbon(
+    accentColor: Color,
+    modifier: Modifier = Modifier
+) {
+    Box(
+        modifier =
+            modifier
+                .width(46.dp)
+                .height(62.dp)
+                .shadow(
+                    elevation = 6.dp,
+                    shape = RoundedCornerShape(
+                        bottomStart = 8.dp,
+                        bottomEnd = 8.dp
+                    ),
+                    clip = false
+                )
+    ) {
+
+        androidx.compose.foundation.Canvas(
+            modifier = Modifier.fillMaxSize()
+        ) {
+            val notchDepth =
+                size.height * 0.18f
+
+            val path =
+                Path().apply {
+                    moveTo(
+                        0f,
+                        0f
+                    )
+
+                    lineTo(
+                        size.width,
+                        0f
+                    )
+
+                    lineTo(
+                        size.width,
+                        size.height
+                    )
+
+                    lineTo(
+                        size.width / 2f,
+                        size.height - notchDepth
+                    )
+
+                    lineTo(
+                        0f,
+                        size.height
+                    )
+
+                    close()
+                }
+
+            drawPath(
+                path = path,
+                brush =
+                    Brush.verticalGradient(
+                        colors =
+                            listOf(
+                                lerp(
+                                    accentColor,
+                                    Color.White,
+                                    0.18f
+                                ),
+                                accentColor,
+                                lerp(
+                                    accentColor,
+                                    Color.Black,
+                                    0.20f
+                                )
+                            )
+                    )
+            )
+        }
+
+        Box(
+            modifier =
+                Modifier
+                    .align(Alignment.TopCenter)
+                    .padding(top = 10.dp)
+                    .size(28.dp)
+                    .background(
+                        color =
+                            Color.White.copy(
+                                alpha = 0.17f
+                            ),
+                        shape = CircleShape
+                    ),
+            contentAlignment =
+                Alignment.Center
+        ) {
+            Icon(
+                imageVector =
+                    Icons.Filled.Check,
+                contentDescription =
+                    null,
+                tint =
+                    Color.White,
+                modifier =
+                    Modifier.size(
+                        scaledIconSize(16.dp)
+                    )
+            )
         }
     }
 }
@@ -803,10 +1089,20 @@ fun TrainingSummaryScreen(
                     }
 
                     // -----------------------------
-                    // סיכום חופשי (מאמן/מתאמן לפי role)
-                    // -----------------------------
+// סיכום חופשי (מאמן/מתאמן לפי role)
+// -----------------------------
                     item {
-                        PremiumSummaryCard {
+
+                        val summaryAccent =
+                            MaterialTheme
+                                .colorScheme
+                                .tertiary
+
+                        PremiumSummaryAccentCard(
+                            accentColor =
+                                summaryAccent
+                        ) {
+
                             SummarySectionHeader(
                                 title =
                                     tr(
@@ -819,104 +1115,199 @@ fun TrainingSummaryScreen(
                                         "Free summary of the training, feelings, highlights, and what to improve"
                                     ),
                                 icon =
-                                    Icons.AutoMirrored.Filled.Notes,
+                                    Icons.AutoMirrored
+                                        .Filled
+                                        .Notes,
                                 isEnglish =
-                                    isEnglish
+                                    isEnglish,
+                                accentColor =
+                                    summaryAccent
                             )
 
                             Surface(
-                                modifier = Modifier.fillMaxWidth(),
-                                color = SummaryDivider,
-                                shape = RoundedCornerShape(999.dp)
+                                modifier =
+                                    Modifier.fillMaxWidth(),
+                                color =
+                                    summaryAccent.copy(
+                                        alpha = 0.16f
+                                    ),
+                                shape =
+                                    RoundedCornerShape(
+                                        999.dp
+                                    )
                             ) {
-                                Spacer(Modifier.height(2.dp))
+                                Spacer(
+                                    Modifier.height(
+                                        2.dp
+                                    )
+                                )
                             }
 
-                            OutlinedTextField(
+                            Surface(
                                 modifier =
-                                    Modifier
-                                        .fillMaxWidth()
-                                        .heightIn(min = 160.dp),
-                                value =
-                                    state.notes,
-                                onValueChange = {
-                                    vm.setNotes(it)
-                                },
-                                label = {
-                                    Text(
-                                        text =
-                                            if (state.isCoach) {
-                                                tr(
-                                                    "דגשים מקצועיים, ביצוע, מה לשפר…",
-                                                    "Professional notes, performance, what to improve…"
-                                                )
-                                            } else {
-                                                tr(
-                                                    "איך היה האימון? מה הרגשת? מה לשפר…",
-                                                    "How was the training? What did you feel? What should be improved…"
-                                                )
-                                            },
-                                        style =
-                                            KmiTypography.caption
-                                    )
-                                },
-                                minLines = 6,
-                                textStyle =
-                                    KmiTypography.body.copy(
-                                        color =
-                                            MaterialTheme
-                                                .colorScheme
-                                                .onSurface
+                                    Modifier.fillMaxWidth(),
+                                shape =
+                                    RoundedCornerShape(16.dp),
+                                color =
+                                    lerp(
+                                        MaterialTheme
+                                            .colorScheme
+                                            .surface,
+                                        summaryAccent,
+                                        0.055f
                                     ),
-                                colors =
-                                    OutlinedTextFieldDefaults.colors(
-                                        focusedTextColor =
-                                            MaterialTheme
-                                                .colorScheme
-                                                .onSurface,
-                                        unfocusedTextColor =
-                                            MaterialTheme
-                                                .colorScheme
-                                                .onSurface,
-                                        focusedBorderColor =
-                                            MaterialTheme
-                                                .colorScheme
-                                                .primary,
-                                        unfocusedBorderColor =
-                                            MaterialTheme
-                                                .colorScheme
-                                                .outlineVariant,
-                                        focusedLabelColor =
-                                            MaterialTheme
-                                                .colorScheme
-                                                .onSurfaceVariant,
-                                        unfocusedLabelColor =
-                                            MaterialTheme
-                                                .colorScheme
-                                                .onSurfaceVariant,
-                                        cursorColor =
-                                            MaterialTheme
-                                                .colorScheme
-                                                .primary,
-                                        focusedContainerColor =
-                                            MaterialTheme
-                                                .colorScheme
-                                                .surfaceVariant,
-                                        unfocusedContainerColor =
-                                            MaterialTheme
-                                                .colorScheme
-                                                .surfaceVariant
+                                tonalElevation = 0.dp,
+                                shadowElevation = 0.dp,
+                                border =
+                                    BorderStroke(
+                                        width = 1.dp,
+                                        color =
+                                            summaryAccent.copy(
+                                                alpha = 0.22f
+                                            )
                                     )
-                            )
+                            ) {
+
+                                Box(
+                                    modifier =
+                                        Modifier.fillMaxWidth()
+                                ) {
+
+                                    /*
+                                     * Glow דקורטיבי בתוך אזור הטקסט.
+                                     */
+                                    Box(
+                                        modifier =
+                                            Modifier
+                                                .align(
+                                                    Alignment.BottomStart
+                                                )
+                                                .size(150.dp)
+                                                .background(
+                                                    brush =
+                                                        Brush.radialGradient(
+                                                            colors =
+                                                                listOf(
+                                                                    summaryAccent.copy(
+                                                                        alpha = 0.09f
+                                                                    ),
+                                                                    Color.Transparent
+                                                                )
+                                                        ),
+                                                    shape = CircleShape
+                                                )
+                                    )
+
+                                    OutlinedTextField(
+                                        modifier =
+                                            Modifier
+                                                .fillMaxWidth()
+                                                .heightIn(
+                                                    min = 145.dp
+                                                ),
+                                        value =
+                                            state.notes,
+                                        onValueChange = {
+                                            vm.setNotes(it)
+                                        },
+                                        label = {
+                                            Text(
+                                                text =
+                                                    if (state.isCoach) {
+                                                        tr(
+                                                            "דגשים מקצועיים, ביצוע, מה לשפר…",
+                                                            "Professional notes, performance, what to improve…"
+                                                        )
+                                                    } else {
+                                                        tr(
+                                                            "איך היה האימון? מה הרגשת? מה לשפר…",
+                                                            "How was the training? What did you feel? What should be improved…"
+                                                        )
+                                                    },
+                                                style =
+                                                    KmiTypography.caption,
+                                                color =
+                                                    summaryAccent
+                                            )
+                                        },
+                                        minLines = 5,
+                                        textStyle =
+                                            KmiTypography.body.copy(
+                                                color =
+                                                    MaterialTheme
+                                                        .colorScheme
+                                                        .onSurface,
+                                                fontWeight =
+                                                    FontWeight.SemiBold
+                                            ),
+                                        colors =
+                                            OutlinedTextFieldDefaults.colors(
+                                                focusedTextColor =
+                                                    MaterialTheme
+                                                        .colorScheme
+                                                        .onSurface,
+
+                                                unfocusedTextColor =
+                                                    MaterialTheme
+                                                        .colorScheme
+                                                        .onSurface,
+
+                                                focusedBorderColor =
+                                                    summaryAccent.copy(
+                                                        alpha = 0.50f
+                                                    ),
+
+                                                unfocusedBorderColor =
+                                                    Color.Transparent,
+
+                                                focusedLabelColor =
+                                                    summaryAccent,
+
+                                                unfocusedLabelColor =
+                                                    summaryAccent,
+
+                                                cursorColor =
+                                                    summaryAccent,
+
+                                                focusedContainerColor =
+                                                    Color.Transparent,
+
+                                                unfocusedContainerColor =
+                                                    Color.Transparent
+                                            )
+                                    )
+                                }
+                            }
                         }
                     }
-
-                    // -----------------------------
-                    // שמירה
-                    // -----------------------------
+// -----------------------------
+// שמירה
+// -----------------------------
                     item {
-                        PremiumSummaryCard {
-                            SummarySectionHeader(
+
+                        val saveAccent =
+                            MaterialTheme
+                                .colorScheme
+                                .primary
+
+                        Box(
+                            modifier =
+                                Modifier.fillMaxWidth()
+                        ) {
+
+                            PremiumSummaryAccentCard(
+                                accentColor =
+                                    saveAccent
+                            ) {
+
+                                /*
+                                 * מרווח קטן עבור ה־Ribbon.
+                                 */
+                                Spacer(
+                                    Modifier.height(6.dp)
+                                )
+
+                                SummarySectionHeader(
                                 title =
                                     tr(
                                         "שמירה",
@@ -930,96 +1321,324 @@ fun TrainingSummaryScreen(
                                 icon =
                                     Icons.Filled.Check,
                                 isEnglish =
-                                    isEnglish
+                                    isEnglish,
+                                accentColor =
+                                    saveAccent
                             )
 
-                            FilledTonalButton(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .height(58.dp),
-                                onClick = {
-                                    val key = "training_summary_days"
-                                    val cleanIso = state.dateIso.trim().take(10)
-
-                                    fun markSummaryDayLocally() {
-                                        if (cleanIso.isBlank()) return
-
-                                        val summaryCur =
-                                            summarySp
-                                                .getStringSet(
-                                                    key,
-                                                    emptySet()
-                                                )
-                                                ?.toMutableSet()
-                                                ?: mutableSetOf()
-
-                                        summaryCur.add(cleanIso)
-
-                                        summarySp.edit {
-                                            putStringSet(
-                                                key,
-                                                summaryCur
-                                            )
-
-                                            putLong(
-                                                "training_summary_days_updated_at",
-                                                System.currentTimeMillis()
-                                            )
-                                        }
-                                    }
-
-                                    vm.save(
-                                        onSuccess = {
-                                            markSummaryDayLocally()
-                                            onBack?.invoke()
-                                        },
-                                        onError = {
-                                            // כרגע Firestore חסום בהרשאות.
-                                            // כדי שה-UX לא ייתקע, נסמן מקומית ונחזור למסך הקודם.
-                                            markSummaryDayLocally()
-                                            onBack?.invoke()
-                                        }
-                                    )
-                                },
-                                enabled = !state.isSaving,
-                                shape = RoundedCornerShape(999.dp),
-                                colors =
-                                    ButtonDefaults.filledTonalButtonColors(
-                                        containerColor =
-                                            SummaryPrimaryButton,
-                                        contentColor =
-                                            MaterialTheme
-                                                .colorScheme
-                                                .onPrimary
+                            Surface(
+                                modifier =
+                                    Modifier.fillMaxWidth(),
+                                color =
+                                    saveAccent.copy(
+                                        alpha = 0.16f
+                                    ),
+                                shape =
+                                    RoundedCornerShape(
+                                        999.dp
                                     )
                             ) {
-                                Text(
-                                    text =
-                                        if (state.isSaving) {
-                                            tr(
-                                                "שומר...",
-                                                "Saving..."
-                                            )
-                                        } else {
-                                            tr(
-                                                "שמירת סיכום האימון",
-                                                "Save training summary"
-                                            )
-                                        },
-                                    style =
-                                        KmiTypography.action.copy(
-                                            fontWeight = FontWeight.Bold
-                                        ),
-                                    color =
+                                Spacer(
+                                    Modifier.height(
+                                        2.dp
+                                    )
+                                )
+                            }
+
+                            Surface(
+                                modifier =
+                                    Modifier.fillMaxWidth(),
+                                shape =
+                                    RoundedCornerShape(
+                                        20.dp
+                                    ),
+                                color =
+                                    lerp(
                                         MaterialTheme
                                             .colorScheme
-                                            .onPrimary
-                                )
+                                            .surface,
+                                        saveAccent,
+                                        0.07f
+                                    ),
+                                tonalElevation = 0.dp,
+                                shadowElevation = 0.dp,
+                                border =
+                                    BorderStroke(
+                                        width = 1.dp,
+                                        color =
+                                            saveAccent.copy(
+                                                alpha = 0.18f
+                                            )
+                                    )
+                            ) {
+
+                                val saveButtonEnabled =
+                                    !state.isSaving
+
+                                val saveButtonBrush =
+                                    Brush.horizontalGradient(
+                                        colors =
+                                            listOf(
+                                                lerp(
+                                                    saveAccent,
+                                                    Color.Black,
+                                                    0.18f
+                                                ),
+                                                saveAccent,
+                                                lerp(
+                                                    saveAccent,
+                                                    Color.White,
+                                                    0.16f
+                                                ),
+                                                saveAccent
+                                            )
+                                    )
+
+                                Box(
+                                    modifier =
+                                        Modifier
+                                            .fillMaxWidth()
+                                            .padding(
+                                                horizontal = 10.dp,
+                                                vertical = 10.dp
+                                            )
+                                            .height(58.dp)
+                                            .shadow(
+                                                elevation = 7.dp,
+                                                shape =
+                                                    RoundedCornerShape(
+                                                        999.dp
+                                                    ),
+                                                clip = false
+                                            )
+                                            .clip(
+                                                RoundedCornerShape(
+                                                    999.dp
+                                                )
+                                            )
+                                            .background(
+                                                brush =
+                                                    if (saveButtonEnabled) {
+                                                        saveButtonBrush
+                                                    } else {
+                                                        Brush.horizontalGradient(
+                                                            colors =
+                                                                listOf(
+                                                                    saveAccent.copy(
+                                                                        alpha = 0.35f
+                                                                    ),
+                                                                    saveAccent.copy(
+                                                                        alpha = 0.45f
+                                                                    )
+                                                                )
+                                                        )
+                                                    }
+                                            )
+                                            .clickable(
+                                                enabled =
+                                                    saveButtonEnabled
+                                            ) {
+
+                                                val key =
+                                                    "training_summary_days"
+
+                                                val cleanIso =
+                                                    state
+                                                        .dateIso
+                                                        .trim()
+                                                        .take(10)
+
+                                                fun markSummaryDayLocally() {
+
+                                                    if (
+                                                        cleanIso.isBlank()
+                                                    ) {
+                                                        return
+                                                    }
+
+                                                    val summaryCur =
+                                                        summarySp
+                                                            .getStringSet(
+                                                                key,
+                                                                emptySet()
+                                                            )
+                                                            ?.toMutableSet()
+                                                            ?: mutableSetOf()
+
+                                                    summaryCur.add(
+                                                        cleanIso
+                                                    )
+
+                                                    summarySp.edit {
+
+                                                        putStringSet(
+                                                            key,
+                                                            summaryCur
+                                                        )
+
+                                                        putLong(
+                                                            "training_summary_days_updated_at",
+                                                            System.currentTimeMillis()
+                                                        )
+                                                    }
+                                                }
+
+                                                vm.save(
+                                                    onSuccess = {
+
+                                                        /*
+                                                         * רק סיכום שנשמר בפועל
+                                                         * מסומן בלוח.
+                                                         */
+                                                        markSummaryDayLocally()
+
+                                                        onBack
+                                                            ?.invoke()
+                                                    },
+
+                                                    onError = {
+
+                                                        /*
+                                                         * נשארים במסך במקרה
+                                                         * של כשל שמירה.
+                                                         */
+                                                    }
+                                                )
+                                            },
+                                    contentAlignment =
+                                        Alignment.Center
+                                ) {
+
+                                    /*
+                                     * Highlight עליון עדין.
+                                     */
+                                    Box(
+                                        modifier =
+                                            Modifier
+                                                .align(
+                                                    Alignment.TopCenter
+                                                )
+                                                .fillMaxWidth()
+                                                .height(1.dp)
+                                                .background(
+                                                    Color.White.copy(
+                                                        alpha = 0.45f
+                                                    )
+                                                )
+                                    )
+
+                                    Row(
+                                        verticalAlignment =
+                                            Alignment.CenterVertically,
+                                        horizontalArrangement =
+                                            Arrangement.Center
+                                    ) {
+
+                                        /*
+                                         * עיגול האייקון.
+                                         */
+                                        Box(
+                                            modifier =
+                                                Modifier
+                                                    .size(34.dp)
+                                                    .background(
+                                                        color =
+                                                            Color.White.copy(
+                                                                alpha = 0.16f
+                                                            ),
+                                                        shape =
+                                                            CircleShape
+                                                    ),
+                                            contentAlignment =
+                                                Alignment.Center
+                                        ) {
+
+                                            Icon(
+                                                imageVector =
+                                                    Icons.Filled.Check,
+                                                contentDescription =
+                                                    null,
+                                                tint =
+                                                    Color.White,
+                                                modifier =
+                                                    Modifier.size(
+                                                        scaledIconSize(
+                                                            17.dp
+                                                        )
+                                                    )
+                                            )
+                                        }
+
+                                        Spacer(
+                                            Modifier.width(
+                                                10.dp
+                                            )
+                                        )
+
+                                        Text(
+                                            text =
+                                                if (
+                                                    state.isSaving
+                                                ) {
+                                                    tr(
+                                                        "שומר...",
+                                                        "Saving..."
+                                                    )
+                                                } else {
+                                                    tr(
+                                                        "שמירת סיכום האימון",
+                                                        "Save training summary"
+                                                    )
+                                                },
+                                            style =
+                                                KmiTypography
+                                                    .action
+                                                    .copy(
+                                                        fontWeight =
+                                                            FontWeight.ExtraBold
+                                                    ),
+                                            color =
+                                                Color.White,
+                                            maxLines = 1,
+                                            textAlign =
+                                                TextAlign.Center
+                                        )
+                                    }
+                                }
+                            }
+
+                                Box(
+                                    modifier =
+                                        Modifier.fillMaxWidth()
+                                ) {
+                                    PremiumSaveRibbon(
+                                        accentColor =
+                                            saveAccent,
+                                        modifier =
+                                            Modifier
+                                                .align(
+                                                    if (isEnglish) {
+                                                        Alignment.TopStart
+                                                    } else {
+                                                        Alignment.TopEnd
+                                                    }
+                                                )
+                                                .offset(
+                                                    x =
+                                                        if (isEnglish) {
+                                                            18.dp
+                                                        } else {
+                                                            (-18).dp
+                                                        },
+                                                    y = (-1).dp
+                                                )
+                                    )
+                                }
                             }
                         }
                     }
 
-                    item { Spacer(Modifier.height(10.dp)) }
+                        item { Spacer(Modifier.height(10.dp)) }
                 } // LazyColumn
 
                 if (showAddExercisesSheet) {
@@ -2141,15 +2760,45 @@ private fun ExercisePickRow(
     }
 }
 
+private fun exerciseBeltFromId(
+    exerciseId: String
+): Belt? {
+
+    val beltId =
+        exerciseId
+            .substringBefore("|")
+            .trim()
+
+    if (beltId.isBlank()) {
+        return null
+    }
+
+    return Belt.entries
+        .firstOrNull { belt ->
+            belt.id.equals(
+                beltId,
+                ignoreCase = true
+            )
+        }
+}
+
 @Composable
 private fun SelectedExerciseEditor(
     item: SelectedExerciseUi,
     onRemove: () -> Unit,
     onHighlight: (String) -> Unit
 ) {
-    val context = LocalContext.current
-    val languageManager = remember { AppLanguageManager(context) }
-    val isEnglish = languageManager.getCurrentLanguage() == AppLanguage.ENGLISH
+    val context =
+        LocalContext.current
+
+    val languageManager =
+        remember {
+            AppLanguageManager(context)
+        }
+
+    val isEnglish =
+        languageManager.getCurrentLanguage() ==
+                AppLanguage.ENGLISH
 
     fun tr(
         he: String,
@@ -2171,188 +2820,546 @@ private fun SelectedExerciseEditor(
     val titleDirectionStyle =
         if (isEnglish) {
             TextStyle(
-                textDirection = TextDirection.Ltr
+                textDirection =
+                    TextDirection.Ltr
             )
         } else {
             TextStyle(
-                textDirection = TextDirection.Rtl
+                textDirection =
+                    TextDirection.Rtl
             )
         }
 
-    var notesOpen by rememberSaveable(item.exerciseId) {
-        mutableStateOf(item.highlight.isNotBlank())
+    val belt =
+        remember(item.exerciseId) {
+            exerciseBeltFromId(
+                item.exerciseId
+            )
+        }
+
+    val beltAccentColor =
+        when (belt) {
+
+            Belt.WHITE ->
+                Color(0xFFD1D5DB)
+
+            Belt.YELLOW ->
+                Color(0xFFFACC15)
+
+            Belt.ORANGE ->
+                Color(0xFFF97316)
+
+            Belt.GREEN ->
+                Color(0xFF22C55E)
+
+            Belt.BLUE ->
+                Color(0xFF3B82F6)
+
+            Belt.BROWN ->
+                Color(0xFF8B5A2B)
+
+            Belt.BLACK ->
+                Color(0xFF111111)
+
+            null ->
+                MaterialTheme
+                    .colorScheme
+                    .primary
+        }
+
+    val beltLabel =
+        when {
+            belt == null ->
+                ""
+
+            isEnglish ->
+                when (belt) {
+                    Belt.WHITE -> "White belt"
+                    Belt.YELLOW -> "Yellow belt"
+                    Belt.ORANGE -> "Orange belt"
+                    Belt.GREEN -> "Green belt"
+                    Belt.BLUE -> "Blue belt"
+                    Belt.BROWN -> "Brown belt"
+                    Belt.BLACK -> "Black belt"
+                }
+
+            else ->
+                belt.heb
+        }
+
+    /*
+     * אותו רעיון עיצובי של ExerciseExplanationDialog:
+     * בסיס בהיר + נגיעה עדינה מצבע החגורה.
+     */
+    val cardBrush =
+        Brush.verticalGradient(
+            colors =
+                listOf(
+                    MaterialTheme
+                        .colorScheme
+                        .surface,
+
+                    lerp(
+                        MaterialTheme
+                            .colorScheme
+                            .surface,
+                        beltAccentColor,
+                        0.10f
+                    ),
+
+                    lerp(
+                        MaterialTheme
+                            .colorScheme
+                            .surface,
+                        beltAccentColor,
+                        0.05f
+                    ),
+
+                    MaterialTheme
+                        .colorScheme
+                        .surface
+                )
+        )
+
+    val innerChipColor =
+        lerp(
+            MaterialTheme
+                .colorScheme
+                .surface,
+            beltAccentColor,
+            0.08f
+        )
+
+    var notesOpen by
+    rememberSaveable(
+        item.exerciseId
+    ) {
+        mutableStateOf(
+            item.highlight.isNotBlank()
+        )
     }
 
     Surface(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(22.dp)),
-        color = SummaryCardInner,
-        tonalElevation = 0.dp,
-        shadowElevation = 0.dp,
-        border = BorderStroke(
-            1.dp,
-            SummaryBorder
-        )
+        modifier =
+            Modifier
+                .fillMaxWidth(),
+        shape =
+            RoundedCornerShape(
+                24.dp
+            ),
+        color =
+            Color.Transparent,
+        tonalElevation =
+            0.dp,
+        shadowElevation =
+            0.dp,
+        border =
+            BorderStroke(
+                width = 1.dp,
+                color =
+                    beltAccentColor
+                        .copy(
+                            alpha = 0.34f
+                        )
+            )
     ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 10.dp, vertical = 8.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
+
+        Box(
+            modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .background(
+                        brush =
+                            cardBrush
+                    )
         ) {
-            Text(
-                text = item.name,
-                style =
-                    KmiTypography.cardTitle
-                        .merge(titleDirectionStyle),
-                fontWeight = FontWeight.ExtraBold,
-                color = SummaryTextDark,
-                textAlign = textAlignPrimary,
-                modifier = Modifier.fillMaxWidth(),
-                maxLines = 3,
-                overflow = TextOverflow.Ellipsis
+
+            /*
+             * פס חגורה מודגש בצד הכרטיס.
+             */
+            Box(
+                modifier =
+                    Modifier
+                        .align(
+                            if (isEnglish) {
+                                Alignment.CenterStart
+                            } else {
+                                Alignment.CenterEnd
+                            }
+                        )
+                        .width(6.dp)
+                        .fillMaxSize()
+                        .background(
+                            color =
+                                beltAccentColor
+                        )
             )
 
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = if (isEnglish) Arrangement.Start else Arrangement.End,
-                verticalAlignment = Alignment.CenterVertically
+            Column(
+                modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .padding(
+                            start =
+                                if (isEnglish) {
+                                    18.dp
+                                } else {
+                                    14.dp
+                                },
+                            end =
+                                if (isEnglish) {
+                                    14.dp
+                                } else {
+                                    18.dp
+                                },
+                            top = 14.dp,
+                            bottom = 12.dp
+                        ),
+                verticalArrangement =
+                    Arrangement.spacedBy(
+                        10.dp
+                    )
             ) {
-                FilledTonalIconButton(
-                    onClick = { notesOpen = !notesOpen },
-                    colors = IconButtonDefaults.filledTonalIconButtonColors(
-                        containerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.18f),
-                        contentColor = SummaryTextDark
-                    )
+
+                Text(
+                    text =
+                        item.name,
+                    style =
+                        KmiTypography
+                            .cardTitle
+                            .merge(
+                                titleDirectionStyle
+                            ),
+                    fontWeight =
+                        FontWeight.ExtraBold,
+                    color =
+                        SummaryTextDark,
+                    textAlign =
+                        textAlignPrimary,
+                    modifier =
+                        Modifier
+                            .fillMaxWidth(),
+                    maxLines = 3,
+                    overflow =
+                        TextOverflow.Ellipsis
+                )
+
+                if (
+                    beltLabel.isNotBlank()
                 ) {
-                    Icon(
-                        imageVector = Icons.Filled.EditNote,
-                        contentDescription = if (notesOpen) {
-                            tr("סגור הערות", "Close notes")
-                        } else {
-                            tr("פתח הערות", "Open notes")
-                        }
-                    )
-                }
 
-                Spacer(Modifier.width(8.dp))
-
-                OutlinedIconButton(
-                    onClick = onRemove,
-                    border = BorderStroke(
-                        1.dp,
-                        MaterialTheme.colorScheme.error.copy(alpha = 0.60f)
-                    )
-                ) {
-                    Icon(
-                        imageVector = Icons.Filled.Delete,
-                        contentDescription = tr("מחק תרגיל", "Delete exercise"),
-                        tint = MaterialTheme.colorScheme.error
-                    )
-                }
-            }
-
-            Surface(
-                modifier = Modifier.fillMaxWidth(),
-                color = SummaryDivider,
-                shape = RoundedCornerShape(999.dp)
-            ) {
-                Spacer(Modifier.height(1.5.dp))
-            }
-
-            if (!notesOpen && item.highlight.isNotBlank()) {
-                Surface(
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(14.dp),
-                    color = SummaryChip
-                ) {
                     Text(
-                        text = item.highlight,
-                        style = KmiTypography.body,
-                        color = SummaryTextDark,
-                        textAlign = textAlignPrimary,
+                        text =
+                            beltLabel,
+                        style =
+                            KmiTypography
+                                .secondary
+                                .merge(
+                                    titleDirectionStyle
+                                ),
+                        fontWeight =
+                            FontWeight.ExtraBold,
+                        color =
+                            beltAccentColor,
+                        textAlign =
+                            textAlignPrimary,
                         modifier =
                             Modifier
                                 .fillMaxWidth()
-                                .padding(
-                                    horizontal = 12.dp,
-                                    vertical = 10.dp
-                                ),
-                        maxLines = 3,
-                        overflow = TextOverflow.Ellipsis
                     )
                 }
-            }
 
-            if (notesOpen) {
-                OutlinedTextField(
-                    modifier =
-                        Modifier.fillMaxWidth(),
-                    value =
-                        item.highlight,
-                    onValueChange = {
-                        onHighlight(it)
-                    },
-                    label = {
+                if (
+                    item.topic.isNotBlank()
+                ) {
+
+                    Surface(
+                        shape =
+                            RoundedCornerShape(
+                                999.dp
+                            ),
+                        color =
+                            innerChipColor,
+                        tonalElevation =
+                            0.dp,
+                        shadowElevation =
+                            0.dp,
+                        border =
+                            BorderStroke(
+                                width = 1.dp,
+                                color =
+                                    beltAccentColor
+                                        .copy(
+                                            alpha = 0.20f
+                                        )
+                            )
+                    ) {
+
                         Text(
                             text =
-                                tr(
-                                    "דגשים והערות לתרגיל",
-                                    "Exercise notes and highlights"
-                                ),
+                                item.topic,
                             style =
-                                KmiTypography.caption
-                        )
-                    },
-                    minLines = 3,
-                    textStyle =
-                        KmiTypography.body.copy(
+                                KmiTypography
+                                    .secondary,
                             color =
-                                MaterialTheme
-                                    .colorScheme
-                                    .onSurface
-                        ),
-                    colors =
-                        OutlinedTextFieldDefaults.colors(
-                            focusedTextColor =
-                                MaterialTheme
-                                    .colorScheme
-                                    .onSurface,
-                            unfocusedTextColor =
-                                MaterialTheme
-                                    .colorScheme
-                                    .onSurface,
-                            focusedBorderColor =
-                                MaterialTheme
-                                    .colorScheme
-                                    .primary,
-                            unfocusedBorderColor =
-                                MaterialTheme
-                                    .colorScheme
-                                    .outlineVariant,
-                            focusedLabelColor =
-                                MaterialTheme
-                                    .colorScheme
-                                    .onSurface,
-                            unfocusedLabelColor =
-                                MaterialTheme
-                                    .colorScheme
-                                    .onSurfaceVariant,
-                            cursorColor =
-                                MaterialTheme
-                                    .colorScheme
-                                    .primary,
-                            focusedContainerColor =
-                                MaterialTheme
-                                    .colorScheme
-                                    .surface,
-                            unfocusedContainerColor =
-                                MaterialTheme
-                                    .colorScheme
-                                    .surface
+                                SummaryTextDark
+                                    .copy(
+                                        alpha = 0.86f
+                                    ),
+                            modifier =
+                                Modifier
+                                    .padding(
+                                        horizontal =
+                                            12.dp,
+                                        vertical =
+                                            6.dp
+                                    )
                         )
-                )
+                    }
+                }
+
+                Row(
+                    modifier =
+                        Modifier
+                            .fillMaxWidth(),
+                    horizontalArrangement =
+                        if (isEnglish) {
+                            Arrangement.Start
+                        } else {
+                            Arrangement.End
+                        },
+                    verticalAlignment =
+                        Alignment.CenterVertically
+                ) {
+
+                    FilledTonalIconButton(
+                        onClick = {
+                            notesOpen =
+                                !notesOpen
+                        },
+                        colors =
+                            IconButtonDefaults
+                                .filledTonalIconButtonColors(
+                                    containerColor =
+                                        beltAccentColor
+                                            .copy(
+                                                alpha = 0.14f
+                                            ),
+                                    contentColor =
+                                        SummaryTextDark
+                                )
+                    ) {
+
+                        Icon(
+                            imageVector =
+                                Icons.Filled.EditNote,
+                            contentDescription =
+                                if (notesOpen) {
+                                    tr(
+                                        "סגור הערות",
+                                        "Close notes"
+                                    )
+                                } else {
+                                    tr(
+                                        "פתח הערות",
+                                        "Open notes"
+                                    )
+                                }
+                        )
+                    }
+
+                    Spacer(
+                        Modifier.width(
+                            8.dp
+                        )
+                    )
+
+                    OutlinedIconButton(
+                        onClick =
+                            onRemove,
+                        border =
+                            BorderStroke(
+                                width = 1.dp,
+                                color =
+                                    MaterialTheme
+                                        .colorScheme
+                                        .error
+                                        .copy(
+                                            alpha = 0.55f
+                                        )
+                            )
+                    ) {
+
+                        Icon(
+                            imageVector =
+                                Icons.Filled.Delete,
+                            contentDescription =
+                                tr(
+                                    "מחק תרגיל",
+                                    "Delete exercise"
+                                ),
+                            tint =
+                                MaterialTheme
+                                    .colorScheme
+                                    .error
+                        )
+                    }
+                }
+
+                Surface(
+                    modifier =
+                        Modifier
+                            .fillMaxWidth(),
+                    color =
+                        beltAccentColor
+                            .copy(
+                                alpha = 0.18f
+                            ),
+                    shape =
+                        RoundedCornerShape(
+                            999.dp
+                        )
+                ) {
+
+                    Spacer(
+                        Modifier.height(
+                            1.5.dp
+                        )
+                    )
+                }
+
+                if (
+                    !notesOpen &&
+                    item.highlight.isNotBlank()
+                ) {
+
+                    Surface(
+                        modifier =
+                            Modifier
+                                .fillMaxWidth(),
+                        shape =
+                            RoundedCornerShape(
+                                16.dp
+                            ),
+                        color =
+                            innerChipColor,
+                        tonalElevation =
+                            0.dp,
+                        shadowElevation =
+                            0.dp,
+                        border =
+                            BorderStroke(
+                                width = 1.dp,
+                                color =
+                                    beltAccentColor
+                                        .copy(
+                                            alpha = 0.18f
+                                        )
+                            )
+                    ) {
+
+                        Text(
+                            text =
+                                item.highlight,
+                            style =
+                                KmiTypography.body,
+                            color =
+                                SummaryTextDark,
+                            textAlign =
+                                textAlignPrimary,
+                            modifier =
+                                Modifier
+                                    .fillMaxWidth()
+                                    .padding(
+                                        horizontal =
+                                            12.dp,
+                                        vertical =
+                                            10.dp
+                                    ),
+                            maxLines = 3,
+                            overflow =
+                                TextOverflow.Ellipsis
+                        )
+                    }
+                }
+
+                if (
+                    notesOpen
+                ) {
+
+                    OutlinedTextField(
+                        modifier =
+                            Modifier
+                                .fillMaxWidth(),
+                        value =
+                            item.highlight,
+                        onValueChange = {
+                            onHighlight(it)
+                        },
+                        label = {
+                            Text(
+                                text =
+                                    tr(
+                                        "דגשים והערות לתרגיל",
+                                        "Exercise notes and highlights"
+                                    ),
+                                style =
+                                    KmiTypography
+                                        .caption
+                            )
+                        },
+                        minLines = 3,
+                        textStyle =
+                            KmiTypography
+                                .body
+                                .copy(
+                                    color =
+                                        MaterialTheme
+                                            .colorScheme
+                                            .onSurface
+                                ),
+                        colors =
+                            OutlinedTextFieldDefaults
+                                .colors(
+                                    focusedTextColor =
+                                        MaterialTheme
+                                            .colorScheme
+                                            .onSurface,
+
+                                    unfocusedTextColor =
+                                        MaterialTheme
+                                            .colorScheme
+                                            .onSurface,
+
+                                    focusedBorderColor =
+                                        beltAccentColor,
+
+                                    unfocusedBorderColor =
+                                        beltAccentColor
+                                            .copy(
+                                                alpha =
+                                                    0.32f
+                                            ),
+
+                                    focusedLabelColor =
+                                        beltAccentColor,
+
+                                    unfocusedLabelColor =
+                                        MaterialTheme
+                                            .colorScheme
+                                            .onSurfaceVariant,
+
+                                    cursorColor =
+                                        beltAccentColor,
+
+                                    focusedContainerColor =
+                                        innerChipColor,
+
+                                    unfocusedContainerColor =
+                                        innerChipColor
+                                )
+                    )
+                }
             }
         }
     }

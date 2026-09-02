@@ -1,5 +1,6 @@
 package il.kmi.app.ui.training
 
+import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import il.kmi.app.data.training.FirestoreTrainingSummaryRepo
@@ -61,6 +62,8 @@ class TrainingSummaryViewModel(
     // ❌ למחוק מכאן את כל הפונקציה bootstrapMembersFromUsers(...)
     // (היא שייכת ל-AttendanceViewModel בלבד)
 
+    private val TAG = "TRAINING_SUMMARY"
+
     private val isoFmt = SimpleDateFormat("yyyy-MM-dd", Locale.US)
     private fun todayIso(): String = isoFmt.format(Date())
 
@@ -80,7 +83,112 @@ class TrainingSummaryViewModel(
     // Setters
     // -----------------------------
 
-    fun setDateIso(v: String) = _state.update { it.copy(dateIso = v.trim()) }
+    fun setDateIso(v: String) {
+        val cleanDate =
+            v.trim()
+
+        if (cleanDate.isBlank()) {
+            return
+        }
+
+        _state.update {
+            it.copy(
+                dateIso = cleanDate,
+                selected = emptyMap(),
+                notes = ""
+            )
+        }
+
+        loadExistingSummaryForDate(
+            cleanDate
+        )
+    }
+
+    private fun loadExistingSummaryForDate(
+        dateIso: String
+    ) {
+        val snap =
+            _state.value
+
+        viewModelScope.launch {
+
+            runCatching {
+                repo.loadForOwnerAndDate(
+                    ownerUid =
+                        snap.ownerUid,
+                    ownerRole =
+                        snap.ownerRole,
+                    dateIso =
+                        dateIso
+                )
+            }.onSuccess { summary ->
+
+                if (summary == null) {
+                    return@onSuccess
+                }
+
+                /*
+                 * אם בינתיים המשתמש עבר לתאריך אחר,
+                 * לא נכניס נתונים מהבקשה הישנה.
+                 */
+                if (
+                    _state.value.dateIso !=
+                    dateIso
+                ) {
+                    return@onSuccess
+                }
+
+                val selectedExercises =
+                    summary.exercises
+                        .associate { exercise ->
+
+                            exercise.exerciseId to
+                                    SelectedExerciseUi(
+                                        exerciseId =
+                                            exercise.exerciseId,
+                                        name =
+                                            exercise.name,
+                                        topic =
+                                            exercise.topic,
+                                        difficulty =
+                                            exercise.difficulty,
+                                        highlight =
+                                            exercise.highlight,
+                                        homePractice =
+                                            exercise.homePractice
+                                    )
+                        }
+
+                _state.update {
+                    it.copy(
+                        branchId =
+                            summary.branchId,
+                        branchName =
+                            summary.branchName,
+                        coachUid =
+                            summary.coachUid,
+                        coachName =
+                            summary.coachName,
+                        groupKey =
+                            summary.groupKey,
+                        notes =
+                            summary.notes,
+                        selected =
+                            selectedExercises
+                    )
+                }
+
+            }.onFailure { throwable ->
+
+                Log.e(
+                    TAG,
+                    "loadExistingSummaryForDate failed date=$dateIso",
+                    throwable
+                )
+            }
+        }
+    }
+
     fun setBranchName(v: String) = _state.update { it.copy(branchName = v.trim()) }
     fun setCoachName(v: String) = _state.update { it.copy(coachName = v.trim()) }
     fun setGroupKey(v: String) = _state.update { it.copy(groupKey = v.trim()) }

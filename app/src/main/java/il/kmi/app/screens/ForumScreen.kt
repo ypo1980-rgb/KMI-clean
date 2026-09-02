@@ -8,44 +8,34 @@ import android.graphics.pdf.PdfDocument
 import android.net.Uri
 import android.widget.Toast
 import androidx.core.content.FileProvider
+import androidx.core.content.edit
+import androidx.core.net.toUri
 import il.kmi.app.ui.pdf.KmiPdfFooter
 import il.kmi.app.ui.pdf.KmiPdfHeader
 import java.io.File
 import java.io.FileOutputStream
-import androidx.compose.animation.core.LinearEasing
-import androidx.compose.animation.core.animateFloat
-import androidx.compose.animation.core.infiniteRepeatable
-import androidx.compose.animation.core.rememberInfiniteTransition
-import androidx.compose.animation.core.tween
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.foundation.Canvas
 import androidx.compose.material.icons.filled.Info
-import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.Lock
-import androidx.compose.material.icons.filled.Send
-import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.VideoLibrary
 import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.Mic
-import androidx.compose.material.icons.outlined.StarBorder
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.ExposedDropdownMenuBox
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -69,7 +59,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.drawscope.Fill
 import androidx.compose.ui.platform.LocalContext
@@ -77,7 +66,6 @@ import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 import com.google.firebase.auth.FirebaseAuth
@@ -90,10 +78,7 @@ import com.google.firebase.firestore.SetOptions
 import com.google.firebase.firestore.ktx.firestore
 import com.google.firebase.ktx.Firebase
 import com.google.firebase.storage.ktx.storage
-import il.kmi.shared.domain.Belt
-import il.kmi.shared.domain.Explanations
-import il.kmi.app.subscription.KmiAccess   // 👈 חדש – בדיקת גישת מנוי/ניסיון
-import il.kmi.shared.questions.model.util.ExerciseTitleFormatter
+import il.kmi.app.subscription.KmiAccess
 import il.kmi.app.localization.rememberIsEnglish
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
@@ -103,14 +88,15 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 import androidx.compose.foundation.text.BasicTextField
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.ui.graphics.SolidColor
 import il.kmi.app.ui.KmiIconSize
 import il.kmi.app.ui.KmiPremiumDropdown
 import il.kmi.app.ui.KmiTypography
+import il.kmi.app.ui.loading.KmiLoadingRings
 import il.kmi.app.ui.scaledIconSize
 import il.kmi.app.privacy.TraineeDisplayNameMapper
 import il.kmi.app.screens.registration.CoachBranchAssignmentsCodec
+import il.yuval.ui.theme.kmiScreenBackgroundBrush
 
 //==================================================================
 
@@ -677,117 +663,6 @@ private fun shareForumPdf(
     )
 }
 
-
-@Composable
-private fun ForumPremiumLoadingRings(
-    modifier: Modifier = Modifier,
-    size: Dp = 62.dp
-) {
-    val transition =
-        rememberInfiniteTransition(
-            label = "forumPremiumLoading"
-        )
-
-    val outerRotation by transition.animateFloat(
-        initialValue = 0f,
-        targetValue = 360f,
-        animationSpec =
-            infiniteRepeatable(
-                animation =
-                    tween(
-                        durationMillis = 1_250,
-                        easing = LinearEasing
-                    )
-            ),
-        label = "forumOuterRing"
-    )
-
-    val innerRotation by transition.animateFloat(
-        initialValue = 360f,
-        targetValue = 0f,
-        animationSpec =
-            infiniteRepeatable(
-                animation =
-                    tween(
-                        durationMillis = 1_750,
-                        easing = LinearEasing
-                    )
-            ),
-        label = "forumInnerRing"
-    )
-
-    Box(
-        modifier =
-            modifier.size(size),
-        contentAlignment =
-            Alignment.Center
-    ) {
-        Box(
-            modifier =
-                Modifier
-                    .size(size)
-                    .graphicsLayer {
-                        rotationZ = outerRotation
-                    }
-                    .border(
-                        width = 4.dp,
-                        brush =
-                            Brush.sweepGradient(
-                                listOf(
-                                    Color.Transparent,
-                                    Color(0xFFA855F7),
-                                    Color(0xFF38BDF8),
-                                    Color.Transparent
-                                )
-                            ),
-                        shape = CircleShape
-                    )
-        )
-
-        Box(
-            modifier =
-                Modifier
-                    .size(size * 0.68f)
-                    .graphicsLayer {
-                        rotationZ = innerRotation
-                    }
-                    .border(
-                        width = 3.dp,
-                        brush =
-                            Brush.sweepGradient(
-                                listOf(
-                                    Color.Transparent,
-                                    Color(0xFFF59E0B),
-                                    Color(0xFF22C55E),
-                                    Color.Transparent
-                                )
-                            ),
-                        shape = CircleShape
-                    )
-        )
-
-        Box(
-            modifier =
-                Modifier
-                    .size(size * 0.25f)
-                    .background(
-                        color =
-                            Color.White.copy(
-                                alpha = 0.94f
-                            ),
-                        shape = CircleShape
-                    )
-                    .border(
-                        width = 1.dp,
-                        color =
-                            Color(0xFFA78BFA)
-                                .copy(alpha = 0.55f),
-                        shape = CircleShape
-                    )
-        )
-    }
-}
-
 private const val FORUM_MESSAGE_RETENTION_DAYS = 90L
 private const val FORUM_MESSAGE_RETENTION_MILLIS =
     FORUM_MESSAGE_RETENTION_DAYS * 24L * 60L * 60L * 1000L
@@ -864,9 +739,7 @@ private fun forumPrefsList(
     }
 
     keys.forEach { key ->
-        val value = sp.all[key]
-
-        when (value) {
+        when (val value = sp.all[key]) {
             is String -> {
                 val raw = value.trim()
 
@@ -878,9 +751,10 @@ private fun forumPrefsList(
                             val arr = org.json.JSONArray(raw)
 
                             for (i in 0 until arr.length()) {
-                                val item = arr.opt(i)
-
-                                when (item) {
+                                when (
+                                    val item =
+                                        arr.opt(i)
+                                ) {
                                     is String -> addClean(item)
                                     is org.json.JSONObject -> readJsonObject(item)
                                     else -> addClean(item?.toString())
@@ -967,11 +841,6 @@ fun ForumScreen(
     val isDarkMode =
         MaterialTheme.colorScheme.background
             .luminance() < 0.5f
-
-    val isCoachProfile = remember {
-        val role = userSp.getString("user_role", "trainee").orEmpty().lowercase()
-        role.contains("coach") || role.contains("מאמן")
-    }
 
     // --- זיהוי מנהל / override ---
 
@@ -1316,16 +1185,19 @@ fun ForumScreen(
         if (openFromPushInitial && pendingPushMessageId.isBlank()) {
             pendingPushHandled = true
 
-            sp.edit()
-                .putBoolean("forum_open_from_push", false)
-                .remove("forum_push_message_id")
-                .remove("forum_push_room_id")
-                .remove("forum_push_room_name")
-                .remove("forum_push_branch_id")
-                .remove("forum_push_group_key")
-                .remove("forum_push_sender_id")
-                .remove("forum_push_received_at")
-                .apply()
+            sp.edit {
+                putBoolean(
+                    "forum_open_from_push",
+                    false
+                )
+                remove("forum_push_message_id")
+                remove("forum_push_room_id")
+                remove("forum_push_room_name")
+                remove("forum_push_branch_id")
+                remove("forum_push_group_key")
+                remove("forum_push_sender_id")
+                remove("forum_push_received_at")
+            }
         }
     }
 
@@ -1340,11 +1212,23 @@ fun ForumScreen(
 
     LaunchedEffect(branch, groupKey) {
         if (branch.isNotBlank() && groupKey.isNotBlank()) {
-            userSp.edit()
-                .putString(FORUM_LAST_SELECTED_BRANCH_KEY, branch)
-                .putString(FORUM_LAST_SELECTED_GROUP_KEY, groupKey)
-                .putLong(forumLastReadKey(branch, groupKey), System.currentTimeMillis())
-                .apply()
+            userSp.edit {
+                putString(
+                    FORUM_LAST_SELECTED_BRANCH_KEY,
+                    branch
+                )
+                putString(
+                    FORUM_LAST_SELECTED_GROUP_KEY,
+                    groupKey
+                )
+                putLong(
+                    forumLastReadKey(
+                        branch,
+                        groupKey
+                    ),
+                    System.currentTimeMillis()
+                )
+            }
         }
     }
 
@@ -1393,9 +1277,6 @@ fun ForumScreen(
     // מדיה שמצורפת להודעה שנשלחת
     var attachedUri by remember { mutableStateOf<Uri?>(null) }
     var attachedMediaType by remember { mutableStateOf<String?>(null) } // "image"/"video"/null
-
-    // תרגיל שנבחר מהחיפוש (הדיאלוג למטה)
-    var pickedKey by rememberSaveable { mutableStateOf<String?>(null) }
 
     // במסך אמת לא מתחברים אנונימית.
     // הפורום צריך לעבוד עם משתמש Firebase אמיתי מהכניסה לאפליקציה.
@@ -1505,16 +1386,19 @@ fun ForumScreen(
                                 listState.animateScrollToItem(targetIndex)
                                 pendingPushHandled = true
 
-                                sp.edit()
-                                    .putBoolean("forum_open_from_push", false)
-                                    .remove("forum_push_message_id")
-                                    .remove("forum_push_room_id")
-                                    .remove("forum_push_room_name")
-                                    .remove("forum_push_branch_id")
-                                    .remove("forum_push_group_key")
-                                    .remove("forum_push_sender_id")
-                                    .remove("forum_push_received_at")
-                                    .apply()
+                                sp.edit {
+                                    putBoolean(
+                                        "forum_open_from_push",
+                                        false
+                                    )
+                                    remove("forum_push_message_id")
+                                    remove("forum_push_room_id")
+                                    remove("forum_push_room_name")
+                                    remove("forum_push_branch_id")
+                                    remove("forum_push_group_key")
+                                    remove("forum_push_sender_id")
+                                    remove("forum_push_received_at")
+                                }
 
                                 pendingPushMessageId = ""
                                 pendingPushRoomId = ""
@@ -1797,11 +1681,13 @@ fun ForumScreen(
                             assignmentMap["groups"]
                                     as? List<*>
                             )
+                        ?.asSequence()
                         ?.mapNotNull {
                             it?.toString()
                         }
                         ?.flatMap {
                             expandForumGroupAliases(it)
+                                .asSequence()
                         }
                         ?.map {
                             it.normForum()
@@ -1956,8 +1842,10 @@ fun ForumScreen(
                             .orderBy(FieldPath.documentId())
                             .limit(1000)
 
-                        if (last != null) {
-                            q = q.startAfter(last!!)
+                        last?.let { lastDocument ->
+                            q = q.startAfter(
+                                lastDocument
+                            )
                         }
 
                         val snap = q.get().await()
@@ -2286,7 +2174,7 @@ fun ForumScreen(
                 "authorIsManager" to isManagerOverride,
                 "text" to text,
                 "messagePreview" to messagePreview,
-                "hasMedia" to (mediaUrl != null && mediaType != null),
+                "hasMedia" to (mediaUrl != null),
                 "mediaType" to mediaType,
                 "expiresAt" to com.google.firebase.Timestamp(expiresAtDate),
                 "retentionDays" to FORUM_MESSAGE_RETENTION_DAYS,
@@ -2296,7 +2184,7 @@ fun ForumScreen(
                 "source" to "android_forum"
             )
 
-            if (mediaUrl != null && mediaType != null) {
+            if (mediaUrl != null) {
                 baseData["mediaUrl"] = mediaUrl
                 baseData["mediaType"] = mediaType
             }
@@ -2330,7 +2218,7 @@ fun ForumScreen(
                                 "lastMessageAuthorName" to safeAuthorName,
                                 "lastMessageAt" to FieldValue.serverTimestamp(),
                                 "lastMessageAtMillis" to nowMillis,
-                                "lastMessageHasMedia" to (mediaUrl != null && mediaType != null),
+                                "lastMessageHasMedia" to (mediaUrl != null),
                                 "lastMessageMediaType" to mediaType,
                                 "pendingPushMessageId" to messageRef.id,
                                 "pendingPushAuthorUid" to currentUid,
@@ -2413,13 +2301,13 @@ fun ForumScreen(
             focusManager.clearFocus(force = true)
             keyboardController?.hide()
 
-        } catch (e: Exception) {
+        } catch (_: Exception) {
             Toast.makeText(
                 ctx,
                 forumTr(
                     isEnglish,
-                    "שגיאה בשמירת ההודעה: ${e.localizedMessage ?: "בדוק חיבור לאינטרנט"}",
-                    "Error saving message: ${e.localizedMessage ?: "Check your internet connection"}"
+                    "לא ניתן לשמור את ההודעה כרגע. בדוק את החיבור ונסה שוב.",
+                    "The message cannot be saved right now. Check your connection and try again."
                 ),
                 Toast.LENGTH_LONG
             ).show()
@@ -2432,63 +2320,69 @@ fun ForumScreen(
         return df.format(date)
     }
 
-    val gradientBackground = remember(isDarkMode, isCoachProfile) {
-        if (isDarkMode) {
-            Brush.verticalGradient(
-                listOf(
-                    Color(0xFF0B141A),
-                    Color(0xFF0F1B22),
-                    Color(0xFF111B21)
-                )
-            )
-        } else {
-            if (isCoachProfile) {
-                // ✅ רקע בהיר בסגנון מאמן — סגול/כחול אלגנטי
-                Brush.verticalGradient(
-                    listOf(
-                        Color(0xFFF8F5FF),
-                        Color(0xFFF0E9FF),
-                        Color(0xFFEAF6FF)
-                    )
-                )
-            } else {
-                // ✅ רקע בהיר בסגנון מתאמן — כחול/טורקיז עדין
-                Brush.verticalGradient(
-                    listOf(
-                        Color(0xFFF6FBFF),
-                        Color(0xFFEAF7FF),
-                        Color(0xFFEAFBF6)
-                    )
-                )
-            }
-        }
-    }
+    val screenBackgroundBrush =
+        kmiScreenBackgroundBrush()
 
-    val forumHeaderColor = if (isDarkMode) Color(0xFF182229) else Color.White.copy(alpha = 0.94f)
-    val forumHeaderBorder = if (isDarkMode) Color(0xFF22303A) else Color(0xFFD6E4F4)
-    val forumHeaderText = if (isDarkMode) Color(0xFFD1D7DB) else Color(0xFF1F2937)
+    val forumHeaderColor =
+        MaterialTheme.colorScheme.surface.copy(
+            alpha = 0.94f
+        )
 
-    val participantsColor = if (isDarkMode) Color(0xFF111B21) else Color.White.copy(alpha = 0.92f)
-    val participantsText = if (isDarkMode) Color(0xFFBFC8CD) else Color(0xFF334155)
+    val forumHeaderBorder =
+        MaterialTheme.colorScheme.outline.copy(
+            alpha = 0.72f
+        )
 
-    val myBubbleColor = if (isDarkMode) Color(0xFF144D37) else Color(0xFFDDFBEA)
-    val otherBubbleColor = if (isDarkMode) Color(0xFF202C33) else Color.White.copy(alpha = 0.96f)
-    val myBubbleText = if (isDarkMode) Color(0xFFF7F8F8) else Color(0xFF064E3B)
-    val otherBubbleText = if (isDarkMode) Color(0xFFE9EDEF) else Color(0xFF111827)
+    val participantsText =
+        MaterialTheme.colorScheme.onSurfaceVariant
 
-    val inputSurfaceColor = if (isDarkMode) Color(0xFF202C33) else Color.White
-    val inputTextColor = if (isDarkMode) Color.White else Color(0xFF0F172A)
-    val inputPlaceholderColor = if (isDarkMode) Color(0xFF8696A0) else Color(0xFF64748B)
-    val inputIconTint = if (isDarkMode) Color(0xFF8696A0) else Color(0xFF64748B)
+    val myBubbleColor =
+        MaterialTheme.colorScheme.primaryContainer
 
-    val attachmentChipColor = if (isDarkMode) Color(0xFF1B2A33) else Color.White.copy(alpha = 0.94f)
-    val attachmentChipText = if (isDarkMode) Color(0xFFD8E1E6) else Color(0xFF334155)
+    val otherBubbleColor =
+        MaterialTheme.colorScheme.surface.copy(
+            alpha = 0.96f
+        )
+
+    val myBubbleText =
+        MaterialTheme.colorScheme.onPrimaryContainer
+
+    val otherBubbleText =
+        MaterialTheme.colorScheme.onSurface
+
+    val inputSurfaceColor =
+        MaterialTheme.colorScheme.surface
+
+    val inputTextColor =
+        MaterialTheme.colorScheme.onSurface
+
+    val inputPlaceholderColor =
+        MaterialTheme.colorScheme.onSurfaceVariant.copy(
+            alpha = 0.76f
+        )
+
+    val inputIconTint =
+        MaterialTheme.colorScheme.onSurfaceVariant
+
+    val attachmentChipColor =
+        MaterialTheme.colorScheme.surfaceVariant.copy(
+            alpha = 0.94f
+        )
+
+    val attachmentChipText =
+        MaterialTheme.colorScheme.onSurfaceVariant
 
     Scaffold(
         topBar = {
             il.kmi.app.ui.KmiTopBar(
-                title = forumTr(isEnglish, "פורום הסניף", "Branch Forum"),
-                onPickSearchResult = { key -> pickedKey = key },
+                title =
+                    forumTr(
+                        isEnglish,
+                        "פורום הסניף",
+                        "Branch Forum"
+                    ),
+                onBack = onBack,
+                onOpenExercise = onOpenExercise,
                 onHome = onGoHome,
                 onSearch = { },
                 showTopHome = false,
@@ -2538,7 +2432,7 @@ fun ForumScreen(
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .background(gradientBackground)
+                .background(screenBackgroundBrush)
                 .padding(padding)
         ) {
 
@@ -2550,25 +2444,20 @@ fun ForumScreen(
 
                 // 🔒 קודם כל – נעילת מסך הפורום לפי מנוי / ניסיון
                 if (!canUseExtras) {
-                    val lockText = when {
-                        isTrial && !hasFull -> forumTr(
-                            isEnglish,
-                            "במהלך תקופת הניסיון מסך הפורום נעול.\nאחרי רכישת מנוי המסך ייפתח עבורך.",
-                            "During the trial period, the forum is locked.\nAfter purchasing a subscription, this screen will be available."
-                        )
-
-                        !isTrial && !hasFull -> forumTr(
-                            isEnglish,
-                            "מסך הפורום זמין למנויים בלבד.\nכדי להמשיך יש לרכוש מנוי פעיל.",
-                            "The forum is available to subscribers only.\nTo continue, please purchase an active subscription."
-                        )
-
-                        else -> forumTr(
-                            isEnglish,
-                            "מסך הפורום זמין למנויים בלבד.",
-                            "The forum is available to subscribers only."
-                        )
-                    }
+                    val lockText =
+                        if (isTrial) {
+                            forumTr(
+                                isEnglish,
+                                "במהלך תקופת הניסיון מסך הפורום נעול.\nאחרי רכישת מנוי המסך ייפתח עבורך.",
+                                "During the trial period, the forum is locked.\nAfter purchasing a subscription, this screen will be available."
+                            )
+                        } else {
+                            forumTr(
+                                isEnglish,
+                                "מסך הפורום זמין למנויים בלבד.\nכדי להמשיך יש לרכוש מנוי פעיל.",
+                                "The forum is available to subscribers only.\nTo continue, please purchase an active subscription."
+                            )
+                        }
 
                     Surface(
                         modifier = Modifier
@@ -2576,21 +2465,19 @@ fun ForumScreen(
                             // ✅ מוריד את כרטיס הנעילה מעט למטה כדי שלא יתנגש
                             // עם הידית/סרגל האייקונים הנסתר של KmiTopBar.
                             .padding(top = 24.dp),
-                        color = if (isDarkMode) {
-                            Color(0xFF020617).copy(alpha = 0.92f)
-                        } else {
-                            Color(0xFFEAF2FF)
-                        },
+                        color =
+                            MaterialTheme.colorScheme.surface.copy(
+                                alpha = 0.96f
+                            ),
                         shape = RoundedCornerShape(20.dp),
-                        tonalElevation = 4.dp,
+                        tonalElevation = 0.dp,
                         shadowElevation = 0.dp,
                         border = BorderStroke(
-                            1.dp,
-                            if (isDarkMode) {
-                                Color.Transparent
-                            } else {
-                                Color(0xFFD4E1F7)
-                            }
+                            width = 1.dp,
+                            color =
+                                MaterialTheme.colorScheme.outline.copy(
+                                    alpha = 0.52f
+                                )
                         )
                     ) {
                         Column(
@@ -2601,18 +2488,16 @@ fun ForumScreen(
                         ) {
                             Surface(
                                 shape = RoundedCornerShape(22.dp),
-                                color = if (isDarkMode) {
-                                    Color.White.copy(alpha = 0.08f)
-                                } else {
-                                    Color(0xFFF6F9FF)
-                                },
+                                color =
+                                    MaterialTheme.colorScheme.primaryContainer.copy(
+                                        alpha = 0.72f
+                                    ),
                                 border = BorderStroke(
-                                    1.dp,
-                                    if (isDarkMode) {
-                                        Color.White.copy(alpha = 0.12f)
-                                    } else {
-                                        Color(0xFFD4E1F7)
-                                    }
+                                    width = 1.dp,
+                                    color =
+                                        MaterialTheme.colorScheme.primary.copy(
+                                            alpha = 0.28f
+                                        )
                                 ),
                                 modifier = Modifier.size(
                                     scaledIconSize(64.dp)
@@ -2625,11 +2510,7 @@ fun ForumScreen(
                                         imageVector = Icons.Filled.Lock,
                                         contentDescription = null,
                                         tint =
-                                            if (isDarkMode) {
-                                                Color(0xFFBFDBFE)
-                                            } else {
-                                                Color(0xFF2563EB)
-                                            },
+                                            MaterialTheme.colorScheme.primary,
                                         modifier = Modifier.size(
                                             scaledIconSize(30.dp)
                                         )
@@ -2646,11 +2527,7 @@ fun ForumScreen(
                                     "Forum Access"
                                 ),
                                 color =
-                                    if (isDarkMode) {
-                                        Color(0xFFBFDBFE)
-                                    } else {
-                                        Color(0xFF1E3A8A)
-                                    },
+                                    MaterialTheme.colorScheme.primary,
                                 style = KmiTypography.sectionTitle,
                                 textAlign = TextAlign.Center,
                                 modifier = Modifier.fillMaxWidth()
@@ -2661,11 +2538,7 @@ fun ForumScreen(
                             Text(
                                 text = lockText,
                                 color =
-                                    if (isDarkMode) {
-                                        Color(0xFFE5E7EB)
-                                    } else {
-                                        Color(0xFF334155)
-                                    },
+                                    MaterialTheme.colorScheme.onSurface,
                                 style = KmiTypography.body,
                                 textAlign = TextAlign.Center,
                                 modifier = Modifier.fillMaxWidth()
@@ -2699,11 +2572,7 @@ fun ForumScreen(
                                     "You can always return to this screen after purchasing a subscription."
                                 ),
                                 color =
-                                    if (isDarkMode) {
-                                        Color(0xFF9CA3AF)
-                                    } else {
-                                        Color(0xFF64748B)
-                                    },
+                                    MaterialTheme.colorScheme.onSurfaceVariant,
                                 style = KmiTypography.caption,
                                 textAlign = TextAlign.Center,
                                 modifier = Modifier.fillMaxWidth()
@@ -2723,7 +2592,8 @@ fun ForumScreen(
                             "לא אותרו סניף/קבוצה במשתמש.\nודאו ש־\"branch\" ו־\"groupKey\" מוגדרים בפרופיל.",
                             "No branch/group was found for this user.\nPlease make sure \"branch\" and \"groupKey\" are set in the profile."
                         ),
-                        color = Color(0xFFFF6B6B),
+                        color =
+                            MaterialTheme.colorScheme.error,
                         style = KmiTypography.body,
                         textAlign = screenTextAlign,
                         modifier = Modifier.fillMaxWidth()
@@ -2869,7 +2739,7 @@ fun ForumScreen(
                                 color = forumHeaderBorder
                             )
                     ) {
-                        Column(
+                        KmiLoadingRings(
                             modifier =
                                 Modifier
                                     .fillMaxWidth()
@@ -2877,41 +2747,21 @@ fun ForumScreen(
                                         horizontal = 16.dp,
                                         vertical = 16.dp
                                     ),
-                            horizontalAlignment =
-                                Alignment.CenterHorizontally,
-                            verticalArrangement =
-                                Arrangement.spacedBy(10.dp)
-                        ) {
-                            ForumPremiumLoadingRings(
-                                size = 62.dp
-                            )
-
-                            Text(
-                                text =
-                                    when {
-                                        isMessagesLoading ->
-                                            forumTr(
-                                                isEnglish,
-                                                "טוען הודעות מהפורום...",
-                                                "Loading forum messages..."
-                                            )
-
-                                        else ->
-                                            forumTr(
-                                                isEnglish,
-                                                "טוען את משתתפי הקבוצה...",
-                                                "Loading group participants..."
-                                            )
-                                    },
-                                color = forumHeaderText,
-                                style =
-                                    KmiTypography.secondary,
-                                fontWeight =
-                                    FontWeight.Bold,
-                                textAlign =
-                                    TextAlign.Center
-                            )
-                        }
+                            text =
+                                if (isMessagesLoading) {
+                                    forumTr(
+                                        isEnglish,
+                                        "טוען הודעות מהפורום...",
+                                        "Loading forum messages..."
+                                    )
+                                } else {
+                                    forumTr(
+                                        isEnglish,
+                                        "טוען את משתתפי הקבוצה...",
+                                        "Loading group participants..."
+                                    )
+                                }
+                        )
                     }
                 }
 
@@ -2929,7 +2779,6 @@ fun ForumScreen(
                             EmptyForumRoomCard(
                                 branch = branch,
                                 groupKey = groupKey,
-                                isDarkMode = isDarkMode,
                                 isEnglish = isEnglish
                             )
                         }
@@ -3120,14 +2969,18 @@ fun ForumScreen(
                                                             }
                                                             FilledTonalButton(
                                                                 onClick = {
-                                                                    val intent = Intent(
-                                                                        Intent.ACTION_VIEW,
-                                                                        Uri.parse(url)
-                                                                    ).apply {
-                                                                        setDataAndType(
-                                                                            Uri.parse(url),
-                                                                            "video/*"
-                                                                        )
+                                                                    val videoUri =
+                                                                        url.toUri()
+
+                                                                    val intent =
+                                                                        Intent(
+                                                                            Intent.ACTION_VIEW,
+                                                                            videoUri
+                                                                        ).apply {
+                                                                            setDataAndType(
+                                                                                videoUri,
+                                                                                "video/*"
+                                                                            )
                                                                         addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
                                                                     }
                                                                     context.startActivity(intent)
@@ -3192,8 +3045,6 @@ fun ForumScreen(
                                                 Spacer(Modifier.width(2.dp))
                                                 IconButton(
                                                     onClick = {
-                                                        if (!canModifyMessage) return@IconButton
-
                                                         scope.launch {
                                                             val roomIdForMessage = msg.groupKey
                                                                 .takeIf { it.isNotBlank() }
@@ -3340,9 +3191,8 @@ fun ForumScreen(
                             top = 4.dp,
                             bottom = 4.dp
                         )
-                        .windowInsetsPadding(
-                            WindowInsets.navigationBars.only(WindowInsetsSides.Bottom)
-                        ),
+                        .imePadding()
+                        .navigationBarsPadding(),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
@@ -3355,8 +3205,8 @@ fun ForumScreen(
                         tonalElevation = 0.dp,
                         shadowElevation = 0.dp,
                         border = BorderStroke(
-                            1.dp,
-                            if (isDarkMode) Color.Transparent else Color(0xFFD6E4F4)
+                            width = 1.dp,
+                            color = forumHeaderBorder
                         )
                     ) {
                         Row(
@@ -3416,7 +3266,10 @@ fun ForumScreen(
                                     textAlign = screenTextAlign,
                                     fontWeight = FontWeight.SemiBold
                                 ),
-                                cursorBrush = SolidColor(Color(0xFF25D366)),
+                                cursorBrush =
+                                    SolidColor(
+                                        MaterialTheme.colorScheme.primary
+                                    ),
                                 singleLine = true,
                                 decorationBox = { innerTextField ->
                                     Box(
@@ -3504,7 +3357,12 @@ fun ForumScreen(
                             }
                         },
                         shape = RoundedCornerShape(999.dp),
-                        color = if (canSend) Color(0xFF25D366) else Color(0xFF1F3C33),
+                        color =
+                            if (canSend) {
+                                MaterialTheme.colorScheme.primary
+                            } else {
+                                MaterialTheme.colorScheme.surfaceVariant
+                            },
                         modifier = Modifier.size(
                             scaledIconSize(48.dp)
                         ),
@@ -3516,7 +3374,12 @@ fun ForumScreen(
                             modifier = Modifier.fillMaxSize()
                         ) {
                             Icon(
-                                imageVector = if (canSend) Icons.Filled.Send else Icons.Outlined.Mic,
+                                imageVector =
+                                    if (canSend) {
+                                        Icons.AutoMirrored.Filled.Send
+                                    } else {
+                                        Icons.Outlined.Mic
+                                    },
                                 contentDescription = if (canSend) {
                                     if (editingMessage != null) {
                                         forumTr(isEnglish, "עדכן הודעה", "Update message")
@@ -3526,285 +3389,17 @@ fun ForumScreen(
                                 } else {
                                     forumTr(isEnglish, "הקלטה", "Voice recording")
                                 },
-                                tint = Color.White,
+                                tint =
+                                    if (canSend) {
+                                        MaterialTheme.colorScheme.onPrimary
+                                    } else {
+                                        MaterialTheme.colorScheme.onSurfaceVariant
+                                    },
                                 modifier = Modifier.size(
                                     KmiIconSize.medium
                                 )
                             )
                         }
-                    }
-                }
-            }
-
-            // ===== דיאלוג תרגיל מהחיפוש =====
-            pickedKey?.let { key ->
-                val (belt, topic, item) = parseSearchKey(key)
-
-                val displayName = ExerciseTitleFormatter
-                    .displayName(item)
-                    .ifBlank { item }
-
-                val explanation = remember(belt, item, isEnglish) {
-                    findExplanationForHit(
-                        belt = belt,
-                        rawItem = item,
-                        topic = topic,
-                        isEnglish = isEnglish
-                    )
-                }
-
-                var isFav by remember { mutableStateOf(false) }
-
-                AlertDialog(
-                    onDismissRequest = { pickedKey = null },
-                    title = {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Column(
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .fillMaxWidth(),
-                                horizontalAlignment = Alignment.End
-                            ) {
-                                Text(
-                                    text = displayName,
-                                    style = KmiTypography.sectionTitle,
-                                    color =
-                                        MaterialTheme.colorScheme.onSurface,
-                                    textAlign = screenTextAlign,
-                                    modifier = Modifier.fillMaxWidth()
-                                )
-
-                                Text(
-                                    text =
-                                        if (isEnglish) {
-                                            "(${belt.en})"
-                                        } else {
-                                            "(${belt.heb})"
-                                        },
-                                    style = KmiTypography.secondary,
-                                    color =
-                                        MaterialTheme.colorScheme.onSurfaceVariant,
-                                    textAlign = screenTextAlign,
-                                    modifier = Modifier.fillMaxWidth()
-                                )
-                            }
-
-                            IconButton(
-                                onClick = { isFav = !isFav },
-                                modifier = Modifier
-                                    .padding(start = 6.dp)
-                                    .size(scaledIconSize(36.dp))
-                            ) {
-                                if (isFav) {
-                                    Icon(
-                                        imageVector = Icons.Filled.Star,
-                                        contentDescription = forumTr(
-                                            isEnglish,
-                                            "מועדף",
-                                            "Favorite"
-                                        ),
-                                        tint = Color(0xFFFFC107),
-                                        modifier = Modifier.size(KmiIconSize.medium)
-                                    )
-                                } else {
-                                    Icon(
-                                        imageVector = Icons.Outlined.StarBorder,
-                                        contentDescription = forumTr(
-                                            isEnglish,
-                                            "הוסף למועדפים",
-                                            "Add to favorites"
-                                        ),
-                                        modifier = Modifier.size(KmiIconSize.medium)
-                                    )
-                                }
-                            }
-                        }
-                    },
-                    text = {
-                        Text(
-                            text = explanation,
-                            style = KmiTypography.body,
-                            color = MaterialTheme.colorScheme.onSurface,
-                            textAlign = screenTextAlign,
-                            modifier = Modifier.fillMaxWidth()
-                        )
-                    },
-                    confirmButton = {
-                        TextButton(onClick = { pickedKey = null }) {
-                            Text(
-                                text = forumTr(
-                                    isEnglish,
-                                    "סגור",
-                                    "Close"
-                                ),
-                                style = KmiTypography.action
-                            )
-                        }
-                    }
-                )
-            }
-        }
-    }
-}
-
-@Composable
-private fun ForumTopCollapseHeader(
-    title: String,
-    subtitle: String,
-    isExpanded: Boolean,
-    isDarkMode: Boolean,
-    isEnglish: Boolean,
-    onClick: () -> Unit
-) {
-    val borderColor = if (isDarkMode) {
-        Color.White.copy(alpha = 0.10f)
-    } else {
-        Color(0xFFD8E4F4)
-    }
-
-    val titleColor = if (isDarkMode) {
-        Color(0xFFF3F6F9)
-    } else {
-        Color(0xFF132238)
-    }
-
-    val subtitleColor = if (isDarkMode) {
-        Color(0xFFCFD8DE)
-    } else {
-        Color(0xFF5E738A)
-    }
-
-    val accentColor = if (isDarkMode) {
-        Color(0xFF9B8CFF)
-    } else {
-        Color(0xFF7C5CFA)
-    }
-
-    val cardBrush = if (isDarkMode) {
-        Brush.verticalGradient(
-            listOf(
-                Color(0xFF25323C),
-                Color(0xFF1D2932)
-            )
-        )
-    } else {
-        Brush.verticalGradient(
-            listOf(
-                Color(0xFFFFFFFF),
-                Color(0xFFF4F8FF)
-            )
-        )
-    }
-
-    Surface(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(bottom = 5.dp)
-            .clickable { onClick() },
-        shape = RoundedCornerShape(18.dp),
-        color = Color.Transparent,
-        border = BorderStroke(1.dp, borderColor),
-        shadowElevation = 0.dp
-    ) {
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .background(cardBrush)
-                .padding(horizontal = 10.dp, vertical = 9.dp)
-        ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(10.dp)
-            ) {
-                Column(
-                    modifier = Modifier.weight(1f),
-                    horizontalAlignment = if (isEnglish) Alignment.Start else Alignment.End
-                ) {
-                    Text(
-                        text = title,
-                        color = titleColor,
-                        style = KmiTypography.cardTitle.copy(
-                            fontWeight = FontWeight.ExtraBold
-                        ),
-                        textAlign = forumTextAlign(isEnglish),
-                        modifier = Modifier.fillMaxWidth(),
-                        maxLines = 1
-                    )
-
-                    Spacer(Modifier.height(4.dp))
-
-                    Surface(
-                        shape = RoundedCornerShape(999.dp),
-                        color = if (isDarkMode) {
-                            accentColor.copy(alpha = 0.16f)
-                        } else {
-                            accentColor.copy(alpha = 0.10f)
-                        },
-                        border = BorderStroke(
-                            1.dp,
-                            if (isDarkMode) {
-                                accentColor.copy(alpha = 0.28f)
-                            } else {
-                                accentColor.copy(alpha = 0.20f)
-                            }
-                        )
-                    ) {
-                        Text(
-                            text = subtitle,
-                            color = subtitleColor,
-                            style = KmiTypography.caption.copy(
-                                fontWeight = FontWeight.Bold
-                            ),
-                            textAlign = forumTextAlign(isEnglish),
-                            modifier = Modifier.padding(
-                                horizontal = 10.dp,
-                                vertical = 4.dp
-                            ),
-                            maxLines = 1
-                        )
-                    }
-                }
-
-                Surface(
-                    shape = RoundedCornerShape(12.dp),
-                    color = if (isExpanded) {
-                        accentColor.copy(alpha = if (isDarkMode) 0.22f else 0.14f)
-                    } else {
-                        if (isDarkMode) Color.White.copy(alpha = 0.07f) else Color(0xFFF3F6FB)
-                    },
-                    border = BorderStroke(
-                        1.dp,
-                        if (isExpanded) {
-                            accentColor.copy(alpha = if (isDarkMode) 0.45f else 0.28f)
-                        } else {
-                            if (isDarkMode) Color.White.copy(alpha = 0.10f) else Color(0xFFD8E4F4)
-                        }
-                    )
-                ) {
-                    Box(
-                        modifier = Modifier.size(scaledIconSize(30.dp)),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text(
-                            text =
-                                if (isExpanded) {
-                                    "⌃"
-                                } else {
-                                    "⌄"
-                                },
-                            color =
-                                if (isExpanded) {
-                                    accentColor
-                                } else {
-                                    subtitleColor
-                                },
-                            style = KmiTypography.action,
-                            fontWeight = FontWeight.Black
-                        )
                     }
                 }
             }
@@ -3819,8 +3414,11 @@ private fun ForumControlsMiniHandle(
     text: String,
     onClick: () -> Unit
 ) {
-    val accentColor = if (isDarkMode) Color(0xFF93C5FD) else Color(0xFF2563EB)
-    val textColor = if (isDarkMode) Color(0xFFD8E0E7) else Color(0xFF334155)
+    val accentColor =
+        MaterialTheme.colorScheme.primary
+
+    val textColor =
+        MaterialTheme.colorScheme.onSurface
 
     Box(
         modifier = Modifier.fillMaxWidth(),
@@ -3832,11 +3430,10 @@ private fun ForumControlsMiniHandle(
                 .heightIn(min = 32.dp)
                 .clickable { onClick() },
             shape = RoundedCornerShape(999.dp),
-            color = if (isDarkMode) {
-                Color(0xFF111B24).copy(alpha = 0.94f)
-            } else {
-                Color.White.copy(alpha = 0.96f)
-            },
+            color =
+                MaterialTheme.colorScheme.surface.copy(
+                    alpha = 0.96f
+                ),
             border = BorderStroke(
                 1.dp,
                 accentColor.copy(alpha = if (isDarkMode) 0.42f else 0.24f)
@@ -3950,41 +3547,45 @@ private fun ForumPremiumControlCard(
     onGroupSelected: (String) -> Unit
 ) {
     val titleColor =
-        if (isDarkMode) {
-            Color(0xFFF8FAFC)
-        } else {
-            Color(0xFF102033)
-        }
-    val subtitleColor = if (isDarkMode) Color(0xFFD8E0E7) else Color(0xFF5A6D82)
-    val mutedColor = if (isDarkMode) Color(0xFF9CA3AF) else Color(0xFF718096)
+        MaterialTheme.colorScheme.onSurface
 
-    val blueAccent = if (isDarkMode) Color(0xFF60A5FA) else Color(0xFF1677FF)
-    val purpleAccent = if (isDarkMode) Color(0xFFA78BFA) else Color(0xFF7C3AED)
+    val subtitleColor =
+        MaterialTheme.colorScheme.onSurfaceVariant
 
-    val cardBrush = if (isDarkMode) {
+    val mutedColor =
+        MaterialTheme.colorScheme.onSurfaceVariant.copy(
+            alpha = 0.62f
+        )
+
+    val blueAccent =
+        MaterialTheme.colorScheme.primary
+
+    val purpleAccent =
+        MaterialTheme.colorScheme.tertiary
+
+    val cardBrush =
         Brush.linearGradient(
-            listOf(
-                Color(0xFF253445),
-                Color(0xFF16232F),
-                Color(0xFF111B24)
-            )
+            colors =
+                listOf(
+                    MaterialTheme.colorScheme.surface,
+                    MaterialTheme.colorScheme.surfaceVariant.copy(
+                        alpha = 0.68f
+                    )
+                )
         )
-    } else {
-        Brush.linearGradient(
-            listOf(
-                Color(0xFFFFFFFF),
-                Color(0xFFF7FAFF),
-                Color(0xFFEFF6FF)
-            )
-        )
-    }
 
-    val borderBrush = Brush.linearGradient(
-        listOf(
-            blueAccent.copy(alpha = if (isDarkMode) 0.45f else 0.34f),
-            purpleAccent.copy(alpha = if (isDarkMode) 0.42f else 0.30f)
+    val borderBrush =
+        Brush.linearGradient(
+            colors =
+                listOf(
+                    blueAccent.copy(
+                        alpha = 0.34f
+                    ),
+                    purpleAccent.copy(
+                        alpha = 0.30f
+                    )
+                )
         )
-    )
 
     Surface(
         modifier = Modifier
@@ -4083,11 +3684,14 @@ private fun ForumPremiumControlCard(
                     .height(1.dp)
                     .background(
                         Brush.horizontalGradient(
-                            listOf(
-                                Color.Transparent,
-                                if (isDarkMode) Color.White.copy(alpha = 0.12f) else Color(0xFFD8E7F8),
-                                Color.Transparent
-                            )
+                            colors =
+                                listOf(
+                                    Color.Transparent,
+                                    MaterialTheme.colorScheme.outline.copy(
+                                        alpha = 0.46f
+                                    ),
+                                    Color.Transparent
+                                )
                         )
                     )
             )
@@ -4113,11 +3717,10 @@ private fun ForumPremiumControlCard(
                         .fillMaxWidth()
                         .padding(top = 2.dp, bottom = 3.dp),
                     shape = RoundedCornerShape(17.dp),
-                    color = if (isDarkMode) {
-                        Color(0xFF101B24).copy(alpha = 0.82f)
-                    } else {
-                        Color.White.copy(alpha = 0.72f)
-                    },
+                    color =
+                        MaterialTheme.colorScheme.surfaceVariant.copy(
+                            alpha = 0.72f
+                        ),
                     border = BorderStroke(
                         1.dp,
                         purpleAccent.copy(alpha = if (isDarkMode) 0.28f else 0.18f)
@@ -4176,14 +3779,16 @@ private fun ForumPremiumControlCard(
                         .size(width = 86.dp, height = 22.dp)
                         .clickable { onCollapseAll() },
                     shape = RoundedCornerShape(999.dp),
-                    color = if (isDarkMode) {
-                        Color.White.copy(alpha = 0.07f)
-                    } else {
-                        Color.White.copy(alpha = 0.62f)
-                    },
+                    color =
+                        MaterialTheme.colorScheme.surfaceVariant.copy(
+                            alpha = 0.62f
+                        ),
                     border = BorderStroke(
-                        1.dp,
-                        if (isDarkMode) Color.White.copy(alpha = 0.10f) else Color(0xFFD6E4F4)
+                        width = 1.dp,
+                        color =
+                            MaterialTheme.colorScheme.outline.copy(
+                                alpha = 0.52f
+                            )
                     ),
                     shadowElevation = 0.dp,
                     tonalElevation = 0.dp
@@ -4199,11 +3804,10 @@ private fun ForumPremiumControlCard(
                                     .width(36.dp)
                                     .height(2.dp)
                                     .background(
-                                        color = if (isDarkMode) {
-                                            Color(0xFF93C5FD).copy(alpha = 0.82f)
-                                        } else {
-                                            Color(0xFF2563EB).copy(alpha = 0.72f)
-                                        },
+                                        color =
+                                            MaterialTheme.colorScheme.primary.copy(
+                                                alpha = 0.78f
+                                            ),
                                         shape = RoundedCornerShape(999.dp)
                                     )
                             )
@@ -4324,18 +3928,38 @@ private fun ForumPremiumControlRow(
         Surface(
             modifier = Modifier.size(scaledIconSize(30.dp)),
             shape = RoundedCornerShape(13.dp),
-            color = if (enabled) {
-                accentColor.copy(alpha = if (isDarkMode) 0.18f else 0.10f)
-            } else {
-                if (isDarkMode) Color.White.copy(alpha = 0.05f) else Color(0xFFF1F5F9)
-            },
-            border = BorderStroke(
-                1.dp,
+            color =
                 if (enabled) {
-                    accentColor.copy(alpha = if (isDarkMode) 0.34f else 0.22f)
+                    accentColor.copy(
+                        alpha =
+                            if (isDarkMode) {
+                                0.18f
+                            } else {
+                                0.10f
+                            }
+                    )
                 } else {
-                    if (isDarkMode) Color.White.copy(alpha = 0.07f) else Color(0xFFE2E8F0)
-                }
+                    MaterialTheme.colorScheme.surfaceVariant.copy(
+                        alpha = 0.54f
+                    )
+                },
+            border = BorderStroke(
+                width = 1.dp,
+                color =
+                    if (enabled) {
+                        accentColor.copy(
+                            alpha =
+                                if (isDarkMode) {
+                                    0.34f
+                                } else {
+                                    0.22f
+                                }
+                        )
+                    } else {
+                        MaterialTheme.colorScheme.outline.copy(
+                            alpha = 0.34f
+                        )
+                    }
             )
         ) {
             Box(
@@ -4364,238 +3988,9 @@ private fun ForumPremiumControlRow(
 }
 
 @Composable
-private fun ForumRoomPickerCard(
-    branches: List<String>,
-    groups: List<String>,
-    selectedBranch: String,
-    selectedGroup: String,
-    isDarkMode: Boolean,
-    isEnglish: Boolean,
-    onBranchSelected: (String) -> Unit,
-    onGroupSelected: (String) -> Unit
-) {
-    var branchExpanded by remember { mutableStateOf(false) }
-    var groupExpanded by remember { mutableStateOf(false) }
-
-    val cardColor = if (isDarkMode) {
-        Color(0xFF202C33)
-    } else {
-        Color.White.copy(alpha = 0.96f)
-    }
-
-    val textColor = if (isDarkMode) {
-        Color(0xFFE9EDEF)
-    } else {
-        Color(0xFF111827)
-    }
-
-    Surface(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(14.dp),
-        color = cardColor,
-        border = BorderStroke(
-            1.dp,
-            if (isDarkMode) Color.White.copy(alpha = 0.10f) else Color(0xFFD6E4F4)
-        ),
-        shadowElevation = 0.dp
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 8.dp, vertical = 6.dp),
-            verticalArrangement = Arrangement.spacedBy(5.dp)
-        ) {
-            Text(
-                text =
-                    forumTr(
-                        isEnglish,
-                        "בחירת חדר פורום",
-                        "Forum room"
-                    ),
-                color = textColor,
-                style = KmiTypography.cardTitle,
-                fontWeight = FontWeight.Bold,
-                textAlign =
-                    forumTextAlign(isEnglish),
-                modifier = Modifier.fillMaxWidth()
-            )
-
-            if (branches.size > 1) {
-                ExposedDropdownMenuBox(
-                    expanded = branchExpanded,
-                    onExpandedChange = { branchExpanded = !branchExpanded }
-                ) {
-                    Surface(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .menuAnchor(),
-                        shape = RoundedCornerShape(14.dp),
-                        color = if (isDarkMode) Color(0xFF111B21) else Color(0xFFF8FBFF),
-                        border = BorderStroke(
-                            1.dp,
-                            if (isDarkMode) Color.White.copy(alpha = 0.10f) else Color(0xFFD6E4F4)
-                        )
-                    ) {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = 8.dp, vertical = 5.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(6.dp)
-                        ) {
-                            Icon(
-                                imageVector = Icons.Filled.KeyboardArrowDown,
-                                contentDescription = null,
-                                tint = textColor.copy(alpha = 0.72f),
-                                modifier = Modifier.size(scaledIconSize(18.dp))
-                            )
-
-                            Text(
-                                text =
-                                    selectedBranch.ifBlank {
-                                        forumTr(
-                                            isEnglish,
-                                            "בחר סניף",
-                                            "Select branch"
-                                        )
-                                    },
-                                color = textColor,
-                                style =
-                                    KmiTypography.secondary,
-                                fontWeight =
-                                    FontWeight.SemiBold,
-                                textAlign =
-                                    forumTextAlign(
-                                        isEnglish
-                                    ),
-                                modifier =
-                                    Modifier.weight(1f),
-                                maxLines = 2
-                            )
-                        }
-                    }
-
-                    ExposedDropdownMenu(
-                        expanded = branchExpanded,
-                        onDismissRequest = { branchExpanded = false }
-                    ) {
-                        branches.forEach { branch ->
-                            DropdownMenuItem(
-                                text = {
-                                    Text(
-                                        text = branch,
-                                        style =
-                                            KmiTypography.secondary,
-                                        textAlign =
-                                            forumTextAlign(
-                                                isEnglish
-                                            ),
-                                        modifier =
-                                            Modifier.fillMaxWidth()
-                                    )
-                                },
-                                onClick = {
-                                    onBranchSelected(branch)
-                                    branchExpanded = false
-                                }
-                            )
-                        }
-                    }
-                }
-            }
-
-            if (groups.size > 1) {
-                ExposedDropdownMenuBox(
-                    expanded = groupExpanded,
-                    onExpandedChange = { groupExpanded = !groupExpanded }
-                ) {
-                    Surface(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .menuAnchor(),
-                        shape = RoundedCornerShape(14.dp),
-                        color = if (isDarkMode) Color(0xFF111B21) else Color(0xFFF8FBFF),
-                        border = BorderStroke(
-                            1.dp,
-                            if (isDarkMode) Color.White.copy(alpha = 0.10f) else Color(0xFFD6E4F4)
-                        )
-                    ) {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = 8.dp, vertical = 5.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(6.dp)
-                        ) {
-                            Icon(
-                                imageVector = Icons.Filled.KeyboardArrowDown,
-                                contentDescription = null,
-                                tint = textColor.copy(alpha = 0.72f),
-                                modifier = Modifier.size(scaledIconSize(18.dp))
-                            )
-
-                            Text(
-                                text =
-                                    selectedGroup.ifBlank {
-                                        forumTr(
-                                            isEnglish,
-                                            "בחר קבוצה",
-                                            "Select group"
-                                        )
-                                    },
-                                color = textColor,
-                                style =
-                                    KmiTypography.secondary,
-                                fontWeight =
-                                    FontWeight.SemiBold,
-                                textAlign =
-                                    forumTextAlign(
-                                        isEnglish
-                                    ),
-                                modifier =
-                                    Modifier.weight(1f),
-                                maxLines = 2
-                            )
-                        }
-                    }
-
-                    ExposedDropdownMenu(
-                        expanded = groupExpanded,
-                        onDismissRequest = { groupExpanded = false }
-                    ) {
-                        groups.forEach { group ->
-                            DropdownMenuItem(
-                                text = {
-                                    Text(
-                                        text = group,
-                                        style =
-                                            KmiTypography.secondary,
-                                        textAlign =
-                                            forumTextAlign(
-                                                isEnglish
-                                            ),
-                                        modifier =
-                                            Modifier.fillMaxWidth()
-                                    )
-                                },
-                                onClick = {
-                                    onGroupSelected(group)
-                                    groupExpanded = false
-                                }
-                            )
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
-
-@Composable
 private fun EmptyForumRoomCard(
     branch: String,
     groupKey: String,
-    isDarkMode: Boolean,
     isEnglish: Boolean
 ) {
     val align = forumTextAlign(isEnglish)
@@ -4605,14 +4000,16 @@ private fun EmptyForumRoomCard(
             .fillMaxWidth()
             .padding(vertical = 18.dp),
         shape = RoundedCornerShape(24.dp),
-        color = if (isDarkMode) {
-            Color(0xFF202C33).copy(alpha = 0.92f)
-        } else {
-            Color.White.copy(alpha = 0.96f)
-        },
+        color =
+            MaterialTheme.colorScheme.surface.copy(
+                alpha = 0.96f
+            ),
         border = BorderStroke(
-            1.dp,
-            if (isDarkMode) Color.White.copy(alpha = 0.10f) else Color(0xFFD6E4F4)
+            width = 1.dp,
+            color =
+                MaterialTheme.colorScheme.outline.copy(
+                    alpha = 0.52f
+                )
         ),
         tonalElevation = 0.dp,
         shadowElevation = 0.dp
@@ -4622,10 +4019,13 @@ private fun EmptyForumRoomCard(
                 .fillMaxWidth()
                 .background(
                     Brush.linearGradient(
-                        listOf(
-                            if (isDarkMode) Color.White.copy(alpha = 0.04f) else Color(0xFFEAF7FF),
-                            if (isDarkMode) Color.Transparent else Color.White
-                        )
+                        colors =
+                            listOf(
+                                MaterialTheme.colorScheme.surfaceVariant.copy(
+                                    alpha = 0.54f
+                                ),
+                                MaterialTheme.colorScheme.surface
+                            )
                     )
                 )
                 .padding(horizontal = 18.dp, vertical = 18.dp),
@@ -4634,10 +4034,16 @@ private fun EmptyForumRoomCard(
         ) {
             Surface(
                 shape = RoundedCornerShape(18.dp),
-                color = if (isDarkMode) Color.White.copy(alpha = 0.08f) else Color(0xFFE0F2FE),
+                color =
+                    MaterialTheme.colorScheme.primaryContainer.copy(
+                        alpha = 0.72f
+                    ),
                 border = BorderStroke(
-                    1.dp,
-                    if (isDarkMode) Color.White.copy(alpha = 0.10f) else Color(0xFFBAE6FD)
+                    width = 1.dp,
+                    color =
+                        MaterialTheme.colorScheme.primary.copy(
+                            alpha = 0.30f
+                        )
                 )
             ) {
                 Box(
@@ -4647,7 +4053,8 @@ private fun EmptyForumRoomCard(
                     Icon(
                         imageVector = Icons.Filled.Info,
                         contentDescription = null,
-                        tint = if (isDarkMode) Color(0xFFBFDBFE) else Color(0xFF0284C7),
+                        tint =
+                            MaterialTheme.colorScheme.primary,
                         modifier = Modifier.size(scaledIconSize(26.dp))
                     )
                 }
@@ -4660,11 +4067,7 @@ private fun EmptyForumRoomCard(
                     "No messages in this room yet"
                 ),
                 color =
-                    if (isDarkMode) {
-                        Color(0xFFE9EDEF)
-                    } else {
-                        Color(0xFF0F172A)
-                    },
+                    MaterialTheme.colorScheme.onSurface,
                 style = KmiTypography.sectionTitle,
                 textAlign = TextAlign.Center,
                 modifier = Modifier.fillMaxWidth()
@@ -4677,11 +4080,7 @@ private fun EmptyForumRoomCard(
                     "This forum is connected to the server. Messages sent here will be saved in the group room and shown to authorized participants."
                 ),
                 color =
-                    if (isDarkMode) {
-                        Color(0xFFBFC8CD)
-                    } else {
-                        Color(0xFF475569)
-                    },
+                    MaterialTheme.colorScheme.onSurfaceVariant,
                 style = KmiTypography.caption,
                 textAlign = align,
                 modifier = Modifier.fillMaxWidth()
@@ -4694,11 +4093,7 @@ private fun EmptyForumRoomCard(
                     "Branch: ${branch.ifBlank { "—" }}  •  Group: ${groupKey.ifBlank { "—" }}"
                 ),
                 color =
-                    if (isDarkMode) {
-                        Color(0xFF93C5FD)
-                    } else {
-                        Color(0xFF2563EB)
-                    },
+                    MaterialTheme.colorScheme.primary,
                 style = KmiTypography.secondary.copy(
                     fontWeight = FontWeight.SemiBold
                 ),
@@ -4708,57 +4103,3 @@ private fun EmptyForumRoomCard(
         }
     }
 }
-
-/* ========= עזר: למצוא הסבר אמיתי מתוך Explanations ========= */
-private fun findExplanationForHit(
-    belt: Belt,
-    rawItem: String,
-    topic: String,
-    isEnglish: Boolean
-): String {
-    val display = ExerciseTitleFormatter.displayName(rawItem).ifBlank { rawItem }.trim()
-
-    fun String.clean(): String = this
-        .replace('–', '-')    // en dash
-        .replace('־', '-')    // maqaf
-        .replace("  ", " ")
-        .trim()
-
-    val candidates = buildList {
-        add(rawItem)
-        add(display)
-        add(display.clean())
-        add(display.substringBefore("(").trim().clean())
-    }.distinct()
-
-    for (candidate in candidates) {
-        val got = Explanations.get(belt, candidate).trim()
-        if (got.isNotBlank()
-            && !got.startsWith("הסבר מפורט על")
-            && !got.startsWith("אין כרגע")
-        ) {
-            return if ("::" in got) got.substringAfter("::").trim() else got
-        }
-    }
-
-    return if (isEnglish) {
-        "There is currently no explanation for this exercise."
-    } else {
-        "אין כרגע הסבר לתרגיל הזה."
-    }
-}
-
-
-/* ========= עזר: ראשי תיבות לשם ========= */
-private fun String.toInitials(): String {
-    return this
-        .split(" ", "‏", "-", "–")
-        .mapNotNull { it.firstOrNull()?.toString() }
-        .take(2)
-        .joinToString("")
-        .ifBlank { "?" }
-}
-
-
-
-

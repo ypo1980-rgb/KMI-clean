@@ -29,6 +29,7 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
@@ -64,147 +65,14 @@ import androidx.compose.animation.core.tween
 import androidx.compose.ui.graphics.graphicsLayer
 import android.media.AudioManager
 import android.media.ToneGenerator
-import androidx.compose.foundation.border
-import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.navigationBarsPadding
 import il.kmi.app.ui.KmiIconSize
 import il.kmi.app.ui.KmiTypography
+import il.kmi.app.ui.loading.KmiLoadingRings
 import il.kmi.app.ui.scaledIconSize
 import il.yuval.ui.theme.kmiScreenBackgroundBrush
 
 //==================================================================
-
-@Composable
-private fun SubscriptionPremiumLoading(
-    text: String,
-    modifier: Modifier = Modifier
-) {
-    val transition =
-        rememberInfiniteTransition(
-            label = "subscriptionPremiumLoading"
-        )
-
-    val outerRotation by transition.animateFloat(
-        initialValue = 0f,
-        targetValue = 360f,
-        animationSpec =
-            infiniteRepeatable(
-                animation =
-                    tween(
-                        durationMillis = 1_250
-                    )
-            ),
-        label = "subscriptionOuterRing"
-    )
-
-    val innerRotation by transition.animateFloat(
-        initialValue = 360f,
-        targetValue = 0f,
-        animationSpec =
-            infiniteRepeatable(
-                animation =
-                    tween(
-                        durationMillis = 1_750
-                    )
-            ),
-        label = "subscriptionInnerRing"
-    )
-
-    Column(
-        modifier =
-            modifier
-                .fillMaxWidth()
-                .padding(vertical = 12.dp),
-        horizontalAlignment =
-            Alignment.CenterHorizontally,
-        verticalArrangement =
-            Arrangement.spacedBy(8.dp)
-    ) {
-        Box(
-            modifier = Modifier.size(58.dp),
-            contentAlignment = Alignment.Center
-        ) {
-            Box(
-                modifier =
-                    Modifier
-                        .size(58.dp)
-                        .graphicsLayer {
-                            rotationZ = outerRotation
-                        }
-                        .border(
-                            width = 4.dp,
-                            brush =
-                                Brush.sweepGradient(
-                                    listOf(
-                                        Color.Transparent,
-                                        Color(0xFFA855F7),
-                                        Color(0xFF38BDF8),
-                                        Color.Transparent
-                                    )
-                                ),
-                            shape = CircleShape
-                        )
-            )
-
-            Box(
-                modifier =
-                    Modifier
-                        .size(40.dp)
-                        .graphicsLayer {
-                            rotationZ = innerRotation
-                        }
-                        .border(
-                            width = 3.dp,
-                            brush =
-                                Brush.sweepGradient(
-                                    listOf(
-                                        Color.Transparent,
-                                        Color(0xFFF59E0B),
-                                        Color(0xFF22C55E),
-                                        Color.Transparent
-                                    )
-                                ),
-                            shape = CircleShape
-                        )
-            )
-
-            Box(
-                modifier =
-                    Modifier
-                        .size(14.dp)
-                        .background(
-                            color =
-                                MaterialTheme
-                                    .colorScheme
-                                    .surface,
-                            shape = CircleShape
-                        )
-                        .border(
-                            width = 1.dp,
-                            color =
-                                Color(0xFFA78BFA)
-                                    .copy(alpha = 0.55f),
-                            shape = CircleShape
-                        )
-            )
-        }
-
-        Text(
-            text = text,
-            color =
-                MaterialTheme
-                    .colorScheme
-                    .onSurfaceVariant,
-            style =
-                KmiTypography.secondary.copy(
-                    fontWeight =
-                        FontWeight.Bold
-                ),
-            textAlign = TextAlign.Center,
-            modifier = Modifier.fillMaxWidth()
-        )
-    }
-}
 
 private fun formatStorePriceNoTrailingZeros(raw: String): String {
     return raw
@@ -250,13 +118,6 @@ fun SubscriptionPlansScreen(
     val langManager = remember { il.kmi.shared.localization.AppLanguageManager(ctx) }
     val isEnglish = langManager.getCurrentLanguage() ==
             il.kmi.shared.localization.AppLanguage.ENGLISH
-
-    val layoutDirection =
-        if (isEnglish) {
-            androidx.compose.ui.unit.LayoutDirection.Ltr
-        } else {
-            androidx.compose.ui.unit.LayoutDirection.Rtl
-        }
 
     val userSp = remember {
         ctx.getSharedPreferences("kmi_user", android.content.Context.MODE_PRIVATE)
@@ -350,29 +211,30 @@ fun SubscriptionPlansScreen(
                 yearlyStorePrice != null
 
     DisposableEffect(userSp, subsSp, purchaseStartedFromPlans) {
-        val listener = android.content.SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
-            if (
-                purchaseStartedFromPlans &&
-                (
-                        key == "has_full_access" ||
-                                key == "full_access" ||
-                                key == "subscription_active" ||
-                                key == "is_subscribed" ||
-                                key == "sub_product" ||
-                                key == "sub_access_until" ||
-                                key == "access_changed_at"
-                        )
-            ) {
-                if (hasActiveSubscriptionInPrefs()) {
-                    purchasedProductIdForDialog =
-                        userSp.getString("sub_product", null)
-                            ?: subsSp.getString("sub_product", null)
+        val listener =
+            android.content.SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
+                if (
+                    purchaseStartedFromPlans &&
+                    (
+                            key == "has_full_access" ||
+                                    key == "full_access" ||
+                                    key == "subscription_active" ||
+                                    key == "is_subscribed" ||
+                                    key == "sub_product" ||
+                                    key == "sub_access_until" ||
+                                    key == "access_changed_at"
+                            )
+                ) {
+                    if (hasActiveSubscriptionInPrefs()) {
+                        purchasedProductIdForDialog =
+                            userSp.getString("sub_product", null)
+                                ?: subsSp.getString("sub_product", null)
 
-                    showPurchaseSuccessDialog = true
-                    purchaseStartedFromPlans = false
+                        showPurchaseSuccessDialog = true
+                        purchaseStartedFromPlans = false
+                    }
                 }
             }
-        }
 
         userSp.registerOnSharedPreferenceChangeListener(listener)
         subsSp.registerOnSharedPreferenceChangeListener(listener)
@@ -485,7 +347,10 @@ fun SubscriptionPlansScreen(
                             ),
                         modifier = Modifier.fillMaxWidth()
                     ) {
-                        SubscriptionPremiumLoading(
+                        KmiLoadingRings(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 12.dp),
                             text =
                                 if (isEnglish) {
                                     "Loading subscription prices from Google Play..."
@@ -591,7 +456,10 @@ fun SubscriptionPlansScreen(
                                 "ניתן לבטל בכל עת בהתאם למדיניות Google Play"
                             }
                         ),
-                    containerColor = Color(0xFF0EA5E9),
+                    containerColor =
+                        MaterialTheme.colorScheme.primary,
+                    contentColor =
+                        MaterialTheme.colorScheme.onPrimary,
                     showTrialBadge = false,
                     buyEnabled = monthlyBuyReady,
                     buyText = if (monthlyBuyReady) {
@@ -671,7 +539,10 @@ fun SubscriptionPlansScreen(
                                 "גישה לכל התכנים לאורך כל השנה"
                             }
                         ),
-                    containerColor = Color(0xFFFFA000),
+                    containerColor =
+                        MaterialTheme.colorScheme.tertiary,
+                    contentColor =
+                        MaterialTheme.colorScheme.onTertiary,
                     buyEnabled = yearlyBuyReady,
                     buyText = if (yearlyBuyReady) {
                         if (isEnglish) "Secure purchase" else "רכישה מאובטחת"
@@ -714,16 +585,18 @@ fun SubscriptionPlansScreen(
 
                 Spacer(modifier = Modifier.height(12.dp))
 
-                androidx.compose.material3.Surface(
+                Surface(
                     onClick = onBack,
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(66.dp),
-                    shape = RoundedCornerShape(22.dp),
-                    color = Color(0xFF1B2A3A),
+                        .heightIn(min = 54.dp),
+                    shape = RoundedCornerShape(18.dp),
+                    color =
+                        MaterialTheme.colorScheme.surfaceVariant,
                     border = BorderStroke(
                         width = 1.dp,
-                        color = Color(0xFF43D9F5)
+                        color =
+                            MaterialTheme.colorScheme.outlineVariant
                     ),
                     tonalElevation = 0.dp,
                     shadowElevation = 0.dp
@@ -744,7 +617,8 @@ fun SubscriptionPlansScreen(
                                     fontWeight =
                                         FontWeight.ExtraBold
                                 ),
-                            color = Color(0xFFD8E5F0),
+                            color =
+                                MaterialTheme.colorScheme.onSurfaceVariant,
                             textAlign = TextAlign.Center,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis
@@ -791,12 +665,43 @@ private fun PremiumPurchaseSuccessDialog(
         if (isEnglish) androidx.compose.ui.unit.LayoutDirection.Ltr
         else androidx.compose.ui.unit.LayoutDirection.Rtl
 
-    LaunchedEffect(Unit) {
-        runCatching {
-            ToneGenerator(AudioManager.STREAM_NOTIFICATION, 55).startTone(
-                ToneGenerator.TONE_PROP_ACK,
-                180
-            )
+    val dialogBackground =
+        MaterialTheme.colorScheme.surface
+
+    val dialogBackgroundVariant =
+        MaterialTheme.colorScheme.surfaceVariant
+
+    val dialogContent =
+        MaterialTheme.colorScheme.onSurface
+
+    val accentColor =
+        MaterialTheme.colorScheme.tertiary
+
+    val onAccentColor =
+        MaterialTheme.colorScheme.onTertiary
+
+    val badgeColor =
+        MaterialTheme.colorScheme.primary
+
+    val onBadgeColor =
+        MaterialTheme.colorScheme.onPrimary
+
+    DisposableEffect(Unit) {
+        val toneGenerator =
+            runCatching {
+                ToneGenerator(
+                    AudioManager.STREAM_NOTIFICATION,
+                    55
+                ).also {
+                    it.startTone(
+                        ToneGenerator.TONE_PROP_ACK,
+                        180
+                    )
+                }
+            }.getOrNull()
+
+        onDispose {
+            toneGenerator?.release()
         }
     }
 
@@ -839,9 +744,9 @@ private fun PremiumPurchaseSuccessDialog(
                 1.7.dp,
                 Brush.linearGradient(
                     listOf(
-                        Color(0xFFFFF1B8),
-                        Color(0xFFD4A017),
-                        Color(0xFFFFE7A3)
+                        accentColor.copy(alpha = 0.45f),
+                        accentColor,
+                        badgeColor.copy(alpha = 0.55f)
                     )
                 )
             ),
@@ -863,9 +768,9 @@ private fun PremiumPurchaseSuccessDialog(
                     .background(
                         Brush.verticalGradient(
                             listOf(
-                                Color(0xFF06111F),
-                                Color(0xFF0B1728),
-                                Color(0xFF050B14)
+                                dialogBackground,
+                                dialogBackgroundVariant,
+                                dialogBackground
                             )
                         )
                     )
@@ -874,8 +779,7 @@ private fun PremiumPurchaseSuccessDialog(
                 Text(
                     text = "✦   ✧   ✦   ✧",
                     color =
-                        Color(0xFFFFD978)
-                            .copy(alpha = 0.65f),
+                        accentColor.copy(alpha = 0.65f),
                     style = KmiTypography.action,
                     modifier =
                         Modifier
@@ -901,10 +805,10 @@ private fun PremiumPurchaseSuccessDialog(
                             .background(
                                 Brush.radialGradient(
                                     listOf(
-                                        Color(0xFFFFF1B8),
-                                        Color(0xFFE9B949),
-                                        Color(0xFF7A520E),
-                                        Color(0xFF101827)
+                                        MaterialTheme.colorScheme.tertiaryContainer,
+                                        accentColor,
+                                        MaterialTheme.colorScheme.primaryContainer,
+                                        dialogBackgroundVariant
                                     )
                                 ),
                                 CircleShape
@@ -923,9 +827,9 @@ private fun PremiumPurchaseSuccessDialog(
                             .background(
                                 Brush.horizontalGradient(
                                     listOf(
-                                        Color(0xFF7C3AED),
-                                        Color(0xFF2563EB),
-                                        Color(0xFF06B6D4)
+                                        badgeColor,
+                                        MaterialTheme.colorScheme.secondary,
+                                        MaterialTheme.colorScheme.tertiary
                                     )
                                 )
                             )
@@ -942,7 +846,7 @@ private fun PremiumPurchaseSuccessDialog(
                                     } else {
                                         "רכישה אושרה"
                                     },
-                                color = Color.White,
+                                color = onBadgeColor,
                                 fontWeight =
                                     FontWeight.ExtraBold,
                                 style =
@@ -952,7 +856,7 @@ private fun PremiumPurchaseSuccessDialog(
                             Icon(
                                 imageVector = Icons.Filled.CheckCircle,
                                 contentDescription = null,
-                                tint = Color.White,
+                                tint = onBadgeColor,
                                 modifier = Modifier.size(
                                     KmiIconSize.medium
                                 )
@@ -967,7 +871,7 @@ private fun PremiumPurchaseSuccessDialog(
                             } else {
                                 "ברכות!"
                             },
-                        color = Color(0xFFFFD978),
+                        color = accentColor,
                         fontWeight = FontWeight.Black,
                         style =
                             KmiTypography.screenTitle,
@@ -983,7 +887,7 @@ private fun PremiumPurchaseSuccessDialog(
                                 "הרכישה של $planLabel בוצעה בהצלחה. כעת ניתן להמשיך לתוכן."
                             },
                         color =
-                            Color.White.copy(
+                            dialogContent.copy(
                                 alpha = 0.93f
                             ),
                         fontWeight = FontWeight.Bold,
@@ -996,8 +900,8 @@ private fun PremiumPurchaseSuccessDialog(
                         onClick = onContinue,
                         shape = RoundedCornerShape(26.dp),
                         colors = ButtonDefaults.buttonColors(
-                            containerColor = Color(0xFFE9B949),
-                            contentColor = Color(0xFF111827)
+                            containerColor = accentColor,
+                            contentColor = onAccentColor
                         ),
                         modifier =
                             Modifier
@@ -1020,17 +924,17 @@ private fun PremiumPurchaseSuccessDialog(
                                             max = 64.dp
                                         )
                                         .graphicsLayer {
-                                        translationX = shimmer
-                                    }
-                                    .background(
-                                        Brush.horizontalGradient(
-                                            listOf(
-                                                Color.Transparent,
-                                                Color.White.copy(alpha = 0.42f),
-                                                Color.Transparent
+                                            translationX = shimmer
+                                        }
+                                        .background(
+                                            Brush.horizontalGradient(
+                                                listOf(
+                                                    Color.Transparent,
+                                                    onAccentColor.copy(alpha = 0.42f),
+                                                    Color.Transparent
+                                                )
                                             )
                                         )
-                                    )
                             )
 
                             Text(
@@ -1052,7 +956,9 @@ private fun PremiumPurchaseSuccessDialog(
                         modifier = Modifier
                             .fillMaxWidth()
                             .height(1.dp)
-                            .background(Color(0xFFFFD978).copy(alpha = 0.30f))
+                            .background(
+                                accentColor.copy(alpha = 0.30f)
+                            )
                     )
 
                     Row(
@@ -1072,7 +978,7 @@ private fun PremiumPurchaseSuccessDialog(
                                 } else {
                                     "רכישה מאובטחת • גישה מלאה לתכנים"
                                 },
-                            color = Color(0xFFFFD978),
+                            color = accentColor,
                             fontWeight = FontWeight.Bold,
                             style =
                                 KmiTypography.secondary,
@@ -1111,11 +1017,9 @@ private fun TariffCard(
         colors =
             CardDefaults.elevatedCardColors(
                 containerColor =
-                    if (isSystemInDarkTheme()) {
-                        Color(0xFF0B2344)
-                    } else {
-                        Color(0xFF111827)
-                    }
+                    MaterialTheme.colorScheme.surfaceVariant,
+                contentColor =
+                    MaterialTheme.colorScheme.onSurfaceVariant
             ),
         elevation =
             CardDefaults.elevatedCardElevation(
@@ -1147,7 +1051,8 @@ private fun TariffCard(
                             "תעריפון האפליקציה"
                         },
                     style = KmiTypography.sectionTitle,
-                    color = Color.White,
+                    color =
+                        MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.fillMaxWidth(),
                     textAlign = TextAlign.Center
                 )
@@ -1160,7 +1065,10 @@ private fun TariffCard(
                             "המחירים נטענים ישירות מ־Google Play."
                         },
                     style = KmiTypography.secondary,
-                    color = Color.White.copy(alpha = 0.82f),
+                    color =
+                        MaterialTheme.colorScheme
+                            .onSurfaceVariant
+                            .copy(alpha = 0.82f),
                     modifier = Modifier.fillMaxWidth(),
                     textAlign = TextAlign.Center
                 )
@@ -1170,7 +1078,9 @@ private fun TariffCard(
                     colors =
                         CardDefaults.cardColors(
                             containerColor =
-                                Color.White.copy(alpha = 0.08f)
+                                MaterialTheme.colorScheme.surface,
+                            contentColor =
+                                MaterialTheme.colorScheme.onSurface
                         ),
                     elevation =
                         CardDefaults.cardElevation(
@@ -1247,11 +1157,19 @@ private fun PremiumTariffRow(
     else androidx.compose.ui.unit.LayoutDirection.Rtl
     val labelAlign = if (isEnglish) TextAlign.Left else TextAlign.Right
 
-    val textColor = when {
-        isHeader -> Color.White
-        highlight -> Color(0xFF86EFAC)
-        else -> Color.White.copy(alpha = 0.96f)
-    }
+    val textColor =
+        when {
+            isHeader ->
+                MaterialTheme.colorScheme.onSurface
+
+            highlight ->
+                MaterialTheme.colorScheme.tertiary
+
+            else ->
+                MaterialTheme.colorScheme
+                    .onSurface
+                    .copy(alpha = 0.96f)
+        }
 
     val fontWeight =
         if (isHeader) {
@@ -1313,7 +1231,9 @@ private fun PremiumTariffDivider() {
         modifier = Modifier
             .fillMaxWidth()
             .height(1.dp)
-            .background(Color.White.copy(alpha = 0.10f))
+            .background(
+                MaterialTheme.colorScheme.outlineVariant
+            )
     )
 }
 
@@ -1462,6 +1382,7 @@ private fun PlanCard(
     priceLine: String,
     points: List<String>,
     containerColor: Color,
+    contentColor: Color,
     showTrialBadge: Boolean = false,
     buyEnabled: Boolean = true,
     buyText: String,
@@ -1536,7 +1457,7 @@ private fun PlanCard(
                     text = title,
                     style = KmiTypography.screenTitle,
                     fontWeight = FontWeight.ExtraBold,
-                    color = Color.White,
+                    color = contentColor,
                     textAlign = TextAlign.Center,
                     modifier = Modifier.fillMaxWidth()
                 )
@@ -1545,7 +1466,7 @@ private fun PlanCard(
                     text = priceLine,
                     style = KmiTypography.sectionTitle,
                     fontWeight = FontWeight.ExtraBold,
-                    color = Color.White,
+                    color = contentColor,
                     textAlign = TextAlign.Center,
                     modifier = Modifier.fillMaxWidth()
                 )
@@ -1564,7 +1485,7 @@ private fun PlanCard(
                                 Icon(
                                     imageVector = Icons.Filled.CheckCircle,
                                     contentDescription = null,
-                                    tint = Color.White.copy(alpha = 0.95f),
+                                    tint = contentColor.copy(alpha = 0.95f),
                                     modifier = Modifier.size(
                                         KmiIconSize.medium
                                     )
@@ -1574,7 +1495,7 @@ private fun PlanCard(
                                 Text(
                                     text = line,
                                     style = KmiTypography.body,
-                                    color = Color.White,
+                                    color = contentColor,
                                     textAlign = pointTextAlign,
                                     modifier = Modifier.weight(1f)
                                 )
@@ -1582,7 +1503,7 @@ private fun PlanCard(
                                 Text(
                                     text = line,
                                     style = KmiTypography.body,
-                                    color = Color.White,
+                                    color = contentColor,
                                     textAlign = pointTextAlign,
                                     modifier = Modifier.weight(1f)
                                 )
@@ -1591,7 +1512,7 @@ private fun PlanCard(
                                 Icon(
                                     imageVector = Icons.Filled.CheckCircle,
                                     contentDescription = null,
-                                    tint = Color.White.copy(alpha = 0.95f),
+                                    tint = contentColor.copy(alpha = 0.95f),
                                     modifier = Modifier.size(
                                         KmiIconSize.medium
                                     )
@@ -1608,9 +1529,9 @@ private fun PlanCard(
                     enabled = buyEnabled,
                     shape = RoundedCornerShape(24.dp),
                     colors = ButtonDefaults.buttonColors(
-                        containerColor = Color.White,
+                        containerColor = contentColor,
                         contentColor = containerColor,
-                        disabledContainerColor = Color.White.copy(alpha = 0.55f),
+                        disabledContainerColor = contentColor.copy(alpha = 0.55f),
                         disabledContentColor = containerColor.copy(alpha = 0.70f)
                     ),
                     modifier = Modifier

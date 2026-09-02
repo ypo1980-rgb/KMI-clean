@@ -89,7 +89,7 @@ fun MonthlyCalendarScreen(
     kmiPrefs: KmiPrefs,
     onBack: () -> Unit,
     onHome: () -> Unit,
-    mode: MonthlyCalendarMode = MonthlyCalendarMode.SUMMARY_DATE_PICKER,
+    mode: MonthlyCalendarMode = MonthlyCalendarMode.VIEW_ONLY,
     onDateClick: (
         date: LocalDate,
         branch: String,

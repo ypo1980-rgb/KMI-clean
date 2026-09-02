@@ -18,6 +18,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -40,6 +41,7 @@ import il.kmi.app.ui.KmiIconSize
 import il.kmi.app.ui.scaledIconSize
 import il.kmi.shared.localization.AppLanguage
 import il.kmi.shared.localization.AppLanguageManager
+import kotlin.time.Duration.Companion.seconds
 
 /**
  * האזנה לפקודה קולית ללא מסך מלא.
@@ -60,8 +62,13 @@ fun VoiceCommandListener(
     val currentOnCommand by rememberUpdatedState(onCommand)
     val currentOnDismiss by rememberUpdatedState(onDismiss)
 
+    val languageManager =
+        remember(context) {
+            AppLanguageManager(context)
+        }
+
     val isEnglish =
-        AppLanguageManager(context).getCurrentLanguage() ==
+        languageManager.getCurrentLanguage() ==
                 AppLanguage.ENGLISH
 
     var state by remember {
@@ -118,7 +125,11 @@ fun VoiceCommandListener(
 
                 Toast.makeText(
                     context,
-                    message,
+                    if (isEnglish) {
+                        "Voice recognition could not be completed"
+                    } else {
+                        "לא ניתן היה להשלים את הזיהוי הקולי"
+                    },
                     Toast.LENGTH_SHORT
                 ).show()
 
@@ -208,7 +219,7 @@ fun VoiceCommandListener(
             state == PushToTalkState.STARTING ||
             state == PushToTalkState.LISTENING
         ) {
-            delay(12_000L)
+            delay(12.seconds)
 
             if (
                 state == PushToTalkState.STARTING ||
@@ -235,6 +246,45 @@ fun VoiceCommandListener(
     val listening =
         state == PushToTalkState.STARTING ||
                 state == PushToTalkState.LISTENING
+
+    val microphoneTint =
+        when {
+            errorMessage != null ->
+                MaterialTheme.colorScheme.onError
+
+            state == PushToTalkState.PROCESSING ->
+                MaterialTheme.colorScheme.onPrimary
+
+            else ->
+                MaterialTheme.colorScheme.onSecondary
+        }
+
+    val microphoneDescription =
+        when {
+            errorMessage != null -> {
+                if (isEnglish) {
+                    "Voice recognition error"
+                } else {
+                    "שגיאה בזיהוי הקולי"
+                }
+            }
+
+            state == PushToTalkState.PROCESSING -> {
+                if (isEnglish) {
+                    "Processing voice command"
+                } else {
+                    "מעבד פקודה קולית"
+                }
+            }
+
+            else -> {
+                if (isEnglish) {
+                    "Listening"
+                } else {
+                    "מאזין"
+                }
+            }
+        }
 
     val infiniteTransition =
         rememberInfiniteTransition(
@@ -275,37 +325,38 @@ fun VoiceCommandListener(
                 ),
             shape = CircleShape,
             color = Color.Transparent,
-            shadowElevation = 18.dp
+            shadowElevation = 6.dp
         ) {
             Box(
                 modifier = Modifier
                     .fillMaxSize()
                     .background(
                         brush = Brush.radialGradient(
-                            colors = when {
-                                errorMessage != null -> {
-                                    listOf(
-                                        Color(0xFFEF4444),
-                                        Color(0xFFB91C1C)
-                                    )
-                                }
+                            colors =
+                                when {
+                                    errorMessage != null -> {
+                                        listOf(
+                                            MaterialTheme.colorScheme.error,
+                                            MaterialTheme.colorScheme.errorContainer
+                                        )
+                                    }
 
-                                state ==
-                                        PushToTalkState.PROCESSING -> {
-                                    listOf(
-                                        Color(0xFF8B5CF6),
-                                        Color(0xFF4F46E5)
-                                    )
-                                }
+                                    state ==
+                                            PushToTalkState.PROCESSING -> {
+                                        listOf(
+                                            MaterialTheme.colorScheme.primary,
+                                            MaterialTheme.colorScheme.primaryContainer
+                                        )
+                                    }
 
-                                else -> {
-                                    listOf(
-                                        Color(0xFF38BDF8),
-                                        Color(0xFF6366F1),
-                                        Color(0xFF7C3AED)
-                                    )
+                                    else -> {
+                                        listOf(
+                                            MaterialTheme.colorScheme.secondary,
+                                            MaterialTheme.colorScheme.primary,
+                                            MaterialTheme.colorScheme.tertiary
+                                        )
+                                    }
                                 }
-                            }
                         ),
                         shape = CircleShape
                     ),
@@ -313,12 +364,9 @@ fun VoiceCommandListener(
             ) {
                 Icon(
                     imageVector = Icons.Filled.Mic,
-                    contentDescription = if (isEnglish) {
-                        "Listening"
-                    } else {
-                        "מאזין"
-                    },
-                    tint = Color.White,
+                    contentDescription =
+                        microphoneDescription,
+                    tint = microphoneTint,
                     modifier = Modifier.size(
                         KmiIconSize.hero
                     )

@@ -359,8 +359,36 @@ fun NavGraphBuilder.legacyNavGraph(
     }
 
     composable(route = Route.MonthlyCalendar.route) {
+
+        val requestedMode =
+            nav.previousBackStackEntry
+                ?.savedStateHandle
+                ?.get<String>(
+                    "monthly_calendar_mode"
+                )
+
+        val calendarMode =
+            if (
+                requestedMode ==
+                "summary_date_picker"
+            ) {
+                il.kmi.app.screens.MonthlyCalendarMode.SUMMARY_DATE_PICKER
+            } else {
+                il.kmi.app.screens.MonthlyCalendarMode.VIEW_ONLY
+            }
+
         MonthlyCalendarScreen(
             kmiPrefs = kmiPrefs,
+
+            /*
+             * כניסה רגילה מהניווט:
+             * VIEW_ONLY — התאריך רק מציג את פרטי היום.
+             *
+             * כניסה מתוך מסך סיכום:
+             * SUMMARY_DATE_PICKER — התאריך משמש לבחירת
+             * יום עבור הסיכום.
+             */
+            mode = calendarMode,
 
             onBack = {
                 nav.popBackStack()
@@ -379,11 +407,17 @@ fun NavGraphBuilder.legacyNavGraph(
                 }
             },
 
-            onDateClick = { pickedDate,
-                            branch,
-                            group,
-                            timeText ->
+            onDateClick = {
+                    pickedDate,
+                    branch,
+                    group,
+                    timeText ->
 
+                /*
+                 * onDateClick מגיע לכאן רק כאשר
+                 * MonthlyCalendarScreen נמצא במצב
+                 * SUMMARY_DATE_PICKER.
+                 */
                 nav.currentBackStackEntry
                     ?.savedStateHandle
                     ?.apply {
