@@ -5108,6 +5108,7 @@ private fun TraineeMaterialStatusSelector(
 internal fun CoachMaterialStatusSelector(
     progress: CoachMaterialProgress,
     isEnglish: Boolean,
+    modifier: Modifier = Modifier,
     excluded: Boolean = false,
     isFav: Boolean = false,
     hasNote: Boolean = false,
@@ -5145,7 +5146,7 @@ internal fun CoachMaterialStatusSelector(
     )
 
     Row(
-        modifier = Modifier
+        modifier = modifier
             .fillMaxWidth()
             .height(IntrinsicSize.Min)
             .padding(

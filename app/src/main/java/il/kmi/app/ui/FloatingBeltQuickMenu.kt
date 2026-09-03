@@ -11,7 +11,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.FormatListBulleted
 import androidx.compose.material.icons.filled.Mic
-import androidx.compose.material.icons.filled.PictureAsPdf
 import androidx.compose.material.icons.automirrored.filled.ReceiptLong
 import androidx.compose.material.icons.filled.SportsMma
 import androidx.compose.material.icons.filled.Warning
@@ -385,6 +384,7 @@ fun FloatingQuickMenu(
     onPractice: () -> Unit = {},
     onSummary: () -> Unit,
     onVoice: () -> Unit,
+    @Suppress("UNUSED_PARAMETER")
     onPdf: () -> Unit
 ) {
     val ctx = LocalContext.current
@@ -464,8 +464,7 @@ fun FloatingQuickMenu(
         onAllLists,
         onPractice,
         onSummary,
-        onVoice,
-        onPdf
+        onVoice
     ) {
         buildList {
         add(
@@ -519,15 +518,6 @@ fun FloatingQuickMenu(
                     title = tr("עוזר קולי", "Voice Assistant"),
                     icon = Icons.Filled.Mic,
                     action = onVoice,
-                    isLocked = isMenuLocked
-                )
-            )
-
-            add(
-                QuickMenuItemUi(
-                    title = tr("חומרי PDF", "PDF Materials"),
-                    icon = Icons.Filled.PictureAsPdf,
-                    action = onPdf,
                     isLocked = isMenuLocked
                 )
             )
@@ -720,8 +710,15 @@ private fun PremiumQuickMenuPanel(
      * בחגורה כהה משתמשים בצבע הטקסט של ערכת הנושא,
      * כדי למנוע שחור על רקע שחור.
      */
+    val isBlackBeltInDarkMode =
+        isDarkMode &&
+                accentColor.luminance() < 0.08f
+
     val readableAccent =
         when {
+            isBlackBeltInDarkMode ->
+                Color.White
+
             accentColor == Belt.GREEN.color ->
                 kmiSuccessColor()
 
@@ -894,7 +891,7 @@ private fun PremiumQuickMenuPanel(
                     PremiumQuickMenuRow(
                         text = item.title,
                         icon = item.icon,
-                        accentColor = accentColor,
+                        accentColor = readableAccent,
                         textColor = readableAccent,
                         lockColor = quickMenuLockTint(),
                         isEnglish = isEnglish,

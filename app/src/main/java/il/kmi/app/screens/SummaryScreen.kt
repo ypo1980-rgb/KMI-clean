@@ -13,7 +13,6 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.Insights
-import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.*
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.runtime.*
@@ -26,6 +25,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.compositeOver
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.LocalContext
@@ -54,6 +54,7 @@ import kotlinx.coroutines.CancellationException
 import android.app.Activity
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.core.content.edit
 import androidx.core.graphics.withTranslation
 import il.kmi.shared.localization.AppLanguage
@@ -1180,14 +1181,35 @@ private fun CoachGroupsProgressCard(
     modifier: Modifier = Modifier,
     onClose: () -> Unit
 ) {
+    val colorScheme =
+        MaterialTheme.colorScheme
+
+    val isDarkMode =
+        colorScheme.background.luminance() < 0.5f
+
     val surfaceColor =
-        MaterialTheme.colorScheme.surface
+        colorScheme.surface
 
     val primaryTextColor =
-        MaterialTheme.colorScheme.onSurface
+        if (isDarkMode) {
+            Color.White
+        } else {
+            colorScheme.onSurface
+        }
 
     val secondaryTextColor =
-        MaterialTheme.colorScheme.onSurfaceVariant
+        if (isDarkMode) {
+            Color.White
+        } else {
+            colorScheme.onSurfaceVariant
+        }
+
+    val metricTextColor =
+        if (isDarkMode) {
+            Color.White
+        } else {
+            belt.color
+        }
 
     Surface(
         modifier = modifier,
@@ -1214,9 +1236,14 @@ private fun CoachGroupsProgressCard(
                         )
                     )
                 )
-                .padding(16.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(12.dp)
+                .padding(
+                    horizontal = 14.dp,
+                    vertical = 10.dp
+                ),
+            horizontalAlignment =
+                Alignment.CenterHorizontally,
+            verticalArrangement =
+                Arrangement.spacedBy(8.dp)
         ) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -1385,10 +1412,11 @@ private fun CoachGroupsProgressCard(
                             horizontalAlignment = Alignment.CenterHorizontally
                         ) {
                             Text(
-                                text = summary.groupsCount.toString(),
+                                text =
+                                    summary.groupsCount.toString(),
                                 style = KmiTypography.metric,
                                 fontWeight = FontWeight.Black,
-                                color = belt.color
+                                color = metricTextColor
                             )
 
                             Text(
@@ -1420,10 +1448,11 @@ private fun CoachGroupsProgressCard(
                             horizontalAlignment = Alignment.CenterHorizontally
                         ) {
                             Text(
-                                text = summary.totalTrainees.toString(),
+                                text =
+                                    summary.totalTrainees.toString(),
                                 style = KmiTypography.metric,
                                 fontWeight = FontWeight.Black,
-                                color = belt.color
+                                color = metricTextColor
                             )
 
                             Text(
@@ -1461,7 +1490,7 @@ private fun CoachGroupsProgressCard(
                                         .toString(),
                                 style = KmiTypography.metric,
                                 fontWeight = FontWeight.Black,
-                                color = belt.color
+                                color = metricTextColor
                             )
 
                             Text(
@@ -1488,11 +1517,15 @@ private fun CoachGroupsProgressCard(
                             } else {
                                 "המתאמנים עדיין לא שמרו נתוני התקדמות בחגורה זו."
                             },
-                        modifier = Modifier.fillMaxWidth(),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(bottom = 4.dp),
                         style = KmiTypography.caption,
                         fontWeight = FontWeight.SemiBold,
                         color = secondaryTextColor,
-                        textAlign = TextAlign.Center
+                        textAlign = TextAlign.Center,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis
                     )
                 } else if (
                     summary.traineesWithoutProgress > 0
@@ -1504,11 +1537,15 @@ private fun CoachGroupsProgressCard(
                             } else {
                                 "ל־${summary.traineesWithoutProgress} מתאמנים עדיין אין נתוני התקדמות בחגורה זו."
                             },
-                        modifier = Modifier.fillMaxWidth(),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(bottom = 4.dp),
                         style = KmiTypography.caption,
                         fontWeight = FontWeight.SemiBold,
                         color = secondaryTextColor,
-                        textAlign = TextAlign.Center
+                        textAlign = TextAlign.Center,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis
                     )
                 }
             }

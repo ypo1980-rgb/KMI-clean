@@ -3157,7 +3157,9 @@ fun SettingsListSection(
                         alpha = 0.50f
                     )
                 } else {
-                    Color.White.copy(alpha = 0.22f)
+                    MaterialTheme.colorScheme.outline.copy(
+                        alpha = 0.48f
+                    )
                 }
         ),
         modifier = Modifier.fillMaxWidth()
@@ -3171,21 +3173,21 @@ fun SettingsListSection(
                         colors =
                             if (isDarkMode) {
                                 listOf(
-                                    MaterialTheme.colorScheme.surfaceVariant,
-                                    MaterialTheme.colorScheme.surface,
-                                    MaterialTheme.colorScheme.surfaceVariant
+                                    MaterialTheme.colorScheme
+                                        .surfaceVariant,
+                                    MaterialTheme.colorScheme
+                                        .surface,
+                                    MaterialTheme.colorScheme
+                                        .surfaceVariant
                                 )
                             } else {
                                 listOf(
-                                    Color(0xFFF6F1FA).copy(
-                                        alpha = 0.98f
-                                    ),
-                                    Color(0xFFEAF5FB).copy(
-                                        alpha = 0.96f
-                                    ),
-                                    Color(0xFFF8F4EC).copy(
-                                        alpha = 0.94f
-                                    )
+                                    MaterialTheme.colorScheme
+                                        .surfaceVariant,
+                                    MaterialTheme.colorScheme
+                                        .secondaryContainer,
+                                    MaterialTheme.colorScheme
+                                        .surfaceVariant
                                 )
                             }
                     )
@@ -3338,29 +3340,34 @@ fun SettingsListItem(
                 .clip(rowShape)
                 .background(
                     Brush.horizontalGradient(
-                        colors = listOf(
-                            accentColor.copy(
-                                alpha = if (isDarkMode) {
-                                    0.18f
-                                } else {
-                                    0.08f
-                                }
-                            ),
-                            MaterialTheme.colorScheme.surface.copy(
-                                alpha = if (isDarkMode) {
-                                    0.72f
-                                } else {
-                                    0.10f
-                                }
-                            ),
-                            accentColor.copy(
-                                alpha = if (isDarkMode) {
-                                    0.10f
-                                } else {
-                                    0.04f
-                                }
-                            )
-                        )
+                        colors =
+                            if (isDarkMode) {
+                                listOf(
+                                    accentColor.copy(
+                                        alpha = 0.18f
+                                    ),
+                                    MaterialTheme.colorScheme
+                                        .surface.copy(
+                                            alpha = 0.72f
+                                        ),
+                                    accentColor.copy(
+                                        alpha = 0.10f
+                                    )
+                                )
+                            } else {
+                                listOf(
+                                    accentColor.copy(
+                                        alpha = 0.22f
+                                    ),
+                                    MaterialTheme.colorScheme
+                                        .surface.copy(
+                                            alpha = 0.96f
+                                        ),
+                                    accentColor.copy(
+                                        alpha = 0.12f
+                                    )
+                                )
+                            }
                     )
                 )
                 .clickable(

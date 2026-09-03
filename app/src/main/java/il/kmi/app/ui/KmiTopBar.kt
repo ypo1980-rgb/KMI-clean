@@ -89,6 +89,9 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import il.kmi.app.ui.assistant.ui.AiAssistantDialog
+import il.yuval.ui.theme.KmiQuickActionType
+import il.yuval.ui.theme.kmiQuickActionColors
+import il.yuval.ui.theme.kmiRolePillColors
 
 //===============================================================================
 
@@ -714,6 +717,27 @@ fun KmiTopBar(
     val topBarDividerColor =
         MaterialTheme.colorScheme.outline.copy(alpha = 0.45f)
 
+    val searchActionColors =
+        kmiQuickActionColors(KmiQuickActionType.SEARCH)
+
+    val homeActionColors =
+        kmiQuickActionColors(KmiQuickActionType.HOME)
+
+    val settingsActionColors =
+        kmiQuickActionColors(KmiQuickActionType.SETTINGS)
+
+    val statisticsActionColors =
+        kmiQuickActionColors(KmiQuickActionType.STATISTICS)
+
+    val assistantActionColors =
+        kmiQuickActionColors(KmiQuickActionType.ASSISTANT)
+
+    val guideActionColors =
+        kmiQuickActionColors(KmiQuickActionType.GUIDE)
+
+    val shareActionColors =
+        kmiQuickActionColors(KmiQuickActionType.SHARE)
+
     // ✅ טור האייקונים נפתח כ-overlay מעל המסך,
     // לכן ה-TopBar עצמו נשאר בגובה הכותרת בלבד.
     val quickActionsWidth = 68.dp
@@ -1253,22 +1277,21 @@ fun KmiTopBar(
                                 VerticalQuickActionItem(
                                     icon = Icons.Filled.Search,
                                     label = if (isEnglish) "Search" else "חיפוש",
-                                    tint = MaterialTheme.colorScheme.primary,
-                                    background =
-                                        MaterialTheme.colorScheme.primaryContainer,
+                                    tint = searchActionColors.content,
+                                    background = searchActionColors.background,
                                     enabled = !lockSearch,
                                     onClick = {
-                                            quickActionsExpanded = false
-                                            focusManager.clearFocus(force = true)
+                                        quickActionsExpanded = false
+                                        focusManager.clearFocus(force = true)
 
-                                            // אם מסך חיצוני רוצה להגיב לחיפוש — נשאיר לו אפשרות.
-                                            onSearch?.invoke()
+                                        // אם מסך חיצוני רוצה להגיב לחיפוש — נשאיר לו אפשרות.
+                                        onSearch?.invoke()
 
-                                            // החיפוש הגלובאלי האמיתי נפתח כאן.
-                                            globalSearchQuery = ""
-                                            showGlobalSearch = true
-                                        }
-                                    )
+                                        // החיפוש הגלובאלי האמיתי נפתח כאן.
+                                        globalSearchQuery = ""
+                                        showGlobalSearch = true
+                                    }
+                                )
 
                                 VerticalQuickActionItem(
                                     icon = Icons.Filled.Home,
@@ -1279,7 +1302,7 @@ fun KmiTopBar(
                                                 .onSurfaceVariant
                                                 .copy(alpha = 0.45f)
                                         } else {
-                                            MaterialTheme.colorScheme.primary
+                                            homeActionColors.content
                                         },
                                     background =
                                         if (lockHome) {
@@ -1287,25 +1310,25 @@ fun KmiTopBar(
                                                 .surfaceVariant
                                                 .copy(alpha = 0.45f)
                                         } else {
-                                            MaterialTheme.colorScheme.primaryContainer
+                                            homeActionColors.background
                                         },
                                     enabled = onHome != null,
-                                        onClick = {
-                                            if (lockHome) {
-                                                android.widget.Toast
-                                                    .makeText(
-                                                        ctx,
-                                                        homeDisabledToast ?: "אתה כבר במסך הבית 🙂",
-                                                        android.widget.Toast.LENGTH_SHORT
-                                                    )
-                                                    .show()
-                                            } else {
-                                                quickActionsExpanded = false
-                                                focusManager.clearFocus(force = true)
-                                                onHome?.invoke()
-                                            }
+                                    onClick = {
+                                        if (lockHome) {
+                                            android.widget.Toast
+                                                .makeText(
+                                                    ctx,
+                                                    homeDisabledToast ?: "אתה כבר במסך הבית 🙂",
+                                                    android.widget.Toast.LENGTH_SHORT
+                                                )
+                                                .show()
+                                        } else {
+                                            quickActionsExpanded = false
+                                            focusManager.clearFocus(force = true)
+                                            onHome?.invoke()
                                         }
-                                    )
+                                    }
+                                )
 
                                 VerticalQuickActionItem(
                                     icon = Icons.Filled.Settings,
@@ -1314,107 +1337,102 @@ fun KmiTopBar(
                                     } else {
                                         "הגדרות"
                                     },
-                                    tint = MaterialTheme.colorScheme.tertiary,
-                                    background =
-                                        MaterialTheme.colorScheme.tertiaryContainer,
+                                    tint = settingsActionColors.content,
+                                    background = settingsActionColors.background,
                                     enabled = showSettingsAllowed,
-                                        onClick = {
+                                    onClick = {
+                                        quickActionsExpanded = false
+                                        focusManager.clearFocus(
+                                            force = true
+                                        )
+
+                                        /*
+                                         * מסך שמארח את KmiTopBar יכול
+                                         * לסגור תחילה דיאלוג פעיל ורק
+                                         * לאחר מכן לפתוח את ההגדרות.
+                                         */
+                                        if (onSettings != null) {
+                                            onSettings()
+                                        } else {
+                                            DrawerBridge.openSettings()
+                                        }
+                                    }
+                                )
+
+                                VerticalQuickActionItem(
+                                    icon = Icons.Filled.BarChart,
+                                    label = if (isEnglish) "Stats" else "סטטיסטיקה",
+                                    tint = statisticsActionColors.content,
+                                    background = statisticsActionColors.background,
+                                    enabled = true,
+                                    onClick = {
+                                        quickActionsExpanded = false
+                                        focusManager.clearFocus(force = true)
+
+                                        if (onOpenProgress != null) {
+                                            onOpenProgress()
+                                        } else {
+                                            DrawerBridge.openProgress()
+                                        }
+                                    }
+                                )
+
+                                VerticalQuickActionItem(
+                                    icon = Icons.Filled.Lightbulb,
+                                    label = if (isEnglish) "AI" else "עוזר",
+                                    tint = assistantActionColors.content,
+                                    background = assistantActionColors.background,
+                                    enabled = !isInsideAssistant,
+                                    onClick = {
+                                        if (!isInsideAssistant) {
                                             quickActionsExpanded = false
                                             focusManager.clearFocus(
                                                 force = true
                                             )
 
-                                            /*
-                                             * מסך שמארח את KmiTopBar יכול
-                                             * לסגור תחילה דיאלוג פעיל ורק
-                                             * לאחר מכן לפתוח את ההגדרות.
-                                             */
-                                            if (onSettings != null) {
-                                                onSettings()
+                                            if (onOpenAi != null) {
+                                                onOpenAi()
                                             } else {
-                                                DrawerBridge.openSettings()
+                                                showAiDialog = true
                                             }
                                         }
-                                    )
-
-                                VerticalQuickActionItem(
-                                    icon = Icons.Filled.BarChart,
-                                    label = if (isEnglish) "Stats" else "סטטיסטיקה",
-                                    tint = MaterialTheme.colorScheme.secondary,
-                                    background =
-                                        MaterialTheme.colorScheme.secondaryContainer,
-                                    enabled = true,
-                                        onClick = {
-                                            quickActionsExpanded = false
-                                            focusManager.clearFocus(force = true)
-
-                                            if (onOpenProgress != null) {
-                                                onOpenProgress()
-                                            } else {
-                                                DrawerBridge.openProgress()
-                                            }
-                                        }
-                                    )
-
-                                VerticalQuickActionItem(
-                                    icon = Icons.Filled.Lightbulb,
-                                    label = if (isEnglish) "AI" else "עוזר",
-                                    tint = MaterialTheme.colorScheme.primary,
-                                    background =
-                                        MaterialTheme.colorScheme.primaryContainer,
-                                    enabled = !isInsideAssistant,
-                                        onClick = {
-                                            if (!isInsideAssistant) {
-                                                quickActionsExpanded = false
-                                                focusManager.clearFocus(
-                                                    force = true
-                                                )
-
-                                                if (onOpenAi != null) {
-                                                    onOpenAi()
-                                                } else {
-                                                    showAiDialog = true
-                                                }
-                                            }
-                                        }
-                                    )
+                                    }
+                                )
 
                                 if (showBottomHelp) {
                                     VerticalQuickActionItem(
                                         icon = Icons.AutoMirrored.Filled.HelpOutline,
                                         label = if (isEnglish) "Guide" else "הדרכה",
-                                        tint = MaterialTheme.colorScheme.secondary,
-                                        background =
-                                            MaterialTheme.colorScheme.secondaryContainer,
+                                        tint = guideActionColors.content,
+                                        background = guideActionColors.background,
                                         enabled = true,
-                                            onClick = {
-                                                quickActionsExpanded = false
-                                                focusManager.clearFocus(force = true)
+                                        onClick = {
+                                            quickActionsExpanded = false
+                                            focusManager.clearFocus(force = true)
 
-                                                val opened = OnboardingBridge.open()
+                                            val opened = OnboardingBridge.open()
 
-                                                if (!opened) {
-                                                    android.widget.Toast.makeText(
-                                                        ctx,
-                                                        if (isEnglish) {
-                                                            "The app guide is not available yet"
-                                                        } else {
-                                                            "מסך ההדרכה עדיין לא מחובר"
-                                                        },
-                                                        android.widget.Toast.LENGTH_SHORT
-                                                    ).show()
-                                                }
+                                            if (!opened) {
+                                                android.widget.Toast.makeText(
+                                                    ctx,
+                                                    if (isEnglish) {
+                                                        "The app guide is not available yet"
+                                                    } else {
+                                                        "מסך ההדרכה עדיין לא מחובר"
+                                                    },
+                                                    android.widget.Toast.LENGTH_SHORT
+                                                ).show()
                                             }
-                                        )
-                                    }
+                                        }
+                                    )
+                                }
 
                                 if (showBottomShare) {
                                     VerticalQuickActionItem(
                                         icon = Icons.Filled.Share,
                                         label = if (isEnglish) "Share" else "שתף",
-                                        tint = MaterialTheme.colorScheme.tertiary,
-                                        background =
-                                            MaterialTheme.colorScheme.tertiaryContainer,
+                                        tint = shareActionColors.content,
+                                        background = shareActionColors.background,
                                         enabled = true,
                                         onClick = {
                                             quickActionsExpanded = false
@@ -2428,19 +2446,16 @@ private fun RoleInlinePill(
     isCoach: Boolean,
     isEnglish: Boolean
 ) {
+    val roleColors =
+        kmiRolePillColors(
+            isCoach = isCoach
+        )
+
     val backgroundColor =
-        if (isCoach) {
-            MaterialTheme.colorScheme.primaryContainer
-        } else {
-            MaterialTheme.colorScheme.secondaryContainer
-        }
+        roleColors.background
 
     val accentColor =
-        if (isCoach) {
-            MaterialTheme.colorScheme.primary
-        } else {
-            MaterialTheme.colorScheme.secondary
-        }
+        roleColors.content
 
     val label =
         when {
@@ -2462,7 +2477,7 @@ private fun RoleInlinePill(
             backgroundColor.copy(
                 alpha = 0.94f
             ),
-        contentColor = MaterialTheme.colorScheme.onSurface,
+        contentColor = accentColor,
         shape = RoundedCornerShape(999.dp),
         shadowElevation = 1.dp,
         border = BorderStroke(
@@ -2476,7 +2491,7 @@ private fun RoleInlinePill(
         Text(
             text = label,
             textAlign = TextAlign.Center,
-            color = Color.White,
+            color = accentColor,
             style =
                 KmiTypography.caption.copy(
                     fontWeight =

@@ -159,6 +159,108 @@ fun kmiSectionHeaderBrush(): Brush {
 }
 
 /**
+ * רקע גלובלי ייעודי לסרגל הצד.
+ *
+ * הרקע מובחן מרקע המסכים הרגיל, אך נשען על צבעי
+ * ערכת הנושא ואינו מגדיר צבעים מקומיים בסרגל.
+ */
+@Composable
+fun kmiDrawerBackgroundBrush(): Brush {
+    val isDarkMode =
+        MaterialTheme.colorScheme.background
+            .luminance() < 0.5f
+
+    val graniteColors =
+        if (isDarkMode) {
+            listOf(
+                Color(0xFF071A2A),
+                Color(0xFF163B55),
+                Color(0xFF344F63),
+                Color(0xFF102F47),
+                Color(0xFF061521)
+            )
+        } else {
+            listOf(
+                Color(0xFFF1F4F7),
+                Color(0xFFB8C4CF),
+                Color(0xFFDDE3E9),
+                Color(0xFF9EAFBD),
+                Color(0xFFE9EEF2)
+            )
+        }
+
+    return Brush.linearGradient(
+        colors = graniteColors
+    )
+}
+
+/**
+ * סוגי כרטיסי התפקיד בסרגל הצד.
+ */
+enum class KmiDrawerRoleType {
+    TRAINEE,
+    COACH,
+    MANAGER
+}
+
+data class KmiDrawerRoleColors(
+    val background: Brush,
+    val content: Color,
+    val border: Color
+)
+
+/**
+ * צבעים קבועים לכרטיסי התפקיד בסרגל הצד.
+ *
+ * הצבעים אינם משתנים בין Light ו־Dark ואינם תלויים
+ * בחגורה או בערכת הצבעים הפעילה.
+ */
+fun kmiDrawerRoleColors(
+    type: KmiDrawerRoleType
+): KmiDrawerRoleColors {
+    return when (type) {
+        KmiDrawerRoleType.TRAINEE ->
+            KmiDrawerRoleColors(
+                background = Brush.verticalGradient(
+                    colors = listOf(
+                        Color(0xFFDCEEFF),
+                        Color(0xFF9AC7EF),
+                        Color(0xFF5A9FD6)
+                    )
+                ),
+                content = Color(0xFF0B2942),
+                border = Color(0xFF347FB8)
+            )
+
+        KmiDrawerRoleType.COACH ->
+            KmiDrawerRoleColors(
+                background = Brush.verticalGradient(
+                    colors = listOf(
+                        Color(0xFFE8DDF7),
+                        Color(0xFFC6B4E1),
+                        Color(0xFFA58FC8)
+                    )
+                ),
+                content = Color(0xFF302044),
+                border = Color(0xFF7D61A5)
+            )
+
+        KmiDrawerRoleType.MANAGER ->
+            KmiDrawerRoleColors(
+                background = Brush.verticalGradient(
+                    colors = listOf(
+                        Color(0xFFD9F3E4),
+                        Color(0xFF8FD3AC),
+                        Color(0xFF48A877)
+                    )
+                ),
+                content = Color(0xFF123B27),
+                border = Color(0xFF27845A)
+            )
+    }
+}
+
+/**
  * צבע הטקסט והאייקונים בכותרות המשנה העליונות.
  *
  * הרקע של הכותרת תמיד כהה ולכן הצבע נשאר לבן
@@ -221,6 +323,56 @@ fun kmiOnSuccessContainerColor(): Color {
 }
 
 /**
+ * צבע אזהרה גלובלי.
+ *
+ * משמש לספירה לאחור, התראה ומצב שדורש תשומת לב.
+ */
+@Composable
+fun kmiWarningColor(): Color {
+    val isDarkMode =
+        MaterialTheme.colorScheme.background
+            .luminance() < 0.5f
+
+    return if (isDarkMode) {
+        Color(0xFFFDBA74)
+    } else {
+        Color(0xFFC2410C)
+    }
+}
+
+/**
+ * רקע גלובלי לרכיבי אזהרה.
+ */
+@Composable
+fun kmiWarningContainerColor(): Color {
+    val isDarkMode =
+        MaterialTheme.colorScheme.background
+            .luminance() < 0.5f
+
+    return if (isDarkMode) {
+        Color(0xFF431407)
+    } else {
+        Color(0xFFFFEDD5)
+    }
+}
+
+/**
+ * צבע תוכן גלובלי מעל רקע אזהרה.
+ */
+@Composable
+fun kmiOnWarningContainerColor(): Color {
+    val isDarkMode =
+        MaterialTheme.colorScheme.background
+            .luminance() < 0.5f
+
+    return if (isDarkMode) {
+        Color(0xFFFFEDD5)
+    } else {
+        Color(0xFF7C2D12)
+    }
+}
+
+/**
  * גרדיאנט הגרניט הגלובלי לכפתורי הפעולה התחתונים.
  *
  * זהו הגרדיאנט הסגול־כחול־תכלת המקורי.
@@ -261,6 +413,145 @@ fun kmiBeltColor(
         Belt.BLUE -> Color(0xFF1565C0)
         Belt.BROWN -> Color(0xFF6D4C41)
         Belt.BLACK -> Color(0xFF111111)
+    }
+}
+
+enum class KmiQuickActionType {
+    SEARCH,
+    HOME,
+    SETTINGS,
+    STATISTICS,
+    ASSISTANT,
+    GUIDE,
+    SHARE
+}
+
+data class KmiQuickActionColors(
+    val background: Color,
+    val content: Color
+)
+
+/**
+ * צבעי הפעולות בסרגל האייקונים.
+ *
+ * לכל פעולה נשמר צבע מזוהה ועקבי ב־Light וב־Dark.
+ */
+@Composable
+fun kmiQuickActionColors(
+    type: KmiQuickActionType
+): KmiQuickActionColors {
+    val isDarkMode =
+        MaterialTheme.colorScheme.background
+            .luminance() < 0.5f
+
+    return if (isDarkMode) {
+        when (type) {
+            KmiQuickActionType.SEARCH ->
+                KmiQuickActionColors(
+                    background = Color(0xFF312E81),
+                    content = Color(0xFFC4B5FD)
+                )
+
+            KmiQuickActionType.HOME ->
+                KmiQuickActionColors(
+                    background = Color(0xFF172554),
+                    content = Color(0xFF93C5FD)
+                )
+
+            KmiQuickActionType.SETTINGS ->
+                KmiQuickActionColors(
+                    background = Color(0xFF4C0519),
+                    content = Color(0xFFFDA4AF)
+                )
+
+            KmiQuickActionType.STATISTICS ->
+                KmiQuickActionColors(
+                    background = Color(0xFF042F2E),
+                    content = Color(0xFF5EEAD4)
+                )
+
+            KmiQuickActionType.ASSISTANT ->
+                KmiQuickActionColors(
+                    background = Color(0xFF422006),
+                    content = Color(0xFFFCD34D)
+                )
+
+            KmiQuickActionType.GUIDE ->
+                KmiQuickActionColors(
+                    background = Color(0xFF1E1B4B),
+                    content = Color(0xFFA5B4FC)
+                )
+
+            KmiQuickActionType.SHARE ->
+                KmiQuickActionColors(
+                    background = Color(0xFF500724),
+                    content = Color(0xFFF9A8D4)
+                )
+        }
+    } else {
+        when (type) {
+            KmiQuickActionType.SEARCH ->
+                KmiQuickActionColors(
+                    background = Color(0xFFEDE9FE),
+                    content = Color(0xFF6D28D9)
+                )
+
+            KmiQuickActionType.HOME ->
+                KmiQuickActionColors(
+                    background = Color(0xFFDBEAFE),
+                    content = Color(0xFF2563EB)
+                )
+
+            KmiQuickActionType.SETTINGS ->
+                KmiQuickActionColors(
+                    background = Color(0xFFFFE4E6),
+                    content = Color(0xFFBE123C)
+                )
+
+            KmiQuickActionType.STATISTICS ->
+                KmiQuickActionColors(
+                    background = Color(0xFFCCFBF1),
+                    content = Color(0xFF0F766E)
+                )
+
+            KmiQuickActionType.ASSISTANT ->
+                KmiQuickActionColors(
+                    background = Color(0xFFFEF3C7),
+                    content = Color(0xFFB45309)
+                )
+
+            KmiQuickActionType.GUIDE ->
+                KmiQuickActionColors(
+                    background = Color(0xFFE0E7FF),
+                    content = Color(0xFF4338CA)
+                )
+
+            KmiQuickActionType.SHARE ->
+                KmiQuickActionColors(
+                    background = Color(0xFFFCE7F3),
+                    content = Color(0xFFBE185D)
+                )
+        }
+    }
+}
+
+/**
+ * צבעי תג מצב מאמן/מתאמן.
+ */
+@Composable
+fun kmiRolePillColors(
+    isCoach: Boolean
+): KmiQuickActionColors {
+    return if (isCoach) {
+        KmiQuickActionColors(
+            background = MaterialTheme.colorScheme.primaryContainer,
+            content = MaterialTheme.colorScheme.onPrimaryContainer
+        )
+    } else {
+        KmiQuickActionColors(
+            background = MaterialTheme.colorScheme.secondaryContainer,
+            content = MaterialTheme.colorScheme.onSecondaryContainer
+        )
     }
 }
 

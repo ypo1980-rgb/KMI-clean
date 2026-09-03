@@ -68,8 +68,9 @@ import com.google.firebase.firestore.Query
 import com.google.firebase.firestore.ktx.firestore
 import com.google.firebase.ktx.Firebase
 import il.kmi.app.ui.KmiTypography
-import il.kmi.app.ui.pdf.KmiPdfHeader
+import il.kmi.app.ui.pdf.KmiPdfDirection
 import il.kmi.app.ui.pdf.KmiPdfFooter
+import il.kmi.app.ui.pdf.KmiPdfHeader
 import java.text.SimpleDateFormat
 import java.util.Locale
 import java.util.concurrent.TimeUnit
@@ -171,11 +172,7 @@ private fun createAdminDiagnosticsPdf(
         color = darkText
         textSize = 15f
         typeface = boldTypeface
-        textAlign = if (isEnglish) {
-            android.graphics.Paint.Align.LEFT
-        } else {
-            android.graphics.Paint.Align.RIGHT
-        }
+        textAlign = KmiPdfDirection.textAlign(isEnglish)
     }
 
     val bodyPaint = android.graphics.Paint(
@@ -184,11 +181,7 @@ private fun createAdminDiagnosticsPdf(
         color = darkText
         textSize = 10.5f
         typeface = regularTypeface
-        textAlign = if (isEnglish) {
-            android.graphics.Paint.Align.LEFT
-        } else {
-            android.graphics.Paint.Align.RIGHT
-        }
+        textAlign = KmiPdfDirection.textAlign(isEnglish)
     }
 
     val bodyBoldPaint = android.graphics.Paint(
@@ -197,11 +190,7 @@ private fun createAdminDiagnosticsPdf(
         color = darkText
         textSize = 11f
         typeface = boldTypeface
-        textAlign = if (isEnglish) {
-            android.graphics.Paint.Align.LEFT
-        } else {
-            android.graphics.Paint.Align.RIGHT
-        }
+        textAlign = KmiPdfDirection.textAlign(isEnglish)
     }
 
     val smallPaint = android.graphics.Paint(
@@ -228,12 +217,17 @@ private fun createAdminDiagnosticsPdf(
     }
 
     var pageNumber = 0
+    var totalPages = 1
     lateinit var page: android.graphics.pdf.PdfDocument.Page
     lateinit var canvas: android.graphics.Canvas
     var y = 0f
 
     fun textX(): Float {
-        return if (isEnglish) contentLeft else contentRight
+        return KmiPdfDirection.startX(
+            isEnglish = isEnglish,
+            left = contentLeft,
+            right = contentRight
+        )
     }
 
     fun cleanText(value: String): String {
@@ -335,7 +329,7 @@ private fun createAdminDiagnosticsPdf(
             pageWidth = pageWidth,
             pageHeight = pageHeight,
             pageNumber = pageNumber,
-            totalPages = null,
+            totalPages = totalPages,
             isEnglish = isEnglish
         )
     }
@@ -370,11 +364,7 @@ private fun createAdminDiagnosticsPdf(
         ensureSpace(28f)
 
         sectionPaint.textAlign =
-            if (isEnglish) {
-                android.graphics.Paint.Align.LEFT
-            } else {
-                android.graphics.Paint.Align.RIGHT
-            }
+            KmiPdfDirection.textAlign(isEnglish)
 
         canvas.drawText(
             value,
@@ -478,7 +468,12 @@ private fun createAdminDiagnosticsPdf(
 
         canvas.drawText(
             (index + 1).toString(),
-            if (isEnglish) contentLeft + 18f else contentRight - 18f,
+            KmiPdfDirection.startPaddingX(
+                isEnglish = isEnglish,
+                left = contentLeft,
+                right = contentRight,
+                padding = 18f
+            ),
             rowTop + 17f,
             numberPaint
         )
@@ -494,16 +489,23 @@ private fun createAdminDiagnosticsPdf(
 
         canvas.drawText(
             screen.count.toString(),
-            if (isEnglish) contentRight - 28f else contentLeft + 28f,
+            KmiPdfDirection.endPaddingX(
+                isEnglish = isEnglish,
+                left = contentLeft,
+                right = contentRight,
+                padding = 28f
+            ),
             rowTop + 17f,
             countPaint
         )
 
-        val nameX = if (isEnglish) {
-            contentLeft + 42f
-        } else {
-            contentRight - 42f
-        }
+        val nameX =
+            KmiPdfDirection.startPaddingX(
+                isEnglish = isEnglish,
+                left = contentLeft,
+                right = contentRight,
+                padding = 42f
+            )
 
         val maxWidth = contentRight - contentLeft - 110f
 
@@ -524,8 +526,10 @@ private fun createAdminDiagnosticsPdf(
         y = rowBottom + 6f
     }
 
-    fun drawLogCard(log: AdminDiagnosticLog) {
-        val titleLines = splitLines(
+    fun logTitleLines(
+        log: AdminDiagnosticLog
+    ): List<String> {
+        return splitLines(
             value = log.title.ifBlank {
                 log.type.ifBlank {
                     if (isEnglish) "Log event" else "אירוע לוג"
@@ -535,13 +539,22 @@ private fun createAdminDiagnosticsPdf(
             maxWidth = contentRight - contentLeft - 24f,
             maxLines = 2
         )
+    }
 
-        val messageLines = splitLines(
+    fun logMessageLines(
+        log: AdminDiagnosticLog
+    ): List<String> {
+        return splitLines(
             value = log.message,
             paint = bodyPaint,
             maxWidth = contentRight - contentLeft - 24f,
             maxLines = 5
         )
+    }
+
+    fun drawLogCard(log: AdminDiagnosticLog) {
+        val titleLines = logTitleLines(log)
+        val messageLines = logMessageLines(log)
 
         val metadataText = buildString {
             append(
@@ -659,11 +672,13 @@ private fun createAdminDiagnosticsPdf(
             statusPaint
         )
 
-        val innerX = if (isEnglish) {
-            contentLeft + 14f
-        } else {
-            contentRight - 14f
-        }
+        val innerX =
+            KmiPdfDirection.startPaddingX(
+                isEnglish = isEnglish,
+                left = contentLeft,
+                right = contentRight,
+                padding = 14f
+            )
 
         var textY = rowTop + 19f
 
@@ -683,11 +698,8 @@ private fun createAdminDiagnosticsPdf(
             isEnglish = isEnglish
         )
 
-        smallPaint.textAlign = if (isEnglish) {
-            android.graphics.Paint.Align.LEFT
-        } else {
-            android.graphics.Paint.Align.RIGHT
-        }
+        smallPaint.textAlign =
+            KmiPdfDirection.textAlign(isEnglish)
 
         canvas.drawText(
             timeText,
@@ -727,6 +739,105 @@ private fun createAdminDiagnosticsPdf(
         y = rowBottom + 8f
     }
 
+    fun calculateTotalPages(): Int {
+        var simulatedPages = 1
+        var simulatedY = KmiPdfHeader.CONTENT_TOP
+
+        fun simulateSpace(requiredHeight: Float) {
+            if (simulatedY + requiredHeight > contentBottom) {
+                simulatedPages++
+                simulatedY = KmiPdfHeader.CONTENT_TOP
+            }
+        }
+
+        fun simulateSectionTitle() {
+            simulateSpace(28f)
+            simulatedY += 20f
+        }
+
+        fun simulateLogCard(log: AdminDiagnosticLog) {
+            val titleLines = logTitleLines(log)
+            val messageLines = logMessageLines(log)
+
+            val metadataText = buildString {
+                append(
+                    if (isEnglish) {
+                        "Area: ${log.area.ifBlank { "-" }}"
+                    } else {
+                        "אזור: ${log.area.ifBlank { "-" }}"
+                    }
+                )
+
+                if (log.userRole.isNotBlank()) {
+                    append("  |  ")
+                    append(
+                        if (isEnglish) {
+                            "Role: ${log.userRole}"
+                        } else {
+                            "תפקיד: ${log.userRole}"
+                        }
+                    )
+                }
+
+                if (log.appVersion.isNotBlank()) {
+                    append("  |  ")
+                    append(
+                        if (isEnglish) {
+                            "Version: ${log.appVersion}"
+                        } else {
+                            "גרסה: ${log.appVersion}"
+                        }
+                    )
+                }
+            }
+
+            val metadataLines = splitLines(
+                value = metadataText,
+                paint = smallPaint,
+                maxWidth = contentRight - contentLeft - 24f,
+                maxLines = 2
+            )
+
+            val requiredHeight =
+                28f +
+                        titleLines.size * 14f +
+                        messageLines.size * 13f +
+                        metadataLines.size * 12f +
+                        22f
+
+            simulateSpace(requiredHeight + 8f)
+            simulatedY += requiredHeight + 8f
+        }
+
+        simulateSectionTitle()
+
+        /*
+         * שתי שורות כרטיסי הסיכום.
+         */
+        simulatedY += 66f
+        simulatedY += 74f
+
+        if (topScreens.isNotEmpty()) {
+            simulateSectionTitle()
+
+            topScreens.take(10).forEach {
+                simulateSpace(32f)
+                simulatedY += 32f
+            }
+
+            simulatedY += 8f
+        }
+
+        simulateSectionTitle()
+
+        logs.forEach { log ->
+            simulateLogCard(log)
+        }
+
+        return simulatedPages
+    }
+
+    totalPages = calculateTotalPages()
     startPage()
 
     drawSectionTitle(
@@ -741,11 +852,25 @@ private fun createAdminDiagnosticsPdf(
     val summaryCardWidth =
         (contentRight - contentLeft - summaryGap * 2f) / 3f
 
+    fun summaryCardLeft(
+        logicalIndex: Int
+    ): Float {
+        val visualIndex =
+            if (isEnglish) {
+                logicalIndex
+            } else {
+                2 - logicalIndex
+            }
+
+        return contentLeft +
+                (summaryCardWidth + summaryGap) * visualIndex
+    }
+
     drawSummaryCard(
         title = if (isEnglish) "Events" else "אירועים",
         value = logs.size,
         color = infoBlue,
-        left = contentLeft,
+        left = summaryCardLeft(0),
         top = y,
         width = summaryCardWidth
     )
@@ -754,7 +879,7 @@ private fun createAdminDiagnosticsPdf(
         title = if (isEnglish) "Errors" else "שגיאות",
         value = errorCount,
         color = errorRed,
-        left = contentLeft + summaryCardWidth + summaryGap,
+        left = summaryCardLeft(1),
         top = y,
         width = summaryCardWidth
     )
@@ -763,7 +888,7 @@ private fun createAdminDiagnosticsPdf(
         title = if (isEnglish) "Logins" else "כניסות",
         value = loginCount,
         color = successGreen,
-        left = contentLeft + (summaryCardWidth + summaryGap) * 2f,
+        left = summaryCardLeft(2),
         top = y,
         width = summaryCardWidth
     )
@@ -774,7 +899,7 @@ private fun createAdminDiagnosticsPdf(
         title = if (isEnglish) "No results" else "ללא תוצאה",
         value = searchNoResultsCount,
         color = warningOrange,
-        left = contentLeft,
+        left = summaryCardLeft(0),
         top = y,
         width = summaryCardWidth
     )
@@ -783,7 +908,7 @@ private fun createAdminDiagnosticsPdf(
         title = if (isEnglish) "Successes" else "הצלחות",
         value = successCount,
         color = successGreen,
-        left = contentLeft + summaryCardWidth + summaryGap,
+        left = summaryCardLeft(1),
         top = y,
         width = summaryCardWidth
     )
@@ -792,7 +917,7 @@ private fun createAdminDiagnosticsPdf(
         title = if (isEnglish) "Screens" else "מסכים",
         value = topScreens.size,
         color = infoBlue,
-        left = contentLeft + (summaryCardWidth + summaryGap) * 2f,
+        left = summaryCardLeft(2),
         top = y,
         width = summaryCardWidth
     )

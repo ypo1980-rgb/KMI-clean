@@ -7,11 +7,11 @@ import android.content.Context
 import android.content.Intent
 import android.graphics.Canvas
 import android.graphics.Paint
-import android.graphics.Path
 import android.graphics.Typeface
 import android.graphics.pdf.PdfDocument
 import android.widget.Toast
 import androidx.core.content.FileProvider
+import androidx.core.content.edit
 import java.io.File
 import java.io.FileOutputStream
 import java.text.SimpleDateFormat
@@ -49,11 +49,9 @@ import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.StarBorder
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -61,7 +59,6 @@ import androidx.compose.material3.OutlinedCard
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
@@ -75,7 +72,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLayoutDirection
@@ -91,18 +87,20 @@ import il.kmi.app.domain.color
 import il.kmi.app.favorites.FavoritesStore
 import il.kmi.app.ui.KmiTopBar
 import il.kmi.app.ui.KmiTypography
+import il.kmi.app.ui.dialogs.ExerciseExplanationDialog
+import il.kmi.app.ui.pdf.KmiPdfDirection
+import il.kmi.app.ui.pdf.KmiPdfFooter
+import il.kmi.app.ui.pdf.KmiPdfHeader
 import il.kmi.shared.domain.Belt
+import il.yuval.ui.theme.kmiScreenBackgroundBrush
 import il.kmi.shared.domain.content.ExerciseIdentityRegistry
+import il.kmi.shared.domain.content.ExerciseTitlesEn
 import il.kmi.shared.domain.content.HardSectionsResolver
 import il.kmi.shared.localization.AppLanguage
 import il.kmi.shared.localization.LocalizationRuntime
 
 
 //=========================================================================
-
-private val subjectScreenGradientTop = Color(0xFFF2F0FA)
-private val subjectScreenGradientMid = Color(0xFFF7F8FC)
-private val subjectScreenGradientBottom = Color(0xFFFDFDFE)
 
 private fun shareUnifiedSubjectExercisesPdf(
     context: Context,
@@ -175,19 +173,17 @@ private fun createUnifiedSubjectExercisesPdf(
 ): File {
     val pageWidth = 595
     val pageHeight = 842
-    val margin = 28f
-    val contentTop = 166f
-    val footerTop = 804f
-    val contentBottom = footerTop - 14f
+    val margin = 34f
+    val contentTop = KmiPdfHeader.CONTENT_TOP
+    val contentBottom =
+        pageHeight -
+                KmiPdfFooter.CONTENT_BOTTOM_PADDING
 
     fun tr(he: String, en: String): String =
         if (isEnglish) en else he
 
     val document = PdfDocument()
 
-    val navy = android.graphics.Color.rgb(2, 43, 74)
-    val mediumBlue = android.graphics.Color.rgb(36, 103, 158)
-    val lightBlue = android.graphics.Color.rgb(128, 183, 220)
     val textDark = android.graphics.Color.rgb(15, 23, 42)
     val textMuted = android.graphics.Color.rgb(100, 116, 139)
     val rowBackground = android.graphics.Color.rgb(246, 250, 253)
@@ -203,7 +199,8 @@ private fun createUnifiedSubjectExercisesPdf(
         size: Float,
         color: Int = textDark,
         bold: Boolean = false,
-        align: Paint.Align = Paint.Align.RIGHT
+        align: Paint.Align =
+            KmiPdfDirection.textAlign(isEnglish)
     ): Paint {
         return Paint(Paint.ANTI_ALIAS_FLAG).apply {
             textSize = size
@@ -223,43 +220,6 @@ private fun createUnifiedSubjectExercisesPdf(
             Belt.BLACK -> android.graphics.Color.rgb(31, 41, 55)
             else -> textMuted
         }
-    }
-
-    fun drawKmiLogo(
-        canvas: Canvas,
-        cx: Float,
-        cy: Float,
-        radius: Float
-    ) {
-        canvas.drawCircle(
-            cx,
-            cy,
-            radius,
-            Paint(Paint.ANTI_ALIAS_FLAG).apply {
-                color = navy
-            }
-        )
-
-        canvas.drawCircle(
-            cx,
-            cy,
-            radius - 4f,
-            Paint(Paint.ANTI_ALIAS_FLAG).apply {
-                color = android.graphics.Color.WHITE
-            }
-        )
-
-        canvas.drawText(
-            "KAMI",
-            cx,
-            cy + radius * 0.22f,
-            textPaint(
-                size = radius * 0.62f,
-                color = navy,
-                bold = true,
-                align = Paint.Align.CENTER
-            )
-        )
     }
 
     fun fitText(
@@ -289,178 +249,41 @@ private fun createUnifiedSubjectExercisesPdf(
         return "${shortened.trimEnd()}…"
     }
 
-    fun drawHeader(canvas: Canvas) {
-        canvas.drawColor(android.graphics.Color.WHITE)
+    fun drawHeader(
+        canvas: Canvas
+    ) {
+        val generatedDate =
+            SimpleDateFormat(
+                "dd/MM/yyyy",
+                Locale.getDefault()
+            ).format(Date())
 
-        val headerBottom = 122f
-
-        canvas.drawPath(
-            Path().apply {
-                moveTo(pageWidth.toFloat(), 0f)
-                lineTo(pageWidth.toFloat(), headerBottom)
-                lineTo(178f, headerBottom)
-                lineTo(238f, 0f)
-                close()
-            },
-            Paint(Paint.ANTI_ALIAS_FLAG).apply {
-                color = navy
-            }
-        )
-
-        canvas.drawPath(
-            Path().apply {
-                moveTo(208f, headerBottom)
-                lineTo(224f, headerBottom)
-                lineTo(284f, 0f)
-                lineTo(268f, 0f)
-                close()
-            },
-            Paint(Paint.ANTI_ALIAS_FLAG).apply {
-                color = mediumBlue
-            }
-        )
-
-        canvas.drawPath(
-            Path().apply {
-                moveTo(230f, headerBottom)
-                lineTo(238f, headerBottom)
-                lineTo(298f, 0f)
-                lineTo(290f, 0f)
-                close()
-            },
-            Paint(Paint.ANTI_ALIAS_FLAG).apply {
-                color = lightBlue
-            }
-        )
-
-        drawKmiLogo(
+        KmiPdfHeader.draw(
+            context = context,
             canvas = canvas,
-            cx = 78f,
-            cy = 58f,
-            radius = 42f
-        )
-
-        val headerAlign =
-            if (isEnglish) Paint.Align.LEFT else Paint.Align.RIGHT
-
-        val headerX =
-            if (isEnglish) 308f else 435f
-
-        canvas.drawText(
-            tr("תרגילים לפי נושא", "Exercises by Topic"),
-            headerX,
-            50f,
-            textPaint(
-                size = 27f,
-                color = android.graphics.Color.WHITE,
-                bold = true,
-                align = headerAlign
-            )
-        )
-
-        canvas.drawText(
-            fitText(
-                raw = title,
-                paint = textPaint(
-                    size = 13f,
-                    color = android.graphics.Color.WHITE,
-                    align = headerAlign
-                ),
-                maxWidth = 260f
-            ),
-            headerX,
-            77f,
-            textPaint(
-                size = 13f,
-                color = android.graphics.Color.WHITE,
-                align = headerAlign
-            )
-        )
-
-        canvas.drawText(
-            tr("תאריך הפקה:", "Generated:") + " " +
-                    SimpleDateFormat(
-                        "dd/MM/yyyy",
-                        Locale.getDefault()
-                    ).format(Date()),
-            pageWidth - 34f,
-            142f,
-            textPaint(
-                size = 9f,
-                color = textMuted,
-                align = Paint.Align.RIGHT
-            )
+            pageWidth = pageWidth,
+            isEnglish = isEnglish,
+            titleHebrew = "תרגילים לפי נושא",
+            titleEnglish = "Exercises by Topic",
+            subtitleHebrew = title,
+            subtitleEnglish = title,
+            generatedDate = generatedDate
         )
     }
+
 
     fun drawFooter(
         canvas: Canvas,
         pageNumber: Int,
         totalPages: Int
     ) {
-        canvas.drawLine(
-            0f,
-            footerTop,
-            pageWidth.toFloat(),
-            footerTop,
-            Paint(Paint.ANTI_ALIAS_FLAG).apply {
-                color = navy
-                strokeWidth = 2f
-            }
-        )
-
-        drawKmiLogo(
+        KmiPdfFooter.draw(
             canvas = canvas,
-            cx = 38f,
-            cy = footerTop + 22f,
-            radius = 13f
-        )
-
-        canvas.drawText(
-            "Together We Protect",
-            62f,
-            footerTop + 25f,
-            textPaint(
-                size = 8f,
-                color = textMuted,
-                align = Paint.Align.LEFT
-            )
-        )
-
-        canvas.drawText(
-            tr(
-                "עמוד $pageNumber מתוך $totalPages",
-                "Page $pageNumber of $totalPages"
-            ),
-            pageWidth / 2f,
-            footerTop + 25f,
-            textPaint(
-                size = 8f,
-                color = textMuted,
-                align = Paint.Align.CENTER
-            )
-        )
-
-        canvas.drawText(
-            "Krav Maga Israel",
-            pageWidth - 32f,
-            footerTop + 18f,
-            textPaint(
-                size = 8f,
-                color = textMuted,
-                align = Paint.Align.RIGHT
-            )
-        )
-
-        canvas.drawText(
-            "www.kmi.org.il",
-            pageWidth - 32f,
-            footerTop + 31f,
-            textPaint(
-                size = 8f,
-                color = textMuted,
-                align = Paint.Align.RIGHT
-            )
+            pageWidth = pageWidth,
+            pageHeight = pageHeight,
+            pageNumber = pageNumber,
+            totalPages = totalPages,
+            isEnglish = isEnglish
         )
     }
 
@@ -591,10 +414,15 @@ private fun createUnifiedSubjectExercisesPdf(
             )
 
             val titleAlign =
-                if (isEnglish) Paint.Align.LEFT else Paint.Align.RIGHT
+                KmiPdfDirection.textAlign(isEnglish)
 
             val titleX =
-                if (isEnglish) margin + 16f else pageWidth - margin - 16f
+                KmiPdfDirection.startPaddingX(
+                    isEnglish = isEnglish,
+                    left = margin,
+                    right = pageWidth - margin,
+                    padding = 16f
+                )
 
             canvas.drawText(
                 beltTitle(row.belt, isEnglish),
@@ -613,21 +441,19 @@ private fun createUnifiedSubjectExercisesPdf(
                     "${row.count} תרגילים",
                     "${row.count} exercises"
                 ),
-                if (isEnglish) {
-                    pageWidth - margin - 16f
-                } else {
-                    margin + 16f
-                },
+                KmiPdfDirection.endPaddingX(
+                    isEnglish = isEnglish,
+                    left = margin,
+                    right = pageWidth - margin,
+                    padding = 16f
+                ),
                 y + 22f,
                 textPaint(
                     size = 10f,
                     color = android.graphics.Color.WHITE,
                     bold = true,
-                    align = if (isEnglish) {
-                        Paint.Align.RIGHT
-                    } else {
-                        Paint.Align.LEFT
-                    }
+                    align =
+                        KmiPdfDirection.endTextAlign(isEnglish)
                 )
             )
 
@@ -660,7 +486,16 @@ private fun createUnifiedSubjectExercisesPdf(
             )
 
             val accentX =
-                if (isEnglish) margin else pageWidth - margin - 4f
+                KmiPdfDirection.startX(
+                    isEnglish = isEnglish,
+                    left = margin,
+                    right = pageWidth - margin
+                ) -
+                        if (isEnglish) {
+                            0f
+                        } else {
+                            4f
+                        }
 
             canvas.drawRoundRect(
                 accentX,
@@ -675,10 +510,15 @@ private fun createUnifiedSubjectExercisesPdf(
             )
 
             val itemAlign =
-                if (isEnglish) Paint.Align.LEFT else Paint.Align.RIGHT
+                KmiPdfDirection.textAlign(isEnglish)
 
             val itemX =
-                if (isEnglish) margin + 16f else pageWidth - margin - 16f
+                KmiPdfDirection.startPaddingX(
+                    isEnglish = isEnglish,
+                    left = margin,
+                    right = pageWidth - margin,
+                    padding = 16f
+                )
 
             val itemPaint = textPaint(
                 size = 11.5f,
@@ -704,11 +544,12 @@ private fun createUnifiedSubjectExercisesPdf(
 
             canvas.drawText(
                 (index + 1).toString(),
-                if (isEnglish) {
-                    pageWidth - margin - 22f
-                } else {
-                    margin + 22f
-                },
+                KmiPdfDirection.endPaddingX(
+                    isEnglish = isEnglish,
+                    left = margin,
+                    right = pageWidth - margin,
+                    padding = 22f
+                ),
                 y + 29f,
                 textPaint(
                     size = 9f,
@@ -731,15 +572,16 @@ private fun createUnifiedSubjectExercisesPdf(
         mkdirs()
     }
 
-    val safeTitle = title
-        .replace(Regex("[^\\p{L}\\p{N}_-]+"), "_")
-        .trim('_')
-        .take(48)
-        .ifBlank { "exercises_by_topic" }
+    val fileName =
+        if (isEnglish) {
+            "Exercises by Topic.pdf"
+        } else {
+            "תרגילים לפי נושא.pdf"
+        }
 
     val file = File(
         directory,
-        "${safeTitle}_${System.currentTimeMillis()}.pdf"
+        fileName
     )
 
     try {
@@ -844,13 +686,7 @@ fun UnifiedSubjectExercisesScreen(
                 .fillMaxSize()
                 .padding(padding)
                 .background(
-                    brush = Brush.verticalGradient(
-                        colors = listOf(
-                            subjectScreenGradientTop,
-                            subjectScreenGradientMid,
-                            subjectScreenGradientBottom
-                        )
-                    )
+                    brush = kmiScreenBackgroundBrush()
                 )
         ) {
             if (combinedDefenseGroups != null) {
@@ -933,6 +769,7 @@ private fun resultTitle(
         is HardSectionsResolver.NodeResult.Sections -> {
             result.title ?: subjectRootTitle(subjectId)
         }
+
         is HardSectionsResolver.NodeResult.BeltGroups -> result.title
         null -> subjectRootTitle(subjectId)
     }
@@ -1329,9 +1166,7 @@ private fun BeltGroupsContent(
     }
 
     fun hardStatusKeysFor(
-        belt: Belt,
-        topic: String,
-        rawItem: String
+        topic: String
     ): List<String> {
         return listOf(topic, "כללי")
             .map { value -> normalizeStatusPart(value) }
@@ -1346,14 +1181,11 @@ private fun BeltGroupsContent(
     fun setHardLocalStatus(
         belt: Belt,
         topic: String,
-        rawItem: String,
         statusId: String,
         value: Boolean?
     ) {
         hardStatusKeysFor(
-            belt = belt,
-            topic = topic,
-            rawItem = rawItem
+            topic = topic
         ).forEach { key ->
             val masteredKey = "mastered_${belt.id}_${key}"
             val unknownKey = "unknown_${belt.id}_${key}"
@@ -1381,10 +1213,10 @@ private fun BeltGroupsContent(
                 }
             }
 
-            prefs.edit()
-                .putStringSet(masteredKey, masteredSet)
-                .putStringSet(unknownKey, unknownSet)
-                .apply()
+            prefs.edit {
+                putStringSet(masteredKey, masteredSet)
+                putStringSet(unknownKey, unknownSet)
+            }
         }
     }
 
@@ -1400,7 +1232,7 @@ private fun BeltGroupsContent(
 
                 var valueFromVm: Boolean? = null
 
-                for (key in hardStatusKeysFor(group.belt, title, rawItem)) {
+                for (key in hardStatusKeysFor(title)) {
                     val directStatus: Boolean? = try {
                         vm.getItemStatusNullable(
                             belt = group.belt,
@@ -1430,12 +1262,14 @@ private fun BeltGroupsContent(
                 }
 
                 if (valueFromVm == null) {
-                    for (key in hardStatusKeysFor(group.belt, title, rawItem)) {
+                    for (key in hardStatusKeysFor(title)) {
                         val masteredKey = "mastered_${group.belt.id}_${key}"
                         val unknownKey = "unknown_${group.belt.id}_${key}"
 
-                        val masteredSet = prefs.getStringSet(masteredKey, emptySet<String>()) ?: emptySet()
-                        val unknownSet = prefs.getStringSet(unknownKey, emptySet<String>()) ?: emptySet()
+                        val masteredSet =
+                            prefs.getStringSet(masteredKey, emptySet<String>()) ?: emptySet()
+                        val unknownSet =
+                            prefs.getStringSet(unknownKey, emptySet<String>()) ?: emptySet()
 
                         val localValue: Boolean? = when {
                             masteredSet.contains(statusId) -> true
@@ -1477,35 +1311,6 @@ private fun BeltGroupsContent(
             topic = topic,
             rawItem = rawItem
         )
-    }
-
-    val allHardItems: List<Triple<Belt, String, String>> = remember(groups, title) {
-        groups.flatMap { group: HardSectionsResolver.BeltItems ->
-            hardItemsOf(group).map { rawItem: String ->
-                Triple(group.belt, title, rawItem)
-            }
-        }
-    }
-
-    val hardTotalCount = allHardItems.size
-
-    val hardKnownCount = allHardItems.count { (belt, topic, rawItem) ->
-        val statusId = hardStatusIdFor(belt, topic, rawItem)
-        hardItemStates[statusId] == true
-    }
-
-    val hardUnknownCount = allHardItems.count { (belt, topic, rawItem) ->
-        val statusId = hardStatusIdFor(belt, topic, rawItem)
-        hardItemStates[statusId] == false
-    }
-
-    val hardUnmarkedCount = allHardItems.count { (belt, topic, rawItem) ->
-        val statusId = hardStatusIdFor(belt, topic, rawItem)
-        hardItemStates[statusId] == null
-    }
-
-    val hardFavoriteCount = allHardItems.count { (belt, topic, rawItem) ->
-        hardFavoriteIdFor(belt, topic, rawItem) in favoriteIds
     }
 
     var selectedExercise by remember { mutableStateOf<SelectedHardExercise?>(null) }
@@ -1655,9 +1460,7 @@ private fun BeltGroupsContent(
                         hardItemStates[statusId] = nextValue
 
                         hardStatusKeysFor(
-                            belt = belt,
-                            topic = title,
-                            rawItem = rawItem
+                            topic = title
                         ).forEach { key ->
                             vm.setItemStatusNullable(
                                 belt = belt,
@@ -1670,7 +1473,6 @@ private fun BeltGroupsContent(
                         setHardLocalStatus(
                             belt = belt,
                             topic = title,
-                            rawItem = rawItem,
                             statusId = statusId,
                             value = nextValue
                         )
@@ -1688,80 +1490,66 @@ private fun BeltGroupsContent(
                     }
                 )
 
-                HardExerciseRowCard(
-                    exerciseNumber = rowIndex + 1,
-                    belt = belt,
-                    item = displayItem,
-                    mastered = mastered,
-                    isFavorite = isFavorite,
-                    isEnglish = isEnglish,
-                    onStatusClick = {
-                        // הקוד הקיים
-                    },
-                    onToggleFavorite = {
-                        // הקוד הקיים
-                    },
-                    onInfoClick = {
-                        // הקוד הקיים
-                    }
-                )
             }
         }
     }
 
     selectedExercise?.let { selected ->
-        val explanation = remember(selected.belt, selected.rawItem) {
-            val raw = Explanations.get(selected.belt, selected.rawItem).trim()
-            if (raw.isBlank()) {
-                if (isEnglish) {
-                    "There is no explanation for this exercise yet."
-                } else {
-                    "אין כרגע הסבר לתרגיל הזה."
-                }
-            } else {
-                if ("::" in raw) raw.substringAfter("::").trim() else raw
-            }
-        }
+        val explanation =
+            remember(
+                selected.belt,
+                selected.rawItem,
+                isEnglish
+            ) {
+                val raw =
+                    Explanations
+                        .get(
+                            selected.belt,
+                            selected.rawItem
+                        )
+                        .trim()
 
-        AlertDialog(
-            onDismissRequest = { selectedExercise = null },
-            title = {
-                Text(
-                    text = selected.displayItem,
-                    style = KmiTypography.cardTitle,
-                    textAlign =
-                        if (isEnglish) {
-                            TextAlign.Left
-                        } else {
-                            TextAlign.Right
-                        },
-                    modifier = Modifier.fillMaxWidth()
-                )
-            },
-            text = {
-                Text(
-                    text = explanation,
-                    style = KmiTypography.body,
-                    textAlign =
-                        if (isEnglish) {
-                            TextAlign.Left
-                        } else {
-                            TextAlign.Right
-                        },
-                    modifier = Modifier.fillMaxWidth()
-                )
-            },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        selectedExercise = null
+                if (raw.isBlank()) {
+                    if (isEnglish) {
+                        "There is no explanation for this exercise yet."
+                    } else {
+                        "אין כרגע הסבר לתרגיל הזה."
                     }
-                ) {
-                    Text(
-                        text = if (isEnglish) "Close" else "סגור",
-                        style = KmiTypography.action
-                    )
+                } else {
+                    if ("::" in raw) {
+                        raw.substringAfter("::").trim()
+                    } else {
+                        raw
+                    }
                 }
+            }
+
+        val favoriteId =
+            hardFavoriteIdFor(
+                belt = selected.belt,
+                topic = selected.topic,
+                rawItem = selected.rawItem
+            )
+
+        ExerciseExplanationDialog(
+            title = selected.displayItem,
+            beltLabel =
+                beltTitle(
+                    belt = selected.belt,
+                    isEnglish = isEnglish
+                ),
+            explanation = explanation,
+            noteText = "",
+            isFavorite = favoriteId in favoriteIds,
+            accentColor = selected.belt.color,
+            isEnglish = isEnglish,
+            onDismiss = {
+                selectedExercise = null
+            },
+            onEditNote = {},
+            onDeleteNote = {},
+            onToggleFavorite = {
+                FavoritesStore.toggle(favoriteId)
             }
         )
     }
@@ -1941,205 +1729,6 @@ private fun HardBeltStickyHeader(
 }
 
 @Composable
-private fun BeltSectionCard(
-    group: HardSectionsResolver.BeltItems,
-    title: String,
-    isEnglish: Boolean,
-    hardItemStates: Map<String, Boolean?>,
-    favoriteIds: Set<String>,
-    statusIdFor: (belt: Belt, topic: String, rawItem: String) -> String,
-    favoriteIdFor: (belt: Belt, topic: String, rawItem: String) -> String,
-    onToggleFavorite: (belt: Belt, topic: String, rawItem: String) -> Unit,
-    onStatusClick: (belt: Belt, topic: String, rawItem: String) -> Unit,
-    onInfoClick: (belt: Belt, topic: String, rawItem: String, displayItem: String) -> Unit
-) {
-    val rawItems: List<String> = hardItemsForGroup(group)
-
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(22.dp),
-        colors = CardDefaults.cardColors(
-            containerColor = group.belt.color.copy(alpha = 0.07f)
-        ),
-        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(14.dp)
-        ) {
-            Surface(
-                tonalElevation = 2.dp,
-                shape = RoundedCornerShape(16.dp),
-                color = group.belt.color.copy(alpha = 0.18f)
-            ) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 12.dp, vertical = 8.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        text = beltTitle(group.belt, isEnglish),
-                        style = KmiTypography.sectionTitle,
-                        textAlign =
-                            if (isEnglish) {
-                                TextAlign.Left
-                            } else {
-                                TextAlign.Right
-                            },
-                        modifier = Modifier.weight(1f)
-                    )
-
-                    Text(
-                        text =
-                            if (isEnglish) {
-                                if (rawItems.size == 1) {
-                                    "1 exercise"
-                                } else {
-                                    "${rawItems.size} exercises"
-                                }
-                            } else {
-                                "${rawItems.size} תרגילים"
-                            },
-                        style = KmiTypography.secondary.copy(
-                            fontWeight = FontWeight.Bold
-                        ),
-                        color = group.belt.color,
-                        maxLines = 1
-                    )
-                }
-            }
-
-            Spacer(Modifier.height(8.dp))
-
-            val groupTotalCount = rawItems.size
-
-            val groupKnownCount = rawItems.count { rawItem: String ->
-                hardItemStates[statusIdFor(group.belt, title, rawItem)] == true
-            }
-
-            val groupUnknownCount = rawItems.count { rawItem: String ->
-                hardItemStates[statusIdFor(group.belt, title, rawItem)] == false
-            }
-
-            val groupFavoriteCount = rawItems.count { rawItem: String ->
-                favoriteIdFor(group.belt, title, rawItem) in favoriteIds
-            }
-
-            val groupUnmarkedCount = rawItems.count { rawItem: String ->
-                hardItemStates[statusIdFor(group.belt, title, rawItem)] == null
-            }
-
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .horizontalScroll(rememberScrollState())
-                    .padding(top = 4.dp, bottom = 8.dp),
-                horizontalArrangement = Arrangement.spacedBy(6.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                HardTopStatChip(
-                    value = groupTotalCount.toString(),
-                    label = if (isEnglish) "Exercises" else "תרגילים",
-                    containerColor = Color(0xFF98A2B3)
-                )
-
-                HardTopStatChip(
-                    value = groupKnownCount.toString(),
-                    label = if (isEnglish) "Known" else "יודע",
-                    containerColor = Color(0xFF7ACB88)
-                )
-
-                HardTopStatChip(
-                    value = groupUnknownCount.toString(),
-                    label = if (isEnglish) "Unknown" else "לא יודע",
-                    containerColor = Color(0xFFF1A97A)
-                )
-
-                HardTopStatChip(
-                    value = groupFavoriteCount.toString(),
-                    label = if (isEnglish) "Favorites" else "מועדפים",
-                    containerColor = Color(0xFFE7A3B5)
-                )
-
-                HardTopStatChip(
-                    value = groupUnmarkedCount.toString(),
-                    label = if (isEnglish) "Unmarked" else "לא סומן",
-                    containerColor = Color(0xFF8596C9)
-                )
-            }
-
-            var lastSectionTitle: String? = null
-
-            rawItems.forEachIndexed { index: Int, rawItem: String ->
-                val statusId = statusIdFor(group.belt, title, rawItem)
-                val favoriteId = favoriteIdFor(group.belt, title, rawItem)
-                val mastered = hardItemStates[statusId]
-                val displayItem = if (isEnglish) translateHardExerciseTitle(rawItem) else rawItem
-                val isFavorite = favoriteId in favoriteIds
-
-                val sectionTitle = if (
-                    title.trim() == "הגנות נגד בעיטות" ||
-                    title.trim() == "Defenses against kicks" ||
-                    title.trim() == "Defenses Against Kicks"
-                ) {
-                    kickDefenseSectionTitleFor(rawItem, isEnglish)
-                } else {
-                    null
-                }
-
-                if (sectionTitle != null && sectionTitle != lastSectionTitle) {
-                    HardExerciseSectionHeader(
-                        text = sectionTitle,
-                        isEnglish = isEnglish
-                    )
-
-                    lastSectionTitle = sectionTitle
-                }
-
-                HardExerciseRowCard(
-                    exerciseNumber = index + 1,
-                    belt = group.belt,
-                    item = displayItem,
-                    mastered = mastered,
-                    isFavorite = isFavorite,
-                    isEnglish = isEnglish,
-                    onStatusClick = {
-                        onStatusClick(group.belt, title, rawItem)
-                    },
-                    onToggleFavorite = {
-                        onToggleFavorite(group.belt, title, rawItem)
-                    },
-                    onInfoClick = {
-                        onInfoClick(
-                            group.belt,
-                            title,
-                            rawItem,
-                            displayItem
-                        )
-                    }
-                )
-
-                if (index != rawItems.lastIndex) {
-                    HorizontalDivider(
-                        modifier = Modifier.padding(
-                            start = 18.dp,
-                            end = 18.dp,
-                            top = 3.dp,
-                            bottom = 3.dp
-                        ),
-                        thickness = 1.dp,
-                        color = MaterialTheme.colorScheme.outlineVariant
-                            .copy(alpha = 0.72f)
-                    )
-                }
-            }
-        }
-    }
-}
-
-@Composable
 private fun HardExerciseRowCard(
     exerciseNumber: Int,
     belt: Belt,
@@ -2156,12 +1745,14 @@ private fun HardExerciseRowCard(
             .fillMaxWidth()
             .clip(RoundedCornerShape(16.dp)),
         shape = RoundedCornerShape(16.dp),
-        color = Color.White.copy(alpha = 0.98f),
+        color = MaterialTheme.colorScheme.surface.copy(
+            alpha = 0.98f
+        ),
         tonalElevation = 0.dp,
-        shadowElevation = 4.dp,
+        shadowElevation = 1.dp,
         border = BorderStroke(
             width = 1.dp,
-            color = belt.color.copy(alpha = 0.22f)
+            color = belt.color.copy(alpha = 0.32f)
         )
     ) {
         /*
@@ -2229,7 +1820,8 @@ private fun HardExerciseRowCard(
                                     },
                                 containerColor =
                                     belt.color.copy(alpha = 0.14f),
-                                contentColor = Color(0xFF1F2937)
+                                contentColor =
+                                    MaterialTheme.colorScheme.onSurface
                             )
 
                             Spacer(Modifier.width(3.dp))
@@ -2246,7 +1838,8 @@ private fun HardExerciseRowCard(
                                         } else {
                                             "מידע על התרגיל"
                                         },
-                                    tint = Color(0xFF607D8B),
+                                    tint =
+                                        MaterialTheme.colorScheme.onSurfaceVariant,
                                     modifier = Modifier.size(19.dp)
                                 )
                             }
@@ -2282,7 +1875,7 @@ private fun HardExerciseRowCard(
                                         if (isFavorite) {
                                             Color(0xFFFFC107)
                                         } else {
-                                            Color(0xFF9CA3AF)
+                                            MaterialTheme.colorScheme.onSurfaceVariant
                                         },
                                     modifier = Modifier.size(19.dp)
                                 )
@@ -2303,10 +1896,10 @@ private fun HardExerciseRowCard(
                             style = KmiTypography.body.copy(
                                 fontWeight = FontWeight.ExtraBold
                             ),
-                            color = Color(0xFF263238),
+                            color = MaterialTheme.colorScheme.onSurface,
                             textAlign =
                                 if (isEnglish) {
-                                    TextAlign.Left
+                                    TextAlign.Start
                                 } else {
                                     TextAlign.Right
                                 },
@@ -2408,22 +2001,26 @@ private fun beltTitle(belt: Belt, isEnglish: Boolean): String =
         }
     }
 
-private fun translateHardExerciseTitle(raw: String): String {
-    return raw
+private fun translateHardExerciseTitle(
+    raw: String
+): String {
+    val clean = raw.trim()
+
+    return ExerciseTitlesEn
+        .getOrSame(clean)
+        .trim()
+        .ifBlank { clean }
 }
 
-private fun translateHardTopicTitle(raw: String): String {
-    return raw
+private fun translateHardTopicTitle(
+    raw: String
+): String {
+    val clean = raw.trim()
+
+    return ExerciseTitlesEn
+        .getOrSame(clean)
+        .trim()
+        .ifBlank { clean }
 }
 
-private fun normalizeHardTitle(raw: String): String {
-    return raw
-        .trim()
-        .replace('\u200F', ' ')
-        .replace('\u200E', ' ')
-        .replace('\u00A0', ' ')
-        .replace('–', '-')
-        .replace('—', '-')
-        .replace(Regex("\\s+"), " ")
-        .trim()
-}
+

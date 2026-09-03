@@ -26,6 +26,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -67,7 +68,6 @@ import androidx.compose.material.icons.filled.Assessment
 import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.Campaign
 import androidx.compose.material.icons.filled.Description
-import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Groups
 import androidx.compose.material.icons.filled.Language
 import androidx.compose.material.icons.filled.Person
@@ -78,8 +78,10 @@ import il.kmi.app.voicecommands.VoiceDrawerDestination
 import kotlinx.coroutines.delay
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.core.net.toUri
+import il.yuval.ui.theme.KmiDrawerRoleType
+import il.yuval.ui.theme.kmiDrawerBackgroundBrush
+import il.yuval.ui.theme.kmiDrawerRoleColors
 import il.yuval.ui.theme.kmiOnSuccessContainerColor
-import il.yuval.ui.theme.kmiSectionHeaderBrush
 import il.yuval.ui.theme.kmiSectionHeaderContentColor
 import il.yuval.ui.theme.kmiSuccessColor
 import il.yuval.ui.theme.kmiSuccessContainerColor
@@ -193,8 +195,41 @@ fun AppDrawerContent(
     val contextLang = LocalContext.current
     val scope = rememberCoroutineScope()
 
+    val isDarkMode =
+        MaterialTheme.colorScheme.background
+            .luminance() < 0.5f
+
     val drawerContentColor =
-        kmiSectionHeaderContentColor()
+        if (isDarkMode) {
+            kmiSectionHeaderContentColor()
+        } else {
+            MaterialTheme.colorScheme.onBackground
+        }
+
+    val drawerBackgroundBrush =
+        kmiDrawerBackgroundBrush()
+
+    val traineeRoleColors =
+        kmiDrawerRoleColors(
+            KmiDrawerRoleType.TRAINEE
+        )
+
+    val coachRoleColors =
+        kmiDrawerRoleColors(
+            KmiDrawerRoleType.COACH
+        )
+
+    val managerRoleColors =
+        kmiDrawerRoleColors(
+            KmiDrawerRoleType.MANAGER
+        )
+
+    val roleCardContentColor =
+        if (isDarkMode) {
+            traineeRoleColors.content
+        } else {
+            drawerContentColor
+        }
 
     val dialogContainerColor =
         MaterialTheme.colorScheme.tertiaryContainer
@@ -246,9 +281,9 @@ fun AppDrawerContent(
             clean.contains("Forum", ignoreCase = true) ||
                     clean.contains("פורום") -> Icons.Filled.Groups
 
-            clean.contains("Edit Profile", ignoreCase = true) ||
-                    clean.contains("עריכת פרופיל") ->
-                Icons.Filled.Edit
+            clean.contains("Accessibility", ignoreCase = true) ||
+                    clean.contains("נגישות") ->
+                Icons.Filled.AccessibilityNew
 
             clean.contains("Profile", ignoreCase = true) ||
                     clean.contains("פרופיל") ->
@@ -293,17 +328,30 @@ fun AppDrawerContent(
         Surface(
             shape = CircleShape,
             color =
-                kmiSectionHeaderContentColor()
-                    .copy(alpha = 0.12f),
+                roleCardContentColor.copy(
+                    alpha =
+                        if (isDarkMode) {
+                            0.10f
+                        } else {
+                            0.08f
+                        }
+                ),
             border =
                 BorderStroke(
-                    1.dp,
-                    kmiSectionHeaderContentColor()
-                        .copy(alpha = 0.18f)
+                    width = 1.dp,
+                    color =
+                        roleCardContentColor.copy(
+                            alpha =
+                                if (isDarkMode) {
+                                    0.22f
+                                } else {
+                                    0.14f
+                                }
+                        )
                 ),
             tonalElevation = 0.dp,
             shadowElevation = 0.dp,
-            modifier = Modifier.size(30.dp)
+            modifier = Modifier.size(26.dp)
         ) {
             Box(
                 modifier = Modifier.fillMaxSize(),
@@ -315,9 +363,11 @@ fun AppDrawerContent(
                     Icon(
                         imageVector = icon,
                         contentDescription = null,
-                        tint =
-                            kmiSectionHeaderContentColor(),
-                        modifier = Modifier.size(KmiIconSize.small)
+                        tint = roleCardContentColor,
+                        modifier =
+                            Modifier.size(
+                                KmiIconSize.small
+                            )
                     )
                 }
             }
@@ -668,7 +718,7 @@ fun AppDrawerContent(
                 Modifier
                     .fillMaxSize()
                     .background(
-                        brush = kmiSectionHeaderBrush()
+                        brush = drawerBackgroundBrush
                     )
         ) {
 
@@ -681,79 +731,126 @@ fun AppDrawerContent(
                 onClick: () -> Unit,
                 titleTextStyle: TextStyle =
                     KmiTypography.cardTitle.copy(
-                        color = drawerContentColor,
-                        fontWeight = FontWeight.ExtraBold
+                        color = roleCardContentColor,
+                        fontWeight =
+                            FontWeight.ExtraBold
                     )
             ) {
-                val autoIcon = drawerIconForTitle(title)
+                val autoIcon =
+                    drawerIconForTitle(title)
 
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
                         .background(Color.Transparent)
-                        .padding(start = 16.dp, end = 16.dp)
+                        .padding(
+                            start = 10.dp,
+                            end = 6.dp
+                        )
                         .clickable(onClick = onClick)
-                        .padding(top = 2.dp, bottom = 4.dp)
+                        .padding(
+                            top = 2.dp,
+                            bottom = 4.dp
+                        )
                 ) {
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
                             .background(Color.Transparent)
-                            .padding(horizontal = 4.dp, vertical = 1.dp),
-                        verticalAlignment = Alignment.CenterVertically
+                            .padding(
+                                horizontal = 4.dp,
+                                vertical = 1.dp
+                            ),
+                        verticalAlignment =
+                            Alignment.CenterVertically
                     ) {
-                        if (leading != null || autoIcon != null) {
+                        if (
+                            leading != null ||
+                            autoIcon != null
+                        ) {
                             DrawerMenuIconBubble(
                                 icon = autoIcon,
                                 content = leading
                             )
-                            Spacer(Modifier.width(10.dp))
+
+                            Spacer(
+                                Modifier.width(10.dp)
+                            )
                         }
 
                         Column(
-                            modifier = Modifier.weight(1f),
-                            horizontalAlignment = Alignment.End,
-                            verticalArrangement = Arrangement.Center
+                            modifier =
+                                Modifier.weight(1f),
+                            horizontalAlignment =
+                                Alignment.End,
+                            verticalArrangement =
+                                Arrangement.Center
                         ) {
                             Text(
                                 text = title,
-                                style = titleTextStyle,
+                                style =
+                                    titleTextStyle.copy(
+                                        color =
+                                            roleCardContentColor
+                                    ),
                                 maxLines = 2,
                                 softWrap = true,
-                                textAlign = TextAlign.Right,
-                                overflow = TextOverflow.Ellipsis,
-                                modifier = Modifier.fillMaxWidth()
+                                textAlign =
+                                    TextAlign.Right,
+                                overflow =
+                                    TextOverflow.Ellipsis,
+                                modifier =
+                                    Modifier.fillMaxWidth()
                             )
 
-                            if (!subtitle.isNullOrBlank()) {
-                                Spacer(Modifier.height(2.dp))
+                            if (
+                                !subtitle.isNullOrBlank()
+                            ) {
+                                Spacer(
+                                    Modifier.height(2.dp)
+                                )
+
                                 Text(
                                     text = subtitle,
                                     maxLines = 2,
                                     softWrap = true,
-                                    overflow = TextOverflow.Ellipsis,
-                                    style = KmiTypography.secondary.copy(
-                                        color =
-                                            drawerContentColor.copy(
-                                                alpha = 0.72f
+                                    overflow =
+                                        TextOverflow.Ellipsis,
+                                    style =
+                                        KmiTypography
+                                            .secondary
+                                            .copy(
+                                                color =
+                                                    roleCardContentColor
+                                                        .copy(
+                                                            alpha = 0.72f
+                                                        ),
+                                                fontWeight =
+                                                    FontWeight.SemiBold
                                             ),
-                                        fontWeight = FontWeight.SemiBold
-                                    ),
-                                    textAlign = TextAlign.Right,
-                                    modifier = Modifier.fillMaxWidth()
+                                    textAlign =
+                                        TextAlign.Right,
+                                    modifier =
+                                        Modifier.fillMaxWidth()
                                 )
                             }
                         }
 
                         if (trailing != null) {
-                            Spacer(Modifier.width(8.dp))
+                            Spacer(
+                                Modifier.width(8.dp)
+                            )
+
                             trailing()
                         }
                     }
 
                     HorizontalDivider(
                         thickness = 1.dp,
-                        color = drawerContentColor.copy(alpha = 0.10f)
+                        color =
+                            roleCardContentColor.copy(
+                                alpha = 0.10f
+                            )
                     )
                 }
             }
@@ -767,69 +864,116 @@ fun AppDrawerContent(
                 onClick: () -> Unit,
                 titleTextStyle: TextStyle =
                     KmiTypography.cardTitle.copy(
-                        color = drawerContentColor,
-                        fontWeight = FontWeight.ExtraBold
+                        color = roleCardContentColor,
+                        fontWeight =
+                            FontWeight.ExtraBold
                     )
             ) {
-                val autoIcon = drawerIconForTitle(title)
+                val autoIcon =
+                    drawerIconForTitle(title)
 
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
                         .background(Color.Transparent)
-                        .padding(start = 8.dp, end = 16.dp)
+                        .padding(
+                            start = 8.dp,
+                            end = 16.dp
+                        )
                         .clickable(onClick = onClick)
-                        .padding(top = 2.dp, bottom = 4.dp)
+                        .padding(
+                            top = 2.dp,
+                            bottom = 4.dp
+                        )
                 ) {
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
                             .background(Color.Transparent)
-                            .padding(horizontal = 4.dp, vertical = 1.dp),
-                        verticalAlignment = Alignment.CenterVertically
+                            .padding(
+                                horizontal = 4.dp,
+                                vertical = 1.dp
+                            ),
+                        verticalAlignment =
+                            Alignment.CenterVertically
                     ) {
-                        if (leading != null || autoIcon != null) {
+                        if (
+                            leading != null ||
+                            autoIcon != null
+                        ) {
                             DrawerMenuIconBubble(
                                 icon = autoIcon,
                                 content = leading
                             )
-                            Spacer(Modifier.width(8.dp))
+
+                            Spacer(
+                                Modifier.width(8.dp)
+                            )
                         }
 
                         Column(
-                            modifier = Modifier.weight(1f),
-                            horizontalAlignment = Alignment.Start,
-                            verticalArrangement = Arrangement.Center
+                            modifier =
+                                Modifier.weight(1f),
+                            horizontalAlignment =
+                                Alignment.Start,
+                            verticalArrangement =
+                                Arrangement.Center
                         ) {
                             Text(
                                 text = title,
-                                style = titleTextStyle,
+                                style =
+                                    titleTextStyle.copy(
+                                        color =
+                                            roleCardContentColor
+                                    ),
                                 maxLines = 2,
                                 softWrap = true,
-                                textAlign = TextAlign.Start,
-                                overflow = TextOverflow.Ellipsis,
-                                modifier = Modifier.fillMaxWidth()
+                                textAlign =
+                                    TextAlign.Start,
+                                overflow =
+                                    TextOverflow.Ellipsis,
+                                modifier =
+                                    Modifier.fillMaxWidth()
                             )
 
-                            if (!subtitle.isNullOrBlank()) {
-                                Spacer(Modifier.height(2.dp))
+                            if (
+                                !subtitle.isNullOrBlank()
+                            ) {
+                                Spacer(
+                                    Modifier.height(2.dp)
+                                )
+
                                 Text(
                                     text = subtitle,
                                     maxLines = 2,
                                     softWrap = true,
-                                    overflow = TextOverflow.Ellipsis,
-                                    style = KmiTypography.secondary.copy(
-                                        color = drawerContentColor.copy(alpha = 0.72f),
-                                        fontWeight = FontWeight.SemiBold
-                                    ),
-                                    textAlign = TextAlign.Start,
-                                    modifier = Modifier.fillMaxWidth()
+                                    overflow =
+                                        TextOverflow.Ellipsis,
+                                    style =
+                                        KmiTypography
+                                            .secondary
+                                            .copy(
+                                                color =
+                                                    roleCardContentColor
+                                                        .copy(
+                                                            alpha = 0.72f
+                                                        ),
+                                                fontWeight =
+                                                    FontWeight.SemiBold
+                                            ),
+                                    textAlign =
+                                        TextAlign.Start,
+                                    modifier =
+                                        Modifier.fillMaxWidth()
                                 )
                             }
                         }
 
                         if (trailing != null) {
-                            Spacer(Modifier.width(8.dp))
+                            Spacer(
+                                Modifier.width(8.dp)
+                            )
+
                             trailing()
                         }
                     }
@@ -837,7 +981,9 @@ fun AppDrawerContent(
                     HorizontalDivider(
                         thickness = 1.dp,
                         color =
-                            drawerContentColor.copy(alpha = 0.10f)
+                            roleCardContentColor.copy(
+                                alpha = 0.10f
+                            )
                     )
                 }
             }
@@ -854,57 +1000,84 @@ fun AppDrawerContent(
                     modifier = Modifier
                         .fillMaxWidth()
                         .background(Color.Transparent)
-                        .padding(horizontal = 16.dp)
+                        .padding(
+                            start = 2.dp,
+                            end = 8.dp
+                        )
                         .clickable(onClick = onClick)
-                        .padding(top = 2.dp, bottom = 4.dp)
+                        .padding(
+                            top = 2.dp,
+                            bottom = 4.dp
+                        )
                 ) {
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
                             .background(Color.Transparent)
-                            .padding(horizontal = 6.dp, vertical = 1.dp),
-                        verticalAlignment = Alignment.CenterVertically
+                            .padding(
+                                horizontal = 2.dp,
+                                vertical = 1.dp
+                            ),
+                        verticalAlignment =
+                            Alignment.CenterVertically
                     ) {
                         DrawerMenuIconBubble(
                             icon = icon
                         )
 
-                        Spacer(Modifier.width(10.dp))
+                        Spacer(Modifier.width(6.dp))
 
                         Column(
-                            modifier = Modifier.weight(1f),
-                            horizontalAlignment = Alignment.End,
-                            verticalArrangement = Arrangement.Center
+                            modifier =
+                                Modifier.weight(1f),
+                            horizontalAlignment =
+                                Alignment.End,
+                            verticalArrangement =
+                                Arrangement.Center
                         ) {
                             Text(
                                 text = title,
                                 style =
                                     KmiTypography.cardTitle.copy(
-                                        color = drawerContentColor,
+                                        color =
+                                            roleCardContentColor,
                                         fontWeight =
                                             FontWeight.ExtraBold
                                     ),
-                                textAlign = TextAlign.Right,
-                                modifier = Modifier.fillMaxWidth(),
+                                textAlign =
+                                    TextAlign.Right,
+                                modifier =
+                                    Modifier.fillMaxWidth(),
                                 maxLines = 2,
-                                overflow = TextOverflow.Ellipsis
+                                overflow =
+                                    TextOverflow.Ellipsis
                             )
 
                             if (!subtitle.isNullOrBlank()) {
-                                Spacer(Modifier.height(2.dp))
+                                Spacer(
+                                    Modifier.height(2.dp)
+                                )
 
                                 Text(
                                     text = subtitle,
-                                    style = KmiTypography.secondary.copy(
-                                        color =
-                                            drawerContentColor.copy(alpha = 0.82f),
-                                        fontWeight = FontWeight.Medium
-                                    ),
-                                    textAlign = TextAlign.Right,
-                                    modifier = Modifier.fillMaxWidth(),
+                                    style =
+                                        KmiTypography.secondary.copy(
+                                            color =
+                                                roleCardContentColor
+                                                    .copy(
+                                                        alpha = 0.82f
+                                                    ),
+                                            fontWeight =
+                                                FontWeight.Medium
+                                        ),
+                                    textAlign =
+                                        TextAlign.Right,
+                                    modifier =
+                                        Modifier.fillMaxWidth(),
                                     maxLines = 3,
                                     softWrap = true,
-                                    overflow = TextOverflow.Ellipsis
+                                    overflow =
+                                        TextOverflow.Ellipsis
                                 )
                             }
                         }
@@ -913,7 +1086,10 @@ fun AppDrawerContent(
                     if (showDivider) {
                         HorizontalDivider(
                             thickness = 1.dp,
-                            color = drawerContentColor.copy(alpha = 0.12f)
+                            color =
+                                roleCardContentColor.copy(
+                                    alpha = 0.12f
+                                )
                         )
                     }
                 }
@@ -931,60 +1107,84 @@ fun AppDrawerContent(
                     modifier = Modifier
                         .fillMaxWidth()
                         .background(Color.Transparent)
-                        .padding(start = 8.dp, end = 42.dp)
+                        .padding(
+                            start = 2.dp,
+                            end = 8.dp
+                        )
                         .clickable(onClick = onClick)
-                        .padding(top = 2.dp, bottom = 4.dp)
+                        .padding(
+                            top = 2.dp,
+                            bottom = 4.dp
+                        )
                 ) {
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
                             .background(Color.Transparent)
-                            .padding(horizontal = 6.dp, vertical = 1.dp),
-                        verticalAlignment = Alignment.CenterVertically
+                            .padding(
+                                horizontal = 6.dp,
+                                vertical = 1.dp
+                            ),
+                        verticalAlignment =
+                            Alignment.CenterVertically
                     ) {
-                        Icon(
-                            imageVector = icon,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.size(KmiIconSize.medium)
+                        DrawerMenuIconBubble(
+                            icon = icon
                         )
 
-                        Spacer(Modifier.width(10.dp))
+                        Spacer(Modifier.width(6.dp))
 
                         Column(
-                            modifier = Modifier.weight(1f),
-                            horizontalAlignment = Alignment.Start,
-                            verticalArrangement = Arrangement.Center
+                            modifier =
+                                Modifier.weight(1f),
+                            horizontalAlignment =
+                                Alignment.Start,
+                            verticalArrangement =
+                                Arrangement.Center
                         ) {
                             Text(
                                 text = title,
                                 style =
                                     KmiTypography.cardTitle.copy(
-                                        color = drawerContentColor,
+                                        color =
+                                            roleCardContentColor,
                                         fontWeight =
                                             FontWeight.ExtraBold
                                     ),
-                                textAlign = TextAlign.Start,
-                                modifier = Modifier.fillMaxWidth(),
+                                textAlign =
+                                    TextAlign.Start,
+                                modifier =
+                                    Modifier.fillMaxWidth(),
                                 maxLines = 2,
-                                overflow = TextOverflow.Ellipsis
+                                overflow =
+                                    TextOverflow.Ellipsis
                             )
 
                             if (!subtitle.isNullOrBlank()) {
-                                Spacer(Modifier.height(2.dp))
+                                Spacer(
+                                    Modifier.height(2.dp)
+                                )
 
                                 Text(
                                     text = subtitle,
-                                    style = KmiTypography.secondary.copy(
-                                        color =
-                                            drawerContentColor.copy(alpha = 0.82f),
-                                        fontWeight = FontWeight.Medium
-                                    ),
-                                    textAlign = TextAlign.Start,
-                                    modifier = Modifier.fillMaxWidth(),
+                                    style =
+                                        KmiTypography.secondary.copy(
+                                            color =
+                                                roleCardContentColor
+                                                    .copy(
+                                                        alpha = 0.82f
+                                                    ),
+                                            fontWeight =
+                                                FontWeight.Medium
+                                        ),
+                                    textAlign =
+                                        TextAlign.Start,
+                                    modifier =
+                                        Modifier.fillMaxWidth(),
                                     maxLines = 3,
                                     softWrap = true,
-                                    overflow = TextOverflow.Ellipsis
+                                    overflow =
+                                        TextOverflow.Ellipsis
                                 )
                             }
                         }
@@ -993,11 +1193,16 @@ fun AppDrawerContent(
                     if (showDivider) {
                         HorizontalDivider(
                             thickness = 1.dp,
-                            color = drawerContentColor.copy(alpha = 0.12f)
+                            color =
+                                roleCardContentColor.copy(
+                                    alpha = 0.12f
+                                )
                         )
                     }
                 }
             }
+
+            // עטיפה ב־Box כדי שנוכל ליישר את החץ לתחתית מעל התוכן
 
             // עטיפה ב־Box כדי שנוכל ליישר את החץ לתחתית מעל התוכן
             Box(Modifier.fillMaxSize()) {
@@ -1070,26 +1275,19 @@ fun AppDrawerContent(
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .padding(horizontal = 10.dp)
-                                    .clip(RoundedCornerShape(24.dp))
+                                    .clip(
+                                        RoundedCornerShape(24.dp)
+                                    )
                                     .background(
-                                        brush = Brush.verticalGradient(
-                                            colors =                                                 listOf(
-                                                MaterialTheme.colorScheme
-                                                    .primaryContainer
-                                                    .copy(alpha = 0.92f),
-                                                MaterialTheme.colorScheme
-                                                    .primary
-                                                    .copy(alpha = 0.78f),
-                                                MaterialTheme.colorScheme
-                                                    .secondary
-                                                    .copy(alpha = 0.36f)
-                                            )
-                                        )
+                                        brush =
+                                            coachRoleColors.background
                                     )
                                     .border(
                                         width = 1.dp,
-                                        color = MaterialTheme.colorScheme.primary.copy(alpha = 0.22f),
-                                        shape = RoundedCornerShape(24.dp)
+                                        color =
+                                            coachRoleColors.border,
+                                        shape =
+                                            RoundedCornerShape(24.dp)
                                     )
                                     .padding(vertical = 6.dp)
                             ) {
@@ -1116,7 +1314,8 @@ fun AppDrawerContent(
                                                     fontWeight =
                                                         FontWeight.Black
                                                 ),
-                                            color = drawerContentColor,
+                                            color =
+                                                roleCardContentColor,
                                             textAlign =
                                                 if (isEnglish) {
                                                     TextAlign.Start
@@ -1131,12 +1330,16 @@ fun AppDrawerContent(
                                 }
 
                                 HorizontalDivider(
-                                    modifier = Modifier.padding(
-                                        horizontal = 16.dp,
-                                        vertical = 4.dp
-                                    ),
+                                    modifier =
+                                        Modifier.padding(
+                                            horizontal = 16.dp,
+                                            vertical = 4.dp
+                                        ),
                                     thickness = 1.dp,
-                                    color = drawerContentColor.copy(alpha = 0.16f)
+                                    color =
+                                        roleCardContentColor.copy(
+                                            alpha = 0.16f
+                                        )
                                 )
 
                                 if (isEnglish) {
@@ -1261,25 +1464,19 @@ fun AppDrawerContent(
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .padding(horizontal = 10.dp)
-                                    .clip(RoundedCornerShape(24.dp))
+                                    .clip(
+                                        RoundedCornerShape(24.dp)
+                                    )
                                     .background(
-                                        brush = Brush.verticalGradient(
-                                            colors =                                                 listOf(
-                                                kmiSuccessContainerColor()
-                                                    .copy(alpha = 0.96f),
-                                                kmiSuccessColor()
-                                                    .copy(alpha = 0.82f),
-                                                kmiSuccessColor()
-                                                    .copy(alpha = 0.42f)
-                                            )
-                                        )
+                                        brush =
+                                            managerRoleColors.background
                                     )
                                     .border(
                                         width = 1.dp,
                                         color =
-                                            kmiSuccessColor()
-                                                .copy(alpha = 0.24f),
-                                        shape = RoundedCornerShape(24.dp)
+                                            managerRoleColors.border,
+                                        shape =
+                                            RoundedCornerShape(24.dp)
                                     )
                                     .padding(vertical = 6.dp)
                             ) {
@@ -1303,7 +1500,8 @@ fun AppDrawerContent(
                                                     fontWeight =
                                                         FontWeight.Black
                                                 ),
-                                            color = drawerContentColor,
+                                            color =
+                                                roleCardContentColor,
                                             textAlign =
                                                 if (isEnglish) {
                                                     TextAlign.Start
@@ -1318,12 +1516,16 @@ fun AppDrawerContent(
                                 }
 
                                 HorizontalDivider(
-                                    modifier = Modifier.padding(
-                                        horizontal = 16.dp,
-                                        vertical = 4.dp
-                                    ),
+                                    modifier =
+                                        Modifier.padding(
+                                            horizontal = 16.dp,
+                                            vertical = 4.dp
+                                        ),
                                     thickness = 1.dp,
-                                    color = drawerContentColor.copy(alpha = 0.16f)
+                                    color =
+                                        roleCardContentColor.copy(
+                                            alpha = 0.16f
+                                        )
                                 )
 
                                 if (isEnglish) {
@@ -1351,7 +1553,7 @@ fun AppDrawerContent(
                                 } else {
                                     CoachLineItemHe(
                                         title = "ניהול משתמשים",
-                                        subtitle = "צפייה בכל המשתמשים\nבאפליקציה",
+                                        subtitle = "צפייה במתאמנים ובמאמנים\nהרשומים באפליקציה",
                                         icon = Icons.Filled.Groups,
                                         showDivider = true,
                                         onClick = {
@@ -1383,29 +1585,19 @@ fun AppDrawerContent(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .padding(horizontal = 10.dp)
-                                .clip(RoundedCornerShape(24.dp))
+                                .clip(
+                                    RoundedCornerShape(24.dp)
+                                )
                                 .background(
-                                    brush = Brush.verticalGradient(
-                                        colors =                                             listOf(
-                                            MaterialTheme.colorScheme
-                                                .secondaryContainer
-                                                .copy(alpha = 0.94f),
-                                            MaterialTheme.colorScheme
-                                                .secondary
-                                                .copy(alpha = 0.82f),
-                                            MaterialTheme.colorScheme
-                                                .tertiary
-                                                .copy(alpha = 0.42f)
-                                        )
-                                    )
+                                    brush =
+                                        traineeRoleColors.background
                                 )
                                 .border(
                                     width = 1.dp,
                                     color =
-                                        MaterialTheme.colorScheme
-                                            .secondary
-                                            .copy(alpha = 0.24f),
-                                    shape = RoundedCornerShape(24.dp)
+                                        traineeRoleColors.border,
+                                    shape =
+                                        RoundedCornerShape(24.dp)
                                 )
                                 .padding(vertical = 6.dp)
                         ) {
@@ -1432,7 +1624,8 @@ fun AppDrawerContent(
                                                 fontWeight =
                                                     FontWeight.Black
                                             ),
-                                        color = drawerContentColor,
+                                        color =
+                                            roleCardContentColor,
                                         textAlign =
                                             if (isEnglish) {
                                                 TextAlign.Start
@@ -1447,12 +1640,16 @@ fun AppDrawerContent(
                             }
 
                             HorizontalDivider(
-                                modifier = Modifier.padding(
-                                    horizontal = 16.dp,
-                                    vertical = 4.dp
-                                ),
+                                modifier =
+                                    Modifier.padding(
+                                        horizontal = 16.dp,
+                                        vertical = 4.dp
+                                    ),
                                 thickness = 1.dp,
-                                color = drawerContentColor.copy(alpha = 0.16f)
+                                color =
+                                    roleCardContentColor.copy(
+                                        alpha = 0.16f
+                                    )
                             )
 
                             // ✅ הפרופיל שלי — מסך אמת שמציג נתונים מהמשתמש / Firestore / Preferences
@@ -1460,13 +1657,16 @@ fun AppDrawerContent(
                                 DrawerLineItemEn(
                                     leading = {
                                         Icon(
-                                            imageVector = Icons.Filled.Person,
+                                            imageVector =
+                                                Icons.Filled.Person,
                                             contentDescription = null,
-                                            tint = drawerContentColor
+                                            tint =
+                                                roleCardContentColor
                                         )
                                     },
                                     title = "My Profile",
-                                    subtitle = "View your personal K.M.I details",
+                                    subtitle =
+                                        "View your personal K.M.I details",
                                     onClick = {
                                         onClose()
                                         onOpenMyProfile()
@@ -1476,13 +1676,16 @@ fun AppDrawerContent(
                                 DrawerLineItemHe(
                                     leading = {
                                         Icon(
-                                            imageVector = Icons.Filled.Person,
+                                            imageVector =
+                                                Icons.Filled.Person,
                                             contentDescription = null,
-                                            tint = drawerContentColor
+                                            tint =
+                                                roleCardContentColor
                                         )
                                     },
                                     title = "הפרופיל שלי",
-                                    subtitle = "צפייה בפרטים האישיים שלך",
+                                    subtitle =
+                                        "צפייה בפרטים האישיים שלך",
                                     onClick = {
                                         onClose()
                                         onOpenMyProfile()
@@ -1491,14 +1694,6 @@ fun AppDrawerContent(
                             }
 
                             if (isEnglish) {
-                                DrawerLineItemEn(
-                                    title = "Edit Profile",
-                                    subtitle = "Update your personal details",
-                                    onClick = {
-                                        onClose()
-                                        onOpenEditProfile()
-                                    }
-                                )
 
                                 DrawerLineItemEn(
                                     title = "Monthly Calendar",
@@ -1518,23 +1713,7 @@ fun AppDrawerContent(
                                     }
                                 )
 
-                                DrawerLineItemEn(
-                                    title = "Accessibility",
-                                    subtitle = "Display and accessibility settings",
-                                    onClick = {
-                                        onClose()
-                                        onOpenAccessibility()
-                                    }
-                                )
                             } else {
-                                DrawerLineItemHe(
-                                    title = "עריכת פרופיל",
-                                    subtitle = "עדכון הפרטים האישיים שלך",
-                                    onClick = {
-                                        onClose()
-                                        onOpenEditProfile()
-                                    }
-                                )
 
                                 DrawerLineItemHe(
                                     title = "לוח שנה חודשי",
@@ -1551,15 +1730,6 @@ fun AppDrawerContent(
                                     onClick = {
                                         onClose()
                                         onOpenTrainingSummary()
-                                    }
-                                )
-
-                                DrawerLineItemHe(
-                                    title = "נגישות",
-                                    subtitle = "הגדרות תצוגה ונגישות",
-                                    onClick = {
-                                        onClose()
-                                        onOpenAccessibility()
                                     }
                                 )
                             }
@@ -1752,7 +1922,7 @@ fun AppDrawerContent(
                                         Icon(
                                             imageVector = Icons.Filled.Language,
                                             contentDescription = null,
-                                            tint = drawerContentColor
+                                            tint = roleCardContentColor
                                         )
                                     },
                                     title = "Language / שפה",
@@ -1782,7 +1952,7 @@ fun AppDrawerContent(
                                         Icon(
                                             imageVector = Icons.Filled.Language,
                                             contentDescription = null,
-                                            tint = drawerContentColor
+                                            tint = roleCardContentColor
                                         )
                                     },
                                     title = "שפה / Language",
@@ -1848,9 +2018,10 @@ fun AppDrawerContent(
                                 DrawerLineItemEn(
                                     leading = {
                                         Icon(
-                                            imageVector = Icons.AutoMirrored.Outlined.Logout,
+                                            imageVector =
+                                                Icons.AutoMirrored.Outlined.Logout,
                                             contentDescription = null,
-                                            tint = drawerContentColor
+                                            tint = roleCardContentColor
                                         )
                                     },
                                     title = "Logout",
@@ -1863,9 +2034,10 @@ fun AppDrawerContent(
                                 DrawerLineItemHe(
                                     leading = {
                                         Icon(
-                                            imageVector = Icons.AutoMirrored.Outlined.Logout,
+                                            imageVector =
+                                                Icons.AutoMirrored.Outlined.Logout,
                                             contentDescription = null,
-                                            tint = drawerContentColor
+                                            tint = roleCardContentColor
                                         )
                                     },
                                     title = "התנתקות",

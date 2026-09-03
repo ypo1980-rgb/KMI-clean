@@ -507,7 +507,7 @@ fun MainApp(
                                 ModalDrawerSheet(
                                     drawerContainerColor = Color.Transparent,
                                     modifier = Modifier
-                                        .fillMaxWidth(0.86f)
+                                        .fillMaxWidth(0.81f)
                                         .alpha(
                                             if (drawerContentReady) {
                                                 1f

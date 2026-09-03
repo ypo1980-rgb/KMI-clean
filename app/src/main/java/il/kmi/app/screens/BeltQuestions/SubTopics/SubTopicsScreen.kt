@@ -3605,7 +3605,72 @@ private fun HardBeltGroupsStickyContent(
         }
     }
 
-    val currentRows = flatRows.filter { it.belt == currentStickyBelt }
+    val currentRows =
+        flatRows.filter {
+            it.belt == currentStickyBelt
+        }
+
+    val currentTaughtCount =
+        currentRows.count { row ->
+            coachProgressStates[
+                coachMapKey(
+                    row.belt,
+                    statusIdFor(
+                        row.belt,
+                        row.rawItem
+                    )
+                )
+            ]?.isSelected(
+                CoachMaterialStatus.TAUGHT
+            ) == true
+        }
+
+    val currentPracticedCount =
+        currentRows.count { row ->
+            coachProgressStates[
+                coachMapKey(
+                    row.belt,
+                    statusIdFor(
+                        row.belt,
+                        row.rawItem
+                    )
+                )
+            ]?.isSelected(
+                CoachMaterialStatus.PRACTICED
+            ) == true
+        }
+
+    val currentReinforcementCount =
+        currentRows.count { row ->
+            coachProgressStates[
+                coachMapKey(
+                    row.belt,
+                    statusIdFor(
+                        row.belt,
+                        row.rawItem
+                    )
+                )
+            ]?.isSelected(
+                CoachMaterialStatus.NEEDS_REINFORCEMENT
+            ) == true
+        }
+
+    val currentCoachUnmarkedCount =
+        currentRows.count { row ->
+            val progress =
+                coachProgressStates[
+                    coachMapKey(
+                        row.belt,
+                        statusIdFor(
+                            row.belt,
+                            row.rawItem
+                        )
+                    )
+                ]
+
+            progress == null ||
+                    progress.selectedStatuses.isEmpty()
+        }
 
     val currentKnownCount = currentRows.count { row ->
         itemStates[statusIdFor(row.belt, row.rawItem)] == true
@@ -3643,6 +3708,13 @@ private fun HardBeltGroupsStickyContent(
         HardBeltStickyHeaderForSubTopics(
             belt = currentStickyBelt,
             totalCount = currentRows.size,
+            isCoach = isCoach,
+            taughtCount = currentTaughtCount,
+            practicedCount = currentPracticedCount,
+            reinforcementCount =
+                currentReinforcementCount,
+            coachUnmarkedCount =
+                currentCoachUnmarkedCount,
             knownCount = currentKnownCount,
             unknownCount = currentUnknownCount,
             favoriteCount = currentFavoriteCount,
@@ -3690,7 +3762,74 @@ private fun HardBeltGroupsStickyContent(
                     row.indexInBelt == 0 && index != 0
 
                 if (shouldShowInlineBeltHeader) {
-                    val inlineRows = flatRows.filter { it.belt == row.belt }
+                    val inlineRows =
+                        flatRows.filter {
+                            it.belt == row.belt
+                        }
+
+                    val inlineTaughtCount =
+                        inlineRows.count { inlineRow ->
+                            coachProgressStates[
+                                coachMapKey(
+                                    inlineRow.belt,
+                                    statusIdFor(
+                                        inlineRow.belt,
+                                        inlineRow.rawItem
+                                    )
+                                )
+                            ]?.isSelected(
+                                CoachMaterialStatus.TAUGHT
+                            ) == true
+                        }
+
+                    val inlinePracticedCount =
+                        inlineRows.count { inlineRow ->
+                            coachProgressStates[
+                                coachMapKey(
+                                    inlineRow.belt,
+                                    statusIdFor(
+                                        inlineRow.belt,
+                                        inlineRow.rawItem
+                                    )
+                                )
+                            ]?.isSelected(
+                                CoachMaterialStatus.PRACTICED
+                            ) == true
+                        }
+
+                    val inlineReinforcementCount =
+                        inlineRows.count { inlineRow ->
+                            coachProgressStates[
+                                coachMapKey(
+                                    inlineRow.belt,
+                                    statusIdFor(
+                                        inlineRow.belt,
+                                        inlineRow.rawItem
+                                    )
+                                )
+                            ]?.isSelected(
+                                CoachMaterialStatus
+                                    .NEEDS_REINFORCEMENT
+                            ) == true
+                        }
+
+                    val inlineCoachUnmarkedCount =
+                        inlineRows.count { inlineRow ->
+                            val progress =
+                                coachProgressStates[
+                                    coachMapKey(
+                                        inlineRow.belt,
+                                        statusIdFor(
+                                            inlineRow.belt,
+                                            inlineRow.rawItem
+                                        )
+                                    )
+                                ]
+
+                            progress == null ||
+                                    progress.selectedStatuses
+                                        .isEmpty()
+                        }
 
                     val inlineKnownCount = inlineRows.count { inlineRow ->
                         itemStates[statusIdFor(inlineRow.belt, inlineRow.rawItem)] == true
@@ -3726,15 +3865,28 @@ private fun HardBeltGroupsStickyContent(
                         )
                     }
 
-                    HardBeltInlineHeaderForSubTopics(
+                    HardBeltStickyHeaderForSubTopics(
                         belt = row.belt,
+                        totalCount = inlineRows.size,
+                        isCoach = isCoach,
+                        taughtCount = inlineTaughtCount,
+                        practicedCount =
+                            inlinePracticedCount,
+                        reinforcementCount =
+                            inlineReinforcementCount,
+                        coachUnmarkedCount =
+                            inlineCoachUnmarkedCount,
                         knownCount = inlineKnownCount,
                         unknownCount = inlineUnknownCount,
-                        favoriteCount = inlineFavoriteCount,
-                        excludedCount = inlineExcludedCount,
-                        unmarkedCount = inlineUnmarkedCount,
+                        favoriteCount =
+                            inlineFavoriteCount,
+                        excludedCount =
+                            inlineExcludedCount,
+                        unmarkedCount =
+                            inlineUnmarkedCount,
                         isDarkMode = isDarkMode,
-                        isEnglish = isEnglish
+                        isEnglish = isEnglish,
+                        modifier = Modifier.fillMaxWidth()
                     )
 
                     Spacer(Modifier.height(8.dp))
@@ -3861,172 +4013,14 @@ private fun readableBeltColor(
 }
 
 @Composable
-private fun HardBeltInlineHeaderForSubTopics(
-    belt: Belt,
-    knownCount: Int,
-    unknownCount: Int,
-    favoriteCount: Int,
-    excludedCount: Int,
-    unmarkedCount: Int,
-    isDarkMode: Boolean,
-    isEnglish: Boolean,
-    modifier: Modifier = Modifier
-) {
-    val title = if (isEnglish) {
-        when (belt) {
-            Belt.YELLOW -> "Yellow Belt"
-            Belt.ORANGE -> "Orange Belt"
-            Belt.GREEN -> "Green Belt"
-            Belt.BLUE -> "Blue Belt"
-            Belt.BROWN -> "Brown Belt"
-            Belt.BLACK -> "Black Belt"
-            else -> belt.en
-        }
-    } else {
-        when (belt) {
-            Belt.YELLOW -> "חגורה צהובה"
-            Belt.ORANGE -> "חגורה כתומה"
-            Belt.GREEN -> "חגורה ירוקה"
-            Belt.BLUE -> "חגורה כחולה"
-            Belt.BROWN -> "חגורה חומה"
-            Belt.BLACK -> "חגורה שחורה"
-            else -> belt.heb
-        }
-    }
-
-    val beltContentColor =
-        readableBeltColor(
-            belt = belt,
-            isDarkMode = isDarkMode
-        )
-
-    val hintTextColor =
-        MaterialTheme.colorScheme.onSurfaceVariant
-
-    Surface(
-        modifier = modifier,
-        shape = RoundedCornerShape(22.dp),
-        color =
-            if (isDarkMode) {
-                MaterialTheme.colorScheme.surface
-            } else {
-                belt.lightColor
-            },
-        tonalElevation = 0.dp,
-        shadowElevation = 0.dp,
-        border = if (isDarkMode) {
-            BorderStroke(
-                width = 1.dp,
-                color = beltContentColor.copy(alpha = 0.45f)
-            )
-        } else {
-            null
-        }
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 12.dp, vertical = 10.dp),
-            horizontalAlignment = if (isEnglish) Alignment.Start else Alignment.End
-        ) {
-            CompositionLocalProvider(
-                LocalLayoutDirection provides
-                        LayoutDirection.Ltr
-            ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        text = title,
-                        style =
-                            KmiTypography.screenTitle.copy(
-                                fontWeight =
-                                    FontWeight.ExtraBold
-                            ),
-                        color = beltContentColor,
-                        textAlign =
-                            if (isEnglish) {
-                                TextAlign.Start
-                            } else {
-                                TextAlign.End
-                            },
-                        modifier = Modifier.fillMaxWidth(),
-                        maxLines = 1,
-                        overflow =
-                            TextOverflow.Ellipsis
-                    )
-                }
-            }
-
-            Spacer(Modifier.height(8.dp))
-
-            Text(
-                text =
-                    if (isEnglish) {
-                        "← Swipe sideways to see more stats →"
-                    } else {
-                        "→→ הזז לצד כדי לראות עוד נתונים →→"
-                    },
-                color = hintTextColor,
-                style =
-                    KmiTypography.caption.copy(
-                        fontWeight =
-                            FontWeight.SemiBold
-                    ),
-                textAlign = TextAlign.Center,
-                modifier = Modifier.fillMaxWidth(),
-                maxLines = 1,
-                overflow =
-                    TextOverflow.Ellipsis
-            )
-
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .horizontalScroll(rememberScrollState())
-                    .padding(top = 6.dp),
-                horizontalArrangement = Arrangement.spacedBy(7.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                HardGroupStatChip(
-                    value = knownCount.toString(),
-                    label = if (isEnglish) "Known" else "יודע",
-                    containerColor = Color(0xFF7ACB88)
-                )
-
-                HardGroupStatChip(
-                    value = unknownCount.toString(),
-                    label = if (isEnglish) "Unknown" else "לא יודע",
-                    containerColor = Color(0xFFF1A97A)
-                )
-
-                HardGroupStatChip(
-                    value = favoriteCount.toString(),
-                    label = if (isEnglish) "Favorites" else "מועדפים",
-                    containerColor = Color(0xFFE7A3B5)
-                )
-
-                HardGroupStatChip(
-                    value = excludedCount.toString(),
-                    label = if (isEnglish) "Excluded" else "מוחרגים",
-                    containerColor = Color(0xFFE5A3A3)
-                )
-
-                HardGroupStatChip(
-                    value = unmarkedCount.toString(),
-                    label = if (isEnglish) "Unmarked" else "לא סומן",
-                    containerColor = Color(0xFF8596C9)
-                )
-            }
-        }
-    }
-}
-
-@Composable
 private fun HardBeltStickyHeaderForSubTopics(
     belt: Belt,
     totalCount: Int,
+    isCoach: Boolean,
+    taughtCount: Int,
+    practicedCount: Int,
+    reinforcementCount: Int,
+    coachUnmarkedCount: Int,
     knownCount: Int,
     unknownCount: Int,
     favoriteCount: Int,
@@ -4160,40 +4154,126 @@ private fun HardBeltStickyHeaderForSubTopics(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .horizontalScroll(rememberScrollState())
+                    .horizontalScroll(
+                        rememberScrollState()
+                    )
                     .padding(top = 6.dp),
-                horizontalArrangement = Arrangement.spacedBy(7.dp),
-                verticalAlignment = Alignment.CenterVertically
+                horizontalArrangement =
+                    Arrangement.spacedBy(7.dp),
+                verticalAlignment =
+                    Alignment.CenterVertically
             ) {
-                HardGroupStatChip(
-                    value = knownCount.toString(),
-                    label = if (isEnglish) "Known" else "יודע",
-                    containerColor = Color(0xFF7ACB88)
-                )
+                if (isCoach) {
+                    HardGroupStatChip(
+                        value = taughtCount.toString(),
+                        label =
+                            if (isEnglish) {
+                                "Taught"
+                            } else {
+                                "נלמד"
+                            },
+                        containerColor =
+                            Color(0xFF7ACB88)
+                    )
 
-                HardGroupStatChip(
-                    value = unknownCount.toString(),
-                    label = if (isEnglish) "Unknown" else "לא יודע",
-                    containerColor = Color(0xFFF1A97A)
-                )
+                    HardGroupStatChip(
+                        value = practicedCount.toString(),
+                        label =
+                            if (isEnglish) {
+                                "Practiced"
+                            } else {
+                                "תורגל"
+                            },
+                        containerColor =
+                            Color(0xFF8B5CF6)
+                    )
 
-                HardGroupStatChip(
-                    value = favoriteCount.toString(),
-                    label = if (isEnglish) "Favorites" else "מועדפים",
-                    containerColor = Color(0xFFE7A3B5)
-                )
+                    HardGroupStatChip(
+                        value =
+                            reinforcementCount.toString(),
+                        label =
+                            if (isEnglish) {
+                                "Reinforcement"
+                            } else {
+                                "חיזוק"
+                            },
+                        containerColor =
+                            Color(0xFFF59E0B)
+                    )
 
-                HardGroupStatChip(
-                    value = excludedCount.toString(),
-                    label = if (isEnglish) "Excluded" else "מוחרגים",
-                    containerColor = Color(0xFFE5A3A3)
-                )
+                    HardGroupStatChip(
+                        value =
+                            coachUnmarkedCount.toString(),
+                        label =
+                            if (isEnglish) {
+                                "Unmarked"
+                            } else {
+                                "לא סומן"
+                            },
+                        containerColor =
+                            Color(0xFF8596C9)
+                    )
+                } else {
+                    HardGroupStatChip(
+                        value = knownCount.toString(),
+                        label =
+                            if (isEnglish) {
+                                "Known"
+                            } else {
+                                "יודע"
+                            },
+                        containerColor =
+                            Color(0xFF7ACB88)
+                    )
 
-                HardGroupStatChip(
-                    value = unmarkedCount.toString(),
-                    label = if (isEnglish) "Unmarked" else "לא סומן",
-                    containerColor = Color(0xFF8596C9)
-                )
+                    HardGroupStatChip(
+                        value = unknownCount.toString(),
+                        label =
+                            if (isEnglish) {
+                                "Unknown"
+                            } else {
+                                "לא יודע"
+                            },
+                        containerColor =
+                            Color(0xFFF1A97A)
+                    )
+
+                    HardGroupStatChip(
+                        value = favoriteCount.toString(),
+                        label =
+                            if (isEnglish) {
+                                "Favorites"
+                            } else {
+                                "מועדפים"
+                            },
+                        containerColor =
+                            Color(0xFFE7A3B5)
+                    )
+
+                    HardGroupStatChip(
+                        value = excludedCount.toString(),
+                        label =
+                            if (isEnglish) {
+                                "Excluded"
+                            } else {
+                                "מוחרגים"
+                            },
+                        containerColor =
+                            Color(0xFFE5A3A3)
+                    )
+
+                    HardGroupStatChip(
+                        value = unmarkedCount.toString(),
+                        label =
+                            if (isEnglish) {
+                                "Unmarked"
+                            } else {
+                                "לא סומן"
+                            },
+                        containerColor =
+                            Color(0xFF8596C9)
+                    )
+                }
             }
         }
     }
@@ -4222,22 +4302,24 @@ private fun HardExerciseLegacyRow(
     onEditNote: () -> Unit
 ) {
     val context = LocalContext.current
-    val langManager = remember(context) {
-        AppLanguageManager(context)
-    }
+
+    val langManager =
+        remember(context) {
+            AppLanguageManager(context)
+        }
 
     val isEnglish =
         langManager.getCurrentLanguage() ==
                 AppLanguage.ENGLISH
 
-    val rowBgColor =
+    val rowBackgroundColor =
         MaterialTheme.colorScheme.surface
 
     val rowTextColor =
         if (excluded) {
-            MaterialTheme.colorScheme.onSurfaceVariant.copy(
-                alpha = 0.55f
-            )
+            MaterialTheme.colorScheme
+                .onSurfaceVariant
+                .copy(alpha = 0.55f)
         } else {
             MaterialTheme.colorScheme.onSurface
         }
@@ -4255,8 +4337,10 @@ private fun HardExerciseLegacyRow(
     Surface(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(16.dp)),
-        color = rowBgColor,
+            .clip(
+                RoundedCornerShape(16.dp)
+            ),
+        color = rowBackgroundColor,
         tonalElevation = 0.dp,
         shadowElevation = 0.dp,
         border = BorderStroke(
@@ -4265,283 +4349,293 @@ private fun HardExerciseLegacyRow(
                 if (isDarkMode) {
                     belt.color.copy(alpha = 0.55f)
                 } else {
-                    MaterialTheme.colorScheme.outlineVariant
+                    MaterialTheme.colorScheme
+                        .outlineVariant
                 }
         )
     ) {
-        /*
-         * הפריסה הפיזית נשארת LTR:
-         * עיגול הסטטוס משמאל ופס החגורה מימין.
-         */
-        CompositionLocalProvider(
-            LocalLayoutDirection provides
-                    LayoutDirection.Ltr
+        Column(
+            modifier = Modifier.fillMaxWidth()
         ) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .heightIn(min = 50.dp)
-                    .padding(
-                        start = 8.dp,
-                        top = 5.dp,
-                        end = 0.dp,
-                        bottom = 5.dp
-                    ),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                if (isEnglish) {
-                    Column(
+            /*
+             * במצב מאמן שם ומספר התרגיל נמצאים
+             * מעל כרטיס בחירת מצב החומר.
+             */
+            if (isCoach) {
+                CompositionLocalProvider(
+                    LocalLayoutDirection provides
+                            if (isEnglish) {
+                                LayoutDirection.Ltr
+                            } else {
+                                LayoutDirection.Rtl
+                            }
+                ) {
+                    Row(
                         modifier = Modifier
-                            .weight(1f)
+                            .fillMaxWidth()
                             .clickable {
                                 onInfoClick()
                             }
                             .padding(
-                                start = 2.dp,
-                                end = 4.dp
+                                start = 12.dp,
+                                top = 8.dp,
+                                end = 12.dp,
+                                bottom = 4.dp
                             ),
-                        horizontalAlignment = Alignment.Start
-                    ) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            HardLegacyMetaBadge(
-                                text = "No. $exerciseNumber",
-                                containerColor =
-                                    exerciseNumberBackground,
-                                contentColor =
-                                    exerciseNumberTextColor
-                            )
-
-                            Spacer(Modifier.width(3.dp))
-
-                            SubTopicItemFloatingActions(
-                                isEnglish = true,
-                                excluded = excluded,
-                                isFav = isFav,
-                                hasNote = hasNote,
-                                onInfo = onInfoClick,
-                                onToggleFavorite =
-                                    onToggleFavorite,
-                                onToggleExclude =
-                                    onToggleExclude,
-                                onEditNote = onEditNote
-                            )
-
-                            if (isFav) {
-                                Spacer(Modifier.width(5.dp))
-
-                                HardLegacyMetaBadge(
-                                    text = "Favorite",
-                                    containerColor =
-                                        Color(0xFFF9D9B8),
-                                    contentColor =
-                                        Color(0xFF9A5A00)
-                                )
-                            }
-
-                            if (excluded) {
-                                Spacer(Modifier.width(5.dp))
-
-                                HardLegacyMetaBadge(
-                                    text = "Excluded",
-                                    containerColor =
-                                        MaterialTheme.colorScheme
-                                            .surfaceVariant,
-                                    contentColor =
-                                        MaterialTheme.colorScheme
-                                            .onSurfaceVariant
-                                )
-                            }
-
-                            Spacer(Modifier.weight(1f))
-                        }
-
-                        Spacer(Modifier.height(2.dp))
-
-                        Text(
-                            text = displayName.trim(),
-                            style =
-                                KmiTypography.caption.copy(
-                                    fontWeight =
-                                        FontWeight.ExtraBold
-                                ),
-                            color = rowTextColor,
-                            textAlign = TextAlign.Left,
-                            modifier = Modifier.fillMaxWidth(),
-                            maxLines = 3,
-                            overflow =
-                                TextOverflow.Ellipsis
-                        )
-                    }
-
-                    Spacer(Modifier.width(6.dp))
-
-                    if (isCoach) {
-                        CoachMaterialStatusSelector(
-                            progress = coachProgress,
-                            isEnglish = true,
-                            onInfo = onInfoClick,
-                            onSelect = onCoachStatusSelect
-                        )
-                    } else {
-                        HardMasterToggle(
-                            mastered = mastered,
-                            onClick = onStatusClick
-                        )
-                    }
-
-                    Spacer(Modifier.width(6.dp))
-
-                    Box(
-                        modifier = Modifier
-                            .width(3.dp)
-                            .height(34.dp)
-                            .clip(
-                                RoundedCornerShape(
-                                    topStart = 8.dp,
-                                    bottomStart = 8.dp
-                                )
-                            )
-                            .background(belt.color)
-                    )
-                } else {
-                    if (isCoach) {
-                        CoachMaterialStatusSelector(
-                            progress = coachProgress,
-                            isEnglish = false,
-                            onInfo = onInfoClick,
-                            onSelect = onCoachStatusSelect
-                        )
-                    } else {
-                        HardMasterToggle(
-                            mastered = mastered,
-                            onClick = onStatusClick
-                        )
-                    }
-
-                    Spacer(Modifier.width(6.dp))
-
-                    Column(
-                        modifier = Modifier
-                            .weight(1f)
-                            .clickable {
-                                onInfoClick()
-                            }
-                            .padding(
-                                start = 2.dp,
-                                end = 2.dp
-                            ),
-                        horizontalAlignment = Alignment.End
+                        verticalAlignment =
+                            Alignment.CenterVertically
                     ) {
                         /*
-                         * השורה נשארת LTR פיזית:
-                         * המספר מימין והאייקון מיד אחריו משמאל.
+                         * באנגלית המספר יופיע משמאל.
+                         * בעברית המספר יופיע מימין.
                          */
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Spacer(Modifier.weight(1f))
+                        HardLegacyMetaBadge(
+                            text =
+                                if (isEnglish) {
+                                    "No. $exerciseNumber"
+                                } else {
+                                    "מס׳ $exerciseNumber"
+                                },
+                            containerColor =
+                                exerciseNumberBackground,
+                            contentColor =
+                                exerciseNumberTextColor
+                        )
 
-                            if (excluded) {
-                                HardLegacyMetaBadge(
-                                    text = "מוחרג",
-                                    containerColor =
-                                        MaterialTheme.colorScheme
-                                            .surfaceVariant,
-                                    contentColor =
-                                        MaterialTheme.colorScheme
-                                            .onSurfaceVariant
-                                )
+                        Spacer(Modifier.width(8.dp))
 
-                                Spacer(Modifier.width(5.dp))
-                            }
-
-                            if (isFav) {
-                                HardLegacyMetaBadge(
-                                    text = "מועדף",
-                                    containerColor =
-                                        Color(0xFFF9D9B8),
-                                    contentColor =
-                                        Color(0xFF9A5A00)
-                                )
-
-                                Spacer(Modifier.width(5.dp))
-                            }
-
-                            /*
-                             * האייקון מופיע פיזית משמאל למספר,
-                             * כלומר אחריו בכיוון הקריאה בעברית.
-                             */
-                            SubTopicItemFloatingActions(
-                                isEnglish = false,
-                                excluded = excluded,
-                                isFav = isFav,
-                                hasNote = hasNote,
-                                onInfo = onInfoClick,
-                                onToggleFavorite =
-                                    onToggleFavorite,
-                                onToggleExclude =
-                                    onToggleExclude,
-                                onEditNote = onEditNote
-                            )
-
-                            Spacer(Modifier.width(3.dp))
-
-                            HardLegacyMetaBadge(
-                                text = "מס׳ $exerciseNumber",
-                                containerColor =
-                                    exerciseNumberBackground,
-                                contentColor =
-                                    exerciseNumberTextColor
-                            )
-                        }
-
-                        Spacer(Modifier.height(2.dp))
-
-                        /*
-                         * אייקון המידע אינו נמצא יותר מחוץ לעמודה,
-                         * ולכן שם התרגיל מקבל את כל רוחב השורה.
-                         */
                         Text(
                             text =
-                                "\u200F${displayName.trim()}\u200F",
+                                if (isEnglish) {
+                                    displayName.trim()
+                                } else {
+                                    "\u200F${displayName.trim()}\u200F"
+                                },
                             style =
-                                KmiTypography.caption.copy(
+                                KmiTypography.body.copy(
                                     fontWeight =
                                         FontWeight.ExtraBold
                                 ),
                             color = rowTextColor,
-                            textAlign = TextAlign.Right,
-                            modifier = Modifier.fillMaxWidth(),
+                            textAlign =
+                                if (isEnglish) {
+                                    TextAlign.Left
+                                } else {
+                                    TextAlign.Right
+                                },
                             maxLines = 3,
                             overflow =
-                                TextOverflow.Ellipsis
+                                TextOverflow.Ellipsis,
+                            modifier =
+                                Modifier.weight(1f)
                         )
                     }
 
-                    Spacer(Modifier.width(4.dp))
-
-                    Box(
-                        modifier = Modifier
-                            .width(3.dp)
-                            .height(34.dp)
-                            .clip(
-                                RoundedCornerShape(
-                                    topStart = 8.dp,
-                                    bottomStart = 8.dp
-                                )
-                            )
-                            .background(belt.color)
+                    CoachMaterialStatusSelector(
+                        progress = coachProgress,
+                        isEnglish = isEnglish,
+                        modifier = Modifier.fillMaxWidth(),
+                        excluded = excluded,
+                        isFav = isFav,
+                        hasNote = hasNote,
+                        onToggleExclude =
+                            onToggleExclude,
+                        onInfo = onInfoClick,
+                        onToggleFavorite =
+                            onToggleFavorite,
+                        onEditNote = onEditNote,
+                        onSelect =
+                            onCoachStatusSelect
                     )
+                }
+            } else {
+                /*
+                 * מצב מתאמן נשאר עם כפתור יודע/לא יודע,
+                 * שם התרגיל ופס צבע החגורה.
+                 */
+                CompositionLocalProvider(
+                    LocalLayoutDirection provides
+                            LayoutDirection.Ltr
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(min = 50.dp)
+                            .padding(
+                                start = 8.dp,
+                                top = 5.dp,
+                                end = 0.dp,
+                                bottom = 5.dp
+                            ),
+                        verticalAlignment =
+                            Alignment.CenterVertically
+                    ) {
+                        HardMasterToggle(
+                            mastered = mastered,
+                            onClick = onStatusClick
+                        )
+
+                        Spacer(Modifier.width(8.dp))
+
+                        CompositionLocalProvider(
+                            LocalLayoutDirection provides
+                                    if (isEnglish) {
+                                        LayoutDirection.Ltr
+                                    } else {
+                                        LayoutDirection.Rtl
+                                    }
+                        ) {
+                            Column(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .clickable {
+                                        onInfoClick()
+                                    }
+                                    .padding(
+                                        start = 2.dp,
+                                        end = 4.dp
+                                    ),
+                                horizontalAlignment =
+                                    if (isEnglish) {
+                                        Alignment.Start
+                                    } else {
+                                        Alignment.End
+                                    }
+                            ) {
+                                Row(
+                                    modifier =
+                                        Modifier.fillMaxWidth(),
+                                    verticalAlignment =
+                                        Alignment.CenterVertically
+                                ) {
+                                    HardLegacyMetaBadge(
+                                        text =
+                                            if (isEnglish) {
+                                                "No. $exerciseNumber"
+                                            } else {
+                                                "מס׳ $exerciseNumber"
+                                            },
+                                        containerColor =
+                                            exerciseNumberBackground,
+                                        contentColor =
+                                            exerciseNumberTextColor
+                                    )
+
+                                    Spacer(Modifier.width(3.dp))
+
+                                    SubTopicItemFloatingActions(
+                                        isEnglish = isEnglish,
+                                        excluded = excluded,
+                                        isFav = isFav,
+                                        hasNote = hasNote,
+                                        onInfo = onInfoClick,
+                                        onToggleFavorite =
+                                            onToggleFavorite,
+                                        onToggleExclude =
+                                            onToggleExclude,
+                                        onEditNote =
+                                            onEditNote
+                                    )
+
+                                    if (isFav) {
+                                        Spacer(
+                                            Modifier.width(5.dp)
+                                        )
+
+                                        HardLegacyMetaBadge(
+                                            text =
+                                                if (isEnglish) {
+                                                    "Favorite"
+                                                } else {
+                                                    "מועדף"
+                                                },
+                                            containerColor =
+                                                Color(0xFFF9D9B8),
+                                            contentColor =
+                                                Color(0xFF9A5A00)
+                                        )
+                                    }
+
+                                    if (excluded) {
+                                        Spacer(
+                                            Modifier.width(5.dp)
+                                        )
+
+                                        HardLegacyMetaBadge(
+                                            text =
+                                                if (isEnglish) {
+                                                    "Excluded"
+                                                } else {
+                                                    "מוחרג"
+                                                },
+                                            containerColor =
+                                                MaterialTheme
+                                                    .colorScheme
+                                                    .surfaceVariant,
+                                            contentColor =
+                                                MaterialTheme
+                                                    .colorScheme
+                                                    .onSurfaceVariant
+                                        )
+                                    }
+
+                                    Spacer(
+                                        Modifier.weight(1f)
+                                    )
+                                }
+
+                                Spacer(
+                                    Modifier.height(2.dp)
+                                )
+
+                                Text(
+                                    text =
+                                        if (isEnglish) {
+                                            displayName.trim()
+                                        } else {
+                                            "\u200F${displayName.trim()}\u200F"
+                                        },
+                                    style =
+                                        KmiTypography.caption.copy(
+                                            fontWeight =
+                                                FontWeight.ExtraBold
+                                        ),
+                                    color = rowTextColor,
+                                    textAlign =
+                                        if (isEnglish) {
+                                            TextAlign.Left
+                                        } else {
+                                            TextAlign.Right
+                                        },
+                                    modifier =
+                                        Modifier.fillMaxWidth(),
+                                    maxLines = 3,
+                                    overflow =
+                                        TextOverflow.Ellipsis
+                                )
+                            }
+                        }
+
+                        Spacer(Modifier.width(4.dp))
+
+                        Box(
+                            modifier = Modifier
+                                .width(3.dp)
+                                .height(34.dp)
+                                .clip(
+                                    RoundedCornerShape(
+                                        topStart = 8.dp,
+                                        bottomStart = 8.dp
+                                    )
+                                )
+                                .background(belt.color)
+                        )
+                    }
                 }
             }
         }
     }
 }
-
 
 @Composable
 private fun SubTopicItemFloatingActions(

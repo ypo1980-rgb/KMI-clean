@@ -129,6 +129,12 @@ import java.util.TimeZone
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.zIndex
+import il.yuval.ui.theme.kmiOnSuccessContainerColor
+import il.yuval.ui.theme.kmiOnWarningContainerColor
+import il.yuval.ui.theme.kmiSuccessColor
+import il.yuval.ui.theme.kmiSuccessContainerColor
+import il.yuval.ui.theme.kmiWarningColor
+import il.yuval.ui.theme.kmiWarningContainerColor
 import kotlin.time.Duration.Companion.seconds
 
 //=================================================================================
@@ -2972,6 +2978,7 @@ fun HomeScreen(
                         ) { item ->
                             TrainingCardCompact(
                                 training = item.training,
+                                group = item.group,
                                 isCoach = isCoach,
                                 isEnglish = isEnglish,
                                 status = item.status,
@@ -3637,9 +3644,12 @@ fun HomeScreen(
             AnimatedVisibility(
                 visible = fabExpanded,
                 modifier = Modifier
-                    // ✅ כמו מסך החגורות: התפריט נפתח מהצד, ליד הטאב
                     .align(Alignment.CenterStart)
-                    .offset(x = 46.dp, y = 88.dp),
+                    .wrapContentSize()
+                    .offset(
+                        x = 46.dp,
+                        y = 88.dp
+                    ),
                 enter =
                     fadeIn(animationSpec = tween(180)) +
                             scaleIn(
@@ -3680,7 +3690,7 @@ fun HomeScreen(
             ) {
                 ModernHomeQuickFab(
                     isEnglish = isEnglish,
-                    accentColor = homeBeltAccent,
+                    accentColor = activeHomeBelt.color,
                     onClick = {
                         clickSound()
                         haptic(true)
@@ -4377,8 +4387,13 @@ private fun ModernHomeQuickFab(
     modifier: Modifier = Modifier,
     onClick: () -> Unit
 ) {
-    // ✅ הטאב יושב בצד שמאל כמו במסך החגורות:
-    // צד שמאל ישר, צד ימין מעוגל.
+    val accentContentColor =
+        if (accentColor.luminance() < 0.55f) {
+            Color.White
+        } else {
+            Color.Black
+        }
+
     val tabShape = RoundedCornerShape(
         topStart = 0.dp,
         bottomStart = 0.dp,
@@ -4386,66 +4401,66 @@ private fun ModernHomeQuickFab(
         bottomEnd = 18.dp
     )
 
-    Box(
+    Surface(
+        onClick = onClick,
+        shape = tabShape,
+        color = Color.Transparent,
+        shadowElevation = 0.dp,
+        tonalElevation = 0.dp,
+        border = BorderStroke(
+            width = 0.75.dp,
+            color =
+                MaterialTheme
+                    .colorScheme
+                    .outlineVariant
+                    .copy(alpha = 0.55f)
+        ),
         modifier = modifier
             .width(38.dp)
-            .height(72.dp),
-        contentAlignment = Alignment.Center
+            .height(72.dp)
     ) {
         Box(
             modifier = Modifier
-                .matchParentSize()
+                .fillMaxSize()
+                .clip(tabShape)
                 .background(
-                    brush =
-                        Brush.horizontalGradient(
-                            colors =
-                                listOf(
-                                    accentColor.copy(
-                                        alpha = 0.52f
-                                    ),
-                                    accentColor,
-                                    lerp(
-                                        accentColor,
-                                        MaterialTheme
-                                            .colorScheme
-                                            .primary,
-                                        0.30f
-                                    )
-                                )
-                        ),
-                    shape = tabShape
-                )
-                .border(
-                    width = 1.dp,
-                    color =
-                        accentColor.copy(
-                            alpha = 0.78f
-                        ),
-                    shape = tabShape
-                )
-                .clickable(
-                    interactionSource = remember { MutableInteractionSource() },
-                    indication = null,
-                    onClick = onClick
+                    Brush.verticalGradient(
+                        colors = listOf(
+                            accentColor.copy(alpha = 0.84f),
+                            accentColor,
+                            accentColor.copy(alpha = 0.88f)
+                        )
+                    )
                 ),
             contentAlignment = Alignment.Center
         ) {
+            Box(
+                modifier = Modifier
+                    .matchParentSize()
+                    .background(
+                        Brush.horizontalGradient(
+                            colors = listOf(
+                                accentContentColor.copy(
+                                    alpha = 0.22f
+                                ),
+                                Color.Transparent
+                            )
+                        )
+                    )
+            )
+
             Icon(
                 imageVector = Icons.Filled.Menu,
                 contentDescription =
                     if (isEnglish) {
-                        "Quick menu"
+                        "Open quick menu"
                     } else {
-                        "תפריט מהיר"
+                        "פתח תפריט מהיר"
                     },
-                tint =
-                    MaterialTheme
-                        .colorScheme
-                        .onPrimary,
-                modifier =
-                    Modifier.size(
-                        scaledIconSize(21.dp)
-                    )
+                tint = accentContentColor,
+                modifier = Modifier.size(
+                    KmiIconSize.large
+                )
             )
         }
     }
@@ -4461,12 +4476,13 @@ private fun HomePremiumQuickMenuPanel(
     items: List<Triple<String, ImageVector, () -> Unit>>,
     onClose: () -> Unit
 ) {
-    val panelWidth = 190.dp
-    val panelMinHeight = 214.dp
     val panelShape = RoundedCornerShape(20.dp)
 
     val colorScheme =
         MaterialTheme.colorScheme
+
+    val isDarkMode =
+        colorScheme.background.luminance() < 0.5f
 
     val panelColor =
         colorScheme.surface
@@ -4474,16 +4490,34 @@ private fun HomePremiumQuickMenuPanel(
     val panelSecondaryColor =
         colorScheme.surfaceVariant
 
+    /*
+     * בחגורה שחורה ובחגורות כהות הטקסט והאייקונים
+     * מוצגים בלבן במצב כהה.
+     */
     val menuAccent =
-        accentColor
+        when {
+            isDarkMode &&
+                    accentColor.luminance() < 0.45f ->
+                Color.White
+
+            accentColor == Belt.GREEN.color ->
+                kmiSuccessColor()
+
+            !isDarkMode &&
+                    accentColor.luminance() > 0.78f ->
+                colorScheme.onSurfaceVariant
+
+            else ->
+                accentColor
+        }
 
     val borderColor =
-        accentColor.copy(
+        menuAccent.copy(
             alpha = 0.58f
         )
 
     val dividerColor =
-        accentColor.copy(
+        menuAccent.copy(
             alpha = 0.32f
         )
 
@@ -4497,8 +4531,11 @@ private fun HomePremiumQuickMenuPanel(
             color = borderColor
         ),
         modifier = Modifier
-            .width(panelWidth)
-            .heightIn(min = panelMinHeight)
+            .widthIn(
+                min = 190.dp,
+                max = 230.dp
+            )
+            .fillMaxWidth()
     ) {
         /*
          * ה־Box מקבל את אותו גובה מינימלי של ה־Surface,
@@ -4510,7 +4547,6 @@ private fun HomePremiumQuickMenuPanel(
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .heightIn(min = panelMinHeight)
                 .clip(panelShape)
                 .background(
                     brush = Brush.verticalGradient(
@@ -4536,7 +4572,9 @@ private fun HomePremiumQuickMenuPanel(
                 horizontalAlignment = if (isEnglish) Alignment.Start else Alignment.End
             ) {
                 Row(
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(min = 40.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     if (isEnglish) {
@@ -4556,12 +4594,7 @@ private fun HomePremiumQuickMenuPanel(
                         Icon(
                             imageVector =
                                 Icons.Filled.Close,
-                            contentDescription =
-                                if (isEnglish) {
-                                    "Close"
-                                } else {
-                                    "סגור"
-                                },
+                            contentDescription = "Close",
                             tint = menuAccent,
                             modifier =
                                 Modifier
@@ -4592,12 +4625,7 @@ private fun HomePremiumQuickMenuPanel(
                         Icon(
                             imageVector =
                                 Icons.Filled.Close,
-                            contentDescription =
-                                if (isEnglish) {
-                                    "Close"
-                                } else {
-                                    "סגור"
-                                },
+                            contentDescription = "סגור",
                             tint = menuAccent,
                             modifier =
                                 Modifier
@@ -4611,7 +4639,7 @@ private fun HomePremiumQuickMenuPanel(
                     }
                 }
 
-                Spacer(Modifier.height(4.dp))
+                Spacer(Modifier.height(6.dp))
 
                 items.forEachIndexed { index, item ->
                     HomePremiumQuickMenuRow(
@@ -4666,9 +4694,13 @@ private fun HomePremiumQuickMenuRow(
     Row(
         modifier = Modifier
             .fillMaxWidth()
+            .heightIn(min = 44.dp)
             .clip(RoundedCornerShape(12.dp))
             .clickable(onClick = onClick)
-            .padding(horizontal = 4.dp, vertical = 5.dp),
+            .padding(
+                horizontal = 4.dp,
+                vertical = 5.dp
+            ),
         verticalAlignment = Alignment.CenterVertically
     ) {
         if (isEnglish) {
@@ -4700,12 +4732,7 @@ private fun HomePremiumQuickMenuRow(
                 Icon(
                     imageVector =
                         Icons.Filled.Lock,
-                    contentDescription =
-                        if (isEnglish) {
-                            "Premium feature"
-                        } else {
-                            "תכונת פרימיום"
-                        },
+                    contentDescription = "Premium feature",
                     tint =
                         MaterialTheme
                             .colorScheme
@@ -4757,12 +4784,7 @@ private fun HomePremiumQuickMenuRow(
                 Icon(
                     imageVector =
                         Icons.Filled.Lock,
-                    contentDescription =
-                        if (isEnglish) {
-                            "Premium feature"
-                        } else {
-                            "תכונת פרימיום"
-                        },
+                    contentDescription = "תכונת פרימיום",
                     tint =
                         MaterialTheme
                             .colorScheme
@@ -4788,8 +4810,6 @@ private fun HomePremiumQuickMenuIcon(
     icon: ImageVector,
     accentColor: Color
 ) {
-    val menuAccent =
-        accentColor
 
     Box(
         modifier =
@@ -4799,7 +4819,7 @@ private fun HomePremiumQuickMenuIcon(
                 )
                 .background(
                     color =
-                        menuAccent.copy(
+                        accentColor.copy(
                             alpha = 0.12f
                         ),
                     shape = CircleShape
@@ -4807,7 +4827,7 @@ private fun HomePremiumQuickMenuIcon(
                 .border(
                     width = 1.dp,
                     color =
-                        menuAccent.copy(
+                        accentColor.copy(
                             alpha = 0.30f
                         ),
                     shape = CircleShape
@@ -4818,7 +4838,7 @@ private fun HomePremiumQuickMenuIcon(
         Icon(
             imageVector = icon,
             contentDescription = null,
-            tint = menuAccent,
+            tint = accentColor,
             modifier =
                 Modifier.size(
                     scaledIconSize(10.5.dp)
@@ -4880,6 +4900,7 @@ private fun findExplanationForHit(
 @Composable
 private fun TrainingCardCompact(
     training: TrainingData,
+    group: String,
     isCoach: Boolean,
     isEnglish: Boolean,
     status: TrainingStatusEngine.Status,
@@ -5102,9 +5123,7 @@ private fun TrainingCardCompact(
     val trainingCardBorderColor =
         when (visualStatusState) {
             TrainingStatusEngine.State.ONGOING ->
-                MaterialTheme
-                    .colorScheme
-                    .tertiary
+                kmiSuccessColor()
 
             TrainingStatusEngine.State.COMPLETED ->
                 MaterialTheme
@@ -5159,17 +5178,28 @@ private fun TrainingCardCompact(
                 .fillMaxWidth()
                 .padding(horizontal = 10.dp, vertical = 8.dp)
         ) {
-                val branchLine = remember(training.place, training.address, isEnglish) {
-                    val displaySource = training.place
-                        .trim()
-                        .takeIf { it.isNotBlank() }
-                        ?: training.address
-
-                    TrainingCatalog.placeDisplayName(
-                        displaySource,
+                val branchLine =
+                    remember(
+                        training.place,
+                        training.address,
                         isEnglish
-                    )
-                }
+                    ) {
+                        val displaySource =
+                            training.place
+                                .trim()
+                                .takeIf { it.isNotBlank() }
+                                ?: training.address
+
+                        TrainingCatalog.placeDisplayName(
+                            displaySource,
+                            isEnglish
+                        )
+                    }
+
+                val groupLine =
+                    remember(group) {
+                        group.trim()
+                    }
 
             Column(
                 modifier = Modifier.fillMaxWidth(),
@@ -5186,6 +5216,19 @@ private fun TrainingCardCompact(
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
+
+                if (groupLine.isNotBlank()) {
+                    Text(
+                        text = groupLine,
+                        style = KmiTypography.secondary,
+                        color =
+                            MaterialTheme.colorScheme.onSurfaceVariant,
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.fillMaxWidth(),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
 
                 Text(
                     text = dateTimeText,
@@ -5249,18 +5292,18 @@ private fun TrainingCardCompact(
                     label = "ongoingTrainingStatusPulse"
                 )
 
-            val ongoingStatusAlpha by
-            ongoingPulseTransition.animateFloat(
-                initialValue = 1f,
-                targetValue = 0.38f,
-                animationSpec = infiniteRepeatable(
-                    animation = tween(
-                        durationMillis = 720
+                val ongoingStatusAlpha by
+                ongoingPulseTransition.animateFloat(
+                    initialValue = 1f,
+                    targetValue = 0.72f,
+                    animationSpec = infiniteRepeatable(
+                        animation = tween(
+                            durationMillis = 720
+                        ),
+                        repeatMode = RepeatMode.Reverse
                     ),
-                    repeatMode = RepeatMode.Reverse
-                ),
-                label = "ongoingTrainingStatusAlpha"
-            )
+                    label = "ongoingTrainingStatusAlpha"
+                )
 
             val statusAlpha =
                 if (isTrainingOngoing) {
@@ -5271,59 +5314,63 @@ private fun TrainingCardCompact(
 
                 if (statusMessage.isNotBlank()) {
                     val statusContentColor =
-                        when (visualStatusState) {
-                            TrainingStatusEngine.State.ONGOING ->
-                                MaterialTheme
-                                    .colorScheme
-                                    .onTertiaryContainer
+                        if (countdownMinutes != null) {
+                            kmiOnWarningContainerColor()
+                        } else {
+                            when (visualStatusState) {
+                                TrainingStatusEngine.State.ONGOING ->
+                                    kmiOnSuccessContainerColor()
 
-                            TrainingStatusEngine.State.COMPLETED ->
-                                MaterialTheme
-                                    .colorScheme
-                                    .onSurfaceVariant
+                                TrainingStatusEngine.State.COMPLETED ->
+                                    MaterialTheme
+                                        .colorScheme
+                                        .onSurfaceVariant
 
-                            TrainingStatusEngine.State.CANCELLED_BY_HOLIDAY ->
-                                MaterialTheme
-                                    .colorScheme
-                                    .onSecondaryContainer
+                                TrainingStatusEngine.State.CANCELLED_BY_HOLIDAY ->
+                                    MaterialTheme
+                                        .colorScheme
+                                        .onSecondaryContainer
 
-                            TrainingStatusEngine.State.INVALID ->
-                                MaterialTheme
-                                    .colorScheme
-                                    .onErrorContainer
+                                TrainingStatusEngine.State.INVALID ->
+                                    MaterialTheme
+                                        .colorScheme
+                                        .onErrorContainer
 
-                            TrainingStatusEngine.State.SCHEDULED ->
-                                MaterialTheme
-                                    .colorScheme
-                                    .onPrimaryContainer
+                                TrainingStatusEngine.State.SCHEDULED ->
+                                    MaterialTheme
+                                        .colorScheme
+                                        .onPrimaryContainer
+                            }
                         }
 
                     val statusBackgroundColor =
-                        when (visualStatusState) {
-                            TrainingStatusEngine.State.ONGOING ->
-                                MaterialTheme
-                                    .colorScheme
-                                    .tertiaryContainer
+                        if (countdownMinutes != null) {
+                            kmiWarningContainerColor()
+                        } else {
+                            when (visualStatusState) {
+                                TrainingStatusEngine.State.ONGOING ->
+                                    kmiSuccessContainerColor()
 
-                            TrainingStatusEngine.State.COMPLETED ->
-                                MaterialTheme
-                                    .colorScheme
-                                    .surfaceVariant
+                                TrainingStatusEngine.State.COMPLETED ->
+                                    MaterialTheme
+                                        .colorScheme
+                                        .surfaceVariant
 
-                            TrainingStatusEngine.State.CANCELLED_BY_HOLIDAY ->
-                                MaterialTheme
-                                    .colorScheme
-                                    .secondaryContainer
+                                TrainingStatusEngine.State.CANCELLED_BY_HOLIDAY ->
+                                    MaterialTheme
+                                        .colorScheme
+                                        .secondaryContainer
 
-                            TrainingStatusEngine.State.INVALID ->
-                                MaterialTheme
-                                    .colorScheme
-                                    .errorContainer
+                                TrainingStatusEngine.State.INVALID ->
+                                    MaterialTheme
+                                        .colorScheme
+                                        .errorContainer
 
-                            TrainingStatusEngine.State.SCHEDULED ->
-                                MaterialTheme
-                                    .colorScheme
-                                    .primaryContainer
+                                TrainingStatusEngine.State.SCHEDULED ->
+                                    MaterialTheme
+                                        .colorScheme
+                                        .primaryContainer
+                            }
                         }
 
                     Spacer(Modifier.height(4.dp))
@@ -5337,9 +5384,19 @@ private fun TrainingCardCompact(
                         color = statusBackgroundColor,
                         border = BorderStroke(
                             width = 1.dp,
-                            color = statusContentColor.copy(
-                                alpha = 0.18f
-                            )
+                            color =
+                                when {
+                                    isTrainingOngoing ->
+                                        kmiSuccessColor()
+
+                                    countdownMinutes != null ->
+                                        kmiWarningColor()
+
+                                    else ->
+                                        statusContentColor.copy(
+                                            alpha = 0.18f
+                                        )
+                                }
                         ),
                         modifier = Modifier.graphicsLayer {
                             alpha = statusAlpha
@@ -6248,9 +6305,6 @@ private fun createHomePdf(
             stroke = true
         )
 
-        val contentLeft =
-            margin
-
         val contentRight =
             pageWidth - margin
 
@@ -6262,7 +6316,7 @@ private fun createHomePdf(
         val summaryTextX =
             KmiPdfDirection.startPaddingX(
                 isEnglish = isEnglish,
-                left = contentLeft,
+                left = margin,
                 right = contentRight,
                 padding = 22f
             )
@@ -6275,7 +6329,7 @@ private fun createHomePdf(
         val summaryValueX =
             KmiPdfDirection.endPaddingX(
                 isEnglish = isEnglish,
-                left = contentLeft,
+                left = margin,
                 right = contentRight,
                 padding = 28f
             )
