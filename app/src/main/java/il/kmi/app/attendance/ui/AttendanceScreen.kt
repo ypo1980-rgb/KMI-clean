@@ -13,6 +13,15 @@ import androidx.compose.animation.shrinkVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.foundation.Canvas
+import androidx.compose.ui.draw.rotate
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.StrokeJoin
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
@@ -565,56 +574,6 @@ fun AttendanceScreen(
                                         shape = RoundedCornerShape(999.dp)
                                     )
                             )
-
-                            // =================================================
-                            // החץ — בתוך הטאב של בחירת אימון
-                            // שכבה עצמאית ולכן לא מזיז את הכותרת
-                            // =================================================
-                            Surface(
-                                onClick = {
-                                    isTrainingSelectionExpanded =
-                                        !isTrainingSelectionExpanded
-                                },
-                                modifier = Modifier
-                                    .align(Alignment.CenterEnd)
-                                    .offset(
-                                        x = (-124).dp
-                                    )
-                                    .size(34.dp),
-                                shape = CircleShape,
-                                color = Color.White.copy(
-                                    alpha = 0.16f
-                                ),
-                                border = BorderStroke(
-                                    width = 1.dp,
-                                    color = Color.White.copy(
-                                        alpha = 0.45f
-                                    )
-                                ),
-                                tonalElevation = 0.dp,
-                                shadowElevation = 0.dp
-                            ) {
-                                Box(
-                                    modifier = Modifier.fillMaxSize(),
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    Text(
-                                        text =
-                                            if (isTrainingSelectionExpanded) {
-                                                "⌃"
-                                            } else {
-                                                "⌄"
-                                            },
-                                        style = KmiTypography.action.copy(
-                                            fontWeight =
-                                                FontWeight.ExtraBold
-                                        ),
-                                        color = Color.White,
-                                        textAlign = TextAlign.Center,
-                                        maxLines = 1
-                                    )
-                                }
-                            }
                         }
                     }
                 }
@@ -751,6 +710,109 @@ fun AttendanceScreen(
 
                 // פס גראניט צמוד ישירות ל־KmiTopBar
                 AttendanceTopTabs()
+
+                val trainingArrowRotation by animateFloatAsState(
+                    targetValue =
+                        if (isTrainingSelectionExpanded) 180f else 0f,
+                    animationSpec = tween(durationMillis = 220),
+                    label = "trainingSelectionArrow"
+                )
+                val trainingArrowBrush = kmiSectionHeaderBrush()
+                val trainingArrowHighlight =
+                    MaterialTheme.colorScheme.onPrimary.copy(
+                        alpha = 0.45f
+                    )
+                val trainingArrowDescription =
+                    if (isTrainingSelectionExpanded) {
+                        tr(
+                            "סגירת בחירת אימון",
+                            "Collapse training selection"
+                        )
+                    } else {
+                        tr(
+                            "פתיחת בחירת אימון",
+                            "Expand training selection"
+                        )
+                    }
+
+                CompositionLocalProvider(
+                    LocalLayoutDirection provides LayoutDirection.Ltr
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Spacer(
+                            modifier = Modifier.weight(1f)
+                        )
+                        Box(
+                            modifier = Modifier
+                                .weight(1f)
+                                .heightIn(min = 48.dp)
+                                .semantics {
+                                    contentDescription =
+                                        trainingArrowDescription
+                                }
+                                .clickable(
+                                    role =
+                                        androidx.compose.ui.semantics.Role.Button
+                                ) {
+                                    isTrainingSelectionExpanded =
+                                        !isTrainingSelectionExpanded
+                                }
+                                .padding(vertical = 8.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Canvas(
+                                modifier = Modifier
+                                    .width(KmiIconSize.large * 3f)
+                                    .height(KmiIconSize.large)
+                                    .rotate(trainingArrowRotation)
+                            ) {
+                                val arrowPath = Path().apply {
+                                    moveTo(
+                                        size.width * 0.08f,
+                                        size.height * 0.20f
+                                    )
+                                    lineTo(
+                                        size.width * 0.44f,
+                                        size.height * 0.72f
+                                    )
+                                    quadraticBezierTo(
+                                        size.width * 0.50f,
+                                        size.height * 0.82f,
+                                        size.width * 0.56f,
+                                        size.height * 0.72f
+                                    )
+                                    lineTo(
+                                        size.width * 0.92f,
+                                        size.height * 0.20f
+                                    )
+                                }
+                                drawPath(
+                                    path = arrowPath,
+                                    brush = trainingArrowBrush,
+                                    style = Stroke(
+                                        width = 5.dp.toPx(),
+                                        cap = StrokeCap.Round,
+                                        join = StrokeJoin.Round
+                                    )
+                                )
+                                drawPath(
+                                    path = arrowPath,
+                                    color = trainingArrowHighlight,
+                                    style = Stroke(
+                                        width = 1.dp.toPx(),
+                                        cap = StrokeCap.Round,
+                                        join = StrokeJoin.Round
+                                    )
+                                )
+                            }
+                        }
+                    }
+                }
+
+                Spacer(Modifier.height(6.dp))
 
 // =========================================================
 // מגירת בחירת אימון + סיכום נוכחות

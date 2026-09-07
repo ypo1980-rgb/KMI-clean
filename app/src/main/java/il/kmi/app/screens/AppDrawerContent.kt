@@ -702,8 +702,27 @@ fun AppDrawerContent(
     ) {
         val scroll = rememberScrollState()
 
-        // כשמחליפים שפה או מרעננים את הסרגל,
-        // פותחים את התפריט מההתחלה ולא מאמצע הרשימה.
+        /*
+         * ה־Drawer נשאר מחובר ל־Composition גם כשהוא סגור,
+         * ולכן rememberScrollState שומר את מיקום הגלילה האחרון.
+         *
+         * מאזינים לפתיחה עצמה ומחזירים את התוכן לראש הרשימה
+         * בכל פעם שה־Drawer מתחיל להיפתח.
+         */
+        val drawerState =
+            il.kmi.app.ui.LocalAppDrawerState.current
+
+        LaunchedEffect(drawerState) {
+            snapshotFlow {
+                drawerState?.targetValue
+            }.collect { targetValue ->
+                if (targetValue == DrawerValue.Open) {
+                    scroll.scrollTo(0)
+                }
+            }
+        }
+
+        // גם שינוי שפה / תפקיד ממשיך לאפס את הרשימה.
         LaunchedEffect(
             isEnglish,
             languageRefreshKey,

@@ -1045,7 +1045,7 @@ private fun CalendarMarkerDot(
 ) {
     Box(
         modifier = Modifier
-            .size(3.dp)
+            .size(6.dp)
             .background(
                 color = color,
                 shape = CircleShape

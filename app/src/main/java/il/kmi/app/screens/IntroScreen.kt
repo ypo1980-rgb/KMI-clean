@@ -474,17 +474,25 @@ private fun IntroWelcomeImageScreen(
             -(maxHeight * 0.015f)
 
         /*
-         * מצב התצוגה באפליקציה נקבע מתוך MaterialTheme
-         * ולכן בוחרים כאן רק את קובץ התמונה המתאים.
-         *
-         * אין ColorMatrix, אין מסנן צבע ואין שכבת כהות:
-         * כל מצב מציג תמונה שעוצבה במיוחד עבורו.
-         */
+ * מצב התצוגה באפליקציה נקבע מתוך MaterialTheme,
+ * והתמונה נבחרת לפי השפה ומצב התצוגה.
+ *
+ * אין ColorMatrix, אין מסנן צבע ואין שכבת כהות:
+ * לכל שילוב קיימת תמונה ייעודית.
+ */
         val introBackgroundRes =
-            if (isDarkTheme) {
-                R.drawable.intro_welcome_screen_v2_dark
-            } else {
-                R.drawable.intro_welcome_screen_v2
+            when {
+                isEnglish && isDarkTheme ->
+                    R.drawable.intro_welcome_screen_dark_en
+
+                isEnglish ->
+                    R.drawable.intro_welcome_screen_light_en
+
+                isDarkTheme ->
+                    R.drawable.intro_welcome_screen_v2_dark
+
+                else ->
+                    R.drawable.intro_welcome_screen_v2
             }
 
         Image(

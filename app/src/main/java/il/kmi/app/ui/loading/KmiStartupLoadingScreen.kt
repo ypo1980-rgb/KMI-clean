@@ -251,21 +251,25 @@ fun KmiStartupLoadingScreen(
         }
 
     /*
-     * מצב התצוגה באפליקציה נקבע מתוך MaterialTheme,
-     * ולכן בוחרים כאן את קובץ הרקע המתאים.
-     *
-     * שתי התמונות נמצאות בתיקיית drawable:
-     *
-     * kmi_startup_loading_bg.png
-     * kmi_startup_loading_bg_dark.png
-     *
-     * אין ColorMatrix, אין ColorFilter ואין שכבת כהות.
-     */
+    * מצב התצוגה באפליקציה נקבע מתוך MaterialTheme,
+    * והרקע נבחר לפי השפה ומצב התצוגה.
+    *
+    * אין ColorMatrix, אין ColorFilter ואין שכבת כהות:
+    * לכל שילוב קיימת תמונה ייעודית.
+    */
     val loadingBackgroundRes =
-        if (isDarkTheme) {
-            R.drawable.kmi_startup_loading_bg_dark
-        } else {
-            R.drawable.kmi_startup_loading_bg
+        when {
+            isEnglish && isDarkTheme ->
+                R.drawable.kmi_startup_loading_bg_dark_en
+
+            isEnglish ->
+                R.drawable.kmi_startup_loading_bg_light_en
+
+            isDarkTheme ->
+                R.drawable.kmi_startup_loading_bg_dark
+
+            else ->
+                R.drawable.kmi_startup_loading_bg
         }
 
     CompositionLocalProvider(

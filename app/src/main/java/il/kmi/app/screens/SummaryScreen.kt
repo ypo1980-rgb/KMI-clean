@@ -42,6 +42,7 @@ import il.kmi.app.ui.KmiTypography
 import il.kmi.app.ui.LocalAppIconScale
 import il.kmi.app.ui.loading.KmiLoadingRings
 import il.yuval.ui.theme.kmiScreenBackgroundBrush
+import il.yuval.ui.theme.kmiSectionHeaderBrush
 import il.kmi.shared.domain.Belt
 import il.kmi.shared.questions.model.util.ExerciseTitleFormatter
 import java.io.File
@@ -1063,111 +1064,41 @@ private fun SummaryToggleButton(
     onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val colorScheme = MaterialTheme.colorScheme
-
-    /*
-     * הכפתור כולו צבוע. אין Surface שקוף, רקע לבן,
-     * מסגרת לבנה או שכבה נוספת מתחת לכפתור.
-     */
-    val buttonBrush =
-        if (selected) {
-            Brush.horizontalGradient(
-                colors =
-                    listOf(
-                        Color(0xFF00B8D9),
-                        Color(0xFF1677FF),
-                        Color(0xFF6D28D9)
-                    )
+    Box(
+        modifier = modifier
+            .clickable(
+                role = androidx.compose.ui.semantics.Role.Button,
+                onClick = onClick
             )
-        } else {
-            Brush.horizontalGradient(
-                colors =
-                    listOf(
-                        Color(0xFF0E7490),
-                        Color(0xFF2563A8),
-                        Color(0xFF5B4BDB)
-                    )
-            )
-        }
-
-    Surface(
-        onClick = onClick,
-        modifier =
-            modifier.heightIn(
-                min = 48.dp
-            ),
-        shape = RoundedCornerShape(19.dp),
-        color = colorScheme.primary,
-        tonalElevation = 0.dp,
-        shadowElevation = 0.dp,
-        border =
-            BorderStroke(
-                width = 0.75.dp,
-                color =
-                    Color.White.copy(
-                        alpha =
-                            if (selected) {
-                                0.52f
-                            } else {
-                                0.28f
-                            }
-                    )
-            )
+            .padding(horizontal = 12.dp),
+        contentAlignment = Alignment.Center
     ) {
-        Box(
-            modifier =
-                Modifier
-                    .fillMaxWidth()
+        Text(
+            text = text,
+            style = KmiTypography.caption.copy(
+                fontWeight = FontWeight.ExtraBold
+            ),
+            color = Color.White,
+            textAlign = TextAlign.Center,
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.padding(
+                top = 4.dp,
+                bottom = 8.dp
+            )
+        )
+        if (selected) {
+            Box(
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .padding(bottom = 5.dp)
+                    .width(50.dp)
+                    .height(3.dp)
                     .background(
-                        brush = buttonBrush
+                        color = Color.White,
+                        shape = RoundedCornerShape(999.dp)
                     )
-                    .padding(
-                        horizontal = 12.dp,
-                        vertical = 12.dp
-                    ),
-            contentAlignment = Alignment.Center
-        ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment =
-                    Alignment.CenterVertically,
-                horizontalArrangement =
-                    Arrangement.Center
-            ) {
-                Text(
-                    text = text,
-                    style = KmiTypography.action,
-                    color = Color.White,
-                    fontWeight = FontWeight.ExtraBold,
-                    maxLines = 1,
-                    textAlign = TextAlign.Center
-                )
-
-                Spacer(Modifier.width(7.dp))
-
-                Surface(
-                    modifier = Modifier.size(26.dp),
-                    shape = CircleShape,
-                    color = Color.White.copy(
-                        alpha = if (selected) 0.24f else 0.17f
-                    ),
-                    tonalElevation = 0.dp,
-                    shadowElevation = 0.dp
-                ) {
-                    Box(
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(
-                            imageVector = Icons.Filled.Insights,
-                            contentDescription = null,
-                            tint = Color.White,
-                            modifier = Modifier.size(
-                                16.dp * LocalAppIconScale.current
-                            )
-                        )
-                    }
-                }
-            }
+            )
         }
     }
 }
@@ -2508,6 +2439,70 @@ fun SummaryScreen(
         }
     }
 
+    @Composable
+    fun SummarySecondaryTabs() {
+        CompositionLocalProvider(
+            androidx.compose.ui.platform.LocalLayoutDirection provides
+                    LayoutDirection.Rtl
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(54.dp)
+                    .background(
+                        brush = kmiSectionHeaderBrush()
+                    ),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                SummaryToggleButton(
+                    text = tr("התקדמות", "Progress"),
+                    selected = showProgress,
+                    onClick = {
+                        if (!isSummaryLoading) {
+                            showProgress = !showProgress
+                            if (showProgress) {
+                                showComparison = false
+                            }
+                        }
+                    },
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxHeight()
+                        .padding(start = 32.dp)
+                )
+                Box(
+                    modifier = Modifier
+                        .width(1.dp)
+                        .height(30.dp)
+                        .background(
+                            Color.White.copy(alpha = 0.65f)
+                        )
+                )
+                SummaryToggleButton(
+                    text =
+                        if (isCoach) {
+                            tr("נתוני הקבוצות", "Group data")
+                        } else {
+                            tr("השוואה", "Compare")
+                        },
+                    selected = showComparison,
+                    onClick = {
+                        if (!isSummaryLoading) {
+                            showComparison = !showComparison
+                            if (showComparison) {
+                                showProgress = false
+                            }
+                        }
+                    },
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxHeight()
+                        .padding(end = 32.dp)
+                )
+            }
+        }
+    }
+
     Scaffold(
         topBar = {
             val beltLabel = remember(belt, isEnglish) {
@@ -2536,7 +2531,10 @@ fun SummaryScreen(
             androidx.compose.runtime.CompositionLocalProvider(
                 androidx.compose.ui.platform.LocalLayoutDirection provides LayoutDirection.Rtl
             ) {
-                il.kmi.app.ui.KmiTopBar(
+                Column(
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    il.kmi.app.ui.KmiTopBar(
                     title = if (isEnglish) "Summary $beltLabel - ${overallPct}%" else "סיכום $beltLabel - ${overallPct}%",
                     onShare = { sharePdf(null) },
                     onPickSearchResult = { key -> handlePickFromTopBar(key) },
@@ -2567,7 +2565,9 @@ fun SummaryScreen(
                         langManager.setLanguage(newLang)
                         (contextLang as? Activity)?.recreate()
                     }
-                )
+                    )
+                    SummarySecondaryTabs()
+                }
             }
         },
         containerColor = Color.Transparent,
@@ -2799,1259 +2799,1104 @@ fun SummaryScreen(
             contentColor = summaryPrimaryText
         ) {
             Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .statusBarsPadding()
-                    .padding(top = 2.dp)
-                    .padding(horizontal = 14.dp),
+                modifier = Modifier.fillMaxSize(),
                 horizontalAlignment = Alignment.End
             ) {
-
                 Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(top = 0.dp, bottom = 8.dp),
-                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                    modifier = Modifier.fillMaxSize(),
+                    horizontalAlignment = Alignment.End
                 ) {
 
-                    Spacer(Modifier.height(0.dp))
-
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(10.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        SummaryToggleButton(
-                            text = tr("התקדמות", "Progress"),
-                            selected = showProgress,
-                            onClick = {
-                                showProgress = !showProgress
-                                if (showProgress) {
-                                    showComparison = false
-                                }
-                            },
-                            modifier = Modifier.weight(1f)
-                        )
-
-                        SummaryToggleButton(
-                            text =
-                                if (isCoach) {
-                                    tr(
-                                        "נתוני הקבוצות",
-                                        "Group data"
-                                    )
-                                } else {
-                                    tr(
-                                        "השוואה",
-                                        "Compare"
-                                    )
-                                },
-                            selected = showComparison,
-                            onClick = {
-                                showComparison =
-                                    !showComparison
-
-                                if (showComparison) {
-                                    showProgress = false
-                                }
-                            },
-                            modifier = Modifier.weight(1f)
-                        )
-                    }
-                }
-
-                if (
-                    showComparison &&
-                    isCoach
-                ) {
-                    CoachGroupsProgressCard(
-                        summary = coachGroupProgress,
-                        isLoaded = coachGroupProgressLoaded,
-                        belt = belt,
-                        isEnglish = isEnglish,
+                    Column(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(
-                                top = 2.dp,
-                                bottom = 10.dp
-                            ),
-                        onClose = {
-                            showComparison = false
-                        }
-                    )
-                } else if (showComparison) {
-                    UserProgressComparisonCard(
-                        comparison = userProgressComparison,
-                        isLoaded = userProgressComparisonLoaded,
-                        belt = belt,
-                        isEnglish = isEnglish,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(
-                                top = 2.dp,
-                                bottom = 10.dp
-                            ),
-                        onClose = {
-                            showComparison = false
-                        }
-                    )
-                }
-
-                /*
-   * שגיאות Firestore נשמרות ב-loadError לצורכי מצב פנימי,
-   * אך איננו מציגים למשתמש הודעות מערכת טכניות גולמיות.
-   */
-
-                if (showProgress) {
-                    Spacer(Modifier.height(8.dp))
-
-                    val partiallyKnownCount =
-                        partiallyKnownIds.size
-
-                    val notKnownCount =
-                        masteredMap.entries.count { (key, state) ->
-                            state == MarkState.NO &&
-                                    key !in partiallyKnownIds
-                        }
-
-                    /*
-                     * לצורך מד ההתקדמות בלבד, כל תרגיל
-                     * משויך לקטגוריה אחת לפי עדיפות:
-                     *
-                     * חיזוק ← תורגל ← נלמד.
-                     *
-                     * השיוכים המקוריים נשארים ללא שינוי,
-                     * גם כאשר לתרגיל נשמרו שני סימונים.
-                     */
-                    val coachReinforcementCount =
-                        coachStatusMap.values.count { statuses ->
-                            CoachSummaryStatus
-                                .NEEDS_REINFORCEMENT in
-                                    statuses
-                        }
-
-                    val coachPracticedCount =
-                        coachStatusMap.values.count { statuses ->
-                            CoachSummaryStatus
-                                .NEEDS_REINFORCEMENT !in
-                                    statuses &&
-                                    CoachSummaryStatus
-                                        .PRACTICED in
-                                    statuses
-                        }
-
-                    val coachTaughtCount =
-                        coachStatusMap.values.count { statuses ->
-                            CoachSummaryStatus
-                                .NEEDS_REINFORCEMENT !in
-                                    statuses &&
-                                    CoachSummaryStatus
-                                        .PRACTICED !in
-                                    statuses &&
-                                    CoachSummaryStatus
-                                        .TAUGHT in
-                                    statuses
-                        }
-
-                    /*
-                     * במצב מאמן אחוז ההתקדמות מבוסס על מספר
-                     * התרגילים שקיבלו לפחות סימון מאמן אחד.
-                     *
-                     * מוני המתאמן אינם נכנסים למד במצב מאמן.
-                     */
-                    val effectivePartiallyKnownCount =
-                        if (isCoach) {
-                            coachPracticedCount
-                        } else {
-                            partiallyKnownCount
-                        }
-
-                    val effectiveNotKnownCount =
-                        if (isCoach) {
-                            coachReinforcementCount
-                        } else {
-                            notKnownCount
-                        }
-
-                    val unmarkedCount =
-                        if (isCoach) {
-                            (
-                                    overallTotal -
-                                            overallDone
-                                    )
-                                .coerceAtLeast(0)
-                        } else {
-                            (
-                                    overallTotal -
-                                            overallDone -
-                                            partiallyKnownCount -
-                                            notKnownCount
-                                    )
-                                .coerceAtLeast(0)
-                        }
-
-                    Card(
-                        modifier = Modifier
-                            .widthIn(max = 318.dp)
-                            .align(Alignment.CenterHorizontally),
-                        shape = RoundedCornerShape(24.dp),
-                        colors = CardDefaults.cardColors(
-                            containerColor = summaryCardColor
-                        ),
-                        border = BorderStroke(
-                            width = 1.dp,
-                            color = belt.color.copy(alpha = 0.28f)
-                        ),
-                        elevation =
-                            CardDefaults.cardElevation(
-                                defaultElevation = 0.dp
-                            )
+                            .weight(1f)
+                            .padding(horizontal = 14.dp)
+                            .padding(top = 8.dp),
+                        horizontalAlignment = Alignment.End
                     ) {
-                        Column(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .background(
-                                    brush = Brush.verticalGradient(
-                                        colors = summaryCardGradient
-                                    )
-                                )
-                                .padding(horizontal = 16.dp, vertical = 14.dp),
-                            verticalArrangement = Arrangement.spacedBy(14.dp),
-                            horizontalAlignment = Alignment.CenterHorizontally
+                        if (
+                            showComparison &&
+                            isCoach
                         ) {
-                            Box(
+                            CoachGroupsProgressCard(
+                                summary = coachGroupProgress,
+                                isLoaded = coachGroupProgressLoaded,
+                                belt = belt,
+                                isEnglish = isEnglish,
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .heightIn(min = 62.dp)
-                            ) {
-                                IconButton(
-                                    onClick = { showProgress = false },
-                                    modifier = Modifier
-                                        .size(34.dp)
-                                        .offset(y = (-13).dp)
-                                        .align(
-                                            if (isEnglish) {
-                                                androidx.compose.ui.AbsoluteAlignment.CenterRight
-                                            } else {
-                                                androidx.compose.ui.AbsoluteAlignment.CenterLeft
-                                            }
-                                        )
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Filled.Close,
-                                        contentDescription = tr(
-                                            "סגור מד התקדמות",
-                                            "Close progress meter"
-                                        ),
-                                        tint = summarySecondaryText,
-                                        modifier = Modifier.size(
-                                            20.dp * LocalAppIconScale.current
-                                        )
-                                    )
+                                    .padding(
+                                        top = 2.dp,
+                                        bottom = 10.dp
+                                    ),
+                                onClose = {
+                                    showComparison = false
+                                }
+                            )
+                        } else if (showComparison) {
+                            UserProgressComparisonCard(
+                                comparison = userProgressComparison,
+                                isLoaded = userProgressComparisonLoaded,
+                                belt = belt,
+                                isEnglish = isEnglish,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(
+                                        top = 2.dp,
+                                        bottom = 10.dp
+                                    ),
+                                onClose = {
+                                    showComparison = false
+                                }
+                            )
+                        }
+
+                        /*
+           * שגיאות Firestore נשמרות ב-loadError לצורכי מצב פנימי,
+           * אך איננו מציגים למשתמש הודעות מערכת טכניות גולמיות.
+           */
+
+                        if (showProgress) {
+                            Spacer(Modifier.height(8.dp))
+
+                            val partiallyKnownCount =
+                                partiallyKnownIds.size
+
+                            val notKnownCount =
+                                masteredMap.entries.count { (key, state) ->
+                                    state == MarkState.NO &&
+                                            key !in partiallyKnownIds
                                 }
 
+                            /*
+                             * לצורך מד ההתקדמות בלבד, כל תרגיל
+                             * משויך לקטגוריה אחת לפי עדיפות:
+                             *
+                             * חיזוק ← תורגל ← נלמד.
+                             *
+                             * השיוכים המקוריים נשארים ללא שינוי,
+                             * גם כאשר לתרגיל נשמרו שני סימונים.
+                             */
+                            val coachReinforcementCount =
+                                coachStatusMap.values.count { statuses ->
+                                    CoachSummaryStatus
+                                        .NEEDS_REINFORCEMENT in
+                                            statuses
+                                }
+
+                            val coachPracticedCount =
+                                coachStatusMap.values.count { statuses ->
+                                    CoachSummaryStatus
+                                        .NEEDS_REINFORCEMENT !in
+                                            statuses &&
+                                            CoachSummaryStatus
+                                                .PRACTICED in
+                                            statuses
+                                }
+
+                            val coachTaughtCount =
+                                coachStatusMap.values.count { statuses ->
+                                    CoachSummaryStatus
+                                        .NEEDS_REINFORCEMENT !in
+                                            statuses &&
+                                            CoachSummaryStatus
+                                                .PRACTICED !in
+                                            statuses &&
+                                            CoachSummaryStatus
+                                                .TAUGHT in
+                                            statuses
+                                }
+
+                            /*
+                             * במצב מאמן אחוז ההתקדמות מבוסס על מספר
+                             * התרגילים שקיבלו לפחות סימון מאמן אחד.
+                             *
+                             * מוני המתאמן אינם נכנסים למד במצב מאמן.
+                             */
+                            val effectivePartiallyKnownCount =
+                                if (isCoach) {
+                                    coachPracticedCount
+                                } else {
+                                    partiallyKnownCount
+                                }
+
+                            val effectiveNotKnownCount =
+                                if (isCoach) {
+                                    coachReinforcementCount
+                                } else {
+                                    notKnownCount
+                                }
+
+                            val unmarkedCount =
+                                if (isCoach) {
+                                    (
+                                            overallTotal -
+                                                    overallDone
+                                            )
+                                        .coerceAtLeast(0)
+                                } else {
+                                    (
+                                            overallTotal -
+                                                    overallDone -
+                                                    partiallyKnownCount -
+                                                    notKnownCount
+                                            )
+                                        .coerceAtLeast(0)
+                                }
+
+                            Card(
+                                modifier = Modifier
+                                    .widthIn(max = 318.dp)
+                                    .align(Alignment.CenterHorizontally),
+                                shape = RoundedCornerShape(24.dp),
+                                colors = CardDefaults.cardColors(
+                                    containerColor = summaryCardColor
+                                ),
+                                border = BorderStroke(
+                                    width = 1.dp,
+                                    color = belt.color.copy(alpha = 0.28f)
+                                ),
+                                elevation =
+                                    CardDefaults.cardElevation(
+                                        defaultElevation = 0.dp
+                                    )
+                            ) {
                                 Column(
                                     modifier = Modifier
                                         .fillMaxWidth()
-                                        .align(Alignment.Center)
-                                        .absolutePadding(
-                                            left = if (isEnglish) 0.dp else 42.dp,
-                                            right = if (isEnglish) 42.dp else 0.dp
-                                        ),
-                                    horizontalAlignment = if (isEnglish) Alignment.Start else Alignment.End
-                                ) {
-                                    Text(
-                                        text = tr(
-                                            "מד התקדמות",
-                                            "Progress meter"
-                                        ),
-                                        style = KmiTypography.sectionTitle,
-                                        color = summaryPrimaryText,
-                                        textAlign =
-                                            if (isEnglish) {
-                                                TextAlign.Left
-                                            } else {
-                                                TextAlign.Right
-                                            },
-                                        maxLines = 1,
-                                        modifier = Modifier.fillMaxWidth()
-                                    )
-                                }
-                            }
-
-                            ProgressMeter(
-                                vm = vm,
-                                belt = belt,
-                                topic = null,
-                                modifier = Modifier.size(194.dp),
-                                meterSize = 194.dp,
-                                stroke = 16.dp,
-                                doneOverride =
-                                    if (isCoach) {
-                                        overallDone
-                                    } else {
-                                        null
-                                    },
-                                totalOverride = overallTotal,
-                                knownOverride =
-                                    if (isCoach) {
-                                        coachTaughtCount
-                                    } else {
-                                        overallDone
-                                    },
-                                partiallyKnownOverride =
-                                    effectivePartiallyKnownCount,
-                                notKnownOverride =
-                                    effectiveNotKnownCount
-                            )
-
-                            Row(
-                                modifier =
-                                    Modifier
-                                        .fillMaxWidth()
-                                        .height(
-                                            IntrinsicSize.Min
-                                        ),
-                                horizontalArrangement =
-                                    Arrangement.spacedBy(8.dp),
-                                verticalAlignment =
-                                    Alignment.CenterVertically
-                            ) {
-                                Surface(
-                                    modifier = Modifier
-                                        .weight(1f)
-                                        .heightIn(
-                                            min = 44.dp
-                                        ),
-                                    shape = RoundedCornerShape(16.dp),
-                                    color = Color(0xFF4CAF50)
-                                        .copy(alpha = 0.12f)
-                                        .compositeOver(summaryColors.surface),
-                                    border = BorderStroke(
-                                        width = 1.dp,
-                                        color = Color(0xFF4CAF50).copy(alpha = 0.26f)
-                                    )
-                                ) {
-                                    Box(
-                                        modifier = Modifier.fillMaxSize(),
-                                        contentAlignment = Alignment.Center
-                                    ) {
-                                        Text(
-                                            text =
-                                                if (isCoach) {
-                                                    tr(
-                                                        "נלמד: $coachTaughtCount",
-                                                        "Taught: $coachTaughtCount"
-                                                    )
-                                                } else {
-                                                    tr(
-                                                        "יודע: $overallDone",
-                                                        "Known: $overallDone"
-                                                    )
-                                                },
-                                            style = KmiTypography.caption.copy(
-                                                fontWeight = FontWeight.ExtraBold
-                                            ),
-                                            color = Color(0xFF4CAF50),
-                                            textAlign = TextAlign.Center,
-                                            maxLines = 1
-                                        )
-                                    }
-                                }
-
-                                /*
-                                 * יודע חלקית — קטגוריה כתומה נפרדת.
-                                 */
-                                Surface(
-                                    modifier = Modifier
-                                        .weight(1f)
-                                        .heightIn(
-                                            min = 44.dp
-                                        ),
-                                    shape =
-                                        RoundedCornerShape(
-                                            16.dp
-                                        ),
-                                    color =
-                                        Color(0xFFF28C28)
-                                            .copy(
-                                                alpha = 0.12f
+                                        .background(
+                                            brush = Brush.verticalGradient(
+                                                colors = summaryCardGradient
                                             )
-                                            .compositeOver(summaryColors.surface),
-                                    border = BorderStroke(
-                                        width = 1.dp,
-                                        color =
-                                            Color(0xFFF28C28)
-                                                .copy(
-                                                    alpha = 0.30f
-                                                )
-                                    )
-                                ) {
-                                    Box(
-                                        modifier =
-                                            Modifier.fillMaxSize(),
-                                        contentAlignment =
-                                            Alignment.Center
-                                    ) {
-                                        Text(
-                                            text =
-                                                if (isCoach) {
-                                                    tr(
-                                                        "תורגל: $coachPracticedCount",
-                                                        "Practiced: $coachPracticedCount"
-                                                    )
-                                                } else {
-                                                    tr(
-                                                        "חלקית: $partiallyKnownCount",
-                                                        "Partial: $partiallyKnownCount"
-                                                    )
-                                                },
-                                            style =
-                                                KmiTypography
-                                                    .caption
-                                                    .copy(
-                                                        fontWeight =
-                                                            FontWeight
-                                                                .ExtraBold
-                                                    ),
-                                            color =
-                                                Color(0xFFF28C28),
-                                            textAlign =
-                                                TextAlign.Center,
-                                            maxLines = 1,
-                                            overflow =
-                                                androidx.compose
-                                                    .ui
-                                                    .text
-                                                    .style
-                                                    .TextOverflow
-                                                    .Ellipsis
                                         )
-                                    }
-                                }
-
-                                /*
-                                 * לא יודע — קטגוריה אדומה.
-                                 */
-                                Surface(
-                                    modifier = Modifier
-                                        .weight(1f)
-                                        .heightIn(
-                                            min = 44.dp
-                                        ),
-                                    shape = RoundedCornerShape(16.dp),
-                                    color = Color(0xFFE53935)
-                                        .copy(alpha = 0.12f)
-                                        .compositeOver(summaryColors.surface),
-                                    border = BorderStroke(
-                                        width = 1.dp,
-                                        color = Color(0xFFE53935).copy(alpha = 0.26f)
-                                    )
-                                ) {
-                                    Box(
-                                        modifier = Modifier.fillMaxSize(),
-                                        contentAlignment = Alignment.Center
-                                    ) {
-                                        Text(
-                                            text =
-                                                if (isCoach) {
-                                                    tr(
-                                                        "חיזוק: $coachReinforcementCount",
-                                                        "Reinforce: $coachReinforcementCount"
-                                                    )
-                                                } else {
-                                                    tr(
-                                                        "לא יודע: $notKnownCount",
-                                                        "No: $notKnownCount"
-                                                    )
-                                                },
-                                            style = KmiTypography.caption.copy(
-                                                fontWeight = FontWeight.ExtraBold
-                                            ),
-                                            color = Color(0xFFE53935),
-                                            textAlign = TextAlign.Center,
-                                            maxLines = 1
-                                        )
-                                    }
-                                }
-
-                                Surface(
-                                    modifier = Modifier
-                                        .weight(1f)
-                                        .heightIn(
-                                            min = 44.dp
-                                        ),
-                                    shape = RoundedCornerShape(16.dp),
-                                    color = summaryColors.surfaceVariant.copy(
-                                        alpha = 0.72f
-                                    ),
-                                    border = BorderStroke(
-                                        width = 1.dp,
-                                        color = summaryColors.outline.copy(
-                                            alpha = 0.30f
-                                        )
-                                    )
+                                        .padding(horizontal = 16.dp, vertical = 14.dp),
+                                    verticalArrangement = Arrangement.spacedBy(14.dp),
+                                    horizontalAlignment = Alignment.CenterHorizontally
                                 ) {
                                     Box(
                                         modifier = Modifier
-                                            .fillMaxSize()
-                                            .padding(horizontal = 2.dp),
-                                        contentAlignment = Alignment.Center
+                                            .fillMaxWidth()
+                                            .heightIn(min = 62.dp)
                                     ) {
-                                        Text(
-                                            text = tr(
-                                                "לא סומן: $unmarkedCount",
-                                                "Open: $unmarkedCount"
-                                            ),
-                                            style = KmiTypography.caption.copy(
-                                                fontWeight = FontWeight.ExtraBold
-                                            ),
-                                            color = summarySecondaryText,
-                                            textAlign = TextAlign.Center,
-                                            maxLines = 1
-                                        )
-                                    }
-                                }
-                            }
-                        }
-                    }
-
-                    Spacer(Modifier.height(12.dp))
-                }
-
-                Column(
-                    modifier = Modifier
-                        .weight(1f)
-                        .clip(RoundedCornerShape(18.dp))
-                        .verticalScroll(scroll)
-                        .padding(bottom = 88.dp),
-                    verticalArrangement = Arrangement.spacedBy(0.dp)
-                ) {
-                    if (itemsByTopic.isEmpty()) {
-                        Card(
-                            modifier = Modifier.fillMaxWidth(),
-                            colors = CardDefaults.cardColors(containerColor = Color.Transparent),
-                            shape = RoundedCornerShape(18.dp),
-                            elevation =
-                                CardDefaults.cardElevation(
-                                    defaultElevation = 0.dp
-                                )
-                        ) {
-                            Text(
-                                text = tr(
-                                    "לא נמצאו פריטים להצגה עבור החגורה או הנושא שנבחרו.",
-                                    "No items were found for the selected belt or topic."
-                                ),
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .background(
-                                        brush = Brush.verticalGradient(
-                                            colors = summaryCardGradient
-                                        ),
-                                        shape = RoundedCornerShape(18.dp)
-                                    )
-                                    .padding(16.dp),
-                                color = summaryPrimaryText,
-                                textAlign =
-                                    if (isEnglish) {
-                                        TextAlign.Left
-                                    } else {
-                                        TextAlign.Right
-                                    }
-                            )
-                        }
-                    } else {
-                        val topicEntries =
-                            itemsByTopic.entries.toList()
-
-                        topicEntries.forEachIndexed { index, entry ->
-                            val topicTitle = entry.key
-                            val items = entry.value
-
-                            val isFirstTopic =
-                                index == 0
-
-                            val isLastTopic =
-                                index == topicEntries.lastIndex
-
-                            val topicCardShape =
-                                when {
-                                    isFirstTopic && isLastTopic ->
-                                        RoundedCornerShape(18.dp)
-
-                                    isFirstTopic ->
-                                        RoundedCornerShape(
-                                            topStart = 18.dp,
-                                            topEnd = 18.dp,
-                                            bottomStart = 0.dp,
-                                            bottomEnd = 0.dp
-                                        )
-
-                                    isLastTopic ->
-                                        RoundedCornerShape(
-                                            topStart = 0.dp,
-                                            topEnd = 0.dp,
-                                            bottomStart = 18.dp,
-                                            bottomEnd = 18.dp
-                                        )
-
-                                    else ->
-                                        RoundedCornerShape(0.dp)
-                                }
-
-                            val (done, total) =
-                                topicStats[topicTitle] ?: (0 to 0)
-
-                            val pct =
-                                if (total > 0) {
-                                    done * 100 / total
-                                } else {
-                                    0
-                                }
-
-                            val isTopicExpanded =
-                                topicExpandedState[topicTitle] ?: false
-
-                            val rowsBySubTopic = items
-                                .groupBy { row ->
-                                    row.subTopicTitle?.trim().orEmpty()
-                                }
-                                .toSortedMap(compareBy { key ->
-                                    key.ifBlank { "000" }
-                                })
-
-                            Card(
-                                modifier = Modifier.fillMaxWidth(),
-                                colors = CardDefaults.cardColors(
-                                    containerColor = summaryTopicRowColor
-                                ),
-                                elevation = CardDefaults.cardElevation(
-                                    defaultElevation = 0.dp
-                                ),
-                                shape = topicCardShape
-                            ) {
-                                Column(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(
-                                            horizontal = 12.dp,
-                                            vertical = 8.dp
-                                        ),
-                                    verticalArrangement = Arrangement.spacedBy(8.dp)
-                                ) {
-                                    androidx.compose.runtime.CompositionLocalProvider(
-                                        androidx.compose.ui.platform.LocalLayoutDirection provides
-                                                if (isEnglish) {
-                                                    LayoutDirection.Ltr
-                                                } else {
-                                                    LayoutDirection.Rtl
-                                                }
-                                    ) {
-                                        Row(
-                                            modifier =
-                                                Modifier
-                                                    .fillMaxWidth()
-                                                    .clickable {
-                                                        topicExpandedState[
-                                                            topicTitle
-                                                        ] =
-                                                            !isTopicExpanded
+                                        IconButton(
+                                            onClick = { showProgress = false },
+                                            modifier = Modifier
+                                                .size(34.dp)
+                                                .offset(y = (-13).dp)
+                                                .align(
+                                                    if (isEnglish) {
+                                                        androidx.compose.ui.AbsoluteAlignment.CenterRight
+                                                    } else {
+                                                        androidx.compose.ui.AbsoluteAlignment.CenterLeft
                                                     }
-                                                    .padding(
-                                                        vertical = 2.dp
-                                                    ),
-                                            verticalAlignment =
-                                                Alignment.CenterVertically
+                                                )
+                                        ) {
+                                            Icon(
+                                                imageVector = Icons.Filled.Close,
+                                                contentDescription = tr(
+                                                    "סגור מד התקדמות",
+                                                    "Close progress meter"
+                                                ),
+                                                tint = summarySecondaryText,
+                                                modifier = Modifier.size(
+                                                    20.dp * LocalAppIconScale.current
+                                                )
+                                            )
+                                        }
+
+                                        Column(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .align(Alignment.Center)
+                                                .absolutePadding(
+                                                    left = if (isEnglish) 0.dp else 42.dp,
+                                                    right = if (isEnglish) 42.dp else 0.dp
+                                                ),
+                                            horizontalAlignment = if (isEnglish) Alignment.Start else Alignment.End
                                         ) {
                                             Text(
-                                                text =
-                                                    if (isEnglish) {
-                                                        "${
-                                                            topicDisplayName(
-                                                                topicTitle,
-                                                                true
-                                                            )
-                                                        } - $pct%"
-                                                    } else {
-                                                        "$topicTitle – $pct%"
-                                                    },
-                                                style =
-                                                    KmiTypography.cardTitle.copy(
-                                                        fontWeight =
-                                                            FontWeight.Black
-                                                    ),
+                                                text = tr(
+                                                    "מד התקדמות",
+                                                    "Progress meter"
+                                                ),
+                                                style = KmiTypography.sectionTitle,
+                                                color = summaryPrimaryText,
                                                 textAlign =
                                                     if (isEnglish) {
                                                         TextAlign.Left
                                                     } else {
                                                         TextAlign.Right
                                                     },
-                                                maxLines = 2,
-                                                modifier = Modifier
-                                                    .weight(1f)
-                                                    .fillMaxWidth(),
-                                                color =
-                                                    summaryTopicTitleColor
+                                                maxLines = 1,
+                                                modifier = Modifier.fillMaxWidth()
                                             )
+                                        }
+                                    }
 
-                                            Spacer(
-                                                Modifier.width(4.dp)
+                                    ProgressMeter(
+                                        vm = vm,
+                                        belt = belt,
+                                        topic = null,
+                                        modifier = Modifier.size(194.dp),
+                                        meterSize = 194.dp,
+                                        stroke = 16.dp,
+                                        doneOverride =
+                                            if (isCoach) {
+                                                overallDone
+                                            } else {
+                                                null
+                                            },
+                                        totalOverride = overallTotal,
+                                        knownOverride =
+                                            if (isCoach) {
+                                                coachTaughtCount
+                                            } else {
+                                                overallDone
+                                            },
+                                        partiallyKnownOverride =
+                                            effectivePartiallyKnownCount,
+                                        notKnownOverride =
+                                            effectiveNotKnownCount
+                                    )
+
+                                    Row(
+                                        modifier =
+                                            Modifier
+                                                .fillMaxWidth()
+                                                .height(
+                                                    IntrinsicSize.Min
+                                                ),
+                                        horizontalArrangement =
+                                            Arrangement.spacedBy(8.dp),
+                                        verticalAlignment =
+                                            Alignment.CenterVertically
+                                    ) {
+                                        Surface(
+                                            modifier = Modifier
+                                                .weight(1f)
+                                                .heightIn(
+                                                    min = 44.dp
+                                                ),
+                                            shape = RoundedCornerShape(16.dp),
+                                            color = Color(0xFF4CAF50)
+                                                .copy(alpha = 0.12f)
+                                                .compositeOver(summaryColors.surface),
+                                            border = BorderStroke(
+                                                width = 1.dp,
+                                                color = Color(0xFF4CAF50).copy(alpha = 0.26f)
                                             )
-
-                                            IconButton(
-                                                onClick = {
-                                                    topicExpandedState[topicTitle] =
-                                                        !isTopicExpanded
-                                                },
-                                                modifier = Modifier.size(40.dp)
+                                        ) {
+                                            Box(
+                                                modifier = Modifier.fillMaxSize(),
+                                                contentAlignment = Alignment.Center
                                             ) {
-                                                Icon(
-                                                    imageVector =
-                                                        if (isTopicExpanded) {
-                                                            Icons.Filled.ExpandLess
-                                                        } else {
-                                                            Icons.Filled.ExpandMore
-                                                        },
-                                                    contentDescription =
-                                                        if (isTopicExpanded) {
+                                                Text(
+                                                    text =
+                                                        if (isCoach) {
                                                             tr(
-                                                                "סגירת כרטיס הנושא",
-                                                                "Collapse topic card"
+                                                                "נלמד: $coachTaughtCount",
+                                                                "Taught: $coachTaughtCount"
                                                             )
                                                         } else {
                                                             tr(
-                                                                "פתיחת כרטיס הנושא",
-                                                                "Expand topic card"
+                                                                "יודע: $overallDone",
+                                                                "Known: $overallDone"
                                                             )
                                                         },
-                                                    tint = belt.color,
-                                                    modifier = Modifier.size(
-                                                        26.dp * LocalAppIconScale.current
+                                                    style = KmiTypography.caption.copy(
+                                                        fontWeight = FontWeight.ExtraBold
+                                                    ),
+                                                    color = Color(0xFF4CAF50),
+                                                    textAlign = TextAlign.Center,
+                                                    maxLines = 1
+                                                )
+                                            }
+                                        }
+
+                                        /*
+                                         * יודע חלקית — קטגוריה כתומה נפרדת.
+                                         */
+                                        Surface(
+                                            modifier = Modifier
+                                                .weight(1f)
+                                                .heightIn(
+                                                    min = 44.dp
+                                                ),
+                                            shape =
+                                                RoundedCornerShape(
+                                                    16.dp
+                                                ),
+                                            color =
+                                                Color(0xFFF28C28)
+                                                    .copy(
+                                                        alpha = 0.12f
                                                     )
+                                                    .compositeOver(summaryColors.surface),
+                                            border = BorderStroke(
+                                                width = 1.dp,
+                                                color =
+                                                    Color(0xFFF28C28)
+                                                        .copy(
+                                                            alpha = 0.30f
+                                                        )
+                                            )
+                                        ) {
+                                            Box(
+                                                modifier =
+                                                    Modifier.fillMaxSize(),
+                                                contentAlignment =
+                                                    Alignment.Center
+                                            ) {
+                                                Text(
+                                                    text =
+                                                        if (isCoach) {
+                                                            tr(
+                                                                "תורגל: $coachPracticedCount",
+                                                                "Practiced: $coachPracticedCount"
+                                                            )
+                                                        } else {
+                                                            tr(
+                                                                "חלקית: $partiallyKnownCount",
+                                                                "Partial: $partiallyKnownCount"
+                                                            )
+                                                        },
+                                                    style =
+                                                        KmiTypography
+                                                            .caption
+                                                            .copy(
+                                                                fontWeight =
+                                                                    FontWeight
+                                                                        .ExtraBold
+                                                            ),
+                                                    color =
+                                                        Color(0xFFF28C28),
+                                                    textAlign =
+                                                        TextAlign.Center,
+                                                    maxLines = 1,
+                                                    overflow =
+                                                        androidx.compose
+                                                            .ui
+                                                            .text
+                                                            .style
+                                                            .TextOverflow
+                                                            .Ellipsis
+                                                )
+                                            }
+                                        }
+
+                                        /*
+                                         * לא יודע — קטגוריה אדומה.
+                                         */
+                                        Surface(
+                                            modifier = Modifier
+                                                .weight(1f)
+                                                .heightIn(
+                                                    min = 44.dp
+                                                ),
+                                            shape = RoundedCornerShape(16.dp),
+                                            color = Color(0xFFE53935)
+                                                .copy(alpha = 0.12f)
+                                                .compositeOver(summaryColors.surface),
+                                            border = BorderStroke(
+                                                width = 1.dp,
+                                                color = Color(0xFFE53935).copy(alpha = 0.26f)
+                                            )
+                                        ) {
+                                            Box(
+                                                modifier = Modifier.fillMaxSize(),
+                                                contentAlignment = Alignment.Center
+                                            ) {
+                                                Text(
+                                                    text =
+                                                        if (isCoach) {
+                                                            tr(
+                                                                "חיזוק: $coachReinforcementCount",
+                                                                "Reinforce: $coachReinforcementCount"
+                                                            )
+                                                        } else {
+                                                            tr(
+                                                                "לא יודע: $notKnownCount",
+                                                                "No: $notKnownCount"
+                                                            )
+                                                        },
+                                                    style = KmiTypography.caption.copy(
+                                                        fontWeight = FontWeight.ExtraBold
+                                                    ),
+                                                    color = Color(0xFFE53935),
+                                                    textAlign = TextAlign.Center,
+                                                    maxLines = 1
+                                                )
+                                            }
+                                        }
+
+                                        Surface(
+                                            modifier = Modifier
+                                                .weight(1f)
+                                                .heightIn(
+                                                    min = 44.dp
+                                                ),
+                                            shape = RoundedCornerShape(16.dp),
+                                            color = summaryColors.surfaceVariant.copy(
+                                                alpha = 0.72f
+                                            ),
+                                            border = BorderStroke(
+                                                width = 1.dp,
+                                                color = summaryColors.outline.copy(
+                                                    alpha = 0.30f
+                                                )
+                                            )
+                                        ) {
+                                            Box(
+                                                modifier = Modifier
+                                                    .fillMaxSize()
+                                                    .padding(horizontal = 2.dp),
+                                                contentAlignment = Alignment.Center
+                                            ) {
+                                                Text(
+                                                    text = tr(
+                                                        "לא סומן: $unmarkedCount",
+                                                        "Open: $unmarkedCount"
+                                                    ),
+                                                    style = KmiTypography.caption.copy(
+                                                        fontWeight = FontWeight.ExtraBold
+                                                    ),
+                                                    color = summarySecondaryText,
+                                                    textAlign = TextAlign.Center,
+                                                    maxLines = 1
                                                 )
                                             }
                                         }
                                     }
+                                }
+                            }
 
-                                    if (!isTopicExpanded) {
-                                        // במצב סגור מוצגת רק כותרת הנושא.
-                                    } else if (items.isEmpty()) {
-                                        Text(
-                                            text = tr(
-                                                "אין פריטים בנושא הזה.",
-                                                "No items in this topic."
-                                            ),
-                                            style = KmiTypography.body,
-                                            textAlign =
-                                                if (isEnglish) {
-                                                    TextAlign.Left
-                                                } else {
-                                                    TextAlign.Right
-                                                },
-                                            modifier = Modifier.fillMaxWidth(),
-                                            color =
-                                                MaterialTheme.colorScheme.onSurfaceVariant
+                            Spacer(Modifier.height(12.dp))
+                        }
+
+                        Column(
+                            modifier = Modifier
+                                .weight(1f)
+                                .clip(RoundedCornerShape(18.dp))
+                                .verticalScroll(scroll)
+                                .padding(bottom = 88.dp),
+                            verticalArrangement = Arrangement.spacedBy(0.dp)
+                        ) {
+                            if (itemsByTopic.isEmpty()) {
+                                Card(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    colors = CardDefaults.cardColors(containerColor = Color.Transparent),
+                                    shape = RoundedCornerShape(18.dp),
+                                    elevation =
+                                        CardDefaults.cardElevation(
+                                            defaultElevation = 0.dp
                                         )
-                                    } else {
-                                        rowsBySubTopic.forEach { (subTopicTitleRaw, rowsInSubTopic) ->
-                                            val subDone = rowsInSubTopic.count { row ->
-                                                val statusId = summaryExerciseIdentityIdFor(
-                                                    belt = belt,
-                                                    topicKey = row.statusTopicKey,
-                                                    topicTitle = row.sourceTopicTitle,
-                                                    index = row.indexInStatusGroup,
-                                                    item = row.itemRaw
+                                ) {
+                                    Text(
+                                        text = tr(
+                                            "לא נמצאו פריטים להצגה עבור החגורה או הנושא שנבחרו.",
+                                            "No items were found for the selected belt or topic."
+                                        ),
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .background(
+                                                brush = Brush.verticalGradient(
+                                                    colors = summaryCardGradient
+                                                ),
+                                                shape = RoundedCornerShape(18.dp)
+                                            )
+                                            .padding(16.dp),
+                                        color = summaryPrimaryText,
+                                        textAlign =
+                                            if (isEnglish) {
+                                                TextAlign.Left
+                                            } else {
+                                                TextAlign.Right
+                                            }
+                                    )
+                                }
+                            } else {
+                                val topicEntries =
+                                    itemsByTopic.entries.toList()
+
+                                topicEntries.forEachIndexed { index, entry ->
+                                    val topicTitle = entry.key
+                                    val items = entry.value
+
+                                    val isFirstTopic =
+                                        index == 0
+
+                                    val isLastTopic =
+                                        index == topicEntries.lastIndex
+
+                                    val topicCardShape =
+                                        when {
+                                            isFirstTopic && isLastTopic ->
+                                                RoundedCornerShape(18.dp)
+
+                                            isFirstTopic ->
+                                                RoundedCornerShape(
+                                                    topStart = 18.dp,
+                                                    topEnd = 18.dp,
+                                                    bottomStart = 0.dp,
+                                                    bottomEnd = 0.dp
                                                 )
 
-                                                if (isCoach) {
-                                                    coachStatusMap[
-                                                        topicTitle to statusId
-                                                    ]
-                                                        .orEmpty()
-                                                        .isNotEmpty()
-                                                } else {
-                                                    masteredMap[topicTitle to statusId] ==
-                                                            MarkState.YES
+                                            isLastTopic ->
+                                                RoundedCornerShape(
+                                                    topStart = 0.dp,
+                                                    topEnd = 0.dp,
+                                                    bottomStart = 18.dp,
+                                                    bottomEnd = 18.dp
+                                                )
+
+                                            else ->
+                                                RoundedCornerShape(0.dp)
+                                        }
+
+                                    val (done, total) =
+                                        topicStats[topicTitle] ?: (0 to 0)
+
+                                    val pct =
+                                        if (total > 0) {
+                                            done * 100 / total
+                                        } else {
+                                            0
+                                        }
+
+                                    val isTopicExpanded =
+                                        topicExpandedState[topicTitle] ?: false
+
+                                    val rowsBySubTopic = items
+                                        .groupBy { row ->
+                                            row.subTopicTitle?.trim().orEmpty()
+                                        }
+                                        .toSortedMap(compareBy { key ->
+                                            key.ifBlank { "000" }
+                                        })
+
+                                    Card(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        colors = CardDefaults.cardColors(
+                                            containerColor = summaryTopicRowColor
+                                        ),
+                                        elevation = CardDefaults.cardElevation(
+                                            defaultElevation = 0.dp
+                                        ),
+                                        shape = topicCardShape
+                                    ) {
+                                        Column(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .padding(
+                                                    horizontal = 12.dp,
+                                                    vertical = 8.dp
+                                                ),
+                                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                                        ) {
+                                            androidx.compose.runtime.CompositionLocalProvider(
+                                                androidx.compose.ui.platform.LocalLayoutDirection provides
+                                                        if (isEnglish) {
+                                                            LayoutDirection.Ltr
+                                                        } else {
+                                                            LayoutDirection.Rtl
+                                                        }
+                                            ) {
+                                                Row(
+                                                    modifier =
+                                                        Modifier
+                                                            .fillMaxWidth()
+                                                            .clickable {
+                                                                topicExpandedState[
+                                                                    topicTitle
+                                                                ] =
+                                                                    !isTopicExpanded
+                                                            }
+                                                            .padding(
+                                                                vertical = 2.dp
+                                                            ),
+                                                    verticalAlignment =
+                                                        Alignment.CenterVertically
+                                                ) {
+                                                    Text(
+                                                        text =
+                                                            if (isEnglish) {
+                                                                "${
+                                                                    topicDisplayName(
+                                                                        topicTitle,
+                                                                        true
+                                                                    )
+                                                                } - $pct%"
+                                                            } else {
+                                                                "$topicTitle – $pct%"
+                                                            },
+                                                        style =
+                                                            KmiTypography.cardTitle.copy(
+                                                                fontWeight =
+                                                                    FontWeight.Black
+                                                            ),
+                                                        textAlign =
+                                                            if (isEnglish) {
+                                                                TextAlign.Left
+                                                            } else {
+                                                                TextAlign.Right
+                                                            },
+                                                        maxLines = 2,
+                                                        modifier = Modifier
+                                                            .weight(1f)
+                                                            .fillMaxWidth(),
+                                                        color =
+                                                            summaryTopicTitleColor
+                                                    )
+
+                                                    Spacer(
+                                                        Modifier.width(4.dp)
+                                                    )
+
+                                                    IconButton(
+                                                        onClick = {
+                                                            topicExpandedState[topicTitle] =
+                                                                !isTopicExpanded
+                                                        },
+                                                        modifier = Modifier.size(40.dp)
+                                                    ) {
+                                                        Icon(
+                                                            imageVector =
+                                                                if (isTopicExpanded) {
+                                                                    Icons.Filled.ExpandLess
+                                                                } else {
+                                                                    Icons.Filled.ExpandMore
+                                                                },
+                                                            contentDescription =
+                                                                if (isTopicExpanded) {
+                                                                    tr(
+                                                                        "סגירת כרטיס הנושא",
+                                                                        "Collapse topic card"
+                                                                    )
+                                                                } else {
+                                                                    tr(
+                                                                        "פתיחת כרטיס הנושא",
+                                                                        "Expand topic card"
+                                                                    )
+                                                                },
+                                                            tint = belt.color,
+                                                            modifier = Modifier.size(
+                                                                26.dp * LocalAppIconScale.current
+                                                            )
+                                                        )
+                                                    }
                                                 }
                                             }
 
-                                            val subTotal = rowsInSubTopic.size
-                                            val subPct =
-                                                if (subTotal > 0) (subDone * 100 / subTotal) else 0
-
-                                            val hasRealSubTopic =
-                                                subTopicTitleRaw
-                                                    .trim()
-                                                    .isNotBlank()
-
-                                            Surface(
-                                                modifier =
-                                                    Modifier.fillMaxWidth(),
-                                                shape =
-                                                    RoundedCornerShape(16.dp),
-                                                color =
-                                                    if (hasRealSubTopic) {
-                                                        belt.color.copy(
-                                                            alpha = 0.055f
-                                                        )
-                                                    } else {
-                                                        Color.Transparent
-                                                    },
-                                                border =
-                                                    if (hasRealSubTopic) {
-                                                        BorderStroke(
-                                                            width = 1.dp,
-                                                            color =
-                                                                belt.color.copy(
-                                                                    alpha = 0.10f
-                                                                )
-                                                        )
-                                                    } else {
-                                                        null
-                                                    },
-                                                tonalElevation = 0.dp,
-                                                shadowElevation = 0.dp
-                                            ) {
-                                                Column(
-                                                    modifier = Modifier
-                                                        .fillMaxWidth()
-                                                        .padding(
-                                                            horizontal =
-                                                                if (
-                                                                    hasRealSubTopic
-                                                                ) {
-                                                                    10.dp
-                                                                } else {
-                                                                    0.dp
-                                                                },
-                                                            vertical =
-                                                                if (
-                                                                    hasRealSubTopic
-                                                                ) {
-                                                                    8.dp
-                                                                } else {
-                                                                    0.dp
-                                                                }
-                                                        ),
-                                                    verticalArrangement =
-                                                        Arrangement.spacedBy(
-                                                            6.dp
-                                                        )
-                                                ) {
-                                                    if (hasRealSubTopic) {
-                                                        androidx.compose.runtime.CompositionLocalProvider(
-                                                            androidx.compose.ui.platform.LocalLayoutDirection provides
-                                                                    if (isEnglish) {
-                                                                        LayoutDirection.Ltr
-                                                                    } else {
-                                                                        LayoutDirection.Rtl
-                                                                    }
-                                                        ) {
-                                                            Text(
-                                                                text =
-                                                                    if (isEnglish) {
-                                                                        "${
-                                                                            subTopicDisplayName(
-                                                                                subTopicTitleRaw,
-                                                                                true
-                                                                            )
-                                                                        } - $subPct%"
-                                                                    } else {
-                                                                        "${
-                                                                            subTopicDisplayName(
-                                                                                subTopicTitleRaw,
-                                                                                false
-                                                                            )
-                                                                        } – $subPct%"
-                                                                    },
-                                                                style =
-                                                                    KmiTypography.cardTitle.copy(
-                                                                        fontWeight =
-                                                                            FontWeight.ExtraBold
-                                                                    ),
-                                                                color =
-                                                                    summarySubTopicTitleColor,
-                                                                textAlign =
-                                                                    if (isEnglish) {
-                                                                        TextAlign.Left
-                                                                    } else {
-                                                                        TextAlign.Right
-                                                                    },
-                                                                maxLines = 2,
-                                                                modifier =
-                                                                    Modifier.fillMaxWidth()
-                                                            )
-                                                        }
-                                                    }
-
-                                                    rowsInSubTopic.forEach { row ->
-                                                        val itemRaw = row.itemRaw
-                                                        val canonicalId = canonicalFromRepo(
-                                                            row.sourceTopicTitle,
-                                                            itemRaw
-                                                        )
-
+                                            if (!isTopicExpanded) {
+                                                // במצב סגור מוצגת רק כותרת הנושא.
+                                            } else if (items.isEmpty()) {
+                                                Text(
+                                                    text = tr(
+                                                        "אין פריטים בנושא הזה.",
+                                                        "No items in this topic."
+                                                    ),
+                                                    style = KmiTypography.body,
+                                                    textAlign =
+                                                        if (isEnglish) {
+                                                            TextAlign.Left
+                                                        } else {
+                                                            TextAlign.Right
+                                                        },
+                                                    modifier = Modifier.fillMaxWidth(),
+                                                    color =
+                                                        MaterialTheme.colorScheme.onSurfaceVariant
+                                                )
+                                            } else {
+                                                rowsBySubTopic.forEach { (subTopicTitleRaw, rowsInSubTopic) ->
+                                                    val subDone = rowsInSubTopic.count { row ->
                                                         val statusId = summaryExerciseIdentityIdFor(
                                                             belt = belt,
                                                             topicKey = row.statusTopicKey,
                                                             topicTitle = row.sourceTopicTitle,
                                                             index = row.indexInStatusGroup,
-                                                            item = itemRaw
+                                                            item = row.itemRaw
                                                         )
 
-                                                        val state =
-                                                            masteredMap[
-                                                                topicTitle to statusId
-                                                            ] ?: MarkState.NONE
-
-                                                        val isPartiallyKnown =
-                                                            partiallyKnownIds
-                                                                .contains(
-                                                                    topicTitle to
-                                                                            statusId
-                                                                )
-
-                                                        val coachStatuses =
+                                                        if (isCoach) {
                                                             coachStatusMap[
                                                                 topicTitle to statusId
                                                             ]
                                                                 .orEmpty()
-                                                                .take(2)
+                                                                .isNotEmpty()
+                                                        } else {
+                                                            masteredMap[topicTitle to statusId] ==
+                                                                    MarkState.YES
+                                                        }
+                                                    }
 
-                                                        val coachPrimaryStatus =
-                                                            coachStatuses.firstOrNull()
-                                                                ?: CoachSummaryStatus.NOT_TAUGHT
+                                                    val subTotal = rowsInSubTopic.size
+                                                    val subPct =
+                                                        if (subTotal > 0) (subDone * 100 / subTotal) else 0
 
-                                                        val statusBackgroundColor =
-                                                            if (isCoach) {
-                                                                when (coachPrimaryStatus) {
-                                                                    CoachSummaryStatus.NOT_TAUGHT ->
-                                                                        summaryColors.outline
+                                                    val hasRealSubTopic =
+                                                        subTopicTitleRaw
+                                                            .trim()
+                                                            .isNotBlank()
 
-                                                                    CoachSummaryStatus.TAUGHT ->
-                                                                        Color(0xFFF3A062)
-
-                                                                    CoachSummaryStatus.PRACTICED ->
-                                                                        Color(0xFF2F9B4E)
-
-                                                                    CoachSummaryStatus.NEEDS_REINFORCEMENT ->
-                                                                        Color(0xFF3478D4)
-                                                                }
+                                                    Surface(
+                                                        modifier =
+                                                            Modifier.fillMaxWidth(),
+                                                        shape =
+                                                            RoundedCornerShape(16.dp),
+                                                        color =
+                                                            if (hasRealSubTopic) {
+                                                                belt.color.copy(
+                                                                    alpha = 0.055f
+                                                                )
                                                             } else {
-                                                                if (isPartiallyKnown) {
-                                                                    Color(0xFFF28C28)
-                                                                } else {
-                                                                    when (state) {
-                                                                        MarkState.YES ->
-                                                                            Color(0xFF4CAF50)
-
-                                                                        MarkState.NO ->
-                                                                            Color(0xFFE53935)
-
-                                                                        MarkState.NONE ->
-                                                                            summaryColors.surfaceVariant
-                                                                    }
-                                                                }
-                                                            }
-
-                                                        val statusForegroundColor =
-                                                            if (
-                                                                !isCoach &&
-                                                                state == MarkState.NONE
-                                                            ) {
-                                                                summaryColors.onSurfaceVariant
+                                                                Color.Transparent
+                                                            },
+                                                        border =
+                                                            if (hasRealSubTopic) {
+                                                                BorderStroke(
+                                                                    width = 1.dp,
+                                                                    color =
+                                                                        belt.color.copy(
+                                                                            alpha = 0.10f
+                                                                        )
+                                                                )
                                                             } else {
-                                                                Color.White
-                                                            }
-
-                                                        val cleanFavId =
-                                                            cleanItem(
-                                                                row.sourceTopicTitle,
-                                                                canonicalId
-                                                            )
-
-                                                        val itemHasNote =
-                                                            hasNote(
-                                                                row.sourceTopicTitle,
-                                                                cleanFavId
-                                                            )
-
-                                                        Row(
+                                                                null
+                                                            },
+                                                        tonalElevation = 0.dp,
+                                                        shadowElevation = 0.dp
+                                                    ) {
+                                                        Column(
                                                             modifier = Modifier
                                                                 .fillMaxWidth()
-                                                                .background(
-                                                                    color =
-                                                                        if (isCoach) {
-                                                                            when (coachPrimaryStatus) {
-                                                                                CoachSummaryStatus.PRACTICED ->
-                                                                                    Color(0xFF2F9B4E)
-                                                                                        .copy(alpha = 0.07f)
-                                                                                        .compositeOver(
-                                                                                            summaryColors.surface
-                                                                                        )
-
-                                                                                CoachSummaryStatus.TAUGHT ->
-                                                                                    Color(0xFFF3A062)
-                                                                                        .copy(alpha = 0.07f)
-                                                                                        .compositeOver(
-                                                                                            summaryColors.surface
-                                                                                        )
-
-                                                                                CoachSummaryStatus.NEEDS_REINFORCEMENT ->
-                                                                                    Color(0xFF3478D4)
-                                                                                        .copy(alpha = 0.07f)
-                                                                                        .compositeOver(
-                                                                                            summaryColors.surface
-                                                                                        )
-
-                                                                                CoachSummaryStatus.NOT_TAUGHT ->
-                                                                                    Color.Transparent
-                                                                            }
-                                                                        } else {
-                                                                            when {
-                                                                                isPartiallyKnown ->
-                                                                                    Color(0xFFF28C28)
-                                                                                        .copy(alpha = 0.075f)
-                                                                                        .compositeOver(
-                                                                                            summaryColors.surface
-                                                                                        )
-
-                                                                                state == MarkState.YES ->
-                                                                                    belt.color
-                                                                                        .copy(alpha = 0.075f)
-                                                                                        .compositeOver(
-                                                                                            summaryColors.surface
-                                                                                        )
-
-                                                                                else ->
-                                                                                    Color.Transparent
-                                                                            }
-                                                                        },
-                                                                    shape = RoundedCornerShape(14.dp)
-                                                                )
                                                                 .padding(
-                                                                    horizontal = 8.dp,
-                                                                    vertical = 6.dp
+                                                                    horizontal =
+                                                                        if (
+                                                                            hasRealSubTopic
+                                                                        ) {
+                                                                            10.dp
+                                                                        } else {
+                                                                            0.dp
+                                                                        },
+                                                                    vertical =
+                                                                        if (
+                                                                            hasRealSubTopic
+                                                                        ) {
+                                                                            8.dp
+                                                                        } else {
+                                                                            0.dp
+                                                                        }
                                                                 ),
-                                                            verticalAlignment = Alignment.CenterVertically
+                                                            verticalArrangement =
+                                                                Arrangement.spacedBy(
+                                                                    6.dp
+                                                                )
                                                         ) {
-                                                            /*
-                                                             * הטקסט מופיע ראשון בתוך Row:
-                                                             *
-                                                             * בעברית, בגלל RTL, הוא מוצמד לקצה הימני
-                                                             * ואייקון הסטטוס עובר לקצה השמאלי.
-                                                             *
-                                                             * באנגלית, בגלל LTR, הטקסט מתחיל משמאל
-                                                             * ואייקון הסטטוס עובר לקצה הימני.
-                                                             */
-                                                            androidx.compose.runtime.CompositionLocalProvider(
-                                                                androidx.compose.ui.platform.LocalLayoutDirection provides
-                                                                        if (isEnglish) {
-                                                                            LayoutDirection.Ltr
-                                                                        } else {
-                                                                            LayoutDirection.Rtl
-                                                                        }
-                                                            ) {
-                                                                Column(
-                                                                    modifier = Modifier
-                                                                        .weight(1f)
-                                                                        .fillMaxWidth(),
-                                                                    horizontalAlignment =
-                                                                        if (isEnglish) {
-                                                                            Alignment.Start
-                                                                        } else {
-                                                                            Alignment.End
-                                                                        }
+                                                            if (hasRealSubTopic) {
+                                                                androidx.compose.runtime.CompositionLocalProvider(
+                                                                    androidx.compose.ui.platform.LocalLayoutDirection provides
+                                                                            if (isEnglish) {
+                                                                                LayoutDirection.Ltr
+                                                                            } else {
+                                                                                LayoutDirection.Rtl
+                                                                            }
                                                                 ) {
                                                                     Text(
                                                                         text =
-                                                                            exerciseDisplayNameForUi(
-                                                                                row.sourceTopicTitle,
-                                                                                itemRaw,
-                                                                                isEnglish
+                                                                            if (isEnglish) {
+                                                                                "${
+                                                                                    subTopicDisplayName(
+                                                                                        subTopicTitleRaw,
+                                                                                        true
+                                                                                    )
+                                                                                } - $subPct%"
+                                                                            } else {
+                                                                                "${
+                                                                                    subTopicDisplayName(
+                                                                                        subTopicTitleRaw,
+                                                                                        false
+                                                                                    )
+                                                                                } – $subPct%"
+                                                                            },
+                                                                        style =
+                                                                            KmiTypography.cardTitle.copy(
+                                                                                fontWeight =
+                                                                                    FontWeight.ExtraBold
                                                                             ),
-                                                                        style = KmiTypography.body,
-                                                                        color = summaryPrimaryText,
+                                                                        color =
+                                                                            summarySubTopicTitleColor,
                                                                         textAlign =
                                                                             if (isEnglish) {
                                                                                 TextAlign.Left
                                                                             } else {
                                                                                 TextAlign.Right
                                                                             },
-                                                                        maxLines = 3,
-                                                                        overflow =
-                                                                            androidx.compose.ui.text.style.TextOverflow.Ellipsis,
-                                                                        modifier = Modifier.fillMaxWidth()
+                                                                        maxLines = 2,
+                                                                        modifier =
+                                                                            Modifier.fillMaxWidth()
                                                                     )
-
-                                                                    if (itemHasNote) {
-                                                                        Text(
-                                                                            text = tr(
-                                                                                "יש הערה שמורה",
-                                                                                "Saved note exists"
-                                                                            ),
-                                                                            style = KmiTypography.caption,
-                                                                            color =
-                                                                                MaterialTheme.colorScheme.primary,
-                                                                            textAlign =
-                                                                                if (isEnglish) {
-                                                                                    TextAlign.Left
-                                                                                } else {
-                                                                                    TextAlign.Right
-                                                                                },
-                                                                            maxLines = 1,
-                                                                            overflow =
-                                                                                androidx.compose.ui.text.style.TextOverflow.Ellipsis,
-                                                                            modifier = Modifier.fillMaxWidth()
-                                                                        )
-                                                                    }
                                                                 }
                                                             }
 
-                                                            Spacer(Modifier.width(6.dp))
+                                                            rowsInSubTopic.forEach { row ->
+                                                                val itemRaw = row.itemRaw
+                                                                val canonicalId = canonicalFromRepo(
+                                                                    row.sourceTopicTitle,
+                                                                    itemRaw
+                                                                )
 
-                                                            if (isCoach) {
+                                                                val statusId =
+                                                                    summaryExerciseIdentityIdFor(
+                                                                        belt = belt,
+                                                                        topicKey = row.statusTopicKey,
+                                                                        topicTitle = row.sourceTopicTitle,
+                                                                        index = row.indexInStatusGroup,
+                                                                        item = itemRaw
+                                                                    )
 
-                                                                /*
-                                                                 * אם לא נבחר שום סטטוס,
-                                                                 * ממשיכים להציג אייקון אפור "לא נלמד".
-                                                                 */
-                                                                if (coachStatuses.isEmpty()) {
+                                                                val state =
+                                                                    masteredMap[
+                                                                        topicTitle to statusId
+                                                                    ] ?: MarkState.NONE
 
-                                                                    Column(
-                                                                        modifier = Modifier.widthIn(
-                                                                            min = 58.dp
-                                                                        ),
-                                                                        horizontalAlignment =
-                                                                            Alignment.CenterHorizontally
+                                                                val isPartiallyKnown =
+                                                                    partiallyKnownIds
+                                                                        .contains(
+                                                                            topicTitle to
+                                                                                    statusId
+                                                                        )
+
+                                                                val coachStatuses =
+                                                                    coachStatusMap[
+                                                                        topicTitle to statusId
+                                                                    ]
+                                                                        .orEmpty()
+                                                                        .take(2)
+
+                                                                val coachPrimaryStatus =
+                                                                    coachStatuses.firstOrNull()
+                                                                        ?: CoachSummaryStatus.NOT_TAUGHT
+
+                                                                val statusBackgroundColor =
+                                                                    if (isCoach) {
+                                                                        when (coachPrimaryStatus) {
+                                                                            CoachSummaryStatus.NOT_TAUGHT ->
+                                                                                summaryColors.outline
+
+                                                                            CoachSummaryStatus.TAUGHT ->
+                                                                                Color(0xFFF3A062)
+
+                                                                            CoachSummaryStatus.PRACTICED ->
+                                                                                Color(0xFF2F9B4E)
+
+                                                                            CoachSummaryStatus.NEEDS_REINFORCEMENT ->
+                                                                                Color(0xFF3478D4)
+                                                                        }
+                                                                    } else {
+                                                                        if (isPartiallyKnown) {
+                                                                            Color(0xFFF28C28)
+                                                                        } else {
+                                                                            when (state) {
+                                                                                MarkState.YES ->
+                                                                                    Color(0xFF4CAF50)
+
+                                                                                MarkState.NO ->
+                                                                                    Color(0xFFE53935)
+
+                                                                                MarkState.NONE ->
+                                                                                    summaryColors.surfaceVariant
+                                                                            }
+                                                                        }
+                                                                    }
+
+                                                                val statusForegroundColor =
+                                                                    if (
+                                                                        !isCoach &&
+                                                                        state == MarkState.NONE
                                                                     ) {
-                                                                        Surface(
-                                                                            modifier = Modifier.size(
-                                                                                36.dp
-                                                                            ),
-                                                                            shape = CircleShape,
-                                                                            color = summaryColors.outline,
-                                                                            shadowElevation = 0.dp,
-                                                                            tonalElevation = 0.dp
+                                                                        summaryColors.onSurfaceVariant
+                                                                    } else {
+                                                                        Color.White
+                                                                    }
+
+                                                                val cleanFavId =
+                                                                    cleanItem(
+                                                                        row.sourceTopicTitle,
+                                                                        canonicalId
+                                                                    )
+
+                                                                val itemHasNote =
+                                                                    hasNote(
+                                                                        row.sourceTopicTitle,
+                                                                        cleanFavId
+                                                                    )
+
+                                                                Row(
+                                                                    modifier = Modifier
+                                                                        .fillMaxWidth()
+                                                                        .background(
+                                                                            color =
+                                                                                if (isCoach) {
+                                                                                    when (coachPrimaryStatus) {
+                                                                                        CoachSummaryStatus.PRACTICED ->
+                                                                                            Color(
+                                                                                                0xFF2F9B4E
+                                                                                            )
+                                                                                                .copy(
+                                                                                                    alpha = 0.07f
+                                                                                                )
+                                                                                                .compositeOver(
+                                                                                                    summaryColors.surface
+                                                                                                )
+
+                                                                                        CoachSummaryStatus.TAUGHT ->
+                                                                                            Color(
+                                                                                                0xFFF3A062
+                                                                                            )
+                                                                                                .copy(
+                                                                                                    alpha = 0.07f
+                                                                                                )
+                                                                                                .compositeOver(
+                                                                                                    summaryColors.surface
+                                                                                                )
+
+                                                                                        CoachSummaryStatus.NEEDS_REINFORCEMENT ->
+                                                                                            Color(
+                                                                                                0xFF3478D4
+                                                                                            )
+                                                                                                .copy(
+                                                                                                    alpha = 0.07f
+                                                                                                )
+                                                                                                .compositeOver(
+                                                                                                    summaryColors.surface
+                                                                                                )
+
+                                                                                        CoachSummaryStatus.NOT_TAUGHT ->
+                                                                                            Color.Transparent
+                                                                                    }
+                                                                                } else {
+                                                                                    when {
+                                                                                        isPartiallyKnown ->
+                                                                                            Color(
+                                                                                                0xFFF28C28
+                                                                                            )
+                                                                                                .copy(
+                                                                                                    alpha = 0.075f
+                                                                                                )
+                                                                                                .compositeOver(
+                                                                                                    summaryColors.surface
+                                                                                                )
+
+                                                                                        state == MarkState.YES ->
+                                                                                            belt.color
+                                                                                                .copy(
+                                                                                                    alpha = 0.075f
+                                                                                                )
+                                                                                                .compositeOver(
+                                                                                                    summaryColors.surface
+                                                                                                )
+
+                                                                                        else ->
+                                                                                            Color.Transparent
+                                                                                    }
+                                                                                },
+                                                                            shape = RoundedCornerShape(
+                                                                                14.dp
+                                                                            )
+                                                                        )
+                                                                        .padding(
+                                                                            horizontal = 8.dp,
+                                                                            vertical = 6.dp
+                                                                        ),
+                                                                    verticalAlignment = Alignment.CenterVertically
+                                                                ) {
+                                                                    /*
+                                                                     * הטקסט מופיע ראשון בתוך Row:
+                                                                     *
+                                                                     * בעברית, בגלל RTL, הוא מוצמד לקצה הימני
+                                                                     * ואייקון הסטטוס עובר לקצה השמאלי.
+                                                                     *
+                                                                     * באנגלית, בגלל LTR, הטקסט מתחיל משמאל
+                                                                     * ואייקון הסטטוס עובר לקצה הימני.
+                                                                     */
+                                                                    androidx.compose.runtime.CompositionLocalProvider(
+                                                                        androidx.compose.ui.platform.LocalLayoutDirection provides
+                                                                                if (isEnglish) {
+                                                                                    LayoutDirection.Ltr
+                                                                                } else {
+                                                                                    LayoutDirection.Rtl
+                                                                                }
+                                                                    ) {
+                                                                        Column(
+                                                                            modifier = Modifier
+                                                                                .weight(1f)
+                                                                                .fillMaxWidth(),
+                                                                            horizontalAlignment =
+                                                                                if (isEnglish) {
+                                                                                    Alignment.Start
+                                                                                } else {
+                                                                                    Alignment.End
+                                                                                }
                                                                         ) {
-                                                                            Box(
-                                                                                modifier = Modifier.fillMaxSize(),
-                                                                                contentAlignment = Alignment.Center
-                                                                            ) {
+                                                                            Text(
+                                                                                text =
+                                                                                    exerciseDisplayNameForUi(
+                                                                                        row.sourceTopicTitle,
+                                                                                        itemRaw,
+                                                                                        isEnglish
+                                                                                    ),
+                                                                                style = KmiTypography.body,
+                                                                                color = summaryPrimaryText,
+                                                                                textAlign =
+                                                                                    if (isEnglish) {
+                                                                                        TextAlign.Left
+                                                                                    } else {
+                                                                                        TextAlign.Right
+                                                                                    },
+                                                                                maxLines = 3,
+                                                                                overflow =
+                                                                                    androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                                                                                modifier = Modifier.fillMaxWidth()
+                                                                            )
+
+                                                                            if (itemHasNote) {
                                                                                 Text(
-                                                                                    text = "—",
-                                                                                    color = Color.White,
-                                                                                    fontWeight = FontWeight.ExtraBold,
-                                                                                    textAlign = TextAlign.Center,
-                                                                                    style = KmiTypography.action
+                                                                                    text = tr(
+                                                                                        "יש הערה שמורה",
+                                                                                        "Saved note exists"
+                                                                                    ),
+                                                                                    style = KmiTypography.caption,
+                                                                                    color =
+                                                                                        MaterialTheme.colorScheme.primary,
+                                                                                    textAlign =
+                                                                                        if (isEnglish) {
+                                                                                            TextAlign.Left
+                                                                                        } else {
+                                                                                            TextAlign.Right
+                                                                                        },
+                                                                                    maxLines = 1,
+                                                                                    overflow =
+                                                                                        androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                                                                                    modifier = Modifier.fillMaxWidth()
                                                                                 )
                                                                             }
                                                                         }
-
-                                                                        Spacer(Modifier.height(2.dp))
-
-                                                                        Text(
-                                                                            text =
-                                                                                tr(
-                                                                                    "לא נלמד",
-                                                                                    "Not taught"
-                                                                                ),
-                                                                            style =
-                                                                                KmiTypography.caption.copy(
-                                                                                    fontWeight =
-                                                                                        FontWeight.ExtraBold
-                                                                                ),
-                                                                            color = summaryColors.onSurfaceVariant,
-                                                                            textAlign = TextAlign.Center,
-                                                                            maxLines = 2,
-                                                                            overflow =
-                                                                                androidx.compose.ui.text.style
-                                                                                    .TextOverflow.Ellipsis
-                                                                        )
                                                                     }
 
-                                                                } else {
+                                                                    Spacer(Modifier.width(6.dp))
 
-                                                                    /*
-                                                                     * עד שני סטטוסים מוצגים זה לצד זה.
-                                                                     */
-                                                                    Row(
-                                                                        horizontalArrangement =
-                                                                            Arrangement.spacedBy(6.dp),
-                                                                        verticalAlignment =
-                                                                            Alignment.Top
-                                                                    ) {
-                                                                        coachStatuses.forEach { status ->
+                                                                    if (isCoach) {
 
-                                                                            val coachColor =
-                                                                                when (status) {
-                                                                                    CoachSummaryStatus.TAUGHT ->
-                                                                                        Color(
-                                                                                            0xFFF3A062
-                                                                                        )
-
-                                                                                    CoachSummaryStatus.PRACTICED ->
-                                                                                        Color(
-                                                                                            0xFF2F9B4E
-                                                                                        )
-
-                                                                                    CoachSummaryStatus.NEEDS_REINFORCEMENT ->
-                                                                                        Color(
-                                                                                            0xFF3478D4
-                                                                                        )
-
-                                                                                    CoachSummaryStatus.NOT_TAUGHT ->
-                                                                                        Color(
-                                                                                            0xFF8A939D
-                                                                                        )
-                                                                                }
-
-                                                                            val coachMark =
-                                                                                when (status) {
-                                                                                    CoachSummaryStatus.TAUGHT ->
-                                                                                        "✓"
-
-                                                                                    CoachSummaryStatus.PRACTICED ->
-                                                                                        "↻"
-
-                                                                                    CoachSummaryStatus.NEEDS_REINFORCEMENT ->
-                                                                                        "!"
-
-                                                                                    CoachSummaryStatus.NOT_TAUGHT ->
-                                                                                        "—"
-                                                                                }
-
-                                                                            val coachLabel =
-                                                                                when (status) {
-                                                                                    CoachSummaryStatus.TAUGHT ->
-                                                                                        tr(
-                                                                                            "נלמד",
-                                                                                            "Taught"
-                                                                                        )
-
-                                                                                    CoachSummaryStatus.PRACTICED ->
-                                                                                        tr(
-                                                                                            "תורגל",
-                                                                                            "Practiced"
-                                                                                        )
-
-                                                                                    CoachSummaryStatus.NEEDS_REINFORCEMENT ->
-                                                                                        tr(
-                                                                                            "חיזוק",
-                                                                                            "Reinforce"
-                                                                                        )
-
-                                                                                    CoachSummaryStatus.NOT_TAUGHT ->
-                                                                                        tr(
-                                                                                            "לא נלמד",
-                                                                                            "Not taught"
-                                                                                        )
-                                                                                }
+                                                                        /*
+                                                                         * אם לא נבחר שום סטטוס,
+                                                                         * ממשיכים להציג אייקון אפור "לא נלמד".
+                                                                         */
+                                                                        if (coachStatuses.isEmpty()) {
 
                                                                             Column(
                                                                                 modifier = Modifier.widthIn(
-                                                                                    min = 58.dp,
-                                                                                    max = 72.dp
+                                                                                    min = 58.dp
                                                                                 ),
                                                                                 horizontalAlignment =
                                                                                     Alignment.CenterHorizontally
@@ -4061,23 +3906,19 @@ fun SummaryScreen(
                                                                                         36.dp
                                                                                     ),
                                                                                     shape = CircleShape,
-                                                                                    color = coachColor,
+                                                                                    color = summaryColors.outline,
                                                                                     shadowElevation = 0.dp,
                                                                                     tonalElevation = 0.dp
                                                                                 ) {
                                                                                     Box(
-                                                                                        modifier =
-                                                                                            Modifier.fillMaxSize(),
-                                                                                        contentAlignment =
-                                                                                            Alignment.Center
+                                                                                        modifier = Modifier.fillMaxSize(),
+                                                                                        contentAlignment = Alignment.Center
                                                                                     ) {
                                                                                         Text(
-                                                                                            text = coachMark,
+                                                                                            text = "—",
                                                                                             color = Color.White,
-                                                                                            fontWeight =
-                                                                                                FontWeight.ExtraBold,
-                                                                                            textAlign =
-                                                                                                TextAlign.Center,
+                                                                                            fontWeight = FontWeight.ExtraBold,
+                                                                                            textAlign = TextAlign.Center,
                                                                                             style = KmiTypography.action
                                                                                         )
                                                                                     }
@@ -4090,149 +3931,296 @@ fun SummaryScreen(
                                                                                 )
 
                                                                                 Text(
-                                                                                    text = coachLabel,
+                                                                                    text =
+                                                                                        tr(
+                                                                                            "לא נלמד",
+                                                                                            "Not taught"
+                                                                                        ),
                                                                                     style =
                                                                                         KmiTypography.caption.copy(
                                                                                             fontWeight =
                                                                                                 FontWeight.ExtraBold
                                                                                         ),
-                                                                                    color = coachColor,
-                                                                                    textAlign =
-                                                                                        TextAlign.Center,
+                                                                                    color = summaryColors.onSurfaceVariant,
+                                                                                    textAlign = TextAlign.Center,
                                                                                     maxLines = 2,
                                                                                     overflow =
                                                                                         androidx.compose.ui.text.style
                                                                                             .TextOverflow.Ellipsis
                                                                                 )
                                                                             }
+
+                                                                        } else {
+
+                                                                            /*
+                                                                             * עד שני סטטוסים מוצגים זה לצד זה.
+                                                                             */
+                                                                            Row(
+                                                                                horizontalArrangement =
+                                                                                    Arrangement.spacedBy(
+                                                                                        6.dp
+                                                                                    ),
+                                                                                verticalAlignment =
+                                                                                    Alignment.Top
+                                                                            ) {
+                                                                                coachStatuses.forEach { status ->
+
+                                                                                    val coachColor =
+                                                                                        when (status) {
+                                                                                            CoachSummaryStatus.TAUGHT ->
+                                                                                                Color(
+                                                                                                    0xFFF3A062
+                                                                                                )
+
+                                                                                            CoachSummaryStatus.PRACTICED ->
+                                                                                                Color(
+                                                                                                    0xFF2F9B4E
+                                                                                                )
+
+                                                                                            CoachSummaryStatus.NEEDS_REINFORCEMENT ->
+                                                                                                Color(
+                                                                                                    0xFF3478D4
+                                                                                                )
+
+                                                                                            CoachSummaryStatus.NOT_TAUGHT ->
+                                                                                                Color(
+                                                                                                    0xFF8A939D
+                                                                                                )
+                                                                                        }
+
+                                                                                    val coachMark =
+                                                                                        when (status) {
+                                                                                            CoachSummaryStatus.TAUGHT ->
+                                                                                                "✓"
+
+                                                                                            CoachSummaryStatus.PRACTICED ->
+                                                                                                "↻"
+
+                                                                                            CoachSummaryStatus.NEEDS_REINFORCEMENT ->
+                                                                                                "!"
+
+                                                                                            CoachSummaryStatus.NOT_TAUGHT ->
+                                                                                                "—"
+                                                                                        }
+
+                                                                                    val coachLabel =
+                                                                                        when (status) {
+                                                                                            CoachSummaryStatus.TAUGHT ->
+                                                                                                tr(
+                                                                                                    "נלמד",
+                                                                                                    "Taught"
+                                                                                                )
+
+                                                                                            CoachSummaryStatus.PRACTICED ->
+                                                                                                tr(
+                                                                                                    "תורגל",
+                                                                                                    "Practiced"
+                                                                                                )
+
+                                                                                            CoachSummaryStatus.NEEDS_REINFORCEMENT ->
+                                                                                                tr(
+                                                                                                    "חיזוק",
+                                                                                                    "Reinforce"
+                                                                                                )
+
+                                                                                            CoachSummaryStatus.NOT_TAUGHT ->
+                                                                                                tr(
+                                                                                                    "לא נלמד",
+                                                                                                    "Not taught"
+                                                                                                )
+                                                                                        }
+
+                                                                                    Column(
+                                                                                        modifier = Modifier.widthIn(
+                                                                                            min = 58.dp,
+                                                                                            max = 72.dp
+                                                                                        ),
+                                                                                        horizontalAlignment =
+                                                                                            Alignment.CenterHorizontally
+                                                                                    ) {
+                                                                                        Surface(
+                                                                                            modifier = Modifier.size(
+                                                                                                36.dp
+                                                                                            ),
+                                                                                            shape = CircleShape,
+                                                                                            color = coachColor,
+                                                                                            shadowElevation = 0.dp,
+                                                                                            tonalElevation = 0.dp
+                                                                                        ) {
+                                                                                            Box(
+                                                                                                modifier =
+                                                                                                    Modifier.fillMaxSize(),
+                                                                                                contentAlignment =
+                                                                                                    Alignment.Center
+                                                                                            ) {
+                                                                                                Text(
+                                                                                                    text = coachMark,
+                                                                                                    color = Color.White,
+                                                                                                    fontWeight =
+                                                                                                        FontWeight.ExtraBold,
+                                                                                                    textAlign =
+                                                                                                        TextAlign.Center,
+                                                                                                    style = KmiTypography.action
+                                                                                                )
+                                                                                            }
+                                                                                        }
+
+                                                                                        Spacer(
+                                                                                            Modifier.height(
+                                                                                                2.dp
+                                                                                            )
+                                                                                        )
+
+                                                                                        Text(
+                                                                                            text = coachLabel,
+                                                                                            style =
+                                                                                                KmiTypography.caption.copy(
+                                                                                                    fontWeight =
+                                                                                                        FontWeight.ExtraBold
+                                                                                                ),
+                                                                                            color = coachColor,
+                                                                                            textAlign =
+                                                                                                TextAlign.Center,
+                                                                                            maxLines = 2,
+                                                                                            overflow =
+                                                                                                androidx.compose.ui.text.style
+                                                                                                    .TextOverflow.Ellipsis
+                                                                                        )
+                                                                                    }
+                                                                                }
+                                                                            }
+
                                                                         }
-                                                                    }
 
-                                                                }
+                                                                    } else {
 
-                                                            } else {
-
-                                                                /*
-                                                                 * משתמש רגיל נשאר בדיוק כפי שהיה:
-                                                                 * יודע / לא יודע / לא סומן.
-                                                                 */
-                                                                Column(
-                                                                    modifier =
-                                                                        Modifier.width(
-                                                                            78.dp
-                                                                        ),
-                                                                    horizontalAlignment =
-                                                                        Alignment.CenterHorizontally
-                                                                ) {
-                                                                    Surface(
-                                                                        modifier = Modifier.size(28.dp),
-                                                                        shape = CircleShape,
-                                                                        color = statusBackgroundColor,
-                                                                        shadowElevation = 0.dp,
-                                                                        tonalElevation = 0.dp
-                                                                    ) {
-                                                                        Box(
-                                                                            modifier = Modifier.fillMaxSize(),
-                                                                            contentAlignment = Alignment.Center
+                                                                        /*
+                                                                         * משתמש רגיל נשאר בדיוק כפי שהיה:
+                                                                         * יודע / לא יודע / לא סומן.
+                                                                         */
+                                                                        Column(
+                                                                            modifier =
+                                                                                Modifier.width(
+                                                                                    78.dp
+                                                                                ),
+                                                                            horizontalAlignment =
+                                                                                Alignment.CenterHorizontally
                                                                         ) {
-                                                                            if (state == MarkState.NONE) {
+                                                                            Surface(
+                                                                                modifier = Modifier.size(
+                                                                                    28.dp
+                                                                                ),
+                                                                                shape = CircleShape,
+                                                                                color = statusBackgroundColor,
+                                                                                shadowElevation = 0.dp,
+                                                                                tonalElevation = 0.dp
+                                                                            ) {
                                                                                 Box(
-                                                                                    modifier = Modifier
-                                                                                        .size(9.dp)
-                                                                                        .border(
-                                                                                            width = 1.7.dp,
+                                                                                    modifier = Modifier.fillMaxSize(),
+                                                                                    contentAlignment = Alignment.Center
+                                                                                ) {
+                                                                                    if (state == MarkState.NONE) {
+                                                                                        Box(
+                                                                                            modifier = Modifier
+                                                                                                .size(
+                                                                                                    9.dp
+                                                                                                )
+                                                                                                .border(
+                                                                                                    width = 1.7.dp,
+                                                                                                    color =
+                                                                                                        statusForegroundColor,
+                                                                                                    shape = CircleShape
+                                                                                                )
+                                                                                        )
+                                                                                    } else {
+                                                                                        Text(
+                                                                                            text =
+                                                                                                if (
+                                                                                                    isPartiallyKnown
+                                                                                                ) {
+                                                                                                    "◐"
+                                                                                                } else if (
+                                                                                                    state == MarkState.YES
+                                                                                                ) {
+                                                                                                    "✓"
+                                                                                                } else {
+                                                                                                    "✗"
+                                                                                                },
                                                                                             color =
                                                                                                 statusForegroundColor,
-                                                                                            shape = CircleShape
+                                                                                            style =
+                                                                                                KmiTypography.action,
+                                                                                            fontWeight =
+                                                                                                FontWeight.ExtraBold,
+                                                                                            textAlign =
+                                                                                                TextAlign.Center
                                                                                         )
-                                                                                )
-                                                                            } else {
-                                                                                Text(
-                                                                                    text =
-                                                                                        if (
-                                                                                            isPartiallyKnown
-                                                                                        ) {
-                                                                                            "◐"
-                                                                                        } else if (
-                                                                                            state == MarkState.YES
-                                                                                        ) {
-                                                                                            "✓"
-                                                                                        } else {
-                                                                                            "✗"
-                                                                                        },
-                                                                                    color =
-                                                                                        statusForegroundColor,
-                                                                                    style =
-                                                                                        KmiTypography.action,
-                                                                                    fontWeight =
-                                                                                        FontWeight.ExtraBold,
-                                                                                    textAlign =
-                                                                                        TextAlign.Center
-                                                                                )
+                                                                                    }
+                                                                                }
                                                                             }
+
+                                                                            Spacer(Modifier.height(2.dp))
+
+                                                                            Text(
+                                                                                text =
+                                                                                    if (
+                                                                                        isPartiallyKnown
+                                                                                    ) {
+                                                                                        tr(
+                                                                                            "יודע חלקית",
+                                                                                            "Partially known"
+                                                                                        )
+                                                                                    } else {
+                                                                                        when (
+                                                                                            state
+                                                                                        ) {
+                                                                                            MarkState.YES ->
+                                                                                                tr(
+                                                                                                    "יודע",
+                                                                                                    "Known"
+                                                                                                )
+
+                                                                                            MarkState.NO ->
+                                                                                                tr(
+                                                                                                    "לא יודע",
+                                                                                                    "Not known"
+                                                                                                )
+
+                                                                                            MarkState.NONE ->
+                                                                                                tr(
+                                                                                                    "לא סומן",
+                                                                                                    "Unmarked"
+                                                                                                )
+                                                                                        }
+                                                                                    },
+                                                                                style =
+                                                                                    KmiTypography.caption.copy(
+                                                                                        fontWeight =
+                                                                                            FontWeight.ExtraBold
+                                                                                    ),
+                                                                                color = statusBackgroundColor,
+                                                                                textAlign = TextAlign.Center,
+                                                                                maxLines = 2,
+                                                                                overflow =
+                                                                                    androidx.compose.ui.text.style
+                                                                                        .TextOverflow.Ellipsis
+                                                                            )
                                                                         }
                                                                     }
-
-                                                                    Spacer(Modifier.height(2.dp))
-
-                                                                    Text(
-                                                                        text =
-                                                                            if (
-                                                                                isPartiallyKnown
-                                                                            ) {
-                                                                                tr(
-                                                                                    "יודע חלקית",
-                                                                                    "Partially known"
-                                                                                )
-                                                                            } else {
-                                                                                when (
-                                                                                    state
-                                                                                ) {
-                                                                                    MarkState.YES ->
-                                                                                        tr(
-                                                                                            "יודע",
-                                                                                            "Known"
-                                                                                        )
-
-                                                                                    MarkState.NO ->
-                                                                                        tr(
-                                                                                            "לא יודע",
-                                                                                            "Not known"
-                                                                                        )
-
-                                                                                    MarkState.NONE ->
-                                                                                        tr(
-                                                                                            "לא סומן",
-                                                                                            "Unmarked"
-                                                                                        )
-                                                                                }
-                                                                            },
-                                                                        style =
-                                                                            KmiTypography.caption.copy(
-                                                                                fontWeight =
-                                                                                    FontWeight.ExtraBold
-                                                                            ),
-                                                                        color = statusBackgroundColor,
-                                                                        textAlign = TextAlign.Center,
-                                                                        maxLines = 2,
-                                                                        overflow =
-                                                                            androidx.compose.ui.text.style
-                                                                                .TextOverflow.Ellipsis
-                                                                    )
                                                                 }
                                                             }
                                                         }
                                                     }
                                                 }
                                             }
+
+                                            HorizontalDivider(
+                                                modifier = Modifier.fillMaxWidth(),
+                                                thickness = 1.dp,
+                                                color = summaryTopicDividerColor
+                                            )
                                         }
                                     }
-
-                                    HorizontalDivider(
-                                        modifier = Modifier.fillMaxWidth(),
-                                        thickness = 1.dp,
-                                        color = summaryTopicDividerColor
-                                    )
                                 }
                             }
                         }
@@ -4242,7 +4230,6 @@ fun SummaryScreen(
         }
     }
 }
-
 /* ------------------------------ PDF: Summary ------------------------------ */
 
 private fun createSummaryPdf(

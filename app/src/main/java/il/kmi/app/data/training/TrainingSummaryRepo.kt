@@ -100,40 +100,112 @@ class FirestoreTrainingSummaryRepo(
     ): TrainingSummaryEntity? {
 
         val uid = ownerUid.trim()
+
         require(uid.isNotEmpty()) {
             "ownerUid is required"
         }
 
-        val cleanDate = dateIso.trim()
+        val cleanDate =
+            dateIso
+                .trim()
+                .take(10)
 
         if (cleanDate.isBlank()) {
             return null
         }
 
-        val snap =
-            db.collection("users")
-                .document(uid)
-                .collection(
-                    colName(ownerRole)
-                )
-                .whereEqualTo(
-                    "dateIso",
-                    cleanDate
-                )
-                .limit(1)
-                .get()
-                .await()
+        val rolesToSearch =
+            listOf(
+                ownerRole,
+                if (ownerRole == SummaryAuthorRole.COACH) {
+                    SummaryAuthorRole.TRAINEE
+                } else {
+                    SummaryAuthorRole.COACH
+                }
+            ).distinct()
 
-        val doc =
-            snap.documents
-                .firstOrNull()
-                ?: return null
+        val allSummaries =
+            mutableListOf<TrainingSummaryEntity>()
 
-        return fromDoc(
-            doc.id,
-            doc.data
-                ?: return null
-        )
+        rolesToSearch.forEach { role ->
+
+            val collection =
+                db.collection("users")
+                    .document(uid)
+                    .collection(
+                        colName(role)
+                    )
+
+            /*
+             * חיפוש מסמכים ישנים שבהם נוצר ID אקראי.
+             */
+            val querySnap =
+                collection
+                    .whereEqualTo(
+                        "dateIso",
+                        cleanDate
+                    )
+                    .get()
+                    .await()
+
+            querySnap.documents.forEach { doc ->
+
+                val mapped =
+                    doc.data?.let { data ->
+                        fromDoc(
+                            doc.id,
+                            data
+                        )
+                    }
+
+                if (mapped != null) {
+                    allSummaries.add(
+                        mapped
+                    )
+                }
+            }
+
+            /*
+             * בדיקה גם למסמך החדש שבו ID המסמך הוא התאריך.
+             */
+            val directDoc =
+                collection
+                    .document(cleanDate)
+                    .get()
+                    .await()
+
+            if (directDoc.exists()) {
+                directDoc.data
+                    ?.let { data ->
+                        fromDoc(
+                            directDoc.id,
+                            data
+                        )
+                    }
+                    ?.let { summary ->
+                        allSummaries.add(
+                            summary
+                        )
+                    }
+            }
+        }
+
+        return allSummaries
+            .distinctBy { summary ->
+                "${summary.ownerRole.name}|${summary.id}"
+            }
+            .sortedWith(
+                compareByDescending<TrainingSummaryEntity> { summary ->
+                    summary.exercises.isNotEmpty()
+                }
+                    .thenByDescending { summary ->
+                        summary.notes.isNotBlank()
+                    }
+                    .thenByDescending { summary ->
+                        summary.updatedAtMs
+                    }
+            )
+            .firstOrNull()
     }
 
     // ✅ חדש: תאריכים בלבד בחודש/טווח

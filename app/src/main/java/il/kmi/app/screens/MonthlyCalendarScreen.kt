@@ -608,12 +608,7 @@ fun MonthlyCalendarScreen(
                             ) {
                                 KmiCalendarMonth(
                                     visibleMonth = animatedYm,
-                                    selectedDate =
-                                        if (mode == MonthlyCalendarMode.SUMMARY_DATE_PICKER) {
-                                            selectedDate
-                                        } else {
-                                            null
-                                        },
+                                    selectedDate = selectedDate,
                                     isEnglish = isEnglish,
                                     onVisibleMonthChange = { newMonth ->
                                         ym = newMonth
@@ -623,9 +618,8 @@ fun MonthlyCalendarScreen(
 
                                         /*
                                          * VIEW_ONLY:
-                                         * לחיצה על התאריך רק בוחרת אותו.
-                                         * הפרטים של האימונים / החגים מוצגים בכרטיס שמתחת ללוח.
-                                         * לא עוברים למסך הסיכום ולא פותחים בחירת אימון.
+                                         * לחיצה על התאריך גם מדגישה אותו בלוח
+                                         * וגם מציגה את הפרטים שלו בכרטיס שמתחת.
                                          *
                                          * SUMMARY_DATE_PICKER:
                                          * שומרים בדיוק את ההתנהגות הקיימת.

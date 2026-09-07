@@ -122,7 +122,6 @@ import il.yuval.ui.theme.kmiScreenBackgroundBrush
 import il.kmi.shared.domain.SubTopicRegistry
 import il.kmi.shared.questions.model.util.ExerciseTitleFormatter
 
-
 // ===========================
 // Training Summary Palette
 // ===========================
@@ -676,16 +675,18 @@ fun TrainingSummaryScreen(
     }
 
     // ✅ אם המסך נפתח עם תאריך אמיתי מהלוח – נכניס אותו ל-VM.
-    // אם הגיע placeholder כמו {date} – נתעלם ונציג בחירת תאריך.
-    val routeDateIso = remember(pickedDateIso) { normalizedIsoOrNull(pickedDateIso) }
+// אם הגיע placeholder כמו {date} – נתעלם ונציג בחירת תאריך.
+    val routeDateIso = remember(pickedDateIso) {
+        normalizedIsoOrNull(pickedDateIso)
+    }
 
     LaunchedEffect(routeDateIso) {
-        if (routeDateIso != null && state.dateIso != routeDateIso) {
-            vm.setDateIso(routeDateIso)
+        routeDateIso?.let { dateIso ->
+            vm.setDateIso(dateIso)
         }
     }
 
-    // ✅ מקור אמת לסניף/קבוצה/מאמן לפי תאריך (כמו במסך הבית)
+// ✅ מקור אמת לסניף/קבוצה/מאמן לפי תאריך (כמו במסך הבית)
     val truth = remember(sp) { HomeScheduleTruth(sp) }
     var branchError by remember { mutableStateOf<String?>(null) }
 

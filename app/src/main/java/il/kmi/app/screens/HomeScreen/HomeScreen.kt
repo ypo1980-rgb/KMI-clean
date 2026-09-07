@@ -2275,7 +2275,8 @@ fun HomeScreen(
                 data class HomeTrainingCandidate(
                     val training: TrainingData,
                     val branch: String,
-                    val group: String
+                    val group: String,
+                    val displayGroup: String
                 )
 
                 fun trainingsFromDatabaseForHome(
@@ -2352,7 +2353,19 @@ fun HomeScreen(
                                 now = occurrenceReference
                             ),
                             branch = branchName.trim(),
-                            group = groupName.trim()
+                            group = groupName.trim(),
+                            displayGroup =
+                                if (isEnglish) {
+                                    day.groupEn.trim()
+                                        .ifBlank {
+                                            day.groupHe.trim()
+                                        }
+                                } else {
+                                    day.groupHe.trim()
+                                        .ifBlank {
+                                            groupName.trim()
+                                        }
+                                }
                         )
                     }
                 }
@@ -2432,16 +2445,19 @@ fun HomeScreen(
                             val fallbackItems: List<HomeTrainingCandidate> =
                                 sched
                                     ?.map { training ->
+                                        val fallbackGroup =
+                                            matchedGroup
+                                                .ifBlank { grp }
+                                                .trim()
+
                                         HomeTrainingCandidate(
                                             training = training,
                                             branch =
                                                 matchedBranch
                                                     .ifBlank { branchName }
                                                     .trim(),
-                                            group =
-                                                matchedGroup
-                                                    .ifBlank { grp }
-                                                    .trim()
+                                            group = fallbackGroup,
+                                            displayGroup = fallbackGroup
                                         )
                                     }
                                     .orEmpty()
@@ -2455,7 +2471,6 @@ fun HomeScreen(
 
                             all += validFallbackItems
                         }
-
                         /*
                          * מנרמלים חלקי טקסט לצורך זיהוי אותו אימון,
                          * גם כאשר קיימים הבדלים קטנים ברווחים,
@@ -2580,6 +2595,7 @@ fun HomeScreen(
                     val training: TrainingData,
                     val branch: String,
                     val group: String,
+                    val displayGroup: String,
                     val status: TrainingStatusEngine.Status,
                     val occurrenceKey: String,
                     val activeOverride: TrainingOverride?
@@ -2855,6 +2871,8 @@ fun HomeScreen(
                                         candidate.branch,
                                     group =
                                         candidate.group,
+                                    displayGroup =
+                                        candidate.displayGroup,
                                     status =
                                         TrainingStatusEngine.evaluate(
                                             context = ctx,
@@ -2978,7 +2996,7 @@ fun HomeScreen(
                         ) { item ->
                             TrainingCardCompact(
                                 training = item.training,
-                                group = item.group,
+                                group = item.displayGroup,
                                 isCoach = isCoach,
                                 isEnglish = isEnglish,
                                 status = item.status,

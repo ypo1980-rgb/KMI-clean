@@ -1,6 +1,5 @@
 package il.kmi.app.ui.training
 
-import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import il.kmi.app.data.training.FirestoreTrainingSummaryRepo
@@ -62,8 +61,6 @@ class TrainingSummaryViewModel(
     // ❌ למחוק מכאן את כל הפונקציה bootstrapMembersFromUsers(...)
     // (היא שייכת ל-AttendanceViewModel בלבד)
 
-    private val TAG = "TRAINING_SUMMARY"
-
     private val isoFmt = SimpleDateFormat("yyyy-MM-dd", Locale.US)
     private fun todayIso(): String = isoFmt.format(Date())
 
@@ -110,80 +107,85 @@ class TrainingSummaryViewModel(
         val snap =
             _state.value
 
+        val cleanDate =
+            dateIso
+                .trim()
+                .take(10)
+
         viewModelScope.launch {
 
-            runCatching {
-                repo.loadForOwnerAndDate(
-                    ownerUid =
-                        snap.ownerUid,
-                    ownerRole =
-                        snap.ownerRole,
-                    dateIso =
-                        dateIso
-                )
-            }.onSuccess { summary ->
-
-                if (summary == null) {
-                    return@onSuccess
-                }
-
-                /*
-                 * אם בינתיים המשתמש עבר לתאריך אחר,
-                 * לא נכניס נתונים מהבקשה הישנה.
-                 */
-                if (
-                    _state.value.dateIso !=
-                    dateIso
-                ) {
-                    return@onSuccess
-                }
-
-                val selectedExercises =
-                    summary.exercises
-                        .associate { exercise ->
-
-                            exercise.exerciseId to
-                                    SelectedExerciseUi(
-                                        exerciseId =
-                                            exercise.exerciseId,
-                                        name =
-                                            exercise.name,
-                                        topic =
-                                            exercise.topic,
-                                        difficulty =
-                                            exercise.difficulty,
-                                        highlight =
-                                            exercise.highlight,
-                                        homePractice =
-                                            exercise.homePractice
-                                    )
-                        }
-
-                _state.update {
-                    it.copy(
-                        branchId =
-                            summary.branchId,
-                        branchName =
-                            summary.branchName,
-                        coachUid =
-                            summary.coachUid,
-                        coachName =
-                            summary.coachName,
-                        groupKey =
-                            summary.groupKey,
-                        notes =
-                            summary.notes,
-                        selected =
-                            selectedExercises
+            val summary =
+                runCatching {
+                    repo.loadForOwnerAndDate(
+                        ownerUid =
+                            snap.ownerUid,
+                        ownerRole =
+                            snap.ownerRole,
+                        dateIso =
+                            cleanDate
                     )
-                }
+                }.getOrNull()
+                    ?: return@launch
 
-            }.onFailure { throwable ->
+            /*
+             * המשתמש כבר עבר לתאריך אחר בזמן הטעינה.
+             */
+            if (
+                _state.value.dateIso
+                    .trim()
+                    .take(10) != cleanDate
+            ) {
+                return@launch
+            }
 
-                Log.e(
-                    TAG,
-                    "loadExistingSummaryForDate failed date=$dateIso",
-                    throwable
+            val selectedExercises =
+                summary.exercises
+                    .filter { exercise ->
+                        exercise.exerciseId.isNotBlank() ||
+                                exercise.name.isNotBlank()
+                    }
+                    .associate { exercise ->
+
+                        val exerciseKey =
+                            exercise.exerciseId
+                                .takeIf { id ->
+                                    id.isNotBlank()
+                                }
+                                ?: "${exercise.topic}|${exercise.name}"
+
+                        exerciseKey to
+                                SelectedExerciseUi(
+                                    exerciseId =
+                                        exerciseKey,
+                                    name =
+                                        exercise.name,
+                                    topic =
+                                        exercise.topic,
+                                    difficulty =
+                                        exercise.difficulty,
+                                    highlight =
+                                        exercise.highlight,
+                                    homePractice =
+                                        exercise.homePractice
+                                )
+                    }
+
+            _state.update {
+                it.copy(
+                    branchId =
+                        summary.branchId,
+                    branchName =
+                        summary.branchName,
+                    coachUid =
+                        summary.coachUid,
+                    coachName =
+                        summary.coachName,
+                    groupKey =
+                        summary.groupKey,
+                    notes =
+                        summary.notes,
+                    selected =
+                        selectedExercises
                 )
             }
         }
@@ -277,34 +279,47 @@ class TrainingSummaryViewModel(
     // Save
     // -----------------------------
 
-    fun save(onSuccess: (() -> Unit)? = null, onError: ((Throwable) -> Unit)? = null) {
+    fun save(
+        onSuccess: (() -> Unit)? = null,
+        onError: ((Throwable) -> Unit)? = null
+    ) {
         val snap = _state.value
 
         viewModelScope.launch {
-            _state.update { it.copy(isSaving = true) }
+            _state.update {
+                it.copy(isSaving = true)
+            }
+
             try {
-                val model = TrainingSummaryEntity(
-                    id = "",
-                    ownerUid = snap.ownerUid,
-                    ownerRole = snap.ownerRole,
-                    dateIso = snap.dateIso,
-                    branchId = snap.branchId,
-                    branchName = snap.branchName,
-                    coachUid = snap.coachUid,
-                    coachName = snap.coachName,
-                    groupKey = snap.groupKey,
-                    notes = snap.notes,
-                    exercises = snap.selected.values.map { ex ->
-                        TrainingSummaryExerciseEntity(
-                            exerciseId = ex.exerciseId,
-                            name = ex.name,
-                            topic = ex.topic,
-                            difficulty = ex.difficulty,
-                            highlight = ex.highlight,
-                            homePractice = ex.homePractice
-                        )
-                    }
-                )
+                val cleanDate =
+                    snap.dateIso
+                        .trim()
+                        .take(10)
+
+                val model =
+                    TrainingSummaryEntity(
+                        id = cleanDate,
+                        ownerUid = snap.ownerUid,
+                        ownerRole = snap.ownerRole,
+                        dateIso = cleanDate,
+                        branchId = snap.branchId,
+                        branchName = snap.branchName,
+                        coachUid = snap.coachUid,
+                        coachName = snap.coachName,
+                        groupKey = snap.groupKey,
+                        notes = snap.notes,
+                        exercises =
+                            snap.selected.values.map { ex ->
+                                TrainingSummaryExerciseEntity(
+                                    exerciseId = ex.exerciseId,
+                                    name = ex.name,
+                                    topic = ex.topic,
+                                    difficulty = ex.difficulty,
+                                    highlight = ex.highlight,
+                                    homePractice = ex.homePractice
+                                )
+                            }
+                    )
 
                 repo.saveForOwner(
                     ownerUid = snap.ownerUid,
@@ -316,23 +331,29 @@ class TrainingSummaryViewModel(
                     it.copy(
                         lastSaveMsg = "✅ הסיכום נשמר",
                         lastSaveWasError = false,
-                        saveEventId = System.currentTimeMillis()
+                        saveEventId =
+                            System.currentTimeMillis()
                     )
                 }
 
                 onSuccess?.invoke()
+
             } catch (t: Throwable) {
                 _state.update {
                     it.copy(
                         lastSaveMsg = "❌ השמירה נכשלה",
                         lastSaveWasError = true,
-                        saveEventId = System.currentTimeMillis()
+                        saveEventId =
+                            System.currentTimeMillis()
                     )
                 }
 
                 onError?.invoke(t)
+
             } finally {
-                _state.update { it.copy(isSaving = false) }
+                _state.update {
+                    it.copy(isSaving = false)
+                }
             }
         }
     }
