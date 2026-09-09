@@ -2299,35 +2299,59 @@ private fun SubjectTopStatChip(
     contentColor: Color = Color.White
 ) {
     Surface(
+        modifier = Modifier
+            .width(74.dp)
+            .height(60.dp),
         shape = RoundedCornerShape(14.dp),
         color = containerColor,
         tonalElevation = 0.dp,
         shadowElevation = 0.dp,
         border = BorderStroke(
             width = 1.dp,
-            color = contentColor.copy(alpha = 0.18f)
+            color = contentColor.copy(
+                alpha = 0.18f
+            )
         )
     ) {
         Column(
-            modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
-            horizontalAlignment = Alignment.CenterHorizontally
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(
+                    horizontal = 6.dp,
+                    vertical = 6.dp
+                ),
+            horizontalAlignment =
+                Alignment.CenterHorizontally,
+            verticalArrangement =
+                Arrangement.Center
         ) {
             Text(
                 text = value,
                 color = contentColor,
-                style = KmiTypography.metric,
-                fontWeight = FontWeight.ExtraBold,
-                maxLines = 1
+                style =
+                    KmiTypography.action.copy(
+                        fontWeight =
+                            FontWeight.ExtraBold
+                    ),
+                maxLines = 1,
+                textAlign = TextAlign.Center
+            )
+
+            Spacer(
+                modifier = Modifier.height(2.dp)
             )
 
             Text(
                 text = label,
                 color =
                     contentColor.copy(
-                        alpha = 0.92f
+                        alpha = 0.96f
                     ),
-                style = KmiTypography.caption,
-                fontWeight = FontWeight.SemiBold,
+                style =
+                    KmiTypography.caption.copy(
+                        fontWeight =
+                            FontWeight.ExtraBold
+                    ),
                 maxLines = 2,
                 textAlign = TextAlign.Center
             )

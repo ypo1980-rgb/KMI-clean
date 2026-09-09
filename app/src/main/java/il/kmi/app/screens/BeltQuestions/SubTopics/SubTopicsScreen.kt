@@ -2848,61 +2848,168 @@ private fun HardSubTopicCategoryCard(
 private fun HardGroupStatChip(
     value: String,
     label: String,
+    symbol: String,
+    accentColor: Color,
     containerColor: Color,
-    contentColor: Color = Color.White
+    modifier: Modifier = Modifier
 ) {
+    val colors =
+        MaterialTheme.colorScheme
+
+    val isDark =
+        colors.surface.luminance() < 0.5f
+
+    val gradientTop =
+        if (isDark) {
+            colors.surface.copy(
+                alpha = 0.98f
+            )
+        } else {
+            containerColor.copy(
+                alpha = 0.58f
+            )
+        }
+
+    val gradientBottom =
+        if (isDark) {
+            containerColor.copy(
+                alpha = 0.18f
+            )
+        } else {
+            containerColor.copy(
+                alpha = 0.92f
+            )
+        }
+
     Surface(
-        modifier =
-            Modifier.widthIn(min = 64.dp),
-        shape =
-            RoundedCornerShape(14.dp),
-        color = containerColor,
-        shadowElevation = 0.dp,
+        modifier = modifier
+            .height(72.dp),
+        shape = RoundedCornerShape(10.dp),
+        color = colors.surface,
         tonalElevation = 0.dp,
+        shadowElevation = 1.dp,
         border = BorderStroke(
             width = 1.dp,
             color =
-                contentColor.copy(
-                    alpha = 0.14f
+                accentColor.copy(
+                    alpha =
+                        if (isDark) {
+                            0.55f
+                        } else {
+                            0.24f
+                        }
                 )
         )
     ) {
         Column(
-            modifier = Modifier.padding(
-                horizontal = 12.dp,
-                vertical = 6.dp
-            ),
+            modifier = Modifier
+                .fillMaxSize()
+                .background(
+                    Brush.verticalGradient(
+                        colors =
+                            listOf(
+                                gradientTop,
+                                gradientBottom
+                            )
+                    )
+                ),
             horizontalAlignment =
                 Alignment.CenterHorizontally
         ) {
-            Text(
-                text = value,
-                color = contentColor,
-                style =
-                    KmiTypography.body.copy(
-                        fontWeight =
-                            FontWeight.ExtraBold
-                    ),
-                maxLines = 1,
-                overflow =
-                    TextOverflow.Ellipsis
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(3.dp)
+                    .background(
+                        accentColor
+                    )
             )
 
-            Text(
-                text = label,
-                color =
-                    contentColor.copy(
-                        alpha = 0.92f
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(
+                        horizontal = 3.dp,
+                        vertical = 3.dp
                     ),
-                style =
-                    KmiTypography.caption.copy(
-                        fontWeight =
-                            FontWeight.SemiBold
-                    ),
-                maxLines = 1,
-                overflow =
-                    TextOverflow.Ellipsis
-            )
+                horizontalAlignment =
+                    Alignment.CenterHorizontally,
+                verticalArrangement =
+                    Arrangement.Center
+            ) {
+                Surface(
+                    modifier =
+                        Modifier.size(22.dp),
+                    shape = CircleShape,
+                    color =
+                        accentColor.copy(
+                            alpha =
+                                if (isDark) {
+                                    0.22f
+                                } else {
+                                    0.14f
+                                }
+                        ),
+                    tonalElevation = 0.dp,
+                    shadowElevation = 0.dp
+                ) {
+                    Box(
+                        contentAlignment =
+                            Alignment.Center
+                    ) {
+                        Text(
+                            text = symbol,
+                            style =
+                                KmiTypography.caption.copy(
+                                    fontWeight =
+                                        FontWeight.ExtraBold
+                                ),
+                            color = accentColor,
+                            textAlign =
+                                TextAlign.Center,
+                            maxLines = 1
+                        )
+                    }
+                }
+
+                Spacer(
+                    Modifier.height(1.dp)
+                )
+
+                Text(
+                    text = value,
+                    style =
+                        KmiTypography.action.copy(
+                            fontWeight =
+                                FontWeight.ExtraBold
+                        ),
+                    color =
+                        colors.onSurface,
+                    textAlign =
+                        TextAlign.Center,
+                    maxLines = 1
+                )
+
+                Text(
+                    text = label,
+                    style =
+                        KmiTypography.caption.copy(
+                            fontWeight =
+                                FontWeight.Bold
+                        ),
+                    color =
+                        if (isDark) {
+                            colors.onSurface
+                        } else {
+                            accentColor
+                        },
+                    textAlign =
+                        TextAlign.Center,
+                    maxLines = 1,
+                    overflow =
+                        TextOverflow.Ellipsis
+                )
+            }
         }
     }
 }
@@ -3595,13 +3702,51 @@ private fun HardBeltGroupsStickyContent(
 
     val listState = rememberLazyListState()
 
-    val currentStickyBelt by remember(flatRows, listState) {
+    val currentStickyBelt by remember(
+        flatRows,
+        listState
+    ) {
         derivedStateOf {
-            flatRows
-                .getOrNull(listState.firstVisibleItemIndex)
-                ?.belt
-                ?: groups.firstOrNull()?.belt
-                ?: Belt.YELLOW
+            val firstVisibleIndex =
+                listState.firstVisibleItemIndex
+
+            val firstVisibleRow =
+                flatRows.getOrNull(
+                    firstVisibleIndex
+                )
+
+            if (firstVisibleRow == null) {
+                groups.firstOrNull()?.belt
+                    ?: Belt.YELLOW
+            } else {
+
+                val isFirstRowOfNewBelt =
+                    firstVisibleRow.indexInBelt == 0 &&
+                            firstVisibleIndex > 0
+
+                /*
+                 * ה-item הראשון של חגורה חדשה מכיל גם
+                 * את כרטיס החגורה וגם את התרגיל הראשון.
+                 *
+                 * כל עוד כרטיס החגורה החדש עדיין נראה
+                 * בתוך הרשימה, משאירים למעלה את החגורה
+                 * הקודמת.
+                 */
+                if (
+                    isFirstRowOfNewBelt &&
+                    listState.firstVisibleItemScrollOffset <
+                    180
+                ) {
+                    flatRows
+                        .getOrNull(
+                            firstVisibleIndex - 1
+                        )
+                        ?.belt
+                        ?: firstVisibleRow.belt
+                } else {
+                    firstVisibleRow.belt
+                }
+            }
         }
     }
 
@@ -3759,7 +3904,9 @@ private fun HardBeltGroupsStickyContent(
                 }
 
                 val shouldShowInlineBeltHeader =
-                    row.indexInBelt == 0 && index != 0
+                    row.indexInBelt == 0 &&
+                            index != 0 &&
+                            row.belt != currentStickyBelt
 
                 if (shouldShowInlineBeltHeader) {
                     val inlineRows =
@@ -3906,8 +4053,7 @@ private fun HardBeltGroupsStickyContent(
                                 statusId
                             )
                         ] ?: CoachMaterialProgress(),
-                    onCoachStatusSelect = {
-                            selectedStatus ->
+                    onCoachStatusSelect = { selectedStatus ->
                         saveCoachProgress(
                             belt = row.belt,
                             statusId = statusId,
@@ -4133,30 +4279,9 @@ private fun HardBeltStickyHeaderForSubTopics(
 
             Spacer(Modifier.height(8.dp))
 
-            Text(
-                text =
-                    if (isEnglish) {
-                        "← Swipe sideways to see more stats →"
-                    } else {
-                        "→→ הזז לצד כדי לראות עוד נתונים →→"
-                    },
-                color = hintTextColor,
-                style =
-                    KmiTypography.caption.copy(
-                        fontWeight = FontWeight.SemiBold
-                    ),
-                textAlign = TextAlign.Center,
-                modifier = Modifier.fillMaxWidth(),
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
-
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .horizontalScroll(
-                        rememberScrollState()
-                    )
                     .padding(top = 6.dp),
                 horizontalArrangement =
                     Arrangement.spacedBy(7.dp),
@@ -4172,8 +4297,13 @@ private fun HardBeltStickyHeaderForSubTopics(
                             } else {
                                 "נלמד"
                             },
+                        symbol = "✓",
+                        accentColor =
+                            Color(0xFF16A36A),
                         containerColor =
-                            Color(0xFF7ACB88)
+                            Color(0xFFDFF7E9),
+                        modifier =
+                            Modifier.weight(1f)
                     )
 
                     HardGroupStatChip(
@@ -4184,8 +4314,13 @@ private fun HardBeltStickyHeaderForSubTopics(
                             } else {
                                 "תורגל"
                             },
+                        symbol = "↻",
+                        accentColor =
+                            MaterialTheme.colorScheme.primary,
                         containerColor =
-                            Color(0xFF8B5CF6)
+                            MaterialTheme.colorScheme.primaryContainer,
+                        modifier =
+                            Modifier.weight(1f)
                     )
 
                     HardGroupStatChip(
@@ -4195,10 +4330,15 @@ private fun HardBeltStickyHeaderForSubTopics(
                             if (isEnglish) {
                                 "Reinforcement"
                             } else {
-                                "חיזוק"
+                                "לחיזוק"
                             },
+                        symbol = "!",
+                        accentColor =
+                            Color(0xFFF59E0B),
                         containerColor =
-                            Color(0xFFF59E0B)
+                            Color(0xFFFFF1D6),
+                        modifier =
+                            Modifier.weight(1f)
                     )
 
                     HardGroupStatChip(
@@ -4210,8 +4350,13 @@ private fun HardBeltStickyHeaderForSubTopics(
                             } else {
                                 "לא סומן"
                             },
+                        symbol = "−",
+                        accentColor =
+                            Color(0xFF64748B),
                         containerColor =
-                            Color(0xFF8596C9)
+                            Color(0xFFE7EDF5),
+                        modifier =
+                            Modifier.weight(1f)
                     )
                 } else {
                     HardGroupStatChip(
@@ -4222,8 +4367,13 @@ private fun HardBeltStickyHeaderForSubTopics(
                             } else {
                                 "יודע"
                             },
+                        symbol = "✓",
+                        accentColor =
+                            Color(0xFF16A36A),
                         containerColor =
-                            Color(0xFF7ACB88)
+                            Color(0xFFDFF7E9),
+                        modifier =
+                            Modifier.weight(1f)
                     )
 
                     HardGroupStatChip(
@@ -4234,8 +4384,13 @@ private fun HardBeltStickyHeaderForSubTopics(
                             } else {
                                 "לא יודע"
                             },
+                        symbol = "×",
+                        accentColor =
+                            Color(0xFFEF4444),
                         containerColor =
-                            Color(0xFFF1A97A)
+                            Color(0xFFFFE3E3),
+                        modifier =
+                            Modifier.weight(1f)
                     )
 
                     HardGroupStatChip(
@@ -4246,8 +4401,13 @@ private fun HardBeltStickyHeaderForSubTopics(
                             } else {
                                 "מועדפים"
                             },
+                        symbol = "★",
+                        accentColor =
+                            Color(0xFFE0A000),
                         containerColor =
-                            Color(0xFFE7A3B5)
+                            Color(0xFFFFF4CC),
+                        modifier =
+                            Modifier.weight(1f)
                     )
 
                     HardGroupStatChip(
@@ -4258,20 +4418,13 @@ private fun HardBeltStickyHeaderForSubTopics(
                             } else {
                                 "מוחרגים"
                             },
+                        symbol = "−",
+                        accentColor =
+                            Color(0xFFB3261E),
                         containerColor =
-                            Color(0xFFE5A3A3)
-                    )
-
-                    HardGroupStatChip(
-                        value = unmarkedCount.toString(),
-                        label =
-                            if (isEnglish) {
-                                "Unmarked"
-                            } else {
-                                "לא סומן"
-                            },
-                        containerColor =
-                            Color(0xFF8596C9)
+                            Color(0xFFFFE4E1),
+                        modifier =
+                            Modifier.weight(1f)
                     )
                 }
             }
@@ -4334,303 +4487,282 @@ private fun HardExerciseLegacyRow(
     val exerciseNumberTextColor =
         MaterialTheme.colorScheme.onSurface
 
-    Surface(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(
-                RoundedCornerShape(16.dp)
-            ),
-        color = rowBackgroundColor,
-        tonalElevation = 0.dp,
-        shadowElevation = 0.dp,
-        border = BorderStroke(
-            width = 1.dp,
-            color =
-                if (isDarkMode) {
-                    belt.color.copy(alpha = 0.55f)
-                } else {
-                    MaterialTheme.colorScheme
-                        .outlineVariant
-                }
-        )
-    ) {
-        Column(
-            modifier = Modifier.fillMaxWidth()
+    if (isCoach) {
+        CompositionLocalProvider(
+            LocalLayoutDirection provides
+                    if (isEnglish) {
+                        LayoutDirection.Ltr
+                    } else {
+                        LayoutDirection.Rtl
+                    }
+        ) {
+            Column(
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text(
+                    text =
+                        if (isEnglish) {
+                            displayName.trim()
+                        } else {
+                            "\u200F${displayName.trim()}\u200F"
+                        },
+                    style =
+                        KmiTypography.cardTitle.copy(
+                            fontWeight =
+                                FontWeight.ExtraBold
+                        ),
+                    color =
+                        rowTextColor,
+                    textAlign =
+                        if (isEnglish) {
+                            TextAlign.Left
+                        } else {
+                            TextAlign.Right
+                        },
+                    maxLines = 3,
+                    overflow =
+                        TextOverflow.Ellipsis,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable {
+                            onInfoClick()
+                        }
+                        .padding(
+                            start = 8.dp,
+                            end = 8.dp,
+                            top = 2.dp,
+                            bottom = 4.dp
+                        )
+                )
+
+                CoachMaterialStatusSelector(
+                    progress =
+                        coachProgress,
+                    isEnglish =
+                        isEnglish,
+                    modifier =
+                        Modifier.fillMaxWidth(),
+                    excluded =
+                        excluded,
+                    isFav =
+                        isFav,
+                    hasNote =
+                        hasNote,
+                    onToggleExclude =
+                        onToggleExclude,
+                    onInfo =
+                        onInfoClick,
+                    onToggleFavorite =
+                        onToggleFavorite,
+                    onEditNote =
+                        onEditNote,
+                    onSelect =
+                        onCoachStatusSelect
+                )
+            }
+        }
+    } else {
+        Surface(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(
+                    RoundedCornerShape(16.dp)
+                ),
+            color = rowBackgroundColor,
+            tonalElevation = 0.dp,
+            shadowElevation = 0.dp,
+            border = BorderStroke(
+                width = 1.dp,
+                color =
+                    if (isDarkMode) {
+                        belt.color.copy(alpha = 0.55f)
+                    } else {
+                        MaterialTheme.colorScheme
+                            .outlineVariant
+                    }
+            )
         ) {
             /*
-             * במצב מאמן שם ומספר התרגיל נמצאים
-             * מעל כרטיס בחירת מצב החומר.
+             * מצב מתאמן נשאר עם כפתור יודע/לא יודע,
+             * שם התרגיל ופס צבע החגורה.
              */
-            if (isCoach) {
-                CompositionLocalProvider(
-                    LocalLayoutDirection provides
-                            if (isEnglish) {
-                                LayoutDirection.Ltr
-                            } else {
-                                LayoutDirection.Rtl
-                            }
+            CompositionLocalProvider(
+                LocalLayoutDirection provides
+                        LayoutDirection.Ltr
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(min = 50.dp)
+                        .padding(
+                            start = 8.dp,
+                            top = 5.dp,
+                            end = 0.dp,
+                            bottom = 5.dp
+                        ),
+                    verticalAlignment =
+                        Alignment.CenterVertically
                 ) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable {
-                                onInfoClick()
-                            }
-                            .padding(
-                                start = 12.dp,
-                                top = 8.dp,
-                                end = 12.dp,
-                                bottom = 4.dp
-                            ),
-                        verticalAlignment =
-                            Alignment.CenterVertically
-                    ) {
-                        /*
-                         * באנגלית המספר יופיע משמאל.
-                         * בעברית המספר יופיע מימין.
-                         */
-                        HardLegacyMetaBadge(
-                            text =
-                                if (isEnglish) {
-                                    "No. $exerciseNumber"
-                                } else {
-                                    "מס׳ $exerciseNumber"
-                                },
-                            containerColor =
-                                exerciseNumberBackground,
-                            contentColor =
-                                exerciseNumberTextColor
-                        )
-
-                        Spacer(Modifier.width(8.dp))
-
-                        Text(
-                            text =
-                                if (isEnglish) {
-                                    displayName.trim()
-                                } else {
-                                    "\u200F${displayName.trim()}\u200F"
-                                },
-                            style =
-                                KmiTypography.body.copy(
-                                    fontWeight =
-                                        FontWeight.ExtraBold
-                                ),
-                            color = rowTextColor,
-                            textAlign =
-                                if (isEnglish) {
-                                    TextAlign.Left
-                                } else {
-                                    TextAlign.Right
-                                },
-                            maxLines = 3,
-                            overflow =
-                                TextOverflow.Ellipsis,
-                            modifier =
-                                Modifier.weight(1f)
-                        )
-                    }
-
-                    CoachMaterialStatusSelector(
-                        progress = coachProgress,
-                        isEnglish = isEnglish,
-                        modifier = Modifier.fillMaxWidth(),
-                        excluded = excluded,
-                        isFav = isFav,
-                        hasNote = hasNote,
-                        onToggleExclude =
-                            onToggleExclude,
-                        onInfo = onInfoClick,
-                        onToggleFavorite =
-                            onToggleFavorite,
-                        onEditNote = onEditNote,
-                        onSelect =
-                            onCoachStatusSelect
+                    HardMasterToggle(
+                        mastered = mastered,
+                        onClick = onStatusClick
                     )
-                }
-            } else {
-                /*
-                 * מצב מתאמן נשאר עם כפתור יודע/לא יודע,
-                 * שם התרגיל ופס צבע החגורה.
-                 */
-                CompositionLocalProvider(
-                    LocalLayoutDirection provides
-                            LayoutDirection.Ltr
-                ) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .heightIn(min = 50.dp)
-                            .padding(
-                                start = 8.dp,
-                                top = 5.dp,
-                                end = 0.dp,
-                                bottom = 5.dp
-                            ),
-                        verticalAlignment =
-                            Alignment.CenterVertically
+
+                    Spacer(Modifier.width(8.dp))
+
+                    CompositionLocalProvider(
+                        LocalLayoutDirection provides
+                                if (isEnglish) {
+                                    LayoutDirection.Ltr
+                                } else {
+                                    LayoutDirection.Rtl
+                                }
                     ) {
-                        HardMasterToggle(
-                            mastered = mastered,
-                            onClick = onStatusClick
-                        )
-
-                        Spacer(Modifier.width(8.dp))
-
-                        CompositionLocalProvider(
-                            LocalLayoutDirection provides
-                                    if (isEnglish) {
-                                        LayoutDirection.Ltr
-                                    } else {
-                                        LayoutDirection.Rtl
-                                    }
+                        Column(
+                            modifier = Modifier
+                                .weight(1f)
+                                .clickable {
+                                    onInfoClick()
+                                }
+                                .padding(
+                                    start = 2.dp,
+                                    end = 4.dp
+                                ),
+                            horizontalAlignment =
+                                if (isEnglish) {
+                                    Alignment.Start
+                                } else {
+                                    Alignment.End
+                                }
                         ) {
-                            Column(
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .clickable {
-                                        onInfoClick()
-                                    }
-                                    .padding(
-                                        start = 2.dp,
-                                        end = 4.dp
-                                    ),
-                                horizontalAlignment =
-                                    if (isEnglish) {
-                                        Alignment.Start
-                                    } else {
-                                        Alignment.End
-                                    }
+                            Row(
+                                modifier =
+                                    Modifier.fillMaxWidth(),
+                                verticalAlignment =
+                                    Alignment.CenterVertically
                             ) {
-                                Row(
-                                    modifier =
-                                        Modifier.fillMaxWidth(),
-                                    verticalAlignment =
-                                        Alignment.CenterVertically
-                                ) {
+                                HardLegacyMetaBadge(
+                                    text =
+                                        if (isEnglish) {
+                                            "No. $exerciseNumber"
+                                        } else {
+                                            "מס׳ $exerciseNumber"
+                                        },
+                                    containerColor =
+                                        exerciseNumberBackground,
+                                    contentColor =
+                                        exerciseNumberTextColor
+                                )
+
+                                Spacer(Modifier.width(3.dp))
+
+                                SubTopicItemFloatingActions(
+                                    isEnglish = isEnglish,
+                                    excluded = excluded,
+                                    isFav = isFav,
+                                    hasNote = hasNote,
+                                    onInfo = onInfoClick,
+                                    onToggleFavorite =
+                                        onToggleFavorite,
+                                    onToggleExclude =
+                                        onToggleExclude,
+                                    onEditNote =
+                                        onEditNote
+                                )
+
+                                if (isFav) {
+                                    Spacer(
+                                        Modifier.width(5.dp)
+                                    )
+
                                     HardLegacyMetaBadge(
                                         text =
                                             if (isEnglish) {
-                                                "No. $exerciseNumber"
+                                                "Favorite"
                                             } else {
-                                                "מס׳ $exerciseNumber"
+                                                "מועדף"
                                             },
                                         containerColor =
-                                            exerciseNumberBackground,
+                                            Color(0xFFF9D9B8),
                                         contentColor =
-                                            exerciseNumberTextColor
+                                            Color(0xFF9A5A00)
                                     )
+                                }
 
-                                    Spacer(Modifier.width(3.dp))
-
-                                    SubTopicItemFloatingActions(
-                                        isEnglish = isEnglish,
-                                        excluded = excluded,
-                                        isFav = isFav,
-                                        hasNote = hasNote,
-                                        onInfo = onInfoClick,
-                                        onToggleFavorite =
-                                            onToggleFavorite,
-                                        onToggleExclude =
-                                            onToggleExclude,
-                                        onEditNote =
-                                            onEditNote
-                                    )
-
-                                    if (isFav) {
-                                        Spacer(
-                                            Modifier.width(5.dp)
-                                        )
-
-                                        HardLegacyMetaBadge(
-                                            text =
-                                                if (isEnglish) {
-                                                    "Favorite"
-                                                } else {
-                                                    "מועדף"
-                                                },
-                                            containerColor =
-                                                Color(0xFFF9D9B8),
-                                            contentColor =
-                                                Color(0xFF9A5A00)
-                                        )
-                                    }
-
-                                    if (excluded) {
-                                        Spacer(
-                                            Modifier.width(5.dp)
-                                        )
-
-                                        HardLegacyMetaBadge(
-                                            text =
-                                                if (isEnglish) {
-                                                    "Excluded"
-                                                } else {
-                                                    "מוחרג"
-                                                },
-                                            containerColor =
-                                                MaterialTheme
-                                                    .colorScheme
-                                                    .surfaceVariant,
-                                            contentColor =
-                                                MaterialTheme
-                                                    .colorScheme
-                                                    .onSurfaceVariant
-                                        )
-                                    }
-
+                                if (excluded) {
                                     Spacer(
-                                        Modifier.weight(1f)
+                                        Modifier.width(5.dp)
+                                    )
+
+                                    HardLegacyMetaBadge(
+                                        text =
+                                            if (isEnglish) {
+                                                "Excluded"
+                                            } else {
+                                                "מוחרג"
+                                            },
+                                        containerColor =
+                                            MaterialTheme
+                                                .colorScheme
+                                                .surfaceVariant,
+                                        contentColor =
+                                            MaterialTheme
+                                                .colorScheme
+                                                .onSurfaceVariant
                                     )
                                 }
 
                                 Spacer(
-                                    Modifier.height(2.dp)
-                                )
-
-                                Text(
-                                    text =
-                                        if (isEnglish) {
-                                            displayName.trim()
-                                        } else {
-                                            "\u200F${displayName.trim()}\u200F"
-                                        },
-                                    style =
-                                        KmiTypography.caption.copy(
-                                            fontWeight =
-                                                FontWeight.ExtraBold
-                                        ),
-                                    color = rowTextColor,
-                                    textAlign =
-                                        if (isEnglish) {
-                                            TextAlign.Left
-                                        } else {
-                                            TextAlign.Right
-                                        },
-                                    modifier =
-                                        Modifier.fillMaxWidth(),
-                                    maxLines = 3,
-                                    overflow =
-                                        TextOverflow.Ellipsis
+                                    Modifier.weight(1f)
                                 )
                             }
+
+                            Spacer(
+                                Modifier.height(2.dp)
+                            )
+
+                            Text(
+                                text =
+                                    if (isEnglish) {
+                                        displayName.trim()
+                                    } else {
+                                        "\u200F${displayName.trim()}\u200F"
+                                    },
+                                style =
+                                    KmiTypography.caption.copy(
+                                        fontWeight =
+                                            FontWeight.ExtraBold
+                                    ),
+                                color = rowTextColor,
+                                textAlign =
+                                    if (isEnglish) {
+                                        TextAlign.Left
+                                    } else {
+                                        TextAlign.Right
+                                    },
+                                modifier =
+                                    Modifier.fillMaxWidth(),
+                                maxLines = 3,
+                                overflow =
+                                    TextOverflow.Ellipsis
+                            )
                         }
-
-                        Spacer(Modifier.width(4.dp))
-
-                        Box(
-                            modifier = Modifier
-                                .width(3.dp)
-                                .height(34.dp)
-                                .clip(
-                                    RoundedCornerShape(
-                                        topStart = 8.dp,
-                                        bottomStart = 8.dp
-                                    )
-                                )
-                                .background(belt.color)
-                        )
                     }
+
+                    Spacer(Modifier.width(4.dp))
+
+                    Box(
+                        modifier = Modifier
+                            .width(3.dp)
+                            .height(34.dp)
+                            .clip(
+                                RoundedCornerShape(
+                                    topStart = 8.dp,
+                                    bottomStart = 8.dp
+                                )
+                            )
+                            .background(belt.color)
+                    )
                 }
             }
         }

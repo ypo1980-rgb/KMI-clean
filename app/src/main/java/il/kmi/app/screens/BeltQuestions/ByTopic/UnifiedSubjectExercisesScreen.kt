@@ -1063,33 +1063,52 @@ private fun HardTopStatChip(
     value: String,
     label: String,
     containerColor: Color,
-    contentColor: Color = Color.White
+    contentColor: Color = Color.White,
+    modifier: Modifier = Modifier
 ) {
     Surface(
+        modifier = modifier
+            .height(60.dp),
         shape = RoundedCornerShape(14.dp),
         color = containerColor,
         shadowElevation = 1.dp,
         border = BorderStroke(
             1.dp,
-            contentColor.copy(alpha = 0.14f)
+            contentColor.copy(alpha = 0.18f)
         )
     ) {
         Column(
-            modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
-            horizontalAlignment = Alignment.CenterHorizontally
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(
+                    horizontal = 6.dp,
+                    vertical = 6.dp
+                ),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center
         ) {
             Text(
                 text = value,
-                style = KmiTypography.cardTitle,
+                style = KmiTypography.action.copy(
+                    fontWeight = FontWeight.ExtraBold
+                ),
                 color = contentColor,
-                maxLines = 1
+                maxLines = 1,
+                textAlign = TextAlign.Center
+            )
+
+            Spacer(
+                modifier = Modifier.height(2.dp)
             )
 
             Text(
                 text = label,
-                style = KmiTypography.caption,
-                color = contentColor.copy(alpha = 0.92f),
-                maxLines = 1
+                style = KmiTypography.caption.copy(
+                    fontWeight = FontWeight.ExtraBold
+                ),
+                color = contentColor.copy(alpha = 0.96f),
+                maxLines = 2,
+                textAlign = TextAlign.Center
             )
         }
     }
@@ -1689,39 +1708,36 @@ private fun HardBeltStickyHeader(
 
             Row(
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .horizontalScroll(rememberScrollState()),
+                    .fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(6.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 HardTopStatChip(
-                    value = count.toString(),
-                    label = if (isEnglish) "Exercises" else "תרגילים",
-                    containerColor = Color(0xFF98A2B3)
-                )
-
-                HardTopStatChip(
                     value = knownCount.toString(),
                     label = if (isEnglish) "Known" else "יודע",
-                    containerColor = Color(0xFF7ACB88)
+                    containerColor = Color(0xFF7ACB88),
+                    modifier = Modifier.weight(1f)
                 )
 
                 HardTopStatChip(
                     value = unknownCount.toString(),
                     label = if (isEnglish) "Unknown" else "לא יודע",
-                    containerColor = Color(0xFFF1A97A)
+                    containerColor = Color(0xFFF1A97A),
+                    modifier = Modifier.weight(1f)
                 )
 
                 HardTopStatChip(
                     value = favoriteCount.toString(),
                     label = if (isEnglish) "Favorites" else "מועדפים",
-                    containerColor = Color(0xFFE7A3B5)
+                    containerColor = Color(0xFFE7A3B5),
+                    modifier = Modifier.weight(1f)
                 )
 
                 HardTopStatChip(
                     value = unmarkedCount.toString(),
                     label = if (isEnglish) "Unmarked" else "לא סומן",
-                    containerColor = Color(0xFF8596C9)
+                    containerColor = Color(0xFF8596C9),
+                    modifier = Modifier.weight(1f)
                 )
             }
         }

@@ -13,20 +13,14 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import il.kmi.app.R
-import il.kmi.app.training.TrainingCatalog
 import androidx.compose.foundation.Image
 import androidx.compose.ui.layout.ContentScale
 import java.util.*
 import androidx.compose.foundation.background
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Map
-import androidx.compose.material.icons.filled.Place
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.material3.LocalMinimumInteractiveComponentEnforcement
-import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.runtime.remember
 
 private fun openBranchMap(context: Context, address: String) {

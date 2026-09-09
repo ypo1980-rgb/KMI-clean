@@ -54,6 +54,7 @@ import il.kmi.app.hasCalendarPermission
 import il.kmi.app.training.TrainingAlarmReceiver
 import il.kmi.app.ui.KmiIconSize
 import il.kmi.app.ui.KmiTypography
+import il.yuval.ui.theme.kmiSectionHeaderBrush
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -1909,7 +1910,7 @@ fun RegistrationFormScreen(
                 .imePadding()
                 .navigationBarsPadding()
         ) {
-            Spacer(Modifier.height(8.dp))
+            Spacer(Modifier.height(0.dp))
 
             // טאבים חיצוניים
             RegistrationTabsBilingual(
@@ -2231,49 +2232,58 @@ private fun RegistrationTabsBilingual(
     isEnglish: Boolean,
     onTabSelected: (Int) -> Unit
 ) {
-    val traineeLabel = if (isEnglish) "Trainee" else "מתאמן"
-    val coachLabel = if (isEnglish) "Coach" else "מאמן"
+    val traineeLabel =
+        if (isEnglish) "Trainee" else "מתאמן"
 
-    Surface(
+    val coachLabel =
+        if (isEnglish) "Coach" else "מאמן"
+
+    Box(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 10.dp),
-        shape = RoundedCornerShape(0.dp),
-        color = MaterialTheme.colorScheme.primary,
-        tonalElevation = 0.dp,
-        shadowElevation = 0.dp
+            .height(54.dp)
+            .background(
+                brush = kmiSectionHeaderBrush()
+            )
     ) {
-        // ✅ תמיד: מתאמן בצד ימין, מאמן בצד שמאל
-        // נשאר תואם גם באנגלית: Trainee מימין, Coach משמאל.
-        CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) {
+        CompositionLocalProvider(
+            LocalLayoutDirection provides LayoutDirection.Rtl
+        ) {
             Row(
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .height(46.dp),
-                verticalAlignment = Alignment.CenterVertically
+                    .fillMaxSize(),
+                verticalAlignment =
+                    Alignment.CenterVertically
             ) {
                 RegistrationRoleTabButton(
                     text = traineeLabel,
                     selected = selectedTab == 0,
-                    onClick = { onTabSelected(0) },
-                    modifier = Modifier.weight(1f)
+                    onClick = {
+                        onTabSelected(0)
+                    },
+                    modifier =
+                        Modifier.weight(1f)
                 )
 
                 Box(
                     modifier = Modifier
                         .width(1.dp)
-                        .height(28.dp)
+                        .height(30.dp)
                         .background(
-                            MaterialTheme.colorScheme.onPrimary
-                                .copy(alpha = 0.38f)
+                            Color.White.copy(
+                                alpha = 0.65f
+                            )
                         )
                 )
 
                 RegistrationRoleTabButton(
                     text = coachLabel,
                     selected = selectedTab == 1,
-                    onClick = { onTabSelected(1) },
-                    modifier = Modifier.weight(1f)
+                    onClick = {
+                        onTabSelected(1)
+                    },
+                    modifier =
+                        Modifier.weight(1f)
                 )
             }
         }
@@ -2290,23 +2300,32 @@ private fun RegistrationRoleTabButton(
     Box(
         modifier = modifier
             .fillMaxHeight()
-            .clickable { onClick() }
-            .background(
-                if (selected) {
-                    MaterialTheme.colorScheme.onPrimary
-                        .copy(alpha = 0.14f)
-                } else {
-                    Color.Transparent
-                }
-            ),
-        contentAlignment = Alignment.Center
+            .clickable {
+                onClick()
+            },
+        contentAlignment =
+            Alignment.Center
     ) {
         Text(
             text = text,
-            style = KmiTypography.action.copy(
-                fontWeight = FontWeight.ExtraBold
-            ),
-            color = MaterialTheme.colorScheme.onPrimary,
+            style =
+                KmiTypography.action.copy(
+                    fontWeight =
+                        if (selected) {
+                            FontWeight.ExtraBold
+                        } else {
+                            FontWeight.Bold
+                        }
+                ),
+            color =
+                Color.White.copy(
+                    alpha =
+                        if (selected) {
+                            1f
+                        } else {
+                            0.90f
+                        }
+                ),
             textAlign = TextAlign.Center,
             maxLines = 2,
             overflow = TextOverflow.Ellipsis
@@ -2315,15 +2334,21 @@ private fun RegistrationRoleTabButton(
         if (selected) {
             Box(
                 modifier = Modifier
-                    .align(Alignment.BottomCenter)
-                    .fillMaxWidth(0.72f)
+                    .align(
+                        Alignment.BottomCenter
+                    )
+                    .padding(
+                        bottom = 4.dp
+                    )
+                    .width(88.dp)
                     .height(3.dp)
                     .background(
-                        color = MaterialTheme.colorScheme.onPrimary,
-                        shape = RoundedCornerShape(
-                            topStart = 4.dp,
-                            topEnd = 4.dp
-                        )
+                        color = Color.White,
+                        shape =
+                            RoundedCornerShape(
+                                topStart = 4.dp,
+                                topEnd = 4.dp
+                            )
                     )
             )
         }

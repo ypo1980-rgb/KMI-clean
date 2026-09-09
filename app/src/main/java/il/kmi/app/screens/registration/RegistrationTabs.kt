@@ -12,6 +12,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import il.yuval.ui.theme.kmiSectionHeaderBrush
 
 /**
  * קומפוננטה של הטאבים למעלה במסך ההרשמה.
@@ -37,69 +38,126 @@ fun RegistrationTabs(
     Box(
         modifier = modifier
             .fillMaxWidth()
-            .padding(horizontal = 16.dp)
+            .height(54.dp)
+            .background(
+                brush = kmiSectionHeaderBrush()
+            )
     ) {
-        Surface(
-            modifier = Modifier.fillMaxWidth(),
-            color = Color.White.copy(alpha = 0.10f)
-        ) {
-            Box(
-                Modifier
-                    .fillMaxWidth()
-                    .height(48.dp)
-            ) {
-                TabRow(
-                    selectedTabIndex = selectedTab,
-                    containerColor = Color.Transparent,
-                    contentColor = Color.White,
-                    divider = {},
-                    indicator = { tabPositions ->
-                        val pos = tabPositions[selectedTab]
-                        TabRowDefaults.Indicator(
-                            modifier = Modifier.tabIndicatorOffset(pos),
-                            height = 3.dp,
-                            color = Color.White
-                        )
-                    }
-                ) {
-                    // -------- מתאמן --------
-                    Tab(
-                        selected = selectedTab == 0,
-                        onClick = {
-                            if (traineeEnabled) onTabSelected(0)
-                        },
-                        text = { Text("מתאמן", fontWeight = FontWeight.Bold) },
-                        selectedContentColor = Color.White,
-                        unselectedContentColor = when {
-                            traineeEnabled -> Color.White.copy(alpha = unselectedAlpha)
-                            else -> Color.White.copy(alpha = disabledAlpha)
-                        }
-                    )
 
-                    // -------- מאמן --------
-                    Tab(
-                        selected = selectedTab == 1,
-                        onClick = {
-                            if (coachEnabled) onTabSelected(1)
-                        },
-                        text = { Text("מאמן", fontWeight = FontWeight.Bold) },
-                        selectedContentColor = Color.White,
-                        unselectedContentColor = when {
-                            coachEnabled -> Color.White.copy(alpha = unselectedAlpha)
-                            else -> Color.White.copy(alpha = disabledAlpha)
-                        }
+        /*
+         * קו מפריד במרכז —
+         * כמו בשאר סרגלי הטאבים באפליקציה.
+         */
+        Box(
+            modifier = Modifier
+                .align(Alignment.Center)
+                .width(1.dp)
+                .height(28.dp)
+                .background(
+                    Color.White.copy(alpha = 0.65f)
+                )
+        )
+
+        TabRow(
+            selectedTabIndex = selectedTab,
+            modifier = Modifier.fillMaxSize(),
+            containerColor = Color.Transparent,
+            contentColor = Color.White,
+            divider = {},
+            indicator = { tabPositions ->
+
+                val pos =
+                    tabPositions[selectedTab]
+
+                /*
+                 * קו הבחירה הקצר —
+                 * כמו במסך רשימת המתאמנים.
+                 */
+                Box(
+                    modifier = Modifier
+                        .tabIndicatorOffset(pos)
+                        .fillMaxHeight(),
+                    contentAlignment = Alignment.BottomCenter
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .width(88.dp)
+                            .height(3.dp)
+                            .background(Color.White)
                     )
                 }
-
-                Box(
-                    Modifier
-                        .align(Alignment.Center)
-                        .fillMaxHeight()
-                        .padding(bottom = 6.dp)
-                        .width(1.dp)
-                        .background(Color.White.copy(alpha = 0.95f))
-                )
             }
+        ) {
+
+            // -------- מתאמן --------
+            Tab(
+                selected = selectedTab == 0,
+                onClick = {
+                    if (traineeEnabled) {
+                        onTabSelected(0)
+                    }
+                },
+                text = {
+                    Text(
+                        text = "מתאמן",
+                        fontWeight =
+                            if (selectedTab == 0) {
+                                FontWeight.ExtraBold
+                            } else {
+                                FontWeight.Bold
+                            }
+                    )
+                },
+                selectedContentColor =
+                    Color.White,
+                unselectedContentColor =
+                    when {
+                        traineeEnabled ->
+                            Color.White.copy(
+                                alpha = 0.90f
+                            )
+
+                        else ->
+                            Color.White.copy(
+                                alpha = disabledAlpha
+                            )
+                    }
+            )
+
+            // -------- מאמן --------
+            Tab(
+                selected = selectedTab == 1,
+                onClick = {
+                    if (coachEnabled) {
+                        onTabSelected(1)
+                    }
+                },
+                text = {
+                    Text(
+                        text = "מאמן",
+                        fontWeight =
+                            if (selectedTab == 1) {
+                                FontWeight.ExtraBold
+                            } else {
+                                FontWeight.Bold
+                            }
+                    )
+                },
+                selectedContentColor =
+                    Color.White,
+                unselectedContentColor =
+                    when {
+                        coachEnabled ->
+                            Color.White.copy(
+                                alpha = 0.90f
+                            )
+
+                        else ->
+                            Color.White.copy(
+                                alpha = disabledAlpha
+                            )
+                    }
+            )
         }
     }
 }

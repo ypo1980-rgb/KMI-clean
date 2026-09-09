@@ -656,6 +656,10 @@ fun TrainingSummaryScreen(
     val scrollState = rememberLazyListState()
     var showAddExercisesSheet by rememberSaveable { mutableStateOf(false) }
 
+    var exercisesExpanded by remember(state.dateIso) {
+        mutableStateOf(false)
+    }
+
     val ctx = LocalContext.current
     val languageManager = remember { AppLanguageManager(ctx) }
     val isEnglish = languageManager.getCurrentLanguage() == AppLanguage.ENGLISH
@@ -1044,13 +1048,23 @@ fun TrainingSummaryScreen(
                                         Alignment.CenterVertically
                                 ) {
                                     AssistChip(
-                                        onClick = { },
+                                        onClick = {
+                                            exercisesExpanded =
+                                                !exercisesExpanded
+                                        },
                                         label = {
                                             Text(
-                                                tr(
-                                                    "סה\"כ ${state.selected.size} תרגילים",
-                                                    "Total ${state.selected.size} exercises"
-                                                )
+                                                if (exercisesExpanded) {
+                                                    tr(
+                                                        "סגור · סה\"כ ${state.selected.size} תרגילים",
+                                                        "Close · Total ${state.selected.size} exercises"
+                                                    )
+                                                } else {
+                                                    tr(
+                                                        "פתח · סה\"כ ${state.selected.size} תרגילים",
+                                                        "Open · Total ${state.selected.size} exercises"
+                                                    )
+                                                }
                                             )
                                         },
                                         leadingIcon = {
@@ -1067,22 +1081,44 @@ fun TrainingSummaryScreen(
                                     )
                                 }
 
-                                val selectedList = state.selected.values.toList()
-                                    .sortedBy { it.name.lowercase() }
+                                if (exercisesExpanded) {
+                                    val selectedList =
+                                        state.selected.values
+                                            .toList()
+                                            .sortedBy {
+                                                it.name.lowercase()
+                                            }
 
-                                LazyColumn(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .heightIn(min = 120.dp, max = 560.dp),
-                                    verticalArrangement = Arrangement.spacedBy(12.dp),
-                                    userScrollEnabled = true
-                                ) {
-                                    items(selectedList, key = { it.exerciseId }) { ex ->
-                                        SelectedExerciseEditor(
-                                            item = ex,
-                                            onRemove = { vm.removeExercise(ex.exerciseId) },
-                                            onHighlight = { vm.setHighlight(ex.exerciseId, it) }
-                                        )
+                                    LazyColumn(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .heightIn(
+                                                min = 120.dp,
+                                                max = 560.dp
+                                            ),
+                                        verticalArrangement =
+                                            Arrangement.spacedBy(12.dp),
+                                        userScrollEnabled = true
+                                    ) {
+                                        items(
+                                            selectedList,
+                                            key = { it.exerciseId }
+                                        ) { ex ->
+                                            SelectedExerciseEditor(
+                                                item = ex,
+                                                onRemove = {
+                                                    vm.removeExercise(
+                                                        ex.exerciseId
+                                                    )
+                                                },
+                                                onHighlight = {
+                                                    vm.setHighlight(
+                                                        ex.exerciseId,
+                                                        it
+                                                    )
+                                                }
+                                            )
+                                        }
                                     }
                                 }
                             }
@@ -2728,7 +2764,7 @@ private fun ExercisePickRow(
                     ),
                 color = SummaryTextDark,
                 textAlign = textAlignPrimary,
-                maxLines = 2,
+                maxLines = 4,
                 overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.fillMaxWidth()
             )
