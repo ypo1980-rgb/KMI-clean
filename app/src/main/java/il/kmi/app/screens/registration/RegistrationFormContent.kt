@@ -159,6 +159,9 @@ fun RegistrationFormContent(
     isCoach: Boolean,
     isEnglish: Boolean,
     isGoogleAuth: Boolean = false,
+    startAtProfile: Boolean = false,
+    scrollToMissingField: String? = null,
+    onMissingFieldScrollHandled: () -> Unit = {},
     fullName: String,
     onFullNameChange: (String) -> Unit,
     fullNameError: Boolean,
@@ -225,6 +228,35 @@ fun RegistrationFormContent(
     val scroll = rememberScrollState()
     var passwordVisible by remember { mutableStateOf(false) }
     val ctx = LocalContext.current
+
+    LaunchedEffect(scrollToMissingField) {
+        val target = scrollToMissingField ?: return@LaunchedEffect
+
+        val targetOffset =
+            when (target) {
+                "fullName" -> 0
+                "phone" -> 90
+                "email" -> 180
+                "gender" -> 280
+                "username" -> 430
+                "password" -> 520
+                "region" -> 650
+                "branch" -> 760
+                "group" -> 900
+                "belt" -> 1050
+                "terms" -> scroll.maxValue
+                else -> 0
+            }
+
+        scroll.animateScrollTo(
+            targetOffset.coerceIn(
+                0,
+                scroll.maxValue
+            )
+        )
+
+        onMissingFieldScrollHandled()
+    }
 
     fun tr(he: String, en: String): String = if (isEnglish) en else he
 
@@ -508,13 +540,14 @@ fun RegistrationFormContent(
                 )
             }
 
-        // ===== Account =====
-        // בכניסה עם Google אין צורך להציג שם משתמש / סיסמה.
-        if (!isGoogleAuth) {
-            RegistrationSectionCard(
-                title = tr("חשבון משתמש", "User account"),
-                isEnglish = isEnglish
-            ) {
+            // ===== Account =====
+// שם משתמש / סיסמה מוצגים רק ברישום חדש רגיל.
+// בעריכת פרופיל שינוי סיסמה צריך להיעשות במסך ייעודי עם re-auth.
+            if (!isGoogleAuth && !startAtProfile) {
+                RegistrationSectionCard(
+                    title = tr("חשבון משתמש", "User account"),
+                    isEnglish = isEnglish
+                ) {
                 OutlinedTextField(
                     value = username,
                     onValueChange = { onUsernameChange(it) },
@@ -1665,6 +1698,35 @@ private fun BranchGroupsAssignmentsPicker(
                             val cleanBranch =
                                 branch.trim()
 
+                            val normalizedBranch =
+                                cleanBranch
+                                    .normalizedBranchValue()
+
+                            val isOfek =
+                                normalizedBranch.contains(
+                                    "מרכז קהילתי אופק",
+                                    ignoreCase = true
+                                )
+
+                            fun filterAvailableGroups(
+                                groups: List<String>
+                            ): List<String> {
+                                return groups
+                                    .map { group ->
+                                        group.trim()
+                                    }
+                                    .filter { group ->
+                                        group.isNotBlank()
+                                    }
+                                    .filterNot { group ->
+                                        isOfek &&
+                                                TrainingCatalog
+                                                    .normalizeGroupName(group) ==
+                                                "בוגרים"
+                                    }
+                                    .distinct()
+                            }
+
                             val databaseGroups =
                                 KmiDatabaseProvider
                                     .branchByName(
@@ -1677,41 +1739,31 @@ private fun BranchGroupsAssignmentsPicker(
                                             .groupHe
                                             .trim()
                                     }
-                                    ?.filter { group ->
-                                        group.isNotBlank()
-                                    }
-                                    ?.distinct()
                                     .orEmpty()
 
                             if (
                                 databaseGroups
                                     .isNotEmpty()
                             ) {
-                                databaseGroups
+                                filterAvailableGroups(
+                                    databaseGroups
+                                )
                             } else {
-                                val normalizedBranch =
-                                    cleanBranch
-                                        .normalizedBranchValue()
+                                val catalogGroups =
+                                    TrainingCatalog
+                                        .ageGroupsByBranch
+                                        .entries
+                                        .firstOrNull { entry ->
+                                            entry.key
+                                                .normalizedBranchValue() ==
+                                                    normalizedBranch
+                                        }
+                                        ?.value
+                                        .orEmpty()
 
-                                TrainingCatalog
-                                    .ageGroupsByBranch
-                                    .entries
-                                    .firstOrNull {
-                                            entry ->
-
-                                        entry.key
-                                            .normalizedBranchValue() ==
-                                                normalizedBranch
-                                    }
-                                    ?.value
-                                    .orEmpty()
-                                    .map { group ->
-                                        group.trim()
-                                    }
-                                    .filter { group ->
-                                        group.isNotBlank()
-                                    }
-                                    .distinct()
+                                filterAvailableGroups(
+                                    catalogGroups
+                                )
                             }
                         }
 

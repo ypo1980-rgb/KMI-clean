@@ -10,7 +10,6 @@ import il.kmi.app.KmiViewModel
 import il.kmi.app.Route
 import il.kmi.app.screens.registration.ExistingUserCoachScreen
 import il.kmi.app.screens.registration.ExistingUserTraineeScreen
-import il.kmi.app.screens.NewUserCoachScreen
 import androidx.compose.runtime.LaunchedEffect
 
 @Suppress("UNUSED_PARAMETER")
@@ -23,34 +22,70 @@ fun NavGraphBuilder.registrationNavGraph(
 
     // --- New user (trainee) ---
     composable(
-        route = Route.NewUserTrainee.route + "?step={step}&skipOtp={skipOtp}",
+        route = Route.NewUserTrainee.route + "?step={step}",
         arguments = listOf(
-            navArgument("step")    { type = NavType.StringType;  nullable = true; defaultValue = null },
-            navArgument("skipOtp") { type = NavType.StringType;  defaultValue = "false" }
+            navArgument("step") {
+                type = NavType.StringType
+                nullable = true
+                defaultValue = null
+            }
         )
     ) { entry ->
-        val stepArg = entry.arguments?.getString("step")?.trim().orEmpty()
-        val skipOtp = entry.arguments?.getString("skipOtp") == "true"
+        val stepArg =
+            entry.arguments
+                ?.getString("step")
+                ?.trim()
+                .orEmpty()
 
-        // ✅ startAtProfile=true רק בעריכת פרופיל.
-        // Google / skipOtp הם כניסה ראשונית ולכן חייבים להמשיך למסך הטעינה הדינמי.
-        val startAtProfile = stepArg.equals("profile", ignoreCase = true) ||
-                stepArg.equals("edit_profile", ignoreCase = true)
+        val startAtProfile =
+            stepArg.equals(
+                "profile",
+                ignoreCase = true
+            ) ||
+                    stepArg.equals(
+                        "edit_profile",
+                        ignoreCase = true
+                    )
 
         il.kmi.app.screens.registration.RegistrationFormScreen(
             initial = "trainee",
-            onBack = { nav.popBackStack() },
+
+            onBack = {
+                nav.popBackStack()
+            },
+
             onRegistrationComplete = {
-                // ✅ רישום ראשוני / Google completion:
-                // קודם עוברים למסך הטעינה הדינמי, והוא מחליט בסיום לאן להמשיך.
-                nav.navigate(Route.Splash.route) {
-                    popUpTo(0) { inclusive = true }
+                nav.navigate(
+                    Route.Splash.route
+                ) {
+                    popUpTo(0) {
+                        inclusive = true
+                    }
+
                     launchSingleTop = true
                     restoreState = false
                 }
             },
-            onOpenTerms = { nav.navigate(Route.Legal.route) },
-            onOpenDrawer = { il.kmi.app.ui.DrawerBridge.open() },
+
+            onOpenHome = {
+                nav.navigate(
+                    Route.Home.route
+                ) {
+                    launchSingleTop = true
+                    restoreState = false
+                }
+            },
+
+            onOpenTerms = {
+                nav.navigate(
+                    Route.Legal.route
+                )
+            },
+
+            onOpenDrawer = {
+                il.kmi.app.ui.DrawerBridge.open()
+            },
+
             sp = sp,
             kmiPrefs = kmiPrefs,
             startAtProfile = startAtProfile
@@ -86,25 +121,6 @@ fun NavGraphBuilder.registrationNavGraph(
             },
             sp = sp,
             kmiPrefs = kmiPrefs
-        )
-    }
-
-    // --- New user (coach) ---
-    composable(route = Route.NewUserCoach.route) {
-        NewUserCoachScreen(
-            onBack = { nav.popBackStack() },
-            onRegistrationComplete = {
-                nav.navigate(Route.Splash.route) {
-                    popUpTo(0) { inclusive = true }
-                    launchSingleTop = true
-                    restoreState = false
-                }
-            },
-            onOpenLegal = { nav.navigate(Route.Legal.route) },
-            vm = vm,
-            sp = sp,
-            kmiPrefs = kmiPrefs,
-            skipOtp = false
         )
     }
 

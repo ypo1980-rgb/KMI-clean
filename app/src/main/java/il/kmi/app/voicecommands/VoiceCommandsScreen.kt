@@ -1,3 +1,7 @@
+@file:OptIn(
+    androidx.compose.foundation.layout.ExperimentalLayoutApi::class
+)
+
 package il.kmi.app.voicecommands
 
 import android.Manifest

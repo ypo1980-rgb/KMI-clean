@@ -11,6 +11,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
@@ -51,6 +52,9 @@ import il.kmi.app.domain.ExerciseExplanationResolver
 import il.kmi.app.domain.SubjectTopic
 import il.kmi.app.screens.BeltQuestions.ByTopic.SubTopicsByTopicRoute
 import java.net.URLDecoder
+import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.firestore.FirebaseFirestore
+import kotlinx.coroutines.tasks.await
 
 //-----------------------------------------------------------------------------------
 
@@ -723,20 +727,83 @@ fun NavGraphBuilder.homeNavGraph(
 
     // ----- מסך מבחן פנימי -----
     composable(route = Route.InternalExam.route) {
-        InternalExamEntryScreen(
-            onBack = {
-                nav.popBackStack()
-            },
-            onHome = {
-                nav.navigate(Route.Home.route) {
-                    launchSingleTop = true
-                    restoreState = true
-                    popUpTo(Route.Home.route) {
-                        inclusive = false
+        var internalExamAuthorized by remember {
+            mutableStateOf<Boolean?>(null)
+        }
+
+        LaunchedEffect(Unit) {
+            val uid =
+                FirebaseAuth.getInstance()
+                    .currentUser
+                    ?.uid
+                    .orEmpty()
+
+            if (uid.isBlank()) {
+                internalExamAuthorized = false
+                return@LaunchedEffect
+            }
+
+            val coachDoc =
+                runCatching {
+                    FirebaseFirestore.getInstance()
+                        .collection("authorizedCoaches")
+                        .document(uid)
+                        .get()
+                        .await()
+                }.getOrNull()
+
+            internalExamAuthorized =
+                coachDoc?.exists() == true &&
+                        coachDoc.getBoolean("active") == true &&
+                        coachDoc.getString("role")
+                            .orEmpty()
+                            .equals(
+                                "coach",
+                                ignoreCase = true
+                            ) &&
+                        (
+                                coachDoc.getBoolean(
+                                    "canManageInternalExams"
+                                ) == true ||
+                                        coachDoc.getBoolean(
+                                            "canManageExams"
+                                        ) == true
+                                )
+        }
+
+        when (internalExamAuthorized) {
+            null -> {
+                CircularProgressIndicator()
+            }
+
+            false -> {
+                LaunchedEffect(Unit) {
+                    nav.navigate(Route.Home.route) {
+                        popUpTo(Route.Home.route) {
+                            inclusive = false
+                        }
+                        launchSingleTop = true
                     }
                 }
             }
-        )
+
+            true -> {
+                InternalExamEntryScreen(
+                    onBack = {
+                        nav.popBackStack()
+                    },
+                    onHome = {
+                        nav.navigate(Route.Home.route) {
+                            launchSingleTop = true
+                            restoreState = true
+                            popUpTo(Route.Home.route) {
+                                inclusive = false
+                            }
+                        }
+                    }
+                )
+            }
+        }
     }
 
     // ---- מסך "כל הרשימות" (ex_tabs_all/{beltId}) ----

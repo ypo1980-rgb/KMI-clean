@@ -35,10 +35,8 @@ fun NewUserTraineeScreen(
     onRegistrationComplete: () -> Unit,
     onOpenTerms: () -> Unit,
     onOpenDrawer: () -> Unit,
-    // יכול להגיע מבחוץ, אבל אם null נפתח כאן בעצמנו את "kmi_user"
     sp: SharedPreferences? = null,
-    skipOtp: Boolean = false,
-    onAuthVerified: () -> Unit = {}
+    fromGoogleLogin: Boolean = false
 ) {
     BackHandler { onBack() }
 
@@ -51,17 +49,17 @@ fun NewUserTraineeScreen(
 
     // חשוב שזה ירוץ לפני RegistrationFormScreen נבנה,
     // כדי שה-state הראשוני של הטופס יקרא כבר את ערכי Google.
-    remember(skipOtp, userSp) {
-        if (skipOtp) {
+    remember(fromGoogleLogin, userSp) {
+        if (fromGoogleLogin) {
             seedGoogleUserIntoPrefs(userSp)
         } else {
-            // ✅ רישום רגיל — מנקים דגלים ישנים של Google כדי ששדות שם משתמש/סיסמה יוצגו
             userSp.edit()
                 .putString("authProvider", "local")
                 .putBoolean("google_login", false)
-                .putBoolean("skip_otp", false)
+                .remove("skip_otp")
                 .apply()
         }
+
         true
     }
 
@@ -69,6 +67,11 @@ fun NewUserTraineeScreen(
         initial = "trainee",
         onBack = onBack,
         onRegistrationComplete = onRegistrationComplete,
+
+        onOpenHome = {
+            il.kmi.app.ui.DrawerBridge.openHome()
+        },
+
         onOpenTerms = onOpenTerms,
         onOpenDrawer = onOpenDrawer,
         sp = userSp,
@@ -107,7 +110,7 @@ private fun seedGoogleUserIntoPrefs(sp: SharedPreferences) {
         putString("firebase_uid", uid)
         putString("authProvider", "google")
         putBoolean("google_login", true)
-        putBoolean("skip_otp", true)
+        remove("skip_otp")
 
         if (email.isNotBlank()) {
             putStringIfBlank(sp, "email", email)
@@ -127,11 +130,6 @@ private fun seedGoogleUserIntoPrefs(sp: SharedPreferences) {
 
         putStringIfBlank(sp, "username", usernameFromGoogle)
         putStringIfBlank(sp, "userName", usernameFromGoogle)
-
-        // כדי ששדה סיסמה לא יישאר ריק אם הטופס עדיין דורש אותו.
-        // בשלב הבא עדיף להסתיר/לבטל שדה סיסמה כאשר authProvider=google.
-        putStringIfBlank(sp, "password", "GOOGLE_AUTH")
-        putStringIfBlank(sp, "user_password", "GOOGLE_AUTH")
 
         commit()
     }

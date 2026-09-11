@@ -71,6 +71,21 @@ import il.kmi.app.ui.KmiTypography
 import il.kmi.app.ui.loading.KmiLoadingRings
 import il.kmi.app.ui.scaledIconSize
 import il.yuval.ui.theme.kmiScreenBackgroundBrush
+import il.yuval.ui.theme.kmiSubscriptionMonthlyColor
+import il.yuval.ui.theme.kmiSubscriptionMonthlyContentColor
+import il.yuval.ui.theme.kmiSubscriptionYearlyColor
+import il.yuval.ui.theme.kmiSubscriptionYearlyContentColor
+import il.yuval.ui.theme.kmiSubscriptionCardColor
+import il.yuval.ui.theme.kmiSubscriptionInnerCardColor
+import il.yuval.ui.theme.kmiSubscriptionSuccessBackgroundColor
+import il.yuval.ui.theme.kmiSubscriptionSuccessBackgroundVariantColor
+import il.yuval.ui.theme.kmiSubscriptionSuccessContentColor
+import il.yuval.ui.theme.kmiSubscriptionSuccessAccentColor
+import il.yuval.ui.theme.kmiSubscriptionSuccessBlueColor
+import il.yuval.ui.theme.kmiSubscriptionSuccessSoftAccentColor
+import il.yuval.ui.theme.kmiSubscriptionSuccessOnAccentColor
+import il.yuval.ui.theme.kmiSubscriptionSuccessBadgeColor
+import il.yuval.ui.theme.kmiSubscriptionSuccessOnBadgeColor
 
 //==================================================================
 
@@ -457,9 +472,9 @@ fun SubscriptionPlansScreen(
                             }
                         ),
                     containerColor =
-                        MaterialTheme.colorScheme.primary,
+                        kmiSubscriptionMonthlyColor(),
                     contentColor =
-                        MaterialTheme.colorScheme.onPrimary,
+                        kmiSubscriptionMonthlyContentColor(),
                     showTrialBadge = false,
                     buyEnabled = monthlyBuyReady,
                     buyText = if (monthlyBuyReady) {
@@ -540,9 +555,9 @@ fun SubscriptionPlansScreen(
                             }
                         ),
                     containerColor =
-                        MaterialTheme.colorScheme.tertiary,
+                        kmiSubscriptionYearlyColor(),
                     contentColor =
-                        MaterialTheme.colorScheme.onTertiary,
+                        kmiSubscriptionYearlyContentColor(),
                     buyEnabled = yearlyBuyReady,
                     buyText = if (yearlyBuyReady) {
                         if (isEnglish) "Secure purchase" else "רכישה מאובטחת"
@@ -662,29 +677,38 @@ private fun PremiumPurchaseSuccessDialog(
     onContinue: () -> Unit
 ) {
     val layoutDirection =
-        if (isEnglish) androidx.compose.ui.unit.LayoutDirection.Ltr
-        else androidx.compose.ui.unit.LayoutDirection.Rtl
+        if (isEnglish) {
+            androidx.compose.ui.unit.LayoutDirection.Ltr
+        } else {
+            androidx.compose.ui.unit.LayoutDirection.Rtl
+        }
 
     val dialogBackground =
-        MaterialTheme.colorScheme.surface
+        kmiSubscriptionSuccessBackgroundColor()
 
     val dialogBackgroundVariant =
-        MaterialTheme.colorScheme.surfaceVariant
+        kmiSubscriptionSuccessBackgroundVariantColor()
 
     val dialogContent =
-        MaterialTheme.colorScheme.onSurface
+        kmiSubscriptionSuccessContentColor()
 
     val accentColor =
-        MaterialTheme.colorScheme.tertiary
+        kmiSubscriptionSuccessAccentColor()
+
+    val accentBlue =
+        kmiSubscriptionSuccessBlueColor()
+
+    val softAccentColor =
+        kmiSubscriptionSuccessSoftAccentColor()
 
     val onAccentColor =
-        MaterialTheme.colorScheme.onTertiary
+        kmiSubscriptionSuccessOnAccentColor()
 
     val badgeColor =
-        MaterialTheme.colorScheme.primary
+        kmiSubscriptionSuccessBadgeColor()
 
     val onBadgeColor =
-        MaterialTheme.colorScheme.onPrimary
+        kmiSubscriptionSuccessOnBadgeColor()
 
     DisposableEffect(Unit) {
         val toneGenerator =
@@ -1017,9 +1041,9 @@ private fun TariffCard(
         colors =
             CardDefaults.elevatedCardColors(
                 containerColor =
-                    MaterialTheme.colorScheme.surfaceVariant,
+                    kmiSubscriptionCardColor(),
                 contentColor =
-                    MaterialTheme.colorScheme.onSurfaceVariant
+                    MaterialTheme.colorScheme.onSurface
             ),
         elevation =
             CardDefaults.elevatedCardElevation(
@@ -1078,7 +1102,7 @@ private fun TariffCard(
                     colors =
                         CardDefaults.cardColors(
                             containerColor =
-                                MaterialTheme.colorScheme.surface,
+                                kmiSubscriptionInnerCardColor(),
                             contentColor =
                                 MaterialTheme.colorScheme.onSurface
                         ),

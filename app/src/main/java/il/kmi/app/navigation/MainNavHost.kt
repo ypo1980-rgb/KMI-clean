@@ -3,7 +3,6 @@ package il.kmi.app.navigation
 import android.content.Context
 import android.content.SharedPreferences
 import androidx.compose.runtime.Composable
-import il.kmi.app.screens.SmsVerifyScreen
 import il.kmi.shared.domain.Belt
 import il.kmi.shared.domain.TopicsEngine
 import il.kmi.app.domain.ContentRepo
@@ -19,13 +18,11 @@ import il.kmi.app.screens.registration.RegistrationNavHost
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.platform.LocalContext
 import il.kmi.app.screens.MyProfileScreen
-import il.kmi.app.screens.PhoneAuthGateScreen
 import il.kmi.app.screens.RateUsScreen
 import il.kmi.app.ui.DrawerBridge
 import il.kmi.app.ui.KmiTtsManager
 import android.widget.Toast
 import android.util.Log
-import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.ktx.firestore
 import com.google.firebase.ktx.Firebase
 import kotlinx.coroutines.delay
@@ -40,6 +37,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.navigation.NavType
 import androidx.navigation.navArgument
 import il.kmi.app.free_sessions.ui.FreeSessionsScreen
@@ -78,6 +76,8 @@ import il.kmi.app.voicecommands.VoiceCommandsBridge
 import il.kmi.app.subscription.AccessModeResolver
 import il.kmi.app.subscription.KmiAccess
 import il.kmi.app.subscription.LockedContentPolicy
+
+//==========================================================================
 
 private const val APP_ENTRY_ROUTE = "app_entry"
 private const val GOOGLE_PROFILE_COMPLETION_ROUTE = "google_profile_completion"
@@ -815,7 +815,6 @@ fun MainNavHost(
             Route.RegistrationLanding.route,
             Route.Registration.route,
             Route.NewUserTrainee.route,
-            Route.NewUserCoach.route,
             Route.ExistingUserTrainee.route,
             Route.ExistingUserCoach.route -> startDestination
 
@@ -877,10 +876,42 @@ fun MainNavHost(
 // רשימת המתאמנים נטענת רק בכניסה למסך CoachTraineesScreen,
 // כדי לא להעמיס על כל המסכים ועל תגובת הלחיצות.
 
-    // ✅ Training Summary VM + exercises list (מחשבים Role מ־SharedPreferences כדי לא להיות תלויים ב־Flow)
-    val isCoach = remember {
-        val role = (sp.getString("user_role", "") ?: "").lowercase()
-        role == "coach" || role.contains("coach") || role.contains("מאמן") || role.contains("מדריך")
+    val ownerUid = remember {
+        FirebaseAuth.getInstance()
+            .currentUser
+            ?.uid
+            .orEmpty()
+    }
+
+    var isCoach by remember(ownerUid) {
+        mutableStateOf(false)
+    }
+
+    LaunchedEffect(ownerUid) {
+        if (ownerUid.isBlank()) {
+            isCoach = false
+            return@LaunchedEffect
+        }
+
+        val coachDoc =
+            runCatching {
+                com.google.firebase.firestore.FirebaseFirestore
+                    .getInstance()
+                    .collection("authorizedCoaches")
+                    .document(ownerUid)
+                    .get()
+                    .await()
+            }.getOrNull()
+
+        isCoach =
+            coachDoc?.exists() == true &&
+                    coachDoc.getBoolean("active") == true &&
+                    coachDoc.getString("role")
+                        .orEmpty()
+                        .equals(
+                            "coach",
+                            ignoreCase = true
+                        )
     }
 
     val ownerRole = remember(isCoach) {
@@ -889,13 +920,6 @@ fun MainNavHost(
         } else {
             il.kmi.app.data.training.SummaryAuthorRole.TRAINEE
         }
-    }
-
-    val ownerUid = remember {
-        com.google.firebase.auth.FirebaseAuth.getInstance()
-            .currentUser
-            ?.uid
-            .orEmpty()
     }
 
     /*
@@ -957,9 +981,6 @@ fun MainNavHost(
             WakeWordManager.stop()
         }
     }
-
-    // אם המספר כבר אומת בעבר – נשמור את המידע כאן
-    val isPhoneVerified = sp.getBoolean("phone_verified", false)
 
     // ⭐ עטיפה בשער נעילה בסיסמה / ללא נעילה / ביומטרי
     PinLockGate {
@@ -1288,50 +1309,6 @@ fun MainNavHost(
                 )
             }
 
-            // מסך הזנת מספר טלפון
-            composable(Route.PhoneGate.route) {
-            val ctxInner = LocalContext.current
-                val scope = rememberCoroutineScope()
-
-                PhoneAuthGateScreen(
-                    onPhoneSubmitted = { phone ->
-                        val cleaned = phone.filter { it.isDigit() }
-
-                        scope.launch {
-                            val ok = try {
-                                checkAndConsumePhone(cleaned)
-                            } catch (t: Throwable) {
-                                Toast.makeText(
-                                    ctxInner,
-                                    "שגיאת חיבור לשרת. נסה שוב בעוד רגע.",
-                                    Toast.LENGTH_LONG
-                                ).show()
-                                false
-                            }
-
-                            if (ok) {
-                                sp.edit()
-                                    .putString("phone_number", cleaned)
-                                    .putBoolean("phone_verified", true)
-                                    .apply()
-
-                                nav.navigate(Route.RegistrationLanding.route) {
-                                    popUpTo(Route.Intro.route) { inclusive = true }
-                                    launchSingleTop = true
-                                }
-                            } else {
-                                Toast.makeText(
-                                    ctxInner,
-                                    "מספר הטלפון אינו מורשה לשימוש באפליקציה.",
-                                    Toast.LENGTH_LONG
-                                ).show()
-                            }
-                        }
-                    },
-                    onBack = { nav.popBackStack() }
-                )
-            }
-
             composable(Route.MembershipPayment.route) {
                 il.kmi.app.screens.forms.payment.MembershipPaymentScreen(
                     isEnglish = isEnglish,
@@ -1419,67 +1396,109 @@ fun MainNavHost(
                 )
             }
 
-            // מסך קוד ה-SMS
-            composable("phone_verify/{phone}") { backStackEntry ->
-                val ctxInner = LocalContext.current
-                val scope = rememberCoroutineScope()
-                val phone = backStackEntry.arguments?.getString("phone") ?: ""
-
-                SmsVerifyScreen(
-                    phone = phone,
-                    onVerified = { verifiedPhone ->
-                        val cleaned = verifiedPhone.filter { it.isDigit() }
-
-                        scope.launch {
-                            val ok = try {
-                                checkAndConsumePhone(cleaned)
-                            } catch (t: Throwable) {
-                                Toast.makeText(
-                                    ctxInner,
-                                    "שגיאת חיבור לשרת. נסה שוב בעוד רגע.",
-                                    Toast.LENGTH_LONG
-                                ).show()
-                                false
-                            }
-
-                            if (ok) {
-                                sp.edit()
-                                    .putString("phone_number", cleaned)
-                                    .putBoolean("phone_verified", true)
-                                    .apply()
-
-                                nav.navigate(Route.RegistrationLanding.route) {
-                                    popUpTo(Route.Intro.route) { inclusive = true }
-                                    launchSingleTop = true
-                                }
-                            } else {
-                                Toast.makeText(
-                                    ctxInner,
-                                    "מספר הטלפון אינו מורשה לשימוש באפליקציה.",
-                                    Toast.LENGTH_LONG
-                                ).show()
-                            }
-                        }
-                    },
-                    onBack = { nav.popBackStack() }
-                )
-            }
-
             composable("coach/trainees") {
-                il.kmi.app.screens.coach.CoachTraineesScreen(
-                    onBack = { nav.popBackStack() },
-                    onOpenDrawer = { il.kmi.app.ui.DrawerBridge.open() },
-                    onOpenHome = {
-                        nav.navigate(Route.Home.route) {
-                            launchSingleTop = true
-                            restoreState = false
+                var coachTraineesAuthorized by remember {
+                    mutableStateOf<Boolean?>(null)
+                }
 
-                            popUpTo(nav.graph.startDestinationId) {
-                                inclusive = false
+                var canManageTraineesAuthorized by remember {
+                    mutableStateOf(false)
+                }
+
+                LaunchedEffect(Unit) {
+                    val uid =
+                        FirebaseAuth.getInstance()
+                            .currentUser
+                            ?.uid
+                            .orEmpty()
+
+                    android.util.Log.e(
+                        "AUTH_UID",
+                        "CURRENT_FIREBASE_UID=$uid"
+                    )
+
+                    if (uid.isBlank()) {
+                        coachTraineesAuthorized = false
+                        return@LaunchedEffect
+                    }
+
+                    val coachDoc =
+                        runCatching {
+                            com.google.firebase.firestore.FirebaseFirestore
+                                .getInstance()
+                                .collection("authorizedCoaches")
+                                .document(uid)
+                                .get()
+                                .await()
+                        }.getOrNull()
+
+                    val isActiveCoach =
+                        coachDoc?.exists() == true &&
+                                coachDoc.getBoolean("active") == true &&
+                                coachDoc.getString("role")
+                                    .orEmpty()
+                                    .equals(
+                                        "coach",
+                                        ignoreCase = true
+                                    )
+
+                    canManageTraineesAuthorized =
+                        isActiveCoach &&
+                                coachDoc?.getBoolean(
+                                    "canManageTrainees"
+                                ) == true
+
+                    coachTraineesAuthorized =
+                        isActiveCoach &&
+                                (
+                                        coachDoc?.getBoolean(
+                                            "canViewTrainees"
+                                        ) == true ||
+                                                canManageTraineesAuthorized
+                                        )
+                }
+
+                when (coachTraineesAuthorized) {
+                    null -> {
+                        CircularProgressIndicator()
+                    }
+
+                    false -> {
+                        LaunchedEffect(Unit) {
+                            nav.navigate(Route.Home.route) {
+                                popUpTo(Route.Home.route) {
+                                    inclusive = false
+                                }
+                                launchSingleTop = true
                             }
                         }
                     }
-                )
+
+                    true -> {
+                        il.kmi.app.screens.coach.CoachTraineesScreen(
+                            canManageTrainees =
+                                canManageTraineesAuthorized,
+                            onBack = {
+                                nav.popBackStack()
+                            },
+                            onOpenDrawer = {
+                                il.kmi.app.ui.DrawerBridge.open()
+                            },
+                            onOpenHome = {
+                                nav.navigate(Route.Home.route) {
+                                    launchSingleTop = true
+                                    restoreState = false
+
+                                    popUpTo(
+                                        nav.graph.startDestinationId
+                                    ) {
+                                        inclusive = false
+                                    }
+                                }
+                            }
+                        )
+                    }
+                }
             }
 
             // --- Registration Landing ---
@@ -1527,14 +1546,34 @@ fun MainNavHost(
             composable(PROFILE_EDIT_ROUTE) {
                 RegistrationFormScreen(
                     initial = "trainee",
-                    onBack = { nav.popBackStack() },
+
+                    onBack = {
+                        nav.popBackStack()
+                    },
+
                     onRegistrationComplete = {
                         nav.popBackStack()
                     },
-                    onOpenTerms = { nav.navigate(Route.Legal.route) },
+
+                    onOpenHome = {
+                        nav.navigate(Route.Home.route) {
+                            launchSingleTop = true
+                            restoreState = false
+
+                            popUpTo(Route.Home.route) {
+                                inclusive = false
+                            }
+                        }
+                    },
+
+                    onOpenTerms = {
+                        nav.navigate(Route.Legal.route)
+                    },
+
                     onOpenDrawer = {
                         DrawerBridge.open()
                     },
+
                     sp = sp,
                     kmiPrefs = kmiPrefs,
                     startAtProfile = true
@@ -1626,13 +1665,15 @@ fun MainNavHost(
                         )
 
                 val calendarMode =
-                    if (
-                        requestedMode ==
-                        "summary_date_picker"
-                    ) {
-                        il.kmi.app.screens.MonthlyCalendarMode.SUMMARY_DATE_PICKER
-                    } else {
-                        il.kmi.app.screens.MonthlyCalendarMode.VIEW_ONLY
+                    when (requestedMode) {
+                        "summary_date_picker" ->
+                            il.kmi.app.screens.MonthlyCalendarMode.SUMMARY_DATE_PICKER
+
+                        "attendance_date_picker" ->
+                            il.kmi.app.screens.MonthlyCalendarMode.ATTENDANCE_DATE_PICKER
+
+                        else ->
+                            il.kmi.app.screens.MonthlyCalendarMode.VIEW_ONLY
                     }
 
                 il.kmi.app.screens.MonthlyCalendarScreen(
@@ -1728,39 +1769,97 @@ fun MainNavHost(
 
             // אזור מנהל - ניהול משתמשים 🔐
             composable(route = Route.AdminUsers.route) {
-                il.kmi.app.screens.admin.AdminUsersScreen(
-                    onBack = {
-                        nav.popBackStack()
-                    },
-                    onHome = {
-                        nav.navigate(Route.Home.route) {
-                            launchSingleTop = true
-                            restoreState = true
-                            popUpTo(nav.graph.startDestinationId) {
-                                inclusive = false
+                var adminAuthorized by remember {
+                    mutableStateOf<Boolean?>(null)
+                }
+
+                LaunchedEffect(Unit) {
+                    adminAuthorized =
+                        il.kmi.app.screens.admin.AdminAccess
+                            .isCurrentUserAdmin()
+                }
+
+                when (adminAuthorized) {
+                    null -> {
+                        CircularProgressIndicator()
+                    }
+
+                    false -> {
+                        LaunchedEffect(Unit) {
+                            nav.navigate(Route.Home.route) {
+                                launchSingleTop = true
+                                popUpTo(Route.Home.route) {
+                                    inclusive = false
+                                }
                             }
                         }
                     }
-                )
+
+                    true -> {
+                        il.kmi.app.screens.admin.AdminUsersScreen(
+                            onBack = {
+                                nav.popBackStack()
+                            },
+                            onHome = {
+                                nav.navigate(Route.Home.route) {
+                                    launchSingleTop = true
+                                    restoreState = true
+                                    popUpTo(nav.graph.startDestinationId) {
+                                        inclusive = false
+                                    }
+                                }
+                            }
+                        )
+                    }
+                }
             }
 
             // אזור מנהל - מרכז בקרה ולוגים 🔐
             composable(route = "admin_diagnostics") {
-                AdminDiagnosticsScreen(
-                    isEnglish = isEnglish,
-                    onBack = {
-                        nav.popBackStack()
-                    },
-                    onHome = {
-                        nav.navigate(Route.Home.route) {
-                            launchSingleTop = true
-                            restoreState = true
-                            popUpTo(nav.graph.startDestinationId) {
-                                inclusive = false
+                var adminDiagnosticsAuthorized by remember {
+                    mutableStateOf<Boolean?>(null)
+                }
+
+                LaunchedEffect(Unit) {
+                    adminDiagnosticsAuthorized =
+                        il.kmi.app.screens.admin.AdminAccess
+                            .isCurrentUserAdmin()
+                }
+
+                when (adminDiagnosticsAuthorized) {
+                    null -> {
+                        CircularProgressIndicator()
+                    }
+
+                    false -> {
+                        LaunchedEffect(Unit) {
+                            nav.navigate(Route.Home.route) {
+                                launchSingleTop = true
+                                popUpTo(Route.Home.route) {
+                                    inclusive = false
+                                }
                             }
                         }
                     }
-                )
+
+                    true -> {
+                        AdminDiagnosticsScreen(
+                            isEnglish = isEnglish,
+                            onBack = {
+                                nav.popBackStack()
+                            },
+                            onHome = {
+                                nav.navigate(Route.Home.route) {
+                                    launchSingleTop = true
+                                    restoreState = true
+                                    popUpTo(nav.graph.startDestinationId) {
+                                        inclusive = false
+                                    }
+                                }
+                            }
+                        )
+                    }
+                }
             }
 
             // --- NEW: Attendance graph ---
@@ -1890,22 +1989,88 @@ fun MainNavHost(
             }
 
             composable(Route.PaymentsReport.route) {
-                PaymentsReportScreen(
-                    isEnglish = isEnglish,
-                    onClose = {
-                        nav.navigate(Route.Home.route) {
-                            launchSingleTop = true
-                            restoreState = false
+                var paymentsReportAuthorized by remember {
+                    mutableStateOf<Boolean?>(null)
+                }
 
-                            popUpTo(nav.graph.startDestinationId) {
-                                inclusive = false
+                LaunchedEffect(Unit) {
+                    val uid =
+                        FirebaseAuth.getInstance()
+                            .currentUser
+                            ?.uid
+                            .orEmpty()
+
+                    if (uid.isBlank()) {
+                        paymentsReportAuthorized = false
+                        return@LaunchedEffect
+                    }
+
+                    val coachDoc =
+                        runCatching {
+                            com.google.firebase.firestore.FirebaseFirestore
+                                .getInstance()
+                                .collection("authorizedCoaches")
+                                .document(uid)
+                                .get()
+                                .await()
+                        }.getOrNull()
+
+                    paymentsReportAuthorized =
+                        coachDoc?.exists() == true &&
+                                coachDoc.getBoolean("active") == true &&
+                                coachDoc.getString("role")
+                                    .orEmpty()
+                                    .equals(
+                                        "coach",
+                                        ignoreCase = true
+                                    ) &&
+                                (
+                                        coachDoc.getBoolean(
+                                            "canViewPaymentReports"
+                                        ) == true ||
+                                                coachDoc.getBoolean(
+                                                    "canManagePayments"
+                                                ) == true
+                                        )
+                }
+
+                when (paymentsReportAuthorized) {
+                    null -> {
+                        CircularProgressIndicator()
+                    }
+
+                    false -> {
+                        LaunchedEffect(Unit) {
+                            nav.navigate(Route.Home.route) {
+                                popUpTo(Route.Home.route) {
+                                    inclusive = false
+                                }
+                                launchSingleTop = true
                             }
                         }
-                    },
-                    onSaveManualPayment = { traineeId, amount, method, notes ->
-                        // כאן נחבר בהמשך ל-Firebase / Firestore
                     }
-                )
+
+                    true -> {
+                        PaymentsReportScreen(
+                            isEnglish = isEnglish,
+                            onClose = {
+                                nav.navigate(Route.Home.route) {
+                                    launchSingleTop = true
+                                    restoreState = false
+
+                                    popUpTo(
+                                        nav.graph.startDestinationId
+                                    ) {
+                                        inclusive = false
+                                    }
+                                }
+                            },
+                            onSaveManualPayment = { traineeId, amount, method, notes ->
+                                // כאן נחבר בהמשך ל-Firebase / Firestore
+                            }
+                        )
+                    }
+                }
             }
 
             // ✅ NEW: Voice settings (קול אחיד לכל האפליקציה)
@@ -3566,7 +3731,7 @@ private suspend fun hydrateProfileLocallyFromFirestore(
 
         putString("authProvider", "google")
         putBoolean("google_login", true)
-        putBoolean("skip_otp", true)
+        remove("skip_otp")
 
         putBoolean("profile_completed", true)
         putBoolean("registration_complete", true)
@@ -3663,48 +3828,4 @@ private suspend fun isProfileCompletedRemotely(uid: String): Boolean {
                 phone.length >= 9
 
     return canEnterApp
-}
-
-/**
- * בדיקת מספר טלפון מול Firestore.
- */
-private suspend fun checkAndConsumePhone(phoneDigits: String): Boolean {
-    val db = Firebase.firestore
-
-    val doc = db.collection("allowed_numbers")
-        .document("numbers")
-        .get()
-        .await()
-
-    val rawList = doc.get("list") as? List<*> ?: emptyList<Any>()
-    val allowedNumbers = rawList
-        .mapNotNull { it?.toString() }
-        .map { it.filter { ch -> ch.isDigit() } }
-
-    if (phoneDigits !in allowedNumbers) {
-        return false
-    }
-
-    val existingUserSnap = db.collection("users")
-        .whereEqualTo("phone", phoneDigits)
-        .limit(1)
-        .get()
-        .await()
-
-    if (!existingUserSnap.isEmpty) {
-        return true
-    }
-
-    runCatching {
-        db.collection("used_numbers")
-            .document(phoneDigits)
-            .set(
-                mapOf(
-                    "usedAt" to FieldValue.serverTimestamp()
-                )
-            )
-            .await()
-    }
-
-    return true
 }

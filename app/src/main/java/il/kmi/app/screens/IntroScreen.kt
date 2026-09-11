@@ -1,8 +1,5 @@
 package il.kmi.app.screens
 
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.animation.core.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -10,7 +7,6 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.text.font.FontWeight
@@ -20,7 +16,6 @@ import androidx.compose.foundation.Image
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
 import il.kmi.app.R
-import androidx.compose.ui.graphics.graphicsLayer
 import android.content.Context
 import androidx.compose.ui.platform.LocalContext
 import il.kmi.app.subscription.KmiAccess
@@ -29,13 +24,11 @@ import il.kmi.shared.localization.AppLanguageManager
 import il.kmi.shared.domain.Belt
 import android.content.SharedPreferences
 import androidx.core.content.edit
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.text.style.TextAlign
 import android.widget.Toast
-import androidx.compose.foundation.BorderStroke
 import il.kmi.app.auth.GoogleAuthManager
 import il.kmi.app.auth.UserProfileCompletion
 import il.kmi.app.ui.KmiTypography
@@ -978,65 +971,6 @@ fun IntroScreen(
         }
     }
 
-    val classicGoogleLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.StartActivityForResult()
-    ) { result ->
-        scope.launch {
-            GoogleAuthManager.logUiStage(
-                context = ctx,
-                stage = "intro_classic_launcher_result_received",
-                message = "resultCode=${result.resultCode}, dataNull=${result.data == null}"
-            )
-
-            val classicResult = GoogleAuthManager.handleClassicGoogleSignInResult(
-                context = ctx,
-                data = result.data
-            )
-
-            classicResult
-                .onSuccess {
-                    GoogleAuthManager.logUiStage(
-                        context = ctx,
-                        stage = "intro_classic_login_success_before_profile_check"
-                    )
-
-                    isGoogleLoading = false
-                    googleFlowLocked = false
-
-                    completeGoogleLoginAfterFirebaseAuth(
-                        ctx = ctx,
-                        userSp = userSp,
-                        legacySp = legacySp,
-                        onProfileComplete = onProfileComplete,
-                        onProfileMissing = onProfileMissing
-                    )
-                }
-                .onFailure { error ->
-                    GoogleAuthManager.logUiStage(
-                        context = ctx,
-                        stage = "intro_classic_login_failure",
-                        error = error
-                    )
-
-                    isGoogleLoading = false
-                    googleFlowLocked = false
-
-                    googleError = googleLoginErrorMessage(
-                        error = error,
-                        isEnglish = isEnglish
-                    )
-
-                    if (!googleError.isNullOrBlank()) {
-                        Toast.makeText(
-                            ctx,
-                            googleError.orEmpty(),
-                            Toast.LENGTH_LONG
-                        ).show()
-                    }
-                }
-        }
-    }
-
     var fetchedName by remember { mutableStateOf<String?>(null) }
     var didFetchName by remember { mutableStateOf(false) }
 
@@ -1091,37 +1025,19 @@ fun IntroScreen(
         }
 
     val startGoogleLogin: () -> Unit = {
-        GoogleAuthManager.logUiStage(
-            context = ctx,
-            stage = "intro_google_button_clicked",
-            message = "isGoogleLoading=$isGoogleLoading, googleFlowLocked=$googleFlowLocked"
-        )
-
-        if (isGoogleLoading || googleFlowLocked) {
-            GoogleAuthManager.logUiStage(
-                context = ctx,
-                stage = "intro_google_button_ignored_locked"
-            )
-        } else {
+        if (!isGoogleLoading && !googleFlowLocked) {
             googleError = null
             isGoogleLoading = true
             googleFlowLocked = true
 
             scope.launch {
-                GoogleAuthManager.logUiStage(
-                    context = ctx,
-                    stage = "intro_credential_manager_flow_start"
-                )
-
-                val loginResult = GoogleAuthManager.signInWithGoogle(ctx)
+                val loginResult =
+                    GoogleAuthManager.signInWithGoogle(
+                        ctx
+                    )
 
                 loginResult
                     .onSuccess {
-                        GoogleAuthManager.logUiStage(
-                            context = ctx,
-                            stage = "intro_credential_manager_login_success_before_profile_check"
-                        )
-
                         isGoogleLoading = false
                         googleFlowLocked = false
 
@@ -1134,67 +1050,24 @@ fun IntroScreen(
                         )
                     }
                     .onFailure { error ->
-                        GoogleAuthManager.logUiStage(
-                            context = ctx,
-                            stage = "intro_credential_manager_login_failure",
-                            error = error
-                        )
+                        isGoogleLoading = false
+                        googleFlowLocked = false
 
-                        if (GoogleAuthManager.shouldUseClassicGoogleFallback(error)) {
-                            GoogleAuthManager.logUiStage(
-                                context = ctx,
-                                stage = "intro_classic_fallback_launch_start"
-                            )
-
-                            runCatching {
-                                classicGoogleLauncher.launch(
-                                    GoogleAuthManager.classicGoogleSignInIntent(ctx)
-                                )
-                            }.onFailure { launchError ->
-                                GoogleAuthManager.logUiStage(
-                                    context = ctx,
-                                    stage = "intro_classic_fallback_launch_failure",
-                                    error = launchError
-                                )
-
-                                isGoogleLoading = false
-                                googleFlowLocked = false
-
-                                googleError = googleLoginErrorMessage(
-                                    error = launchError,
-                                    isEnglish = isEnglish
-                                )
-
-                                if (!googleError.isNullOrBlank()) {
-                                    Toast.makeText(
-                                        ctx,
-                                        googleError.orEmpty(),
-                                        Toast.LENGTH_LONG
-                                    ).show()
-                                }
-                            }
-                        } else {
-                            GoogleAuthManager.logUiStage(
-                                context = ctx,
-                                stage = "intro_no_classic_fallback_show_error",
-                                error = error
-                            )
-
-                            isGoogleLoading = false
-                            googleFlowLocked = false
-
-                            googleError = googleLoginErrorMessage(
+                        googleError =
+                            googleLoginErrorMessage(
                                 error = error,
                                 isEnglish = isEnglish
                             )
 
-                            if (!googleError.isNullOrBlank()) {
-                                Toast.makeText(
-                                    ctx,
-                                    googleError.orEmpty(),
-                                    Toast.LENGTH_LONG
-                                ).show()
-                            }
+                        if (
+                            !googleError
+                                .isNullOrBlank()
+                        ) {
+                            Toast.makeText(
+                                ctx,
+                                googleError.orEmpty(),
+                                Toast.LENGTH_LONG
+                            ).show()
                         }
                     }
             }

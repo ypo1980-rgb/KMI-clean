@@ -668,7 +668,7 @@ object TrainingCatalog {
     // ─────────────────────────────────────────────────────────────
 
     val ageGroupsByBranch: Map<String, List<String>> = mapOf(
-        "נתניה – מרכז קהילתי אופק" to listOf("גן חובה - כיתה א", "כיתה ב' - כיתה ה'", "כיתה ו' - כיתה ח'", "נוער + בוגרים", "בוגרים"),
+        "נתניה – מרכז קהילתי אופק" to listOf("גן חובה - כיתה א", "כיתה ב' - כיתה ה'", "כיתה ו' - כיתה ח'", "נוער + בוגרים"),
         "נתניה – מרכז קהילתי סוקולוב" to listOf("בוגרים", "ילדים"),
         "נתניה – נורדאו" to listOf("טרום חובה וחובה", "כיתה א' - כיתה ב'", "כיתה ג' - כיתה ו'", "בוגרים"),
         "עזריאל – מושב עזריאל" to listOf("ילדים (גן חובה עד כיתה ב')", "כיתה ג' - כיתה ז'", "נוער + בוגרים"),
@@ -827,18 +827,6 @@ object TrainingCatalog {
                     address = addressFor("רחוב אבא אחימאיר 6, נתניה"),
                     coach = "יוני מלסה"
                 )
-            )
-        )
-        add(
-            TrainingSlot(
-                branch = AppStrings.t("branch_netanya_ofek"),
-                groups = listOf("בוגרים"),
-                dayOfWeek = Calendar.MONDAY,  // 20:30–22:00
-                startHour = 20, startMinute = 30,
-                durationMinutes = 90,
-                place = placeFor("נתניה – מרכז קהילתי אופק"),
-                address = addressFor("רחוב אבא אחימאיר 6, נתניה"),
-                coach = "יוני מלסה"
             )
         )
 
@@ -1227,10 +1215,42 @@ object TrainingCatalog {
                         if (cleanLabel(sg) == wantedClean) return@any true
                         if (sg == group) return@any true
 
-                        if (wantedNorm == "נוער" && normSlot == "נוער + בוגרים") return@any true
-                        if (wantedNorm == "בוגרים" && normSlot == "נוער + בוגרים") return@any true
-                        if (wantedNorm == "Youth" && normSlot == "נוער + בוגרים") return@any true
-                        if (wantedNorm == "Adults" && normSlot == "נוער + בוגרים") return@any true
+                        if (wantedNorm == "נוער" && normSlot == "נוער + בוגרים") {
+                            return@any true
+                        }
+
+                        /*
+                         * באופק אין יותר קבוצת "בוגרים" נפרדת.
+                         *
+                         * משתמש ישן ששמור אצלו "בוגרים" לא צריך
+                         * לקבל אוטומטית את קבוצת "נוער + בוגרים".
+                         */
+                        val isOfek =
+                            branchKey ==
+                                    "נתניה – מרכז קהילתי אופק"
+
+                        if (
+                            !isOfek &&
+                            wantedNorm == "בוגרים" &&
+                            normSlot == "נוער + בוגרים"
+                        ) {
+                            return@any true
+                        }
+
+                        if (
+                            !isOfek &&
+                            wantedNorm == "Adults" &&
+                            normSlot == "נוער + בוגרים"
+                        ) {
+                            return@any true
+                        }
+
+                        if (
+                            wantedNorm == "Youth" &&
+                            normSlot == "נוער + בוגרים"
+                        ) {
+                            return@any true
+                        }
 
                         false
                     })

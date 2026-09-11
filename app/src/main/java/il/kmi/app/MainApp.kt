@@ -32,8 +32,10 @@ import il.kmi.app.ui.LocalAppIconScale
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.compose.currentBackStackEntryAsState
 import il.kmi.app.analytics.KmiDiagnostics
+import il.kmi.app.screens.admin.AdminAccess
 import il.kmi.app.ui.DrawerBridge
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.tasks.await
 
 
 @Composable
@@ -236,6 +238,60 @@ fun MainApp(
     val currentRoute = mainBackStackEntry?.destination?.route
     val activeRouteForDrawer = currentRoute ?: resolvedStartDestination
 
+    var isAdmin by remember {
+        mutableStateOf(false)
+    }
+
+    var isCoachAuthorized by remember {
+        mutableStateOf(false)
+    }
+
+    LaunchedEffect(
+        currentRoute,
+        com.google.firebase.auth.FirebaseAuth
+            .getInstance()
+            .currentUser
+            ?.uid
+    ) {
+        isAdmin =
+            AdminAccess.isCurrentUserAdmin()
+
+        val uid =
+            com.google.firebase.auth.FirebaseAuth
+                .getInstance()
+                .currentUser
+                ?.uid
+                .orEmpty()
+
+        if (uid.isBlank()) {
+            isCoachAuthorized = false
+            return@LaunchedEffect
+        }
+
+        val coachDoc =
+            runCatching {
+                com.google.firebase.firestore.FirebaseFirestore
+                    .getInstance()
+                    .collection("authorizedCoaches")
+                    .document(uid)
+                    .get()
+                    .await()
+            }.getOrNull()
+
+        isCoachAuthorized =
+            coachDoc?.exists() == true &&
+                    coachDoc.getBoolean("active") == true &&
+                    coachDoc.getString("role")
+                        .orEmpty()
+                        .equals(
+                            "coach",
+                            ignoreCase = true
+                        ) &&
+                    coachDoc.getBoolean(
+                        "canOpenCoachDrawer"
+                    ) == true
+    }
+
     val ctxForDiagnostics = LocalContext.current.applicationContext
 
     LaunchedEffect(currentRoute) {
@@ -273,15 +329,21 @@ fun MainApp(
         }
     }
 
-    fun isRegistrationOrEntryRoute(route: String?): Boolean {
-        return route == Route.Splash.route ||
-                route == Route.RegistrationLanding.route ||
-                route == Route.Registration.route ||
-                route == Route.NewUserTrainee.route ||
-                route == Route.NewUserCoach.route ||
-                route == Route.ExistingUserTrainee.route ||
-                route == Route.ExistingUserCoach.route ||
-                route == "google_profile_completion"
+    fun isRegistrationOrEntryRoute(
+        route: String?
+    ): Boolean {
+        val cleanRoute =
+            route.orEmpty()
+
+        return cleanRoute == Route.Splash.route ||
+                cleanRoute == Route.RegistrationLanding.route ||
+                cleanRoute == Route.Registration.route ||
+                cleanRoute.startsWith(
+                    Route.NewUserTrainee.route
+                ) ||
+                cleanRoute == Route.ExistingUserTrainee.route ||
+                cleanRoute == Route.ExistingUserCoach.route ||
+                cleanRoute == "google_profile_completion"
     }
 
     val isRegistrationRouteForDrawer =
@@ -531,25 +593,8 @@ fun MainApp(
                                             Context.MODE_PRIVATE
                                         )
                                     }
-                                    val roleState = remember {
-                                        mutableStateOf(spUser.getString("user_role", "trainee"))
-                                    }
-
-                                    DisposableEffect(spUser) {
-                                        val l =
-                                            SharedPreferences.OnSharedPreferenceChangeListener { _, k ->
-                                                if (k == "user_role") {
-                                                    roleState.value =
-                                                        spUser.getString("user_role", "trainee")
-                                                }
-                                            }
-                                        spUser.registerOnSharedPreferenceChangeListener(l)
-                                        onDispose {
-                                            spUser.unregisterOnSharedPreferenceChangeListener(l)
-                                        }
-                                    }
-
-                                    val isCoach = roleState.value.equals("coach", true)
+                                    val isCoach =
+                                        isCoachAuthorized
 
                                     il.kmi.app.screens.drawer.AppDrawerContent(
                                         isEnglish = isEnglish,
@@ -591,7 +636,10 @@ fun MainApp(
                                         // עריכת פרופיל — פותח את אותו טופס רישום,
                                         // אבל במצב עריכה: בסיום חוזרים למסך הקודם ולא למסך הטעינה הדינמי.
                                         onOpenEditProfile = {
-                                            nav.navigate(Route.NewUserTrainee.route + "?step=profile&skipOtp=false") {
+                                            nav.navigate(
+                                                Route.NewUserTrainee.route +
+                                                        "?step=profile"
+                                            ) {
                                                 launchSingleTop = true
                                                 restoreState = false
                                             }
@@ -699,8 +747,8 @@ fun MainApp(
                                             nav.navigate(Route.InternalExam.route)
                                         },
 
-                                        // אדמין – ייקבע רק לפי Firestore בהמשך
-                                        isAdmin = false,
+                                        // הרשאת אדמין נקבעת לפי admins/{uid}.enabled ב-Firestore
+                                        isAdmin = isAdmin,
                                         onOpenAdminUsers = {
                                             nav.navigate(Route.AdminUsers.route)
                                         },

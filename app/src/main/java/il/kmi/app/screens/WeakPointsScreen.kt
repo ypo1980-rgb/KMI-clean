@@ -35,6 +35,7 @@ import il.kmi.app.ui.KmiTopBar
 import il.kmi.app.ui.KmiTypography
 import il.kmi.app.ui.pdf.KmiPdfFooter
 import il.kmi.app.ui.pdf.KmiPdfHeader
+import il.yuval.ui.theme.kmiScreenBackgroundBrush
 
 //================================================================
 
@@ -68,14 +69,7 @@ fun WeakPointsScreen(
         weakTr(isEnglish, he, en)
 
     val backgroundBrush =
-        Brush.verticalGradient(
-            colors = listOf(
-                MaterialTheme.colorScheme.background,
-                MaterialTheme.colorScheme.surfaceVariant,
-                MaterialTheme.colorScheme.primaryContainer,
-                MaterialTheme.colorScheme.background
-            )
-        )
+        kmiScreenBackgroundBrush()
 
     Scaffold(
         topBar = {

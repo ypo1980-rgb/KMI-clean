@@ -88,7 +88,6 @@ import androidx.compose.animation.core.rememberInfiniteTransition
 import il.kmi.app.favorites.FavoritesStore
 import android.app.Activity
 import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.rounded.NearMe
 import androidx.compose.ui.draw.clip
@@ -1886,7 +1885,8 @@ fun HomeScreen(
                 val branchGroupPairsEffective:
                         List<Pair<String, String>> =
                     remember(
-                        homeBranchAssignments
+                        homeBranchAssignments,
+                        ctx
                     ) {
                         homeBranchAssignments
                             .flatMap { assignment ->
@@ -1902,6 +1902,74 @@ fun HomeScreen(
 
                                 branchName.isNotBlank() &&
                                         groupName.isNotBlank()
+                            }
+                            .filter {
+                                    (branchName, groupName) ->
+
+                                val dbGroups =
+                                    KmiDatabaseProvider
+                                        .branchByName(
+                                            ctx,
+                                            branchName
+                                        )
+                                        ?.trainingDays
+                                        ?.map { day ->
+                                            TrainingCatalog
+                                                .normalizeGroupName(
+                                                    day.groupHe
+                                                )
+                                                .ifBlank {
+                                                    day.groupHe.trim()
+                                                }
+                                        }
+                                        ?.filter { group ->
+                                            group.isNotBlank()
+                                        }
+                                        ?.distinct()
+                                        .orEmpty()
+
+                                val catalogGroups =
+                                    TrainingCatalog
+                                        .groupsForBranch(
+                                            branch = branchName,
+                                            isEnglish = false
+                                        )
+                                        .map { group ->
+                                            TrainingCatalog
+                                                .normalizeGroupName(
+                                                    group
+                                                )
+                                                .ifBlank {
+                                                    group.trim()
+                                                }
+                                        }
+                                        .filter { group ->
+                                            group.isNotBlank()
+                                        }
+                                        .distinct()
+
+                                val validGroups =
+                                    if (dbGroups.isNotEmpty()) {
+                                        dbGroups
+                                    } else {
+                                        catalogGroups
+                                    }
+
+                                val wantedGroup =
+                                    TrainingCatalog
+                                        .normalizeGroupName(
+                                            groupName
+                                        )
+                                        .ifBlank {
+                                            groupName.trim()
+                                        }
+
+                                validGroups.any { validGroup ->
+                                    validGroup.equals(
+                                        wantedGroup,
+                                        ignoreCase = true
+                                    )
+                                }
                             }
                             .distinct()
                     }
@@ -2244,7 +2312,8 @@ fun HomeScreen(
                 fun databaseGroupMatches(
                     selectedGroup: String,
                     databaseGroupHe: String,
-                    databaseGroupEn: String
+                    databaseGroupEn: String,
+                    branchName: String
                 ): Boolean {
                     val wanted = TrainingCatalog
                         .normalizeGroupName(selectedGroup)
@@ -2259,15 +2328,51 @@ fun HomeScreen(
                     val dbEn = databaseGroupEn.trim()
 
                     if (wanted.equals(dbHe, ignoreCase = true)) return true
-                    if (selectedGroup.trim()
-                            .equals(databaseGroupHe.trim(), ignoreCase = true)
-                    ) return true
-                    if (selectedGroup.trim().equals(dbEn, ignoreCase = true)) return true
 
-                    // התאמות מרחיבות כמו ב-TrainingCatalog:
-                    // מי שבחר נוער או בוגרים יכול לקבל גם "נוער + בוגרים".
-                    if (wanted == "נוער" && dbHe == "נוער + בוגרים") return true
-                    if (wanted == "בוגרים" && dbHe == "נוער + בוגרים") return true
+                    if (
+                        selectedGroup.trim()
+                            .equals(
+                                databaseGroupHe.trim(),
+                                ignoreCase = true
+                            )
+                    ) {
+                        return true
+                    }
+
+                    if (
+                        selectedGroup.trim()
+                            .equals(
+                                dbEn,
+                                ignoreCase = true
+                            )
+                    ) {
+                        return true
+                    }
+
+                    val isOfek =
+                        branchName
+                            .replace("־", "-")
+                            .replace("–", "-")
+                            .replace("—", "-")
+                            .contains(
+                                "מרכז קהילתי אופק",
+                                ignoreCase = true
+                            )
+
+                    if (
+                        wanted == "נוער" &&
+                        dbHe == "נוער + בוגרים"
+                    ) {
+                        return true
+                    }
+
+                    if (
+                        !isOfek &&
+                        wanted == "בוגרים" &&
+                        dbHe == "נוער + בוגרים"
+                    ) {
+                        return true
+                    }
 
                     return false
                 }
@@ -2291,7 +2396,8 @@ fun HomeScreen(
                         databaseGroupMatches(
                             selectedGroup = groupName,
                             databaseGroupHe = day.groupHe,
-                            databaseGroupEn = day.groupEn
+                            databaseGroupEn = day.groupEn,
+                            branchName = branchName
                         )
                     }
 

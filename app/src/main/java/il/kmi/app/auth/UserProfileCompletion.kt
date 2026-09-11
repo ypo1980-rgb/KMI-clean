@@ -299,7 +299,7 @@ object UserProfileCompletion {
 
             putString("authProvider", "google")
             putBoolean("google_login", true)
-            putBoolean("skip_otp", true)
+            remove("skip_otp")
 
             putBoolean("profile_complete", false)
             putBoolean("profile_completed", false)
@@ -397,9 +397,9 @@ object UserProfileCompletion {
 
             putString("authProvider", "google")
             putBoolean("google_login", true)
-            putBoolean("skip_otp", true)
+            remove("skip_otp")
 
-            putBoolean("profile_complete", isComplete)
+            putBoolean("profile_complete", false)
             putBoolean("profile_completed", isComplete)
             putBoolean("registration_complete", isComplete)
             putBoolean("registration_form_completed", isComplete)

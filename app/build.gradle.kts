@@ -30,14 +30,14 @@ val hasReleaseSigningConfig =
 
 android {
     namespace = "il.kmi.app"
-    compileSdk = 35
+    compileSdk = 36
 
     defaultConfig {
         applicationId = "il.kmi.training"
         minSdk = 24
-        targetSdk = 35
-        versionCode = 159
-        versionName = "1.0.18"
+        targetSdk = 36
+        versionCode = 161
+        versionName = "1.0.19"
         vectorDrawables.useSupportLibrary = true
 
         testInstrumentationRunner =

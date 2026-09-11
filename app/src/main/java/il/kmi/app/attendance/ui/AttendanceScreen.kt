@@ -77,16 +77,13 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.window.Dialog
 import il.kmi.app.attendance.data.GroupMember
 import il.kmi.app.training.TrainingCatalog
 import il.kmi.app.privacy.TraineeDisplayNameMapper
 import il.kmi.shared.localization.AppLanguage
 import il.kmi.shared.localization.AppLanguageManager
-import java.time.YearMonth
 
 //========================================================================
 
@@ -99,6 +96,7 @@ fun AttendanceScreen(
     groupKey: String,
     onOpenMemberStats: (memberId: Long?, name: String) -> Unit,
     onOpenGroupStats: (branch: String, groupKey: String) -> Unit,
+    onOpenDatePicker: () -> Unit,
     onHomeClick: () -> Unit = {}
 ) {
     // הקשר למסך
@@ -110,6 +108,7 @@ fun AttendanceScreen(
     val state by vm.uiState.collectAsState()
     val scope = rememberCoroutineScope()
     val context = LocalContext.current   // לשיתוף דו"ח
+    val snackbarHostState = remember { SnackbarHostState() }
 
     val languageManager = remember(context) { AppLanguageManager(context) }
     val isEnglish = languageManager.getCurrentLanguage() == AppLanguage.ENGLISH
@@ -176,6 +175,10 @@ fun AttendanceScreen(
                      * פתוחה כדי שהסימונים לא ייעלמו.
                      */
                     reportSavedLocally = false
+
+                    snackbarHostState.showSnackbar(
+                        message = event.message
+                    )
                 }
             }
         }
@@ -207,10 +210,6 @@ fun AttendanceScreen(
                     }
                     ?: groupKey
                 ).trim()
-    }
-
-    var showDatePicker by rememberSaveable {
-        mutableStateOf(false)
     }
 
     fun String.nameKey(): String = this
@@ -612,6 +611,11 @@ fun AttendanceScreen(
         }
 
     Scaffold(
+        snackbarHost = {
+            SnackbarHost(
+                hostState = snackbarHostState
+            )
+        },
         topBar = {
 
             val contextLang = LocalContext.current
@@ -887,7 +891,7 @@ fun AttendanceScreen(
                             attendancePct = attendancePct,
                             isEnglish = isEnglish,
                             onDateClick = {
-                                showDatePicker = true
+                                onOpenDatePicker()
                             },
                             onBranchSelected = { effectiveBranchRaw ->
                                 vm.selectBranch(effectiveBranchRaw)
@@ -1356,467 +1360,6 @@ fun AttendanceScreen(
                                 }
                             }
 
-                        }
-                    }
-                }
-            }
-
-            // ===== בחירת תאריך אימון =====
-            if (showDatePicker) {
-                var visibleMonth by remember(state.date) {
-                    mutableStateOf(YearMonth.from(state.date))
-                }
-
-                val selectedDate = state.date
-
-                val firstDayOfMonth = remember(visibleMonth) {
-                    visibleMonth.atDay(1)
-                }
-
-                // Sunday = 0, Monday = 1 ... Saturday = 6
-                val leadingEmptyDays = remember(firstDayOfMonth) {
-                    firstDayOfMonth.dayOfWeek.value % 7
-                }
-
-                val daysInMonth = remember(visibleMonth) {
-                    visibleMonth.lengthOfMonth()
-                }
-
-                val monthLocale = if (isEnglish) Locale.ENGLISH else Locale("he", "IL")
-
-                val monthTitle = remember(visibleMonth, isEnglish) {
-                    visibleMonth.atDay(1)
-                        .format(DateTimeFormatter.ofPattern("MMMM yyyy", monthLocale))
-                }
-
-                val selectedTitle = remember(selectedDate, isEnglish) {
-                    selectedDate.format(
-                        DateTimeFormatter.ofPattern("EEEE · d MMMM yyyy", monthLocale)
-                    )
-                }
-
-                Dialog(
-                    onDismissRequest = { showDatePicker = false }
-                ) {
-                    Surface(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 14.dp),
-                        shape = RoundedCornerShape(30.dp),
-                        color = Color.Transparent,
-                        tonalElevation = 0.dp,
-                        shadowElevation = 18.dp
-                    ) {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clip(RoundedCornerShape(30.dp))
-                                .background(
-                                    Brush.verticalGradient(
-                                        colors = listOf(
-                                            Color(0xFFF8FBFF),
-                                            Color(0xFFEAF4FF),
-                                            Color(0xFFB7DDF7),
-                                            Color(0xFF1F78B4),
-                                            Color(0xFF062B4A)
-                                        )
-                                    )
-                                )
-                                .padding(1.dp)
-                        ) {
-                            Surface(
-                                modifier = Modifier.fillMaxWidth(),
-                                shape = RoundedCornerShape(29.dp),
-                                color = Color(0xFF0F172A).copy(alpha = 0.96f),
-                                tonalElevation = 0.dp
-                            ) {
-                                CompositionLocalProvider(
-                                    LocalLayoutDirection provides if (isEnglish) {
-                                        LayoutDirection.Ltr
-                                    } else {
-                                        LayoutDirection.Rtl
-                                    }
-                                ) {
-                                    Column(
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .padding(horizontal = 16.dp, vertical = 16.dp),
-                                        verticalArrangement = Arrangement.spacedBy(12.dp)
-                                    ) {
-                                        Row(
-                                            modifier = Modifier.fillMaxWidth(),
-                                            verticalAlignment = Alignment.CenterVertically
-                                        ) {
-                                            Column(
-                                                modifier = Modifier.weight(1f),
-                                                horizontalAlignment = if (isEnglish) Alignment.Start else Alignment.End
-                                            ) {
-                                                Text(
-                                                    text = tr(
-                                                        "בחירת תאריך אימון",
-                                                        "Select training date"
-                                                    ),
-                                                    style =
-                                                        KmiTypography.secondary.copy(
-                                                            fontWeight =
-                                                                FontWeight.Bold
-                                                        ),
-                                                    color = Color(0xFFBFDBFE),
-                                                    textAlign =
-                                                        if (isEnglish) {
-                                                            TextAlign.Left
-                                                        } else {
-                                                            TextAlign.Right
-                                                        },
-                                                    modifier =
-                                                        Modifier.fillMaxWidth()
-                                                )
-
-                                                Spacer(Modifier.height(4.dp))
-
-                                                Text(
-                                                    text = selectedTitle,
-                                                    style =
-                                                        KmiTypography.sectionTitle.copy(
-                                                            fontWeight =
-                                                                FontWeight.Black
-                                                        ),
-                                                    color = Color.White,
-                                                    textAlign =
-                                                        if (isEnglish) {
-                                                            TextAlign.Left
-                                                        } else {
-                                                            TextAlign.Right
-                                                        },
-                                                    modifier =
-                                                        Modifier.fillMaxWidth(),
-                                                    maxLines = 2,
-                                                    overflow =
-                                                        TextOverflow.Ellipsis
-                                                )
-                                            }
-
-                                            Spacer(Modifier.width(10.dp))
-
-                                            Surface(
-                                                shape = CircleShape,
-                                                color = Color.White.copy(alpha = 0.12f),
-                                                border = BorderStroke(
-                                                    1.dp,
-                                                    Color.White.copy(alpha = 0.22f)
-                                                )
-                                            ) {
-                                                Text(
-                                                    text = "📅",
-                                                    style = KmiTypography.metric,
-                                                    modifier = Modifier.padding(
-                                                        10.dp
-                                                    )
-                                                )
-                                            }
-                                        }
-
-                                        HorizontalDivider(
-                                            color =
-                                                Color.White.copy(
-                                                    alpha = 0.16f
-                                                )
-                                        )
-
-                                        Row(
-                                            modifier = Modifier.fillMaxWidth(),
-                                            verticalAlignment = Alignment.CenterVertically
-                                        ) {
-                                            IconButton(
-                                                onClick = {
-                                                    visibleMonth = visibleMonth.minusMonths(1)
-                                                }
-                                            ) {
-                                                Text(
-                                                    text =
-                                                        if (isEnglish) {
-                                                            "‹"
-                                                        } else {
-                                                            "›"
-                                                        },
-                                                    style =
-                                                        KmiTypography.metric.copy(
-                                                            fontWeight =
-                                                                FontWeight.Bold,
-                                                            textDirection =
-                                                                TextDirection.Ltr
-                                                        ),
-                                                    color = Color.White
-                                                )
-                                            }
-
-                                            Text(
-                                                text = monthTitle,
-                                                style = KmiTypography.cardTitle.copy(
-                                                    fontWeight = FontWeight.Bold
-                                                ),
-                                                color = Color.White,
-                                                textAlign = TextAlign.Center,
-                                                modifier = Modifier.weight(1f),
-                                                maxLines = 2,
-                                                overflow = TextOverflow.Ellipsis
-                                            )
-
-                                            val canMoveToNextMonth =
-                                                visibleMonth <
-                                                        YearMonth.from(
-                                                            LocalDate.now()
-                                                        )
-
-                                            IconButton(
-                                                onClick = {
-                                                    if (canMoveToNextMonth) {
-                                                        visibleMonth =
-                                                            visibleMonth.plusMonths(1)
-                                                    }
-                                                },
-                                                enabled =
-                                                    canMoveToNextMonth
-                                            ) {
-                                                Text(
-                                                    text =
-                                                        if (isEnglish) {
-                                                            "›"
-                                                        } else {
-                                                            "‹"
-                                                        },
-                                                    style =
-                                                        KmiTypography.metric.copy(
-                                                            fontWeight =
-                                                                FontWeight.Bold,
-                                                            textDirection =
-                                                                TextDirection.Ltr
-                                                        ),
-                                                    color =
-                                                        if (canMoveToNextMonth) {
-                                                            Color.White
-                                                        } else {
-                                                            Color.White.copy(
-                                                                alpha = 0.25f
-                                                            )
-                                                        }
-                                                )
-                                            }
-                                        }
-
-                                        val weekDays = if (isEnglish) {
-                                            listOf("Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat")
-                                        } else {
-                                            listOf("א׳", "ב׳", "ג׳", "ד׳", "ה׳", "ו׳", "ש׳")
-                                        }
-
-                                        Row(
-                                            modifier = Modifier
-                                                .fillMaxWidth()
-                                                .clip(RoundedCornerShape(18.dp))
-                                                .background(Color.White.copy(alpha = 0.08f))
-                                                .padding(vertical = 8.dp),
-                                            horizontalArrangement = Arrangement.SpaceBetween
-                                        ) {
-                                            weekDays.forEach { dayName ->
-                                                Text(
-                                                    text = dayName,
-                                                    style =
-                                                        KmiTypography.caption.copy(
-                                                            fontWeight =
-                                                                FontWeight.Black
-                                                        ),
-                                                    color = Color(0xFF67E8F9),
-                                                    textAlign = TextAlign.Center,
-                                                    modifier = Modifier.weight(1f),
-                                                    maxLines = 1,
-                                                    overflow =
-                                                        TextOverflow.Ellipsis
-                                                )
-                                            }
-                                        }
-
-                                        val cells =
-                                            buildList {
-                                                repeat(
-                                                    leadingEmptyDays
-                                                ) {
-                                                    add(null)
-                                                }
-
-                                                for (
-                                                day in 1..daysInMonth
-                                                ) {
-                                                    add(day)
-                                                }
-
-                                                while (
-                                                    size % 7 != 0
-                                                ) {
-                                                    add(null)
-                                                }
-                                            }
-
-                                        Column(
-                                            modifier = Modifier
-                                                .fillMaxWidth()
-                                                .clip(RoundedCornerShape(22.dp))
-                                                .background(Color.White.copy(alpha = 0.07f))
-                                                .padding(horizontal = 6.dp, vertical = 8.dp),
-                                            verticalArrangement = Arrangement.spacedBy(4.dp)
-                                        ) {
-                                            cells.chunked(7).forEach { week ->
-                                                Row(
-                                                    modifier = Modifier.fillMaxWidth(),
-                                                    horizontalArrangement = Arrangement.SpaceBetween
-                                                ) {
-                                                    week.forEach { day ->
-                                                        val cellDate =
-                                                            day?.let {
-                                                                visibleMonth.atDay(it)
-                                                            }
-
-                                                        val today =
-                                                            LocalDate.now()
-
-                                                        val isSelected =
-                                                            cellDate == selectedDate
-
-                                                        val isToday =
-                                                            cellDate == today
-
-                                                        val isFuture =
-                                                            cellDate?.isAfter(today) ==
-                                                                    true
-
-                                                        Box(
-                                                            modifier = Modifier
-                                                                .weight(1f)
-                                                                .heightIn(
-                                                                    min = 40.dp
-                                                                ),
-                                                            contentAlignment =
-                                                                Alignment.Center
-                                                        ) {
-                                                            if (day != null && cellDate != null) {
-                                                                Surface(
-                                                                    modifier = Modifier
-                                                                        .size(
-                                                                            KmiIconSize.extraLarge
-                                                                        )
-                                                                        .clickable(
-                                                                            enabled =
-                                                                                !isFuture
-                                                                        ) {
-                                                                            vm.selectAttendanceDate(
-                                                                                cellDate
-                                                                            )
-                                                                            showDatePicker =
-                                                                                false
-                                                                        },
-                                                                    shape = CircleShape,
-                                                                    color =
-                                                                        when {
-                                                                            isFuture ->
-                                                                                Color.Transparent
-
-                                                                            isSelected ->
-                                                                                Color(0xFF22D3EE)
-
-                                                                            isToday ->
-                                                                                Color.White.copy(
-                                                                                    alpha = 0.14f
-                                                                                )
-
-                                                                            else ->
-                                                                                Color.Transparent
-                                                                        },
-                                                                    border = when {
-                                                                        isSelected -> null
-                                                                        isToday -> BorderStroke(
-                                                                            1.dp,
-                                                                            Color(0xFF22D3EE)
-                                                                        )
-
-                                                                        else -> null
-                                                                    }
-                                                                ) {
-                                                                    Box(
-                                                                        modifier = Modifier.fillMaxSize(),
-                                                                        contentAlignment = Alignment.Center
-                                                                    ) {
-                                                                        Text(
-                                                                            text =
-                                                                                day.toString(),
-                                                                            style =
-                                                                                KmiTypography.cardTitle.copy(
-                                                                                    fontWeight =
-                                                                                        FontWeight.Black
-                                                                                ),
-                                                                            color =
-                                                                                when {
-                                                                                    isFuture ->
-                                                                                        Color.White.copy(
-                                                                                            alpha = 0.25f
-                                                                                        )
-
-                                                                                    isSelected ->
-                                                                                        Color(
-                                                                                            0xFF020617
-                                                                                        )
-
-                                                                                    else ->
-                                                                                        Color.White
-                                                                                },
-                                                                            textAlign =
-                                                                                TextAlign.Center
-                                                                        )
-                                                                    }
-                                                                }
-                                                            }
-                                                        }
-                                                    }
-                                                }
-                                            }
-                                        }
-
-                                        Row(
-                                            modifier = Modifier.fillMaxWidth(),
-                                            horizontalArrangement = if (isEnglish) Arrangement.End else Arrangement.Start,
-                                            verticalAlignment = Alignment.CenterVertically
-                                        ) {
-                                            TextButton(
-                                                onClick = { showDatePicker = false }
-                                            ) {
-                                                Text(
-                                                    text = tr("ביטול", "Cancel"),
-                                                    color = Color(0xFFBFDBFE),
-                                                    fontWeight = FontWeight.Bold
-                                                )
-                                            }
-
-                                            Spacer(Modifier.width(8.dp))
-
-                                            Button(
-                                                onClick = {
-                                                    vm.selectAttendanceDate(LocalDate.now())
-                                                    showDatePicker = false
-                                                },
-                                                shape = RoundedCornerShape(999.dp),
-                                                colors = ButtonDefaults.buttonColors(
-                                                    containerColor = Color(0xFF22D3EE),
-                                                    contentColor = Color(0xFF020617)
-                                                )
-                                            ) {
-                                                Text(
-                                                    text = tr("היום", "Today"),
-                                                    fontWeight = FontWeight.Black
-                                                )
-                                            }
-                                        }
-                                    }
-                                }
-                            }
                         }
                     }
                 }

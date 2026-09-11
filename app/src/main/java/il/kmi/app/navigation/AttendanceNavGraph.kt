@@ -17,6 +17,15 @@ import il.kmi.app.attendance.ui.AttendanceScreen
 import il.kmi.app.attendance.ui.AttendanceViewModel
 import java.time.LocalDate
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.runtime.mutableStateOf
+import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.firestore.FirebaseFirestore
+import kotlinx.coroutines.tasks.await
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
+
+//=================================================================
 
 /**
  * גרף נוכחות:
@@ -148,77 +157,228 @@ fun NavGraphBuilder.attendanceNavGraph(
             navArgument("groupKey") { type = NavType.StringType }
         )
     ) { e ->
-        val branch = e.arguments
-            ?.getString("branch")
-            .orEmpty()
-            .let { Uri.decode(it) }
-            .cleanAttendancePart()
 
-        val groupKey = e.arguments
-            ?.getString("groupKey")
-            .orEmpty()
-            .let { Uri.decode(it) }
-            .cleanAttendancePart()
+        var attendanceMarkAuthorized by remember {
+            mutableStateOf<Boolean?>(null)
+        }
 
-        val vmKey = "attendance_${branch}_${groupKey}"
-            .replace("/", "_")
-            .replace("\\", "_")
-            .replace("|", "_")
-            .replace(" ", "_")
-            .replace("+", "_")
+        val ctx = LocalContext.current
 
-        val attVm: AttendanceViewModel = viewModel(
-            key = vmKey
-        )
+        LaunchedEffect(Unit) {
+            val uid =
+                FirebaseAuth.getInstance()
+                    .currentUser
+                    ?.uid
+                    .orEmpty()
 
-        AttendanceScreen(
-            vm = attVm,
-            date = LocalDate.now(),
-            branch = branch,
-            groupKey = groupKey,
-            onOpenMemberStats = { memberId: Long?, memberName: String ->
-                val current = attVm.uiState.value
-                val currentBranch = current.branch.ifBlank { branch }
-                val currentGroup = current.groupKey.ifBlank { groupKey }
+            if (uid.isBlank()) {
+                attendanceMarkAuthorized = false
+                return@LaunchedEffect
+            }
 
-                val route = if (memberId != null && memberId > 0L) {
-                    Route.AttendanceStats.make(
-                        branch = Uri.encode(currentBranch),
-                        groupKey = Uri.encode(currentGroup),
-                        memberId = memberId,
-                        memberName = Uri.encode(memberName)
-                    )
-                } else {
-                    Route.AttendanceStats.make(
-                        branch = Uri.encode(currentBranch),
-                        groupKey = Uri.encode(currentGroup),
-                        memberName = Uri.encode(memberName)
-                    )
-                }
+            val userSp =
+                ctx.getSharedPreferences(
+                    "kmi_user",
+                    android.content.Context.MODE_PRIVATE
+                )
 
-                nav.navigate(route) {
-                    launchSingleTop = true
-                }
-            },
-            onOpenGroupStats = { b, g ->
-                val route = safeAttendanceGroupStatsRoute(b, g)
-                if (route != null) {
-                    nav.navigate(route) {
+            val locallyAuthorized =
+                userSp.getBoolean(
+                    "coach_authorized",
+                    false
+                ) &&
+                        userSp.getBoolean(
+                            "can_manage_attendance",
+                            false
+                        )
+
+            if (locallyAuthorized) {
+                attendanceMarkAuthorized = true
+                return@LaunchedEffect
+            }
+
+            val firestore =
+                FirebaseFirestore.getInstance()
+
+            val adminDoc =
+                runCatching {
+                    firestore
+                        .collection("admins")
+                        .document(uid)
+                        .get()
+                        .await()
+                }.getOrNull()
+
+            val isAdmin =
+                adminDoc?.exists() == true &&
+                        adminDoc.getBoolean("enabled") == true
+
+            if (isAdmin) {
+                attendanceMarkAuthorized = true
+                return@LaunchedEffect
+            }
+
+            val coachDoc =
+                runCatching {
+                    firestore
+                        .collection("authorizedCoaches")
+                        .document(uid)
+                        .get()
+                        .await()
+                }.getOrNull()
+
+            attendanceMarkAuthorized =
+                coachDoc?.exists() == true &&
+                        coachDoc.getBoolean("active") == true &&
+                        coachDoc.getString("role")
+                            .orEmpty()
+                            .equals(
+                                "coach",
+                                ignoreCase = true
+                            ) &&
+                        coachDoc.getBoolean(
+                            "canManageAttendance"
+                        ) == true
+        }
+
+        when (attendanceMarkAuthorized) {
+            null -> {
+                CircularProgressIndicator()
+            }
+
+            false -> {
+                LaunchedEffect(Unit) {
+                    nav.navigate(Route.Home.route) {
+                        popUpTo(Route.Home.route) {
+                            inclusive = false
+                        }
                         launchSingleTop = true
                     }
                 }
-            },
-            onHomeClick = {
-                nav.navigate(Route.Home.route) {
-                    launchSingleTop = true
-                    restoreState = false
-
-                    popUpTo(nav.graph.startDestinationId) {
-                        inclusive = false
-                    }
-                }
             }
-        )
+
+            true -> {
+                val branch = e.arguments
+                    ?.getString("branch")
+                    .orEmpty()
+                    .let { Uri.decode(it) }
+                    .cleanAttendancePart()
+
+                val groupKey = e.arguments
+                    ?.getString("groupKey")
+                    .orEmpty()
+                    .let { Uri.decode(it) }
+                    .cleanAttendancePart()
+
+                val vmKey = "attendance_${branch}_${groupKey}"
+                    .replace("/", "_")
+                    .replace("\\", "_")
+                    .replace("|", "_")
+                    .replace(" ", "_")
+                    .replace("+", "_")
+
+                val attVm: AttendanceViewModel = viewModel(
+                    key = vmKey
+                )
+
+                AttendanceScreen(
+                    vm = attVm,
+                    date = LocalDate.now(),
+                    branch = branch,
+                    groupKey = groupKey,
+
+                    onOpenMemberStats = {
+                            memberId: Long?,
+                            memberName: String ->
+
+                        val current = attVm.uiState.value
+                        val currentBranch =
+                            current.branch.ifBlank { branch }
+                        val currentGroup =
+                            current.groupKey.ifBlank { groupKey }
+
+                        val route =
+                            if (
+                                memberId != null &&
+                                memberId > 0L
+                            ) {
+                                Route.AttendanceStats.make(
+                                    branch = Uri.encode(
+                                        currentBranch
+                                    ),
+                                    groupKey = Uri.encode(
+                                        currentGroup
+                                    ),
+                                    memberId = memberId,
+                                    memberName = Uri.encode(
+                                        memberName
+                                    )
+                                )
+                            } else {
+                                Route.AttendanceStats.make(
+                                    branch = Uri.encode(
+                                        currentBranch
+                                    ),
+                                    groupKey = Uri.encode(
+                                        currentGroup
+                                    ),
+                                    memberName = Uri.encode(
+                                        memberName
+                                    )
+                                )
+                            }
+
+                        nav.navigate(route) {
+                            launchSingleTop = true
+                        }
+                    },
+
+                    onOpenGroupStats = { b, g ->
+                        val route =
+                            safeAttendanceGroupStatsRoute(
+                                b,
+                                g
+                            )
+
+                        if (route != null) {
+                            nav.navigate(route) {
+                                launchSingleTop = true
+                            }
+                        }
+                    },
+
+                    onOpenDatePicker = {
+                        nav.currentBackStackEntry
+                            ?.savedStateHandle
+                            ?.set(
+                                "monthly_calendar_mode",
+                                "attendance_date_picker"
+                            )
+
+                        nav.navigate(
+                            Route.MonthlyCalendar.route
+                        ) {
+                            launchSingleTop = true
+                        }
+                    },
+
+                    onHomeClick = {
+                        nav.navigate(
+                            Route.Home.route
+                        ) {
+                            launchSingleTop = true
+                            restoreState = false
+
+                            popUpTo(
+                                nav.graph.startDestinationId
+                            ) {
+                                inclusive = false
+                            }
+                        }
+                    }
+                )
+            }
+        }
     }
 
     // ----- סטטיסטיקות ----- //
@@ -231,53 +391,162 @@ fun NavGraphBuilder.attendanceNavGraph(
             navArgument("memberName") { type = NavType.StringType; nullable = true; defaultValue = null }
         )
     ) { e ->
-        val branch = e.arguments
-            ?.getString("branch")
-            .orEmpty()
-            .let { Uri.decode(it) }
-            .cleanAttendancePart()
+        val attendanceStatsAuthorized = remember {
+            mutableStateOf<Boolean?>(null)
+        }
 
-        val groupKey = e.arguments
-            ?.getString("groupKey")
-            .orEmpty()
-            .let { Uri.decode(it) }
-            .cleanAttendancePart()
+        val ctx = LocalContext.current
 
-        val memberId = e.arguments
-            ?.getString("memberId")
-            ?.toLongOrNull()
+        LaunchedEffect(Unit) {
+            val uid =
+                FirebaseAuth.getInstance()
+                    .currentUser
+                    ?.uid
+                    .orEmpty()
 
-        val memberName = e.arguments
-            ?.getString("memberName")
-            ?.let { Uri.decode(it) }
+            if (uid.isBlank()) {
+                attendanceStatsAuthorized.value = false
+                return@LaunchedEffect
+            }
 
-        AttendanceStatsScreen(
-            branch = branch,
-            groupKey = groupKey,
-            memberId = memberId,
-            memberName = memberName,
-            onBack = {
-                nav.popBackStack()
-            },
-            onHome = {
-                nav.navigate(
-                    Route.Home.route
-                ) {
-                    launchSingleTop = true
-                    restoreState = false
+            val userSp =
+                ctx.getSharedPreferences(
+                    "kmi_user",
+                    android.content.Context.MODE_PRIVATE
+                )
 
-                    /*
-                     * מסיר את מסכי הנוכחות והסטטיסטיקה
-                     * מהמחסנית ולא יוצר מסך בית נוסף.
-                     */
-                    popUpTo(
-                        nav.graph.startDestinationId
-                    ) {
-                        inclusive = false
+            val locallyAuthorized =
+                userSp.getBoolean(
+                    "coach_authorized",
+                    false
+                ) &&
+                        (
+                                userSp.getBoolean(
+                                    "can_manage_attendance",
+                                    false
+                                ) ||
+                                        userSp.getBoolean(
+                                            "can_view_trainees",
+                                            false
+                                        )
+                                )
+
+            if (locallyAuthorized) {
+                attendanceStatsAuthorized.value = true
+                return@LaunchedEffect
+            }
+
+            val firestore =
+                FirebaseFirestore.getInstance()
+
+            val adminDoc =
+                runCatching {
+                    firestore
+                        .collection("admins")
+                        .document(uid)
+                        .get()
+                        .await()
+                }.getOrNull()
+
+            val isAdmin =
+                adminDoc?.exists() == true &&
+                        adminDoc.getBoolean("enabled") == true
+
+            if (isAdmin) {
+                attendanceStatsAuthorized.value = true
+                return@LaunchedEffect
+            }
+
+            val coachDoc =
+                runCatching {
+                    firestore
+                        .collection("authorizedCoaches")
+                        .document(uid)
+                        .get()
+                        .await()
+                }.getOrNull()
+
+            attendanceStatsAuthorized.value =
+                coachDoc?.exists() == true &&
+                        coachDoc.getBoolean("active") == true &&
+                        coachDoc.getString("role")
+                            .orEmpty()
+                            .equals(
+                                "coach",
+                                ignoreCase = true
+                            ) &&
+                        (
+                                coachDoc.getBoolean(
+                                    "canManageAttendance"
+                                ) == true ||
+                                        coachDoc.getBoolean(
+                                            "canViewTrainees"
+                                        ) == true
+                                )
+        }
+
+        when (attendanceStatsAuthorized.value) {
+            null -> {
+                androidx.compose.material3.CircularProgressIndicator()
+            }
+
+            false -> {
+                LaunchedEffect(Unit) {
+                    nav.navigate(Route.Home.route) {
+                        launchSingleTop = true
+                        popUpTo(Route.Home.route) {
+                            inclusive = false
+                        }
                     }
                 }
             }
-        )
+
+            true -> {
+                val branch = e.arguments
+                    ?.getString("branch")
+                    .orEmpty()
+                    .let { Uri.decode(it) }
+                    .cleanAttendancePart()
+
+                val groupKey = e.arguments
+                    ?.getString("groupKey")
+                    .orEmpty()
+                    .let { Uri.decode(it) }
+                    .cleanAttendancePart()
+
+                val memberId = e.arguments
+                    ?.getString("memberId")
+                    ?.toLongOrNull()
+
+                val memberName = e.arguments
+                    ?.getString("memberName")
+                    ?.let { Uri.decode(it) }
+
+                AttendanceStatsScreen(
+                    branch = branch,
+                    groupKey = groupKey,
+                    memberId = memberId,
+                    memberName = memberName,
+                    onBack = {
+                        nav.popBackStack()
+                    },
+                    onHome = {
+                        nav.navigate(
+                            Route.Home.route
+                        ) {
+                            launchSingleTop = true
+                            restoreState = false
+
+                            popUpTo(
+                                nav.graph.startDestinationId
+                            ) {
+                                inclusive = false
+                            }
+                        }
+                    }
+                )
+            }
+        }
     }
 
     // ----- סטטיסטיקת קבוצה (שנה אחורה) ----- //
@@ -288,39 +557,155 @@ fun NavGraphBuilder.attendanceNavGraph(
             navArgument("groupKey") { type = NavType.StringType }
         )
     ) { e ->
-        val branch = e.arguments
-            ?.getString("branch")
-            .orEmpty()
-            .let { Uri.decode(it) }
-            .cleanAttendancePart()
-
-        val groupKey = e.arguments
-            ?.getString("groupKey")
-            .orEmpty()
-            .let { Uri.decode(it) }
-            .cleanAttendancePart()
+        val attendanceGroupStatsAuthorized = remember {
+            mutableStateOf<Boolean?>(null)
+        }
 
         val ctx = LocalContext.current
-        val app = ctx.applicationContext as android.app.Application
 
-        // ✅ לא ליצור repo בכל ריקומפוזיציה
-        val repo = remember(app) { AttendanceRepository.get(app) }
+        LaunchedEffect(Unit) {
+            val uid =
+                FirebaseAuth.getInstance()
+                    .currentUser
+                    ?.uid
+                    .orEmpty()
 
-        AttendanceGroupStatsScreen(
-            repo = repo,
-            branch = branch,
-            groupKey = groupKey,
-            onBack = {
-                nav.popBackStack()
-            },
-            onHome = {
-                nav.navigate(Route.Home.route) {
-                    popUpTo(Route.Home.route) {
-                        inclusive = false
+            if (uid.isBlank()) {
+                attendanceGroupStatsAuthorized.value = false
+                return@LaunchedEffect
+            }
+
+            val userSp =
+                ctx.getSharedPreferences(
+                    "kmi_user",
+                    android.content.Context.MODE_PRIVATE
+                )
+
+            val locallyAuthorized =
+                userSp.getBoolean(
+                    "coach_authorized",
+                    false
+                ) &&
+                        (
+                                userSp.getBoolean(
+                                    "can_manage_attendance",
+                                    false
+                                ) ||
+                                        userSp.getBoolean(
+                                            "can_view_trainees",
+                                            false
+                                        )
+                                )
+
+            if (locallyAuthorized) {
+                attendanceGroupStatsAuthorized.value = true
+                return@LaunchedEffect
+            }
+
+            val firestore =
+                FirebaseFirestore.getInstance()
+
+            val adminDoc =
+                runCatching {
+                    firestore
+                        .collection("admins")
+                        .document(uid)
+                        .get()
+                        .await()
+                }.getOrNull()
+
+            val isAdmin =
+                adminDoc?.exists() == true &&
+                        adminDoc.getBoolean("enabled") == true
+
+            if (isAdmin) {
+                attendanceGroupStatsAuthorized.value = true
+                return@LaunchedEffect
+            }
+
+            val coachDoc =
+                runCatching {
+                    firestore
+                        .collection("authorizedCoaches")
+                        .document(uid)
+                        .get()
+                        .await()
+                }.getOrNull()
+
+            attendanceGroupStatsAuthorized.value =
+                coachDoc?.exists() == true &&
+                        coachDoc.getBoolean("active") == true &&
+                        coachDoc.getString("role")
+                            .orEmpty()
+                            .equals(
+                                "coach",
+                                ignoreCase = true
+                            ) &&
+                        (
+                                coachDoc.getBoolean(
+                                    "canManageAttendance"
+                                ) == true ||
+                                        coachDoc.getBoolean(
+                                            "canViewTrainees"
+                                        ) == true
+                                )
+        }
+
+        when (attendanceGroupStatsAuthorized.value) {
+            null -> {
+                androidx.compose.material3.CircularProgressIndicator()
+            }
+
+            false -> {
+                LaunchedEffect(Unit) {
+                    nav.navigate(Route.Home.route) {
+                        launchSingleTop = true
+                        popUpTo(Route.Home.route) {
+                            inclusive = false
+                        }
                     }
-                    launchSingleTop = true
                 }
             }
-        )
+
+            true -> {
+                val branch = e.arguments
+                    ?.getString("branch")
+                    .orEmpty()
+                    .let { Uri.decode(it) }
+                    .cleanAttendancePart()
+
+                val groupKey = e.arguments
+                    ?.getString("groupKey")
+                    .orEmpty()
+                    .let { Uri.decode(it) }
+                    .cleanAttendancePart()
+
+                val ctx = LocalContext.current
+                val app =
+                    ctx.applicationContext as android.app.Application
+
+                val repo =
+                    remember(app) {
+                        AttendanceRepository.get(app)
+                    }
+
+                AttendanceGroupStatsScreen(
+                    repo = repo,
+                    branch = branch,
+                    groupKey = groupKey,
+                    onBack = {
+                        nav.popBackStack()
+                    },
+                    onHome = {
+                        nav.navigate(Route.Home.route) {
+                            popUpTo(Route.Home.route) {
+                                inclusive = false
+                            }
+                            launchSingleTop = true
+                        }
+                    }
+                )
+            }
+        }
     }
 }

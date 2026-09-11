@@ -58,7 +58,6 @@ import il.kmi.shared.localization.AppLanguageManager
 import com.google.firebase.auth.ActionCodeSettings
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
-import com.google.firebase.functions.FirebaseFunctions
 import kotlinx.coroutines.tasks.await
 
 //======================================================================
@@ -131,27 +130,6 @@ private suspend fun resolveLoginUserUid(
         ?.uid
         .orEmpty()
         .trim()
-}
-
-private suspend fun verifyCoachInviteWithServer(
-    phoneDigits: String,
-    emailLower: String
-): Result<Map<String, Any?>> {
-    return runCatching {
-        val data = hashMapOf(
-            "phoneDigits" to phoneDigits.filter { it.isDigit() },
-            "emailLower" to emailLower.trim().lowercase()
-        )
-
-        val result = FirebaseFunctions
-            .getInstance("us-central1")
-            .getHttpsCallable("verifyCoachInvite")
-            .call(data)
-            .await()
-
-        @Suppress("UNCHECKED_CAST")
-        result.data as? Map<String, Any?> ?: emptyMap()
-    }
 }
 
 @Composable
@@ -251,34 +229,12 @@ fun ExistingUserTraineeScreen(
         }
     }
 
-// מצב נבחר: מתאמן/מאמן
-// משתמש קיים ייפתח כמאמן רק אם כבר אומת בעבר מול authorizedCoaches
-// ונשמרו user_role=coach + coach_authorized=true.
-    val userSpForInitialRole = remember(appCtx) {
-        appCtx.getSharedPreferences("kmi_user", Context.MODE_PRIVATE)
-    }
-
+// מצב נבחר: מתאמן / מאמן
+// ברירת המחדל היא מתאמן.
+// בחירת "מאמן" היא רק ניסיון התחברות;
+// ההרשאה האמיתית נבדקת מול authorizedCoaches/{uid}.
     var isCoach by rememberSaveable {
-        mutableStateOf(
-            (
-                    sp.getString("user_role", "")
-                        .equals("coach", ignoreCase = true) ||
-                            userSpForInitialRole.getString("user_role", "")
-                                .equals("coach", ignoreCase = true)
-                    ) &&
-                    (
-                            sp.getBoolean("coach_authorized", false) ||
-                                    userSpForInitialRole.getBoolean("coach_authorized", false)
-                            )
-        )
-    }
-
-    var coachCodeError by remember {
         mutableStateOf(false)
-    }
-
-    LaunchedEffect(isCoach) {
-        coachCodeError = false
     }
 
     // שדות
@@ -286,7 +242,7 @@ fun ExistingUserTraineeScreen(
         mutableStateOf(sp.getString("remember_username", sp.getString("username", "") ?: "") ?: "")
     }
     var password by rememberSaveable {
-        mutableStateOf(sp.getString("remember_password", sp.getString("password", "") ?: "") ?: "")
+        mutableStateOf("")
     }
 
     var rememberMe by rememberSaveable { mutableStateOf(sp.getBoolean("remember_me_login", false)) }
@@ -297,8 +253,11 @@ fun ExistingUserTraineeScreen(
     // אם rememberMe דלוק – טוענים קרדנציאלס מראש
     LaunchedEffect(Unit) {
         if (rememberMe) {
-            username = sp.getString("remember_username", "") ?: ""
-            password = sp.getString("remember_password", "") ?: ""
+            username =
+                sp.getString(
+                    "remember_username",
+                    ""
+                ) ?: ""
         }
     }
 
@@ -477,7 +436,6 @@ fun ExistingUserTraineeScreen(
                                         // בחירת מאמן היא רק ניסיון כניסה.
                                         // לא שומרים user_role=coach לפני אימות הרשאה מהשרת.
                                         isCoach = true
-                                        coachCodeError = false
                                     }
                                 },
                                 text = {
@@ -502,8 +460,8 @@ fun ExistingUserTraineeScreen(
                 }
 
                 // מצב מאמן:
-                // אין יותר שדה קוד מאמן במסך.
-                // האימות יתבצע מול Cloud Function לפי Firebase Auth + אימייל + טלפון + coachInvites.
+// אין יותר שדה קוד מאמן במסך.
+// האימות מתבצע לפי Firebase UID מול authorizedCoaches/{uid}.
                 if (isCoach) {
                     Text(
                         text = tr(
@@ -719,27 +677,95 @@ fun ExistingUserTraineeScreen(
                         scope.launch {
                             val userSpForLogin = appCtx.getSharedPreferences("kmi_user", Context.MODE_PRIVATE)
 
-                            val savedUsername = sp.getString("username", "") ?: ""
-                            val savedPassword = sp.getString("password", "") ?: ""
                             val savedEmail =
                                 sp.getString("email", null)
                                     ?: userSpForLogin.getString("email", null)
                                     ?: ""
 
-                            val credsOk =
-                                username.isNotBlank() &&
-                                        password.isNotBlank() &&
-                                        savedUsername.isNotBlank() &&
-                                        savedPassword.isNotBlank() &&
-                                        username.trim().equals(savedUsername.trim(), ignoreCase = true) &&
-                                        password == savedPassword
-
-                            if (!credsOk) {
+                            if (
+                                username.isBlank() ||
+                                password.isBlank()
+                            ) {
                                 loginError = true
                                 return@launch
                             }
 
-                            var resolvedCoachCode = ""
+                            val loginEmail =
+                                when {
+                                    Patterns.EMAIL_ADDRESS
+                                        .matcher(username.trim())
+                                        .matches() -> {
+                                        username.trim()
+                                    }
+
+                                    else -> {
+                                        runCatching {
+                                            val db =
+                                                FirebaseFirestore.getInstance()
+
+                                            val fields = listOf(
+                                                "username",
+                                                "userName",
+                                                "loginUsername",
+                                                "login_name",
+                                                "user_login"
+                                            )
+
+                                            fields.firstNotNullOfOrNull { field ->
+                                                db.collection("users")
+                                                    .whereEqualTo(
+                                                        field,
+                                                        username.trim()
+                                                    )
+                                                    .limit(1)
+                                                    .get()
+                                                    .await()
+                                                    .documents
+                                                    .firstOrNull()
+                                                    ?.getString("email")
+                                                    ?.trim()
+                                                    ?.takeIf {
+                                                        Patterns.EMAIL_ADDRESS
+                                                            .matcher(it)
+                                                            .matches()
+                                                    }
+                                            }
+                                        }.getOrNull()
+                                            ?: savedEmail
+                                                .trim()
+                                                .takeIf {
+                                                    Patterns.EMAIL_ADDRESS
+                                                        .matcher(it)
+                                                        .matches()
+                                                }
+                                                .orEmpty()
+                                    }
+                                }
+
+                            if (loginEmail.isBlank()) {
+                                loginError = true
+                                return@launch
+                            }
+
+                            val firebaseUser =
+                                runCatching {
+                                    FirebaseAuth.getInstance()
+                                        .signInWithEmailAndPassword(
+                                            loginEmail,
+                                            password
+                                        )
+                                        .await()
+                                        .user
+                                }.getOrNull()
+
+                            if (firebaseUser == null) {
+                                loginError = true
+                                return@launch
+                            }
+
+                            var resolvedLoginUid =
+                                firebaseUser.uid
+
                             var resolvedCoachRole: String
                             var resolvedCoachActive: Boolean
                             var resolvedCoachName = ""
@@ -753,175 +779,72 @@ fun ExistingUserTraineeScreen(
                             var resolvedCanManagePayments = false
                             var resolvedCanSendBroadcasts = false
 
-                            var resolvedLoginUid = ""
-
-                            val coachOk = if (isCoach) {
-                                val loginEmail =
-                                    savedEmail.trim().takeIf { Patterns.EMAIL_ADDRESS.matcher(it).matches() }
-                                        ?: username.trim().takeIf { Patterns.EMAIL_ADDRESS.matcher(it).matches() }
-                                        ?: runCatching {
-                                            FirebaseFirestore.getInstance()
-                                                .collection("users")
-                                                .whereEqualTo("username", username.trim())
-                                                .limit(1)
-                                                .get()
-                                                .await()
-                                                .documents
-                                                .firstOrNull()
-                                                ?.getString("email")
-                                                .orEmpty()
-                                        }.getOrDefault("")
-                                            .takeIf { Patterns.EMAIL_ADDRESS.matcher(it).matches() }
-                                        ?: runCatching {
-                                            FirebaseFirestore.getInstance()
-                                                .collection("users")
-                                                .whereEqualTo("userName", username.trim())
-                                                .limit(1)
-                                                .get()
-                                                .await()
-                                                .documents
-                                                .firstOrNull()
-                                                ?.getString("email")
-                                                .orEmpty()
-                                        }.getOrDefault("")
-                                            .takeIf { Patterns.EMAIL_ADDRESS.matcher(it).matches() }
-                                        ?: ""
-
-                                val cleanPhoneDigits =
-                                    (
-                                            sp.getString("phone", null)
-                                                ?: sp.getString("phoneDigits", null)
-                                                ?: userSpForLogin.getString("phone", null)
-                                                ?: userSpForLogin.getString("phoneDigits", null)
-                                                ?: ""
-                                            ).filter { it.isDigit() }
-
-                                if (loginEmail.isBlank()) {
-                                    false
-                                } else if (cleanPhoneDigits.isBlank()) {
-                                    false
-                                } else {
-                                    val firebaseUidFromLogin = runCatching {
-                                        FirebaseAuth.getInstance()
-                                            .signInWithEmailAndPassword(loginEmail, password)
-                                            .await()
-                                            .user
-                                            ?.uid
-                                            .orEmpty()
-                                    }.getOrDefault("")
-
-                                    val uid = firebaseUidFromLogin.ifBlank {
-                                        resolveLoginUserUid(
-                                            appCtx = appCtx,
-                                            sp = sp,
-                                            username = username
-                                        )
-                                    }
-
-                                    resolvedLoginUid = uid
+                            val coachOk =
+                                if (isCoach) {
+                                    val uid =
+                                        resolvedLoginUid
 
                                     if (uid.isBlank()) {
                                         false
                                     } else {
-                                        val existingDoc = runCatching {
-                                            FirebaseFirestore.getInstance()
-                                                .collection("authorizedCoaches")
-                                                .document(uid)
-                                                .get()
-                                                .await()
-                                        }.getOrNull()
+                                        val coachDoc =
+                                            runCatching {
+                                                FirebaseFirestore.getInstance()
+                                                    .collection("authorizedCoaches")
+                                                    .document(uid)
+                                                    .get()
+                                                    .await()
+                                            }.getOrNull()
 
-                                        if (existingDoc?.exists() == true) {
-                                            resolvedCoachActive = existingDoc.getBoolean("active") == true
-                                            resolvedCoachRole = existingDoc.getString("role").orEmpty()
-                                            resolvedCoachCode = existingDoc.getString("coachCode").orEmpty()
-                                            resolvedCoachName = existingDoc.getString("fullName").orEmpty()
+                                        if (coachDoc?.exists() != true) {
+                                            false
+                                        } else {
+                                            resolvedCoachActive =
+                                                coachDoc.getBoolean("active") == true
+
+                                            resolvedCoachRole =
+                                                coachDoc.getString("role")
+                                                    .orEmpty()
+
+                                            resolvedCoachName =
+                                                coachDoc.getString("fullName")
+                                                    .orEmpty()
 
                                             resolvedCanOpenCoachDrawer =
-                                                existingDoc.getBoolean("canOpenCoachDrawer") == true
+                                                coachDoc.getBoolean("canOpenCoachDrawer") == true
+
                                             resolvedCanViewTrainees =
-                                                existingDoc.getBoolean("canViewTrainees") == true
+                                                coachDoc.getBoolean("canViewTrainees") == true
+
                                             resolvedCanManageTrainees =
-                                                existingDoc.getBoolean("canManageTrainees") == true
+                                                coachDoc.getBoolean("canManageTrainees") == true
+
                                             resolvedCanManageAttendance =
-                                                existingDoc.getBoolean("canManageAttendance") == true
+                                                coachDoc.getBoolean("canManageAttendance") == true
+
                                             resolvedCanManageInternalExams =
-                                                existingDoc.getBoolean("canManageInternalExams") == true ||
-                                                        existingDoc.getBoolean("canManageExams") == true
+                                                coachDoc.getBoolean("canManageInternalExams") == true ||
+                                                        coachDoc.getBoolean("canManageExams") == true
+
                                             resolvedCanViewPaymentReports =
-                                                existingDoc.getBoolean("canViewPaymentReports") == true
+                                                coachDoc.getBoolean("canViewPaymentReports") == true
+
                                             resolvedCanManagePayments =
-                                                existingDoc.getBoolean("canManagePayments") == true
+                                                coachDoc.getBoolean("canManagePayments") == true
+
                                             resolvedCanSendBroadcasts =
-                                                existingDoc.getBoolean("canSendBroadcasts") == true
+                                                coachDoc.getBoolean("canSendBroadcasts") == true
 
-                                            val valid =
-                                                resolvedCoachActive &&
-                                                        resolvedCoachRole.equals("coach", ignoreCase = true)
-
-                                            valid
-                                        } else {
-                                            val verifyResult = verifyCoachInviteWithServer(
-                                                phoneDigits = cleanPhoneDigits,
-                                                emailLower = loginEmail
-                                            )
-
-                                            if (verifyResult.isFailure) {
-                                                false
-                                            } else {
-                                                val freshDoc = runCatching {
-                                                        FirebaseFirestore.getInstance()
-                                                            .collection("authorizedCoaches")
-                                                            .document(uid)
-                                                            .get()
-                                                            .await()
-                                                    }.getOrNull()
-
-                                                if (freshDoc?.exists() != true) {
-                                                    false
-                                                } else {
-                                                        resolvedCoachActive = freshDoc.getBoolean("active") == true
-                                                        resolvedCoachRole = freshDoc.getString("role").orEmpty()
-                                                        resolvedCoachCode = freshDoc.getString("coachCode").orEmpty()
-                                                        resolvedCoachName = freshDoc.getString("fullName").orEmpty()
-
-                                                        resolvedCanOpenCoachDrawer =
-                                                            freshDoc.getBoolean("canOpenCoachDrawer") == true
-                                                        resolvedCanViewTrainees =
-                                                            freshDoc.getBoolean("canViewTrainees") == true
-                                                        resolvedCanManageTrainees =
-                                                            freshDoc.getBoolean("canManageTrainees") == true
-                                                        resolvedCanManageAttendance =
-                                                            freshDoc.getBoolean("canManageAttendance") == true
-                                                        resolvedCanManageInternalExams =
-                                                            freshDoc.getBoolean("canManageInternalExams") == true ||
-                                                                    freshDoc.getBoolean("canManageExams") == true
-                                                        resolvedCanViewPaymentReports =
-                                                            freshDoc.getBoolean("canViewPaymentReports") == true
-                                                        resolvedCanManagePayments =
-                                                            freshDoc.getBoolean("canManagePayments") == true
-                                                        resolvedCanSendBroadcasts =
-                                                            freshDoc.getBoolean("canSendBroadcasts") == true
-
-                                                        val valid =
-                                                            resolvedCoachActive &&
-                                                                    resolvedCoachRole.equals("coach", ignoreCase = true)
-
-                                                    valid
-                                                    }
-                                            }
+                                            resolvedCoachActive &&
+                                                    resolvedCoachRole.equals(
+                                                        "coach",
+                                                        ignoreCase = true
+                                                    )
                                         }
                                     }
+                                } else {
+                                    resolvedLoginUid.isNotBlank()
                                 }
-                            } else {
-                                resolvedLoginUid = resolveLoginUserUid(
-                                    appCtx = appCtx,
-                                    sp = sp,
-                                    username = username
-                                )
-
-                                true
-                            }
 
                             if (!coachOk) {
                                 loginError = true
@@ -934,7 +857,7 @@ fun ExistingUserTraineeScreen(
 
                             loginError = false
 
-                            if (rememberMe && password.isNotBlank()) {
+                            if (rememberMe) {
                                 sp.edit {
                                     putBoolean(
                                         "remember_me_login",
@@ -944,10 +867,7 @@ fun ExistingUserTraineeScreen(
                                         "remember_username",
                                         username.trim()
                                     )
-                                    putString(
-                                        "remember_password",
-                                        password
-                                    )
+                                    remove("remember_password")
                                 }
                             } else {
                                 sp.edit {
@@ -983,14 +903,7 @@ fun ExistingUserTraineeScreen(
                                     "user_role",
                                     role
                                 )
-                                putString(
-                                    "coach_code",
-                                    if (role == "coach") {
-                                        resolvedCoachCode
-                                    } else {
-                                        ""
-                                    }
-                                )
+                                remove("coach_code")
                                 putString(
                                     "coach_name",
                                     if (role == "coach") {
@@ -1065,14 +978,7 @@ fun ExistingUserTraineeScreen(
                                     "user_role",
                                     role
                                 )
-                                putString(
-                                    "coach_code",
-                                    if (role == "coach") {
-                                        resolvedCoachCode
-                                    } else {
-                                        ""
-                                    }
-                                )
+                                remove("coach_code")
                                 putString(
                                     "coach_name",
                                     if (role == "coach") {
@@ -1132,7 +1038,6 @@ fun ExistingUserTraineeScreen(
                             }
 
                             kmiPrefs.username = username
-                            kmiPrefs.password = password
 
                             loginSucceeded = true
                         }

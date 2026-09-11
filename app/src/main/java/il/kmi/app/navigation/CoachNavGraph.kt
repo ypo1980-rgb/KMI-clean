@@ -4,16 +4,23 @@ import android.content.Intent
 import android.content.SharedPreferences
 import android.net.Uri
 import androidx.compose.ui.platform.LocalContext
-import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavGraphBuilder
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.composable
 import il.kmi.app.KmiViewModel
 import il.kmi.app.Route
-import il.kmi.app.attendance.ui.AttendanceScreen
-import il.kmi.app.attendance.ui.AttendanceViewModel
 import il.kmi.app.training.TrainingCatalog
-import java.time.LocalDate
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.firestore.FirebaseFirestore
+import kotlinx.coroutines.tasks.await
+
+//========================================================================
 
 @Suppress("UNUSED_PARAMETER")
 fun NavGraphBuilder.coachNavGraph(
@@ -24,26 +31,84 @@ fun NavGraphBuilder.coachNavGraph(
 ) {
     // --- שידור מאמן ---
     composable(Route.CoachBroadcast.route) {
-        val regionDefault = kmiPrefs.region
-        val branchDefault = kmiPrefs.branch
+        var broadcastAuthorized by remember {
+            mutableStateOf<Boolean?>(null)
+        }
 
-        val ctx = LocalContext.current
+        LaunchedEffect(Unit) {
+            val uid =
+                FirebaseAuth.getInstance()
+                    .currentUser
+                    ?.uid
+                    .orEmpty()
 
-        il.kmi.app.screens.coach.CoachBroadcastScreen(
-            branchesByRegion = TrainingCatalog.branchesByRegion,
-            defaultRegion = regionDefault,
-            defaultBranch = branchDefault,
-            onBack = { nav.popBackStack() },
-            onHome = {
-                nav.navigate(Route.Home.route) {
-                    launchSingleTop = true
-                    restoreState = false
+            if (uid.isBlank()) {
+                broadcastAuthorized = false
+                return@LaunchedEffect
+            }
 
-                    popUpTo(Route.CoachBroadcast.route) {
-                        inclusive = true
+            val coachDoc =
+                runCatching {
+                    FirebaseFirestore.getInstance()
+                        .collection("authorizedCoaches")
+                        .document(uid)
+                        .get()
+                        .await()
+                }.getOrNull()
+
+            broadcastAuthorized =
+                coachDoc?.exists() == true &&
+                        coachDoc.getBoolean("active") == true &&
+                        coachDoc.getString("role")
+                            .orEmpty()
+                            .equals(
+                                "coach",
+                                ignoreCase = true
+                            ) &&
+                        coachDoc.getBoolean(
+                            "canSendBroadcasts"
+                        ) == true
+        }
+
+        when (broadcastAuthorized) {
+            null -> {
+                CircularProgressIndicator()
+            }
+
+            false -> {
+                LaunchedEffect(Unit) {
+                    nav.navigate(Route.Home.route) {
+                        popUpTo(Route.Home.route) {
+                            inclusive = false
+                        }
+                        launchSingleTop = true
                     }
                 }
-            },
+            }
+
+            true -> {
+                val regionDefault = kmiPrefs.region
+                val branchDefault = kmiPrefs.branch
+
+                val ctx = LocalContext.current
+
+                il.kmi.app.screens.coach.CoachBroadcastScreen(
+                    branchesByRegion = TrainingCatalog.branchesByRegion,
+                    defaultRegion = regionDefault,
+                    defaultBranch = branchDefault,
+                    onBack = {
+                        nav.popBackStack()
+                    },
+                    onHome = {
+                        nav.navigate(Route.Home.route) {
+                            launchSingleTop = true
+                            restoreState = false
+
+                            popUpTo(Route.CoachBroadcast.route) {
+                                inclusive = true
+                            }
+                        }
+                    },
 
             // פתיחת אפליקציית SMS עם כל המספרים המסומנים
             onOpenSms = { numbers, message ->
@@ -61,77 +126,32 @@ fun NavGraphBuilder.coachNavGraph(
             },
 
             // שיתוף טקסט כללי: וואטסאפ / מייל / טלגרם וכו'
-            onShareText = { message ->
-                if (message.isBlank()) return@CoachBroadcastScreen
+                    onShareText = { message ->
+                        if (message.isBlank()) {
+                            return@CoachBroadcastScreen
+                        }
 
-                val shareIntent = Intent(Intent.ACTION_SEND).apply {
-                    type = "text/plain"
-                    putExtra(Intent.EXTRA_TEXT, message)
-                }
+                        val shareIntent =
+                            Intent(Intent.ACTION_SEND).apply {
+                                type = "text/plain"
+                                putExtra(
+                                    Intent.EXTRA_TEXT,
+                                    message
+                                )
+                            }
 
-                val chooser = Intent.createChooser(
-                    shareIntent,
-                    "שתף הודעת מאמן"
-                )
+                        val chooser =
+                            Intent.createChooser(
+                                shareIntent,
+                                "שתף הודעת מאמן"
+                            )
 
-                runCatching {
-                    ctx.startActivity(chooser)
-                }
-            }
-        )
-    }
-
-    // --- נוכחות מאמן (שמרנו על ה-route הישן "attendance") ---
-    composable(route = "attendance") {
-        val userBranch   = kmiPrefs.branch.orEmpty()
-        val userGroupKey = TrainingCatalog.normalizeGroupName(name = kmiPrefs.ageGroup.orEmpty())
-        val today        = LocalDate.now()
-
-        val attendVm: AttendanceViewModel = viewModel(
-            key = "attendance_${userBranch}_${userGroupKey}"
-        )
-
-        AttendanceScreen(
-            vm = attendVm,
-            date = today,
-            branch = userBranch,
-            groupKey = userGroupKey,
-
-            onOpenMemberStats = { memberId: Long?, memberName: String ->
-                val route = if (memberId != null && memberId > 0L) {
-                    Route.AttendanceStats.make(
-                        branch = userBranch,
-                        groupKey = userGroupKey,
-                        memberId = memberId,
-                        memberName = memberName
-                    )
-                } else {
-                    Route.AttendanceStats.make(
-                        branch = userBranch,
-                        groupKey = userGroupKey,
-                        memberName = memberName
-                    )
-                }
-                nav.navigate(route)
-            },
-
-            // ✅ חדש: סטטיסטיקת קבוצה (שנה אחורה)
-            onOpenGroupStats = { b, g ->
-                nav.navigate(Route.AttendanceGroupStats.make(b, g)) {
-                    launchSingleTop = true
-                }
-            },
-
-            onHomeClick = {
-                nav.navigate(Route.Home.route) {
-                    launchSingleTop = true
-                    restoreState = false
-
-                    popUpTo(nav.graph.startDestinationId) {
-                        inclusive = false
+                        runCatching {
+                            ctx.startActivity(chooser)
+                        }
                     }
-                }
+                )
             }
-        )
+        }
     }
 }

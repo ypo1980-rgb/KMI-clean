@@ -44,7 +44,6 @@ import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.FirebaseAuthUserCollisionException
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.SetOptions
-import il.kmi.app.screens.admin.AdminAccess
 import il.kmi.app.training.TrainingCatalog
 import il.kmi.app.database.KmiDatabaseProvider
 import il.kmi.shared.prefs.KmiPrefs
@@ -59,6 +58,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.tasks.await
 
 private const val TAG_REG = "KMI_REGISTRATION"
 
@@ -88,39 +88,6 @@ private fun maskedPhoneForLog(phone: String): String {
     val digits = phone.filter { it.isDigit() }
     if (digits.isBlank()) return "empty"
     return "len=${digits.length}, last4=${digits.takeLast(4)}"
-}
-
-// === רשימת מאמנים מורשים ===
-object CoachWhitelist {
-    // מפה: טלפון → שם
-    val allowedPhones: Map<String, String> = mapOf(
-        "0526664660" to "יובל פולק",
-        "0524887178" to "יוני מלסה",
-        "0526969287" to "אה, מאמא?איציק ביטון",
-        "0585911518" to "אדם הולצמן",
-        "0526319090" to "גל חג'ג'",
-        "0529462832" to "מעיין פסח",
-        "0505300596" to "אבי אביסדון"
-    )
-
-    // מפה: אימייל → שם
-    val allowedEmails: Map<String, String> = mapOf(
-        "ypo1980@gmail.com" to "יובל פולק",
-        "yonatanmalesa99@gmail.com" to "יוני מלסה",
-        "maayanpesach@gmail.com" to "מעיין פסח",
-        "avi.abeceedon@gmail.com" to "אבי אביסדון"
-        // ... תוסיף כאן עד ~20
-    )
-}
-
-private fun isSuperTesterUser(
-    email: String,
-    phoneDigits: String,
-    firebaseUid: String
-): Boolean {
-    return email.trim().lowercase() == "ypo1980@gmail.com" ||
-            phoneDigits.filter { it.isDigit() } == "0526664660" ||
-            firebaseUid == "DBoyoVVpsrVUX0ukhKwNyQlKUKY2"
 }
 
 @Composable
@@ -327,6 +294,7 @@ fun RegistrationFormScreen(
     initial: String = "trainee",
     onBack: () -> Unit,
     onRegistrationComplete: () -> Unit,
+    onOpenHome: () -> Unit,
     onOpenTerms: () -> Unit,
     onOpenDrawer: () -> Unit = { il.kmi.app.ui.DrawerBridge.open() },
     sp: SharedPreferences,
@@ -368,32 +336,29 @@ fun RegistrationFormScreen(
 
     fun finishRegistrationFlow() {
         if (startAtProfile) {
-            // ✅ עריכת פרופיל — חוזרים למסך הקודם ולא מציגים שוב מסך טעינה
-            onBack()
+            onOpenHome()
         } else {
-            // ✅ כניסה ראשונה / השלמת רישום — ממשיכים למסך הטעינה הדינמי
             onRegistrationComplete()
         }
     }
 
-    val isGoogleAuth = remember(sp, startAtProfile) {
-        val authProvider = sp.getString("authProvider", "").orEmpty()
-        val googleLogin = sp.getBoolean("google_login", false)
-        val skipOtp = sp.getBoolean("skip_otp", false)
+    val isGoogleAuth =
+        remember(startAtProfile) {
+            val firebaseUser =
+                FirebaseAuth.getInstance()
+                    .currentUser
 
-        val firebaseUser = FirebaseAuth.getInstance().currentUser
-        val firebaseIsGoogle = firebaseUser
-            ?.providerData
-            ?.any { provider -> provider.providerId == "google.com" } == true
+            val firebaseIsGoogle =
+                firebaseUser
+                    ?.providerData
+                    ?.any { provider ->
+                        provider.providerId ==
+                                "google.com"
+                    } == true
 
-        // ✅ שדות שם משתמש / סיסמה מוסתרים רק במסלול Google אמיתי.
-        // ברישום רגיל אסור שדגלים ישנים מ־SharedPreferences יסתירו אותם.
-        firebaseIsGoogle &&
-                authProvider == "google" &&
-                googleLogin &&
-                skipOtp &&
-                !startAtProfile
-    }
+            firebaseIsGoogle &&
+                    !startAtProfile
+        }
 
     // ======== STATE של הטופס ========
     var fullName by rememberSaveable { mutableStateOf(sp.getString("fullName", "") ?: "") }
@@ -421,108 +386,132 @@ fun RegistrationFormScreen(
         }
     }
 
-    // ✅ הרשאות רישום לפי whitelist
-    val normalizedPhone = remember(phone) { phone.filter { it.isDigit() } }
-    val normalizedEmail = remember(email) { email.trim().lowercase() }
-
-    val isWhitelistedCoach = remember(normalizedPhone, normalizedEmail) {
-        CoachWhitelist.allowedPhones.containsKey(normalizedPhone) ||
-                CoachWhitelist.allowedEmails.containsKey(normalizedEmail)
-    }
-
-    val firebaseUid = FirebaseAuth.getInstance().currentUser?.uid.orEmpty()
-
-    val isSuperTester = remember(normalizedPhone, normalizedEmail, firebaseUid) {
-        isSuperTesterUser(
-            email = normalizedEmail,
-            phoneDigits = normalizedPhone,
-            firebaseUid = firebaseUid
-        )
-    }
-
     // הרשאת מאמן אמיתית לעריכת פרופיל:
-    // לא מסתמכים על whitelist / super tester / בחירת טאב.
-    // רק מי שכבר אומת מול authorizedCoaches במסך ההתחברות מקבל להישאר/להיות מאמן.
-    val profileCoachAuthorized = remember(startAtProfile, sp, userSp) {
-        if (!startAtProfile) {
-            false
-        } else {
-            sp.getBoolean("coach_authorized", false) ||
-                    userSp.getBoolean("coach_authorized", false)
-        }
+// מקור האמת הוא authorizedCoaches/{uid} ב-Firestore.
+    var profileCoachAuthorized by remember {
+        mutableStateOf(false)
     }
 
-    val profileSavedRole = remember(startAtProfile, sp, userSp) {
-        if (!startAtProfile) {
-            ""
-        } else {
-            userSp.getString("user_role", null)
-                ?: sp.getString("user_role", null)
-                ?: ""
-        }
-    }
-
-    val profileAllowsCoach = remember(
-        startAtProfile,
-        profileCoachAuthorized,
-        profileSavedRole,
-        isWhitelistedCoach,
-        isSuperTester
-    ) {
-        startAtProfile &&
-                (
-                        (
-                                profileCoachAuthorized &&
-                                        profileSavedRole.equals("coach", ignoreCase = true)
-                                ) ||
-                                isWhitelistedCoach ||
-                                isSuperTester
-                        )
-    }
-
-    // ✅ חדש: ADMIN (Firestore: admins/{uid}.enabled)
-    var isAdmin by rememberSaveable { mutableStateOf(false) }
-
-    LaunchedEffect(Unit) {
-        isAdmin = runCatching { AdminAccess.isCurrentUserAdmin() }.getOrDefault(false)
-    }
-
-    // ✅ התאמת הטאב לתפקיד הפעיל בפועל:
-    // - בעריכת פרופיל הטאב נקבע לפי user_role השמור.
-    // - הרשאת מאמן מאפשרת גישה למאמן, אך אינה קובעת
-    //   שהמשתמש נמצא כרגע בפרופיל המאמן.
-    // - ברישום ראשוני נשארת הלוגיקה הקיימת.
     LaunchedEffect(
         startAtProfile,
-        profileSavedRole,
-        isWhitelistedCoach,
-        isAdmin,
-        isSuperTester
+        FirebaseAuth.getInstance().currentUser?.uid
     ) {
-        if (startAtProfile) {
-            selectedTab =
-                if (
-                    profileSavedRole.equals(
-                        "coach",
-                        ignoreCase = true
-                    )
-                ) {
-                    1
-                } else {
-                    0
-                }
-
+        if (!startAtProfile) {
+            profileCoachAuthorized = false
             return@LaunchedEffect
         }
 
-        if (!isAdmin && !isSuperTester) {
-            selectedTab =
-                if (isWhitelistedCoach) {
-                    1
-                } else {
-                    0
-                }
+        val uid =
+            FirebaseAuth.getInstance()
+                .currentUser
+                ?.uid
+                .orEmpty()
+
+        if (uid.isBlank()) {
+            profileCoachAuthorized = false
+            return@LaunchedEffect
         }
+
+        val coachDoc =
+            runCatching {
+                FirebaseFirestore.getInstance()
+                    .collection("authorizedCoaches")
+                    .document(uid)
+                    .get()
+                    .await()
+            }.onFailure { error ->
+                Log.e(
+                    TAG_REG,
+                    "profile_coach_auth_error uid=$uid message=${error.message}",
+                    error
+                )
+            }.getOrNull()
+
+        Log.e(
+            TAG_REG,
+            "profile_coach_auth_check uid=$uid " +
+                    "exists=${coachDoc?.exists()} " +
+                    "active=${coachDoc?.getBoolean("active")} " +
+                    "role=${coachDoc?.getString("role")}"
+        )
+
+        profileCoachAuthorized =
+            coachDoc?.exists() == true &&
+                    coachDoc.getBoolean("active") == true &&
+                    coachDoc.getString("role")
+                        .orEmpty()
+                        .equals(
+                            "coach",
+                            ignoreCase = true
+                        )
+    }
+
+    var profileAdminAuthorized by remember {
+        mutableStateOf(false)
+    }
+
+    LaunchedEffect(
+        startAtProfile,
+        FirebaseAuth.getInstance().currentUser?.uid
+    ) {
+        if (!startAtProfile) {
+            profileAdminAuthorized = false
+            return@LaunchedEffect
+        }
+
+        val uid =
+            FirebaseAuth.getInstance()
+                .currentUser
+                ?.uid
+                .orEmpty()
+
+        if (uid.isBlank()) {
+            profileAdminAuthorized = false
+            return@LaunchedEffect
+        }
+
+        val adminDoc =
+            runCatching {
+                FirebaseFirestore.getInstance()
+                    .collection("admins")
+                    .document(uid)
+                    .get()
+                    .await()
+            }.getOrNull()
+
+        profileAdminAuthorized =
+            adminDoc?.exists() == true &&
+                    adminDoc.getBoolean("enabled") == true
+    }
+
+    val profileAllowsCoach =
+        remember(
+            startAtProfile,
+            profileCoachAuthorized,
+            profileAdminAuthorized
+        ) {
+            startAtProfile &&
+                    (
+                            profileCoachAuthorized ||
+                                    profileAdminAuthorized
+                            )
+        }
+
+    LaunchedEffect(
+        startAtProfile,
+        profileCoachAuthorized,
+        profileAdminAuthorized
+    ) {
+        if (!startAtProfile) {
+            selectedTab = 0
+            return@LaunchedEffect
+        }
+
+        selectedTab =
+            when {
+                profileCoachAuthorized -> 1
+                else -> 0
+            }
     }
 
     var username by rememberSaveable {
@@ -534,13 +523,7 @@ fun RegistrationFormScreen(
     }
 
     var password by rememberSaveable {
-        mutableStateOf(
-            if (isGoogleAuth) {
-                "GOOGLE_AUTH"
-            } else {
-                sp.getString("password", "") ?: ""
-            }
-        )
+        mutableStateOf("")
     }
 
     // תאריך לידה
@@ -728,9 +711,20 @@ fun RegistrationFormScreen(
     }
 
     // העדפות
-    var subscribeSms by rememberSaveable { mutableStateOf(sp.getBoolean("subscribeSms", false)) }
-    var acceptedTerms by rememberSaveable { mutableStateOf(false) }
+    var subscribeSms by rememberSaveable {
+        mutableStateOf(
+            sp.getBoolean(
+                "subscribeSms",
+                false
+            )
+        )
+    }
 
+    var acceptedTerms by rememberSaveable(startAtProfile) {
+        mutableStateOf(
+            startAtProfile
+        )
+    }
     // שגיאות
     var fullNameError by remember { mutableStateOf(false) }
     var phoneError by remember { mutableStateOf(false) }
@@ -742,6 +736,10 @@ fun RegistrationFormScreen(
     var groupError by remember { mutableStateOf(false) }
     var termsError by remember { mutableStateOf(false) }
     var genderError by remember { mutableStateOf(false) }
+
+    var scrollToMissingField by remember {
+        mutableStateOf<String?>(null)
+    }
 
     // קטלוג — קודם branches.json, ואם חסר משהו אז fallback ל־TrainingCatalog הישן
     val databaseBranches = remember(ctx) {
@@ -1013,28 +1011,36 @@ fun RegistrationFormScreen(
                 )
             }, phone=${maskedPhoneForLog(phone)}, ${regAuthStateForLog()}"
         )
-
+        if (startAtProfile) {
+            Toast.makeText(
+                ctx,
+                if (isEnglish) {
+                    "Saving profile..."
+                } else {
+                    "שומר פרופיל..."
+                },
+                Toast.LENGTH_SHORT
+            ).show()
+        }
         var valid = true
 
-        // ✅ אכיפה קשיחה רק ברישום ראשוני.
-        // בעריכת פרופיל לא מחזירים אוטומטית מאמן למתאמן.
-        if (!startAtProfile && !isAdmin && !isSuperTester) {
-            if (isWhitelistedCoach && !isCoach) {
-                Toast.makeText(
-                    ctx,
-                    if (isEnglish) "An authorized coach must register as a coach only" else "מאמן מורשה חייב להירשם כמאמן בלבד",
-                    Toast.LENGTH_LONG
-                ).show()
-                return
-            }
-            if (!isWhitelistedCoach && isCoach) {
-                Toast.makeText(
-                    ctx,
-                    if (isEnglish) "Coach registration is allowed only for authorized coaches" else "הרישום כמאמן מותר רק למאמנים מורשים",
-                    Toast.LENGTH_LONG
-                ).show()
-                return
-            }
+        // ברישום חדש לא ניתן לבחור תפקיד מאמן.
+// הרשאת מאמן ניתנת רק לאחר אימות מול authorizedCoaches.
+        if (
+            !startAtProfile &&
+            isCoach
+        ) {
+            Toast.makeText(
+                ctx,
+                if (isEnglish) {
+                    "Coach access is granted after server authorization"
+                } else {
+                    "הרשאת מאמן ניתנת לאחר אישור מהשרת"
+                },
+                Toast.LENGTH_LONG
+            ).show()
+
+            return
         }
 
         if (fullName.isBlank()) {
@@ -1046,11 +1052,22 @@ fun RegistrationFormScreen(
         if (email.isBlank() || !Patterns.EMAIL_ADDRESS.matcher(email.trim()).matches()) {
             emailError = true; valid = false
         }
-        if (!isGoogleAuth && username.isBlank()) {
-            usernameError = true; valid = false
+        if (
+            !startAtProfile &&
+            !isGoogleAuth &&
+            username.isBlank()
+        ) {
+            usernameError = true
+            valid = false
         }
-        if (!isGoogleAuth && password.isBlank()) {
-            passwordError = true; valid = false
+
+        if (
+            !startAtProfile &&
+            !isGoogleAuth &&
+            password.isBlank()
+        ) {
+            passwordError = true
+            valid = false
         }
 
         if (selectedRegions.isEmpty()) {
@@ -1103,25 +1120,32 @@ fun RegistrationFormScreen(
             termsError = true; valid = false
         }
 
-        // אימות מאמן — רק ברישום ראשוני, לא בעריכת פרופיל של משתמש קיים
-        if (!startAtProfile && isCoach && !isAdmin && !isSuperTester) {
-            val normalizedPhoneLocal = phone.filter { it.isDigit() }
-            val normalizedEmailLocal = email.trim().lowercase()
-
-            val phoneOk = CoachWhitelist.allowedPhones.containsKey(normalizedPhoneLocal)
-            val emailOk = CoachWhitelist.allowedEmails.containsKey(normalizedEmailLocal)
-
-            if (!phoneOk && !emailOk) {
-                Toast.makeText(
-                    ctx,
-                    if (isEnglish) "Coach registration is allowed only for authorized coaches" else "הרישום כמאמן מותר רק למאמנים מורשים",
-                    Toast.LENGTH_LONG
-                ).show()
-                return
-            }
-        }
-
         if (!valid) {
+            scrollToMissingField =
+                when {
+                    fullNameError -> "fullName"
+                    phoneError -> "phone"
+                    emailError -> "email"
+                    genderError -> "gender"
+
+                    !startAtProfile &&
+                            !isGoogleAuth &&
+                            usernameError ->
+                        "username"
+
+                    !startAtProfile &&
+                            !isGoogleAuth &&
+                            passwordError ->
+                        "password"
+
+                    regionError -> "region"
+                    branchError -> "branch"
+                    groupError -> "group"
+                    currentBeltId.isBlank() -> "belt"
+                    termsError -> "terms"
+                    else -> null
+                }
+
             Log.d(
                 TAG_REG,
                 "stage=submit_registration_validation_failed, fullNameError=$fullNameError, phoneError=$phoneError, emailError=$emailError, usernameError=$usernameError, passwordError=$passwordError, regionError=$regionError, branchError=$branchError, groupError=$groupError, genderError=$genderError, termsError=$termsError, beltBlank=${currentBeltId.isBlank()}, ${regAuthStateForLog()}"
@@ -1137,39 +1161,26 @@ fun RegistrationFormScreen(
         // role סופי:
         // בעריכת פרופיל אסור להפוך למאמן דרך הטופס.
         // מאמן נשאר מאמן רק אם כבר יש coach_authorized=true מהתחברות מול authorizedCoaches.
-        val roleFinal = if (startAtProfile) {
-            if (isCoach && profileAllowsCoach) "coach" else "trainee"
-        } else if (isAdmin || isSuperTester) {
-            if (isCoach) "coach" else "trainee"
-        } else {
-            if (isWhitelistedCoach) "coach" else "trainee"
-        }
+        val roleFinal =
+            if (
+                startAtProfile &&
+                isCoach &&
+                profileAllowsCoach
+            ) {
+                "coach"
+            } else {
+                "trainee"
+            }
 
-        val roleLockedBy = when {
-            startAtProfile && roleFinal == "coach" && profileCoachAuthorized ->
-                "profile_edit_server_authorized_coach"
-
-            startAtProfile && roleFinal == "coach" && isSuperTester ->
-                "profile_edit_super_tester"
-
-            startAtProfile && roleFinal == "coach" && isWhitelistedCoach ->
-                "profile_edit_coach_whitelist"
-
-            startAtProfile ->
-                "profile_edit_forced_trainee"
-
-            isAdmin ->
-                "admin"
-
-            isSuperTester ->
-                "super_tester"
-
-            isWhitelistedCoach ->
-                "coach_whitelist"
-
-            else ->
+        val roleLockedBy =
+            if (
+                roleFinal == "coach" &&
+                profileCoachAuthorized
+            ) {
+                "server_authorized_coach"
+            } else {
                 "trainee_default"
-        }
+            }
 
         // ✅ מקור אמת לטלפון: ספרות בלבד.
         // חשוב במיוחד ב-Google Login, כי שאר המסכים קוראים גם phone וגם phone_number.
@@ -1381,10 +1392,9 @@ fun RegistrationFormScreen(
                 if (isGoogleAuth) "google" else "local"
             )
             putBoolean("google_login", isGoogleAuth)
-            putString(
-                "password",
-                if (isGoogleAuth) "" else password
-            )
+            remove("password")
+            remove("user_password")
+            remove("remember_password")
             putBoolean("subscribeSms", subscribeSms)
             putString("user_role", roleFinal)
             putString("role_locked_by", roleLockedBy)
@@ -1552,8 +1562,14 @@ fun RegistrationFormScreen(
         kmiPrefs.region = primaryRegion
         kmiPrefs.branch = branchesFinal
         kmiPrefs.ageGroup = primaryGroup
-        kmiPrefs.username = if (isGoogleAuth) email.trim() else username
-        kmiPrefs.password = if (isGoogleAuth) "" else password
+        kmiPrefs.username =
+            if (isGoogleAuth) {
+                email.trim()
+            } else {
+                username
+            }
+
+        kmiPrefs.password = ""
 
         fun persistRegistrationToFirestore(finalUid: String) {
             Log.d(
@@ -1583,8 +1599,6 @@ fun RegistrationFormScreen(
 
             val firestoreData = hashMapOf(
                 "uid" to finalUid,
-                "role" to roleFinal,
-                "roleLockedBy" to roleLockedBy,
                 "fullName" to fullName,
                 "phone" to phoneFinal,
                 "phoneNumber" to phoneFinal,
@@ -1643,38 +1657,104 @@ fun RegistrationFormScreen(
                 "updatedAt" to System.currentTimeMillis()
             )
 
-            FirebaseFirestore.getInstance()
-                .collection("users")
-                .document(finalUid)
-                .set(firestoreData, SetOptions.merge())
+            Log.e(
+                TAG_REG,
+                "stage=firestore_set_call time=${System.currentTimeMillis()}"
+            )
+
+            val saveStartedAt =
+                System.currentTimeMillis()
+
+            val firestoreWrite =
+                FirebaseFirestore.getInstance()
+                    .collection("users")
+                    .document(finalUid)
+                    .set(
+                        firestoreData,
+                        SetOptions.merge()
+                    )
+
+            /*
+             * בעריכת פרופיל הנתונים המקומיים כבר נשמרו
+             * לפני ההגעה לכאן.
+             *
+             * אין צורך להשאיר את המשתמש במסך
+             * בזמן ש-Firestore ממתין לאישור מהשרת.
+             */
+            if (startAtProfile) {
+                sp.edit {
+                    putString("uid", finalUid)
+                    putString(
+                        "profile_completed_uid",
+                        finalUid
+                    )
+                }
+
+                userSp.edit {
+                    putString("uid", finalUid)
+                    putString(
+                        "profile_completed_uid",
+                        finalUid
+                    )
+                }
+
+                Toast.makeText(
+                    ctx,
+                    if (isEnglish) {
+                        "Profile saved ✅"
+                    } else {
+                        "הפרופיל נשמר ✅"
+                    },
+                    Toast.LENGTH_SHORT
+                ).show()
+
+                finishRegistrationFlow()
+            }
+
+            firestoreWrite
                 .addOnSuccessListener {
                     Log.d(
                         TAG_REG,
                         "stage=firestore_persist_success, finalUid=$finalUid, ${regAuthStateForLog()}"
                     )
 
-                    sp.edit {
-                        putString("uid", finalUid)
-                        putString(
-                            "profile_completed_uid",
-                            finalUid
-                        )
-                    }
+                    /*
+                     * ברישום חדש עדיין מחכים לאישור Firestore
+                     * לפני שממשיכים בתהליך הרישום.
+                     */
+                    if (!startAtProfile) {
+                        sp.edit {
+                            putString("uid", finalUid)
+                            putString(
+                                "profile_completed_uid",
+                                finalUid
+                            )
+                        }
 
-                    userSp.edit {
-                        putString("uid", finalUid)
-                        putString(
-                            "profile_completed_uid",
-                            finalUid
-                        )
-                    }
+                        userSp.edit {
+                            putString("uid", finalUid)
+                            putString(
+                                "profile_completed_uid",
+                                finalUid
+                            )
+                        }
 
-                    FcmTokenManager.refreshTokenForUserDocId(finalUid)
+                        Toast.makeText(
+                            ctx,
+                            if (isEnglish) {
+                                "Registration saved successfully ✅"
+                            } else {
+                                "הרישום נשמר בהצלחה ✅"
+                            },
+                            Toast.LENGTH_SHORT
+                        ).show()
+
+                        finishRegistrationFlow()
+                    }
 
                     /*
-                     * הסניף והקבוצה החדשים כבר נשמרו ב־Firestore
-                     * וב־SharedPreferences. כעת מרעננים מיד את
-                     * היומן ואת תזכורות האימון, אם הם פעילים.
+                     * פעולות תחזוקה ממשיכות ברקע
+                     * ואינן מעכבות את המשתמש.
                      */
                     val settingsSp = ctx.getSharedPreferences(
                         "kmi_settings",
@@ -1686,6 +1766,12 @@ fun RegistrationFormScreen(
                     )
 
                     backgroundScope.launch {
+                        runCatching {
+                            FcmTokenManager.refreshTokenForUserDocId(
+                                finalUid
+                            )
+                        }
+
                         val calendarSyncEnabled = settingsSp.getBoolean(
                             "calendar_sync_selected_enabled",
                             false
@@ -1715,7 +1801,10 @@ fun RegistrationFormScreen(
                         if (trainingRemindersEnabled) {
                             val leadMinutes = settingsSp.getInt(
                                 "training_reminder_minutes",
-                                settingsSp.getInt("lead_minutes", 60)
+                                settingsSp.getInt(
+                                    "lead_minutes",
+                                    60
+                                )
                             ).takeIf { it > 0 } ?: 60
 
                             TrainingAlarmReceiver.scheduleWeeklyAlarms(
@@ -1724,26 +1813,13 @@ fun RegistrationFormScreen(
                             )
                         }
                     }
-
-                    Toast.makeText(
-                        ctx,
-                        if (isEnglish) {
-                            "Profile saved and active schedules are being updated ✅"
-                        } else {
-                            "הפרופיל נשמר והמערכות הפעילות מתעדכנות ✅"
-                        },
-                        Toast.LENGTH_SHORT
-                    ).show()
-
-                    // אין יותר יצירת קוד מאמן מתוך האפליקציה.
-                    // הרשאת מאמן נקבעת רק דרך Firestore:
-                    // authorizedCoaches/{uid}
-                    finishRegistrationFlow()
                 }
                 .addOnFailureListener { error ->
                     Log.e(
                         TAG_REG,
-                        "stage=firestore_persist_failure, finalUid=$finalUid, errorClass=${error.javaClass.name}, errorMessage=${error.message.orEmpty()}, ${regAuthStateForLog()}",
+                        "stage=firestore_persist_failure durationMs=${
+                            System.currentTimeMillis() - saveStartedAt
+                        }, finalUid=$finalUid, errorClass=${error.javaClass.name}, errorMessage=${error.message.orEmpty()}, ${regAuthStateForLog()}",
                         error
                     )
 
@@ -1871,7 +1947,7 @@ fun RegistrationFormScreen(
                     showRoleStatus = false,
                     onOpenDrawer = onOpenDrawer,
                     onHome = {
-                        il.kmi.app.ui.DrawerBridge.openHome()
+                        onOpenHome()
                     },
                     lockSearch = true,
                     lockHome = false,
@@ -1918,17 +1994,18 @@ fun RegistrationFormScreen(
                 isEnglish = isEnglish,
                 onTabSelected = { newTab ->
 
-                    // בעריכת פרופיל לא מאפשרים להפוך למאמן מתוך הטופס.
-                    // מאמן מותר רק אם המשתמש כבר אומת מול authorizedCoaches
-                    // וההרשאה נשמרה כ-coach_authorized=true.
                     if (startAtProfile) {
-                        if (newTab == 1 && !profileAllowsCoach) {
+                        if (
+                            newTab == 1 &&
+                            !profileAllowsCoach
+                        ) {
                             Toast.makeText(
                                 ctx,
-                                if (isEnglish)
+                                if (isEnglish) {
                                     "Coach mode is allowed only after server authorization"
-                                else
-                                    "כניסה כמאמן מותרת רק לאחר הרשאה מהשרת",
+                                } else {
+                                    "מצב מאמן זמין רק לאחר הרשאה מהשרת"
+                                },
                                 Toast.LENGTH_SHORT
                             ).show()
 
@@ -1936,39 +2013,32 @@ fun RegistrationFormScreen(
                             return@RegistrationTabsBilingual
                         }
 
-                        selectedTab = if (profileAllowsCoach && newTab == 1) 1 else 0
+                        selectedTab =
+                            if (
+                                newTab == 1 &&
+                                profileAllowsCoach
+                            ) {
+                                1
+                            } else {
+                                0
+                            }
+
                         return@RegistrationTabsBilingual
                     }
 
-                    // ADMIN או Super Tester יכולים לבחור חופשי רק ברישום ראשוני.
-                    if (isAdmin || isSuperTester) {
-                        selectedTab = newTab
-                        return@RegistrationTabsBilingual
+                    if (newTab == 1) {
+                        Toast.makeText(
+                            ctx,
+                            if (isEnglish) {
+                                "Coach access is granted after server authorization"
+                            } else {
+                                "הרשאת מאמן ניתנת לאחר אישור מהשרת"
+                            },
+                            Toast.LENGTH_SHORT
+                        ).show()
                     }
 
-                    when {
-                        isWhitelistedCoach -> {
-                            if (newTab != 1) {
-                                Toast.makeText(
-                                    ctx,
-                                    if (isEnglish) "An authorized coach must register as a coach" else "מאמן מורשה נרשם רק כמאמן",
-                                    Toast.LENGTH_SHORT
-                                ).show()
-                            }
-                            selectedTab = 1
-                        }
-
-                        else -> {
-                            if (newTab == 1) {
-                                Toast.makeText(
-                                    ctx,
-                                    if (isEnglish) "Coach registration is allowed only for authorized coaches" else "הרישום כמאמן מותר רק למאמנים מורשים",
-                                    Toast.LENGTH_SHORT
-                                ).show()
-                            }
-                            selectedTab = 0
-                        }
-                    }
+                    selectedTab = 0
                 }
             )
 
@@ -1979,6 +2049,11 @@ fun RegistrationFormScreen(
                 isCoach = isCoach,
                 isEnglish = isEnglish,
                 isGoogleAuth = isGoogleAuth,
+                startAtProfile = startAtProfile,
+                scrollToMissingField = scrollToMissingField,
+                onMissingFieldScrollHandled = {
+                    scrollToMissingField = null
+                },
                 fullName = fullName,
                 onFullNameChange = {
                     fullName = it

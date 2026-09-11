@@ -254,7 +254,6 @@ private fun RegistrationLandingLockedTopBar(
 fun RegistrationLandingScreen(
     onNewUserTrainee: () -> Unit,
     onExistingUserTrainee: () -> Unit,
-    onNewUserCoach: () -> Unit,
     onExistingUserCoach: () -> Unit,
     onOpenDrawer: () -> Unit,
     showTopBar: Boolean,

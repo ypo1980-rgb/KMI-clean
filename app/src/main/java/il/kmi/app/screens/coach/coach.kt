@@ -367,6 +367,7 @@ private fun CoachTraineesTopTabs(
 fun CoachTraineesScreen(
     branch: String = "",
     groupKey: String = "",
+    canManageTrainees: Boolean = false,
     onBack: () -> Unit = {},
     onOpenDrawer: () -> Unit = { il.kmi.app.ui.DrawerBridge.open() },
     onOpenHome: () -> Unit = onBack
@@ -375,17 +376,18 @@ fun CoachTraineesScreen(
     val density = LocalDensity.current
     val isKeyboardVisible = WindowInsets.ime.getBottom(density) > 0
 
-    val sp = remember { ctx.getSharedPreferences("kmi_user", Context.MODE_PRIVATE) }
-    val role = sp.getString("user_role", "trainee").orEmpty()
+    LaunchedEffect(Unit) {
+        android.util.Log.e(
+            "AUTH_UID",
+            "CURRENT_FIREBASE_UID=${FirebaseAuth.getInstance().currentUser?.uid}"
+        )
+    }
 
-    val isCoachRole = remember(role) {
-        val cleanRole = role.trim().lowercase()
-        cleanRole == "coach" ||
-                cleanRole.contains("coach") ||
-                cleanRole.contains("trainer") ||
-                cleanRole.contains("instructor") ||
-                cleanRole.contains("מאמן") ||
-                cleanRole.contains("מדריך")
+    val sp = remember {
+        ctx.getSharedPreferences(
+            "kmi_user",
+            Context.MODE_PRIVATE
+        )
     }
 
     val langManager = remember(ctx) { AppLanguageManager(ctx) }
@@ -2484,64 +2486,6 @@ fun CoachTraineesScreen(
         }
     }
 
-
-    // אם זה לא מאמן – עדיין רוצים טופ-בר עם אייקונים
-    if (!isCoachRole) {
-
-        Scaffold(
-            topBar = {
-                val contextLang = LocalContext.current
-                val langManager = remember { AppLanguageManager(contextLang) }
-
-                KmiTopBar(
-                    title = coachTr(isEnglish, "רשימת מתאמנים", "Trainees list"),
-                    onOpenDrawer = onOpenDrawer,
-                    onHome = onOpenHome,
-                    showTopHome = false,
-                    showRoleStatus = false,
-                    lockSearch = false,
-                    showBottomActions = true,
-                    currentLang = if (langManager.getCurrentLanguage() == AppLanguage.ENGLISH) "en" else "he",
-                    onToggleLanguage = {
-                        val newLang =
-                            if (langManager.getCurrentLanguage() == AppLanguage.HEBREW) {
-                                AppLanguage.ENGLISH
-                            } else {
-                                AppLanguage.HEBREW
-                            }
-
-                        langManager.setLanguage(newLang)
-                        (contextLang as? Activity)?.recreate()
-                    }
-                )
-            },
-            containerColor = Color.Transparent,
-            contentWindowInsets = WindowInsets(0)
-        ) { inner ->
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(inner)
-                    .background(backgroundBrush),
-                contentAlignment = Alignment.Center
-            ) {
-                Text(
-                    text = coachTr(
-                        isEnglish,
-                        "המסך זמין למאמנים בלבד",
-                        "This screen is available for coaches only"
-                    ),
-                    style = KmiTypography.sectionTitle.copy(
-                        fontWeight = FontWeight.ExtraBold
-                    ),
-                    textAlign = TextAlign.Center,
-                    color = MaterialTheme.colorScheme.onBackground
-                )
-            }
-        }
-        return
-    }
-
     var traineeSearchQuery by rememberSaveable {
         mutableStateOf("")
     }
@@ -2869,7 +2813,14 @@ fun CoachTraineesScreen(
         dates: Map<String, String>,
         descriptions: Map<String, String>
     ) {
-        val userDocId = resolveUserDocIdForSelected(selectedProfile)
+        check(canManageTrainees) {
+            "Coach is not authorized to manage trainees"
+        }
+
+        val userDocId =
+            resolveUserDocIdForSelected(
+                selectedProfile
+            )
 
         val cleanedDates = dates
             .mapValues { it.value.trim() }
@@ -2901,7 +2852,14 @@ fun CoachTraineesScreen(
         firestoreFieldName: String,
         entries: Map<String, CoachDateEntry>
     ) {
-        val userDocId = resolveUserDocIdForSelected(selectedProfile)
+        check(canManageTrainees) {
+            "Coach is not authorized to manage trainees"
+        }
+
+        val userDocId =
+            resolveUserDocIdForSelected(
+                selectedProfile
+            )
 
         val cleanedEntries = entries
             .mapValues { (_, value) ->
@@ -2931,7 +2889,14 @@ fun CoachTraineesScreen(
         selectedProfile: TraineeProfile,
         note: String
     ) {
-        val userDocId = resolveUserDocIdForSelected(selectedProfile)
+        check(canManageTrainees) {
+            "Coach is not authorized to manage trainees"
+        }
+
+        val userDocId =
+            resolveUserDocIdForSelected(
+                selectedProfile
+            )
 
         val cleanNote = note.trim()
 
@@ -4325,7 +4290,10 @@ fun CoachTraineesScreen(
 
                                                 Surface(
                                                     onClick = {
-                                                        if (!isSavingBeltDates) {
+                                                        if (
+                                                            canManageTrainees &&
+                                                            !isSavingBeltDates
+                                                        ) {
                                                             val datesToSave =
                                                                 beltAwardDatesState[selected.id]
                                                                     .orEmpty()
@@ -4506,6 +4474,7 @@ fun CoachTraineesScreen(
                                             selectedProfile = selected,
                                             screenScope = screenScope,
                                             isEnglish = isEnglish,
+                                            canManageTrainees = canManageTrainees,
                                             isExpanded = expandedCoachSection == seminarsSectionKey,
                                             onToggleExpanded = {
                                                 expandedCoachSection =
@@ -4541,6 +4510,7 @@ fun CoachTraineesScreen(
                                             selectedProfile = selected,
                                             screenScope = screenScope,
                                             isEnglish = isEnglish,
+                                            canManageTrainees = canManageTrainees,
                                             isExpanded = expandedCoachSection == campsSectionKey,
                                             onToggleExpanded = {
                                                 expandedCoachSection =
@@ -4576,6 +4546,7 @@ fun CoachTraineesScreen(
                                             selectedProfile = selected,
                                             screenScope = screenScope,
                                             isEnglish = isEnglish,
+                                            canManageTrainees = canManageTrainees,
                                             isExpanded = expandedCoachSection == certificationsSectionKey,
                                             onToggleExpanded = {
                                                 expandedCoachSection =
@@ -4658,9 +4629,12 @@ fun CoachTraineesScreen(
                                                     OutlinedTextField(
                                                         value = coachNotes[selected.id] ?: "",
                                                         onValueChange = {
-                                                            coachNotes[selected.id] = it
-                                                            coachNotesSaveMessage = null
+                                                            if (canManageTrainees) {
+                                                                coachNotes[selected.id] = it
+                                                                coachNotesSaveMessage = null
+                                                            }
                                                         },
+                                                        enabled = canManageTrainees,
                                                         placeholder = {
                                                             Text(
                                                                 text = coachTr(
@@ -4741,7 +4715,10 @@ fun CoachTraineesScreen(
                                             ) {
                                                 Surface(
                                                     onClick = {
-                                                        if (!isSavingCoachNotes) {
+                                                        if (
+                                                            canManageTrainees &&
+                                                            !isSavingCoachNotes
+                                                        ) {
                                                             val noteToSave =
                                                                 coachNotes[selected.id]
                                                                     .orEmpty()
@@ -5161,6 +5138,7 @@ fun CoachTraineesScreen(
         selectedProfile: TraineeProfile,
         screenScope: kotlinx.coroutines.CoroutineScope,
         isEnglish: Boolean,
+        canManageTrainees: Boolean,
         isExpanded: Boolean,
         onToggleExpanded: () -> Unit,
         onSave: suspend (
@@ -5450,21 +5428,24 @@ fun CoachTraineesScreen(
                                 OutlinedTextField(
                                     value = currentEntry.description,
                                     onValueChange = { newValue ->
-                                        val current = stateMap[selectedId]
-                                            .orEmpty()
-                                            .toMutableMap()
+                                        if (canManageTrainees) {
+                                            val current = stateMap[selectedId]
+                                                .orEmpty()
+                                                .toMutableMap()
 
-                                        val oldEntry =
-                                            current[itemName]
-                                                ?: CoachDateEntry()
+                                            val oldEntry =
+                                                current[itemName]
+                                                    ?: CoachDateEntry()
 
-                                        current[itemName] =
-                                            oldEntry.copy(
-                                                description = newValue
-                                            )
+                                            current[itemName] =
+                                                oldEntry.copy(
+                                                    description = newValue
+                                                )
 
-                                        stateMap[selectedId] = current
+                                            stateMap[selectedId] = current
+                                        }
                                     },
+                                    enabled = canManageTrainees,
                                     label = {
                                         Text(
                                             text =

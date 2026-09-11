@@ -399,6 +399,87 @@ fun kmiGraniteActionHighlightColor(): Color {
     )
 }
 
+/*
+ * צבעי כרטיסי המנוי.
+ *
+ * נשמרים כאן כדי ששינויי MaterialTheme
+ * לא ישנו את מראה מסך המנויים.
+ */
+@Composable
+fun kmiSubscriptionMonthlyColor(): Color {
+    return Color(0xFF6B4DBB)
+}
+
+@Composable
+fun kmiSubscriptionMonthlyContentColor(): Color {
+    return Color.White
+}
+
+@Composable
+fun kmiSubscriptionYearlyColor(): Color {
+    return Color(0xFF0F6FA8)
+}
+
+@Composable
+fun kmiSubscriptionYearlyContentColor(): Color {
+    return Color.White
+}
+
+@Composable
+fun kmiSubscriptionCardColor(): Color {
+    return Color(0xFFF5F1FA)
+}
+
+@Composable
+fun kmiSubscriptionInnerCardColor(): Color {
+    return Color.White
+}
+
+@Composable
+fun kmiSubscriptionSuccessBackgroundColor(): Color {
+    return Color(0xFFFCFAFF)
+}
+
+@Composable
+fun kmiSubscriptionSuccessBackgroundVariantColor(): Color {
+    return Color(0xFFF2ECFF)
+}
+
+@Composable
+fun kmiSubscriptionSuccessContentColor(): Color {
+    return Color(0xFF211C2B)
+}
+
+@Composable
+fun kmiSubscriptionSuccessAccentColor(): Color {
+    return Color(0xFF6C4DD8)
+}
+
+@Composable
+fun kmiSubscriptionSuccessBlueColor(): Color {
+    return Color(0xFF1479B8)
+}
+
+@Composable
+fun kmiSubscriptionSuccessSoftAccentColor(): Color {
+    return Color(0xFFE9E1FF)
+}
+
+@Composable
+fun kmiSubscriptionSuccessOnAccentColor(): Color {
+    return Color.White
+}
+
+@Composable
+fun kmiSubscriptionSuccessBadgeColor(): Color {
+    return Color(0xFF6847C8)
+}
+
+@Composable
+fun kmiSubscriptionSuccessOnBadgeColor(): Color {
+    return Color.White
+}
+
 /**
  * מקור האמת הגלובלי לצבעי החגורות.
  */

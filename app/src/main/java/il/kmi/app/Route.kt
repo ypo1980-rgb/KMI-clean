@@ -17,27 +17,17 @@ sealed class Route(val route: String) {
     // ▼▼▼ חדש: מסך נחיתה של הרישום (התמונה עם "משתמש חדש / משתמש קיים")
     data object RegistrationLanding : Route("registration_landing")
     data object NewUserTrainee      : Route("new_user_trainee")
-    data object NewUserCoach        : Route("new_user_coach")
     data object ExistingUserTrainee : Route("existing_user_trainee")
     data object ExistingUserCoach   : Route("existing_user_coach")
 
     // ✅ יישור קו עם שאר הראוטים
     data object MonthlyCalendar : Route("calendar_monthly")
-    data object PhoneGate : Route("phone_auth_gate")   // ⬅️ חדש
     data object MyProfile : Route("my_profile")
 
     object Legal : Route("legal")
     object Splash : Route("splash")
-    object CalendarMonthly : Route("calendar/monthly")
-
-    object SmsEntry : Route("smsEntry/{openPrefix}") {
-        fun make(openPrefix: Boolean) = "smsEntry/$openPrefix"
-    }
 
     object RateUs : Route("rate_us")
-    object Subscriptions : Route("subscriptions")
-    object VoiceSettings : Route(route = "voice_settings")
-
     // ✅ NEW: מסך עוזר קולי (AiAssistantDialog כ-screen)
     object VoiceAssistant : Route(route = "voice_assistant")
 
@@ -51,10 +41,8 @@ sealed class Route(val route: String) {
 
     object Exam : Route("exam/{beltId}") {
         fun make(belt: Belt) = "exam/${belt.id}"
-        fun makeId(beltId: String) = "exam/$beltId"
     }
 
-    object RoleSelect : Route("roleSelect")
     object CoachBroadcast : Route("coachBroadcast")
 
     object Materials : Route("materials/{beltId}/{topic}?coach={coach}") {
@@ -72,12 +60,6 @@ sealed class Route(val route: String) {
                 ?: return Materials.make(belt, topic) // fallback בטוח
             return "materials/${belt.id}/${enc(topic)}/${enc(st)}"
         }
-
-        fun makeId(beltId: String, topic: String, subTopic: String?): String {
-            val st = subTopic?.takeIf { it.isNotBlank() }
-                ?: return Materials.makeId(beltId, topic)
-            return "materials/$beltId/${enc(topic)}/${enc(st)}"
-        }
     }
 
     object AttendanceGroupStats : Route("attendance_group_stats/{branch}/{groupKey}") {
@@ -92,12 +74,26 @@ sealed class Route(val route: String) {
 
         fun make(belt: Belt, topic: String, sub: String? = null): String {
             val base = "topic_ex/${belt.id}/${enc(topic)}"
-            return if (sub.isNullOrBlank()) base else "$base?sub=${enc(sub)}"
+            return if (sub.isNullOrBlank()) {
+                base
+            } else {
+                "$base?sub=${enc(sub)}"
+            }
         }
 
-        fun makeId(beltId: String, topic: String, sub: String? = null): String {
-            val base = "topic_ex/$beltId/${enc(topic)}"
-            return if (sub.isNullOrBlank()) base else "$base?sub=${enc(sub)}"
+        fun makeId(
+            beltId: String,
+            topic: String,
+            sub: String? = null
+        ): String {
+            val base =
+                "topic_ex/$beltId/${enc(topic)}"
+
+            return if (sub.isNullOrBlank()) {
+                base
+            } else {
+                "$base?sub=${enc(sub)}"
+            }
         }
     }
 
@@ -106,9 +102,6 @@ sealed class Route(val route: String) {
         // ✅ חדש: מסך סיכום לפי חגורה+נושא (+ אופציונלי תת־נושא)
         fun make(belt: Belt, topic: String, subTopic: String? = null): String =
             "summary/${belt.id}?topic=${enc(topic)}&subTopic=${enc(subTopic)}"
-
-        fun makeId(beltId: String, topic: String, subTopic: String? = null): String =
-            "summary/$beltId?topic=${enc(topic)}&subTopic=${enc(subTopic)}"
 
         // ✅ תאימות לאחור (ישן): אם קראו make(belt) נשלח עם topic ריק
         fun make(belt: Belt): String =
@@ -144,13 +137,6 @@ sealed class Route(val route: String) {
             } else {
                 "practice/${belt.id}?topic=${enc(topic)}"
             }
-
-        fun makeId(beltId: String, topic: String? = null): String =
-            if (topic.isNullOrEmpty()) {
-                "practice/$beltId"
-            } else {
-                "practice/$beltId?topic=${enc(topic)}"
-            }
     }
 
     object Settings : Route("settings")
@@ -159,9 +145,6 @@ sealed class Route(val route: String) {
     object Payment : Route("payment")
     object ContactUs : Route("contact_us")
     object PaymentsReport : Route("payments_report")
-    object CancellationPolicy : Route("cancellation_policy")
-    // 🧪 Debug: בדיקת KMP Catalog + HTML (שחזור iOS)
-    object DebugCatalog : Route("debug_catalog")
     object Registration : Route("registration")
     object Favorites : Route("favorites")
     // ▼▼▼ מבחן פנימי – מסך המאמן
@@ -204,15 +187,6 @@ sealed class Route(val route: String) {
             val base = "attendance/stats/${enc(branch)}/${enc(groupKey)}"
             val qs = buildList {
                 if (memberId != null) add("memberId=$memberId")
-                if (!memberName.isNullOrBlank()) add("memberName=${enc(memberName)}")
-            }
-            return if (qs.isEmpty()) base else "$base?${qs.joinToString("&")}"
-        }
-
-        fun makeId(branch: String, groupKey: String, memberId: String? = null, memberName: String? = null): String {
-            val base = "attendance/stats/${enc(branch)}/${enc(groupKey)}"
-            val qs = buildList {
-                if (!memberId.isNullOrBlank()) add("memberId=${enc(memberId)}")
                 if (!memberName.isNullOrBlank()) add("memberName=${enc(memberName)}")
             }
             return if (qs.isEmpty()) base else "$base?${qs.joinToString("&")}"
