@@ -507,10 +507,22 @@ fun RegistrationFormScreen(
             return@LaunchedEffect
         }
 
+        val currentRole =
+            sp.getString(
+                "user_role",
+                "trainee"
+            ) ?: "trainee"
+
         selectedTab =
-            when {
-                profileCoachAuthorized -> 1
-                else -> 0
+            if (
+                currentRole.equals(
+                    "coach",
+                    ignoreCase = true
+                )
+            ) {
+                1
+            } else {
+                0
             }
     }
 

@@ -1712,6 +1712,22 @@ fun MainNavHost(
                             group,
                             timeText ->
 
+                        if (
+                            requestedMode ==
+                            "attendance_date_picker"
+                        ) {
+                            nav.previousBackStackEntry
+                                ?.savedStateHandle
+                                ?.set(
+                                    "attendance_selected_date",
+                                    pickedDate.toString()
+                                )
+
+                            nav.popBackStack()
+
+                            return@MonthlyCalendarScreen
+                        }
+
                         nav.currentBackStackEntry
                             ?.savedStateHandle
                             ?.apply {

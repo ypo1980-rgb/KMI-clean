@@ -5245,29 +5245,45 @@ private fun TrainingCardCompact(
         }
 
     val trainingCardBorderColor =
-        when (visualStatusState) {
-            TrainingStatusEngine.State.ONGOING ->
+        when {
+            isTrainingCancelled ->
+                Color(0xFFE53935)
+
+            isTrainingOngoing ->
                 kmiSuccessColor()
 
-            TrainingStatusEngine.State.COMPLETED ->
+            visualStatusState ==
+                    TrainingStatusEngine.State.COMPLETED ->
                 MaterialTheme
                     .colorScheme
                     .outline
 
-            TrainingStatusEngine.State.CANCELLED_BY_HOLIDAY ->
-                MaterialTheme
-                    .colorScheme
-                    .secondary
-
-            TrainingStatusEngine.State.INVALID ->
-                MaterialTheme
-                    .colorScheme
-                    .error
-
-            TrainingStatusEngine.State.SCHEDULED ->
+            else ->
                 MaterialTheme
                     .colorScheme
                     .primary
+        }
+
+    val trainingCardBackgroundColor =
+        when {
+            isTrainingCancelled ->
+                Color(0xFFFFD6D6)
+
+            isTrainingOngoing ->
+                kmiSuccessContainerColor()
+
+            countdownMinutes != null ->
+                kmiWarningContainerColor()
+
+            activeOverride?.hasChangedTime == true ->
+                MaterialTheme
+                    .colorScheme
+                    .primaryContainer
+
+            else ->
+                MaterialTheme
+                    .colorScheme
+                    .surface
         }
 
     Box(
@@ -5283,10 +5299,7 @@ private fun TrainingCardCompact(
             modifier = Modifier
                 .fillMaxWidth()
                 .heightIn(min = 78.dp),
-            color =
-                MaterialTheme
-                    .colorScheme
-                    .surface,
+            color = trainingCardBackgroundColor,
             tonalElevation = 0.dp,
             shadowElevation = 0.dp,
             shape = RoundedCornerShape(16.dp),
@@ -5321,8 +5334,42 @@ private fun TrainingCardCompact(
                     }
 
                 val groupLine =
-                    remember(group) {
-                        group.trim()
+                    remember(
+                        group,
+                        training.coach,
+                        isEnglish
+                    ) {
+                        val cleanGroup =
+                            group.trim()
+
+                        val cleanCoach =
+                            training.coach
+                                .trim()
+
+                        when {
+                            cleanGroup.isNotBlank() &&
+                                    cleanCoach.isNotBlank() -> {
+                                if (isEnglish) {
+                                    "$cleanGroup · Coach: $cleanCoach"
+                                } else {
+                                    "$cleanGroup · מאמן: $cleanCoach"
+                                }
+                            }
+
+                            cleanGroup.isNotBlank() ->
+                                cleanGroup
+
+                            cleanCoach.isNotBlank() -> {
+                                if (isEnglish) {
+                                    "Coach: $cleanCoach"
+                                } else {
+                                    "מאמן: $cleanCoach"
+                                }
+                            }
+
+                            else ->
+                                ""
+                        }
                     }
 
             Column(

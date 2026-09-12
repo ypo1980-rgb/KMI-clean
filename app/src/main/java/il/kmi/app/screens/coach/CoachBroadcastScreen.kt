@@ -1341,16 +1341,42 @@ fun CoachBroadcastScreen(
         }
     }
 
-    var region by remember {
-        mutableStateOf(
-            defaultRegion.orEmpty()
-        )
+    val initialRegion =
+        remember(
+            visibleBranchesByRegion,
+            defaultRegion
+        ) {
+            visibleBranchesByRegion
+                .keys
+                .singleOrNull()
+                .orEmpty()
+        }
+
+    val initialBranch =
+        remember(
+            visibleBranchesByRegion,
+            initialRegion,
+            defaultBranch
+        ) {
+            visibleBranchesByRegion[
+                initialRegion
+            ]
+                .orEmpty()
+                .singleOrNull()
+                .orEmpty()
+        }
+
+    var region by remember(
+        visibleBranchesByRegion
+    ) {
+        mutableStateOf(initialRegion)
     }
 
-    var branch by remember {
-        mutableStateOf(
-            defaultBranch.orEmpty()
-        )
+    var branch by remember(
+        visibleBranchesByRegion,
+        initialRegion
+    ) {
+        mutableStateOf(initialBranch)
     }
 
     var message by remember {
@@ -2436,8 +2462,18 @@ fun CoachBroadcastScreen(
                             onSelected = { selectedRegion ->
                                 region = selectedRegion
 
-                                // שינוי אזור מחייב בחירת סניף מחדש.
-                                branch = ""
+                                /*
+                                 * אם קיים סניף יחיד באזור הוא נבחר
+                                 * אוטומטית. אחרת נדרשת בחירה ידנית.
+                                 */
+                                branch =
+                                    visibleBranchesByRegion[
+                                        selectedRegion
+                                    ]
+                                        .orEmpty()
+                                        .singleOrNull()
+                                        .orEmpty()
+
                                 selectedTargetGroups = emptySet()
                                 availableBranchGroups = emptyList()
                                 availableBranchGroupCounts = emptyMap()

@@ -46,9 +46,11 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.border
 import il.kmi.shared.questions.model.util.ExerciseTitleFormatter
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.luminance
 import il.kmi.app.ui.ext.color
@@ -1379,7 +1381,6 @@ fun SubTopicsScreen(
                     },
                     modifier = Modifier
                         .fillMaxSize()
-                        .padding(horizontal = 16.dp, vertical = 10.dp)
                 )
             } else {
                 Column(
@@ -2883,7 +2884,7 @@ private fun HardGroupStatChip(
 
     Surface(
         modifier = modifier
-            .height(72.dp),
+            .height(54.dp),
         shape = RoundedCornerShape(10.dp),
         color = colors.surface,
         tonalElevation = 0.dp,
@@ -2930,52 +2931,13 @@ private fun HardGroupStatChip(
                     .fillMaxSize()
                     .padding(
                         horizontal = 3.dp,
-                        vertical = 3.dp
+                        vertical = 2.dp
                     ),
                 horizontalAlignment =
                     Alignment.CenterHorizontally,
                 verticalArrangement =
                     Arrangement.Center
             ) {
-                Surface(
-                    modifier =
-                        Modifier.size(22.dp),
-                    shape = CircleShape,
-                    color =
-                        accentColor.copy(
-                            alpha =
-                                if (isDark) {
-                                    0.22f
-                                } else {
-                                    0.14f
-                                }
-                        ),
-                    tonalElevation = 0.dp,
-                    shadowElevation = 0.dp
-                ) {
-                    Box(
-                        contentAlignment =
-                            Alignment.Center
-                    ) {
-                        Text(
-                            text = symbol,
-                            style =
-                                KmiTypography.caption.copy(
-                                    fontWeight =
-                                        FontWeight.ExtraBold
-                                ),
-                            color = accentColor,
-                            textAlign =
-                                TextAlign.Center,
-                            maxLines = 1
-                        )
-                    }
-                }
-
-                Spacer(
-                    Modifier.height(1.dp)
-                )
-
                 Text(
                     text = value,
                     style =
@@ -3735,7 +3697,7 @@ private fun HardBeltGroupsStickyContent(
                 if (
                     isFirstRowOfNewBelt &&
                     listState.firstVisibleItemScrollOffset <
-                    180
+                    300
                 ) {
                     flatRows
                         .getOrNull(
@@ -3870,7 +3832,21 @@ private fun HardBeltGroupsStickyContent(
             modifier = Modifier.fillMaxWidth()
         )
 
-        Spacer(Modifier.height(8.dp))
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(2.dp)
+                .background(
+                    MaterialTheme
+                        .colorScheme
+                        .primary
+                        .copy(alpha = 0.55f)
+                )
+        )
+
+        Spacer(
+            modifier = Modifier.height(18.dp)
+        )
 
         LazyColumn(
             state = listState,
@@ -4012,13 +3988,16 @@ private fun HardBeltGroupsStickyContent(
                         )
                     }
 
+                    Spacer(
+                        modifier = Modifier.height(14.dp)
+                    )
+
                     HardBeltStickyHeaderForSubTopics(
                         belt = row.belt,
                         totalCount = inlineRows.size,
                         isCoach = isCoach,
                         taughtCount = inlineTaughtCount,
-                        practicedCount =
-                            inlinePracticedCount,
+                        practicedCount = inlinePracticedCount,
                         reinforcementCount =
                             inlineReinforcementCount,
                         coachUnmarkedCount =
@@ -4035,8 +4014,6 @@ private fun HardBeltGroupsStickyContent(
                         isEnglish = isEnglish,
                         modifier = Modifier.fillMaxWidth()
                     )
-
-                    Spacer(Modifier.height(8.dp))
                 }
 
                 HardExerciseLegacyRow(
@@ -4207,82 +4184,128 @@ private fun HardBeltStickyHeaderForSubTopics(
     val hintTextColor =
         MaterialTheme.colorScheme.onSurfaceVariant
 
-    Surface(
-        modifier = modifier,
-        shape = RoundedCornerShape(22.dp),
-        color =
-            if (isDarkMode) {
-                MaterialTheme.colorScheme.surface
+    Column(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalAlignment =
+            if (isEnglish) {
+                Alignment.Start
             } else {
-                belt.lightColor
-            },
-        tonalElevation = 0.dp,
-        shadowElevation = 0.dp,
-        border = if (isDarkMode) {
-            BorderStroke(
-                width = 1.dp,
-                color = beltContentColor.copy(alpha = 0.45f)
-            )
-        } else {
-            null
-        }
+                Alignment.End
+            }
     ) {
-        Column(
+
+        Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 12.dp, vertical = 12.dp),
-            horizontalAlignment = if (isEnglish) Alignment.Start else Alignment.End
+                .background(
+                    color =
+                        if (isDarkMode) {
+                            MaterialTheme.colorScheme.surface
+                        } else {
+                            belt.lightColor
+                        }
+                )
+                .border(
+                    width = 1.dp,
+                    color = beltContentColor.copy(
+                        alpha = 0.72f
+                    )
+                )
+                .padding(vertical = 4.dp),
+            contentAlignment = Alignment.Center
         ) {
-            val countText = if (isEnglish) {
-                if (totalCount == 1) "1 exercise" else "$totalCount exercises"
-            } else {
-                "\u200E$totalCount\u200E תרגילים"
-            }
+            val countText =
+                if (isEnglish) {
+                    if (totalCount == 1) {
+                        "1 exercise"
+                    } else {
+                        "$totalCount exercises"
+                    }
+                } else {
+                    "\u200E$totalCount\u200E תרגילים"
+                }
 
             CompositionLocalProvider(
                 LocalLayoutDirection provides
                         LayoutDirection.Ltr
             ) {
                 Row(
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(min = 52.dp)
+                        .padding(
+                            start = 16.dp,
+                            end = 16.dp,
+                            top = 10.dp
+                        ),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text(
-                        text = countText,
-                        style =
-                            KmiTypography.caption.copy(
-                                fontWeight = FontWeight.Bold
-                            ),
-                        color = beltContentColor,
-                        textAlign = TextAlign.Start,
-                        modifier = Modifier.weight(1f),
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
+                        Text(
+                            text = countText,
+                            style =
+                                KmiTypography.caption.copy(
+                                    fontWeight = FontWeight.Bold
+                                ),
+                            color = beltContentColor,
+                            textAlign = TextAlign.Start,
+                            modifier = Modifier.weight(1f),
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
 
-                    Text(
-                        text = title,
-                        style =
-                            KmiTypography.screenTitle.copy(
-                                fontWeight =
-                                    FontWeight.ExtraBold
-                            ),
-                        color = beltContentColor,
-                        textAlign = TextAlign.End,
-                        modifier = Modifier.weight(1f),
-                        maxLines = 1,
-                        overflow =
-                            TextOverflow.Ellipsis
-                    )
+                        Text(
+                            text = title,
+                            style =
+                                KmiTypography.screenTitle.copy(
+                                    fontWeight =
+                                        FontWeight.ExtraBold
+                                ),
+                            color = beltContentColor,
+                            textAlign = TextAlign.End,
+                            modifier = Modifier.weight(1f),
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
                 }
             }
+        }
 
-            Spacer(Modifier.height(8.dp))
-
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(
+                color =
+                    MaterialTheme
+                        .colorScheme
+                        .surfaceVariant
+                        .copy(alpha = 0.55f)
+            )
+            .padding(
+                start = 6.dp,
+                top = 3.dp,
+                end = 6.dp,
+                bottom = 6.dp
+            )
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(
+                    MaterialTheme
+                        .colorScheme
+                        .surfaceVariant
+                        .copy(alpha = 0.55f)
+                )
+                .padding(
+                    start = 6.dp,
+                    top = 2.dp,
+                    end = 6.dp,
+                    bottom = 5.dp
+                )
+        ) {
             Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(top = 6.dp),
+                modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement =
                     Arrangement.spacedBy(7.dp),
                 verticalAlignment =
@@ -4441,9 +4464,9 @@ private fun HardExerciseLegacyRow(
     mastered: Boolean?,
     isCoach: Boolean = false,
     coachProgress: CoachMaterialProgress =
-        CoachMaterialProgress(),
+    CoachMaterialProgress(),
     onCoachStatusSelect:
-        (CoachMaterialStatus) -> Unit = {},
+    (CoachMaterialStatus) -> Unit = {},
     isDarkMode: Boolean = false,
     excluded: Boolean,
     isFav: Boolean,

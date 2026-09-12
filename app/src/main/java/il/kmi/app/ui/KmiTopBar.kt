@@ -35,6 +35,7 @@ import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Lightbulb
 import androidx.compose.material.icons.filled.Mic
+import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Replay
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
@@ -369,10 +370,26 @@ fun KmiTopBar(
     // תפקיד המשתמש (coach/trainee) – כולל פולבאק ל־default prefs
     var userRole by remember {
         mutableStateOf(
-            spUser.getString("user_role", null) ?: spDefault.getString(
-                "user_role",
+            spUser.getString("user_role", null)
+                ?: spDefault.getString(
+                    "user_role",
+                    null
+                )
+        )
+    }
+
+    var activeUserMode by remember {
+        mutableStateOf(
+            spUser.getString(
+                "active_user_mode",
                 null
             )
+                ?: spDefault.getString(
+                    "active_user_mode",
+                    null
+                )
+                ?: userRole
+                ?: "trainee"
         )
     }
 
@@ -407,8 +424,31 @@ fun KmiTopBar(
 
             if (key == "user_role") {
                 userRole =
-                    spUser.getString("user_role", null)
-                        ?: spDefault.getString("user_role", null)
+                    spUser.getString(
+                        "user_role",
+                        null
+                    )
+                        ?: spDefault.getString(
+                            "user_role",
+                            null
+                        )
+            }
+
+            if (
+                key == "active_user_mode" ||
+                key == "user_role"
+            ) {
+                activeUserMode =
+                    spUser.getString(
+                        "active_user_mode",
+                        null
+                    )
+                        ?: spDefault.getString(
+                            "active_user_mode",
+                            null
+                        )
+                                ?: userRole
+                                ?: "trainee"
             }
             if (key == null || key in setOf(
                     "is_registered",
@@ -513,7 +553,18 @@ fun KmiTopBar(
         role?.equals("coach", ignoreCase = true) == true
 
     val userIsCoach = isCoach(userRole)
-    val isCoachForPill = modePillIsCoach ?: userIsCoach
+
+    val activeModeIsCoach =
+        activeUserMode
+            .trim()
+            .equals(
+                "coach",
+                ignoreCase = true
+            )
+
+    val isCoachForPill =
+        modePillIsCoach
+            ?: activeModeIsCoach
 
     fun openVoiceExerciseExplanation(
         query: String
@@ -2093,30 +2144,32 @@ private fun PremiumMenuImageIcon(
     ) {
         Box(
             modifier = Modifier
-                .size(38.dp)
+                .size(40.dp)
                 .graphicsLayer {
                     scaleX = iconScale
                     scaleY = iconScale
                 }
-                .clip(RoundedCornerShape(11.dp))
+                .shadow(
+                    elevation = 5.dp,
+                    shape = CircleShape,
+                    clip = false
+                )
+                .clip(CircleShape)
                 .background(
                     Brush.verticalGradient(
                         colors = listOf(
-                            MaterialTheme.colorScheme.primaryContainer,
-                            MaterialTheme.colorScheme.primary,
-                            MaterialTheme.colorScheme.primary.copy(
-                                alpha = 0.82f
-                            )
+                            Color(0xFF9B8AFB),
+                            Color(0xFF7559E8),
+                            Color(0xFF5B43D6)
                         )
                     )
                 )
                 .border(
                     width = 1.dp,
-                    color =
-                        MaterialTheme.colorScheme
-                            .onPrimary
-                            .copy(alpha = 0.28f),
-                    shape = RoundedCornerShape(11.dp)
+                    color = Color.White.copy(
+                        alpha = 0.35f
+                    ),
+                    shape = CircleShape
                 ),
             contentAlignment = Alignment.Center
         ) {
@@ -2475,36 +2528,48 @@ private fun RoleInlinePill(
     Surface(
         color =
             backgroundColor.copy(
-                alpha = 0.94f
+                alpha = 0.96f
             ),
         contentColor = accentColor,
         shape = RoundedCornerShape(999.dp),
-        shadowElevation = 1.dp,
+        shadowElevation = 2.dp,
         border = BorderStroke(
             width = 1.dp,
             color =
                 accentColor.copy(
-                    alpha = 0.30f
+                    alpha = 0.28f
                 )
         )
     ) {
-        Text(
-            text = label,
-            textAlign = TextAlign.Center,
-            color = accentColor,
-            style =
-                KmiTypography.caption.copy(
-                    fontWeight =
-                        FontWeight.Bold
-                ),
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            modifier =
-                Modifier.padding(
-                    horizontal = 7.dp,
-                    vertical = 1.5.dp
-                )
-        )
+        Row(
+            modifier = Modifier.padding(
+                horizontal = 7.dp,
+                vertical = 2.dp
+            ),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement =
+                Arrangement.spacedBy(4.dp)
+        ) {
+            Icon(
+                imageVector = Icons.Filled.Person,
+                contentDescription = null,
+                tint = accentColor,
+                modifier = Modifier.size(13.dp)
+            )
+
+            Text(
+                text = label,
+                textAlign = TextAlign.Center,
+                color = accentColor,
+                style =
+                    KmiTypography.caption.copy(
+                        fontWeight =
+                            FontWeight.Bold
+                    ),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
     }
 }
 

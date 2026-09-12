@@ -87,6 +87,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.compositeOver
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLayoutDirection
@@ -1609,7 +1610,7 @@ internal fun BeltPangoLayout(
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(horizontal = 14.dp)
+                            .padding(horizontal = 4.dp)
                     ) {
                         TopicsCardForBelt(
                             belt = currentBelt,
@@ -1921,27 +1922,6 @@ private fun TopicsCardForBelt(
     val horizontalByLang =
         Alignment.Start
 
-    val cardBg =
-        MaterialTheme.colorScheme.surface
-
-    val titleColor =
-        MaterialTheme.colorScheme.onSurface
-
-    val rowTitleColor =
-        MaterialTheme.colorScheme.onSurface
-
-    /*
-     * צבע החגורה הלבנה נשאר לבן על הכרטיס הכהה.
-     * במצב בהיר משתמשים באפור־כחלחל כדי שלא ייעלם
-     * על הרקע הלבן.
-     */
-    /*
-   * בחגורה שחורה, על גבי כרטיס כהה, משתמשים בלבן
-   * עבור ספירות, חצים, מסגרות ופעולות.
-   *
-   * בחגורה לבנה במצב בהיר משתמשים באפור־כחלחל,
-   * כדי שהצבע לא ייעלם על הרקע הבהיר.
-   */
     val readableBeltAccent =
         when {
             belt == Belt.BLACK && isDarkTheme ->
@@ -1960,15 +1940,61 @@ private fun TopicsCardForBelt(
                 belt.color
         }
 
+    val beltBackgroundAccent =
+        when {
+            belt == Belt.YELLOW ->
+                belt.color
+
+            else ->
+                readableBeltAccent
+        }
+
+    val cardBg =
+        if (isDarkTheme) {
+            beltBackgroundAccent
+                .copy(alpha = 0.10f)
+                .compositeOver(
+                    MaterialTheme.colorScheme.surface
+                )
+        } else {
+            beltBackgroundAccent
+                .copy(
+                    alpha =
+                        if (belt == Belt.YELLOW) {
+                            0.14f
+                        } else {
+                            0.09f
+                        }
+                )
+                .compositeOver(
+                    MaterialTheme.colorScheme.surface
+                )
+        }
+
+    val titleColor =
+        MaterialTheme.colorScheme.onSurface
+
+    val rowTitleColor =
+        MaterialTheme.colorScheme.onSurface
+
     val rowSubColor =
         readableBeltAccent.copy(alpha = 0.88f)
 
     // ✅ כרטיס תתי־הנושאים מקבל גוון קריא של החגורה
     val subTopicsCardBg =
         if (isDarkTheme) {
-            readableBeltAccent.copy(alpha = 0.12f)
+            beltBackgroundAccent.copy(
+                alpha = 0.14f
+            )
         } else {
-            readableBeltAccent.copy(alpha = 0.10f)
+            beltBackgroundAccent.copy(
+                alpha =
+                    if (belt == Belt.YELLOW) {
+                        0.16f
+                    } else {
+                        0.12f
+                    }
+            )
         }
 
     val subTopicsCardBorder =
@@ -2356,11 +2382,18 @@ private fun TopicsCardForBelt(
         color = cardBg,
         border = BorderStroke(
             width = 1.dp,
-            color = MaterialTheme.colorScheme.outlineVariant
+            color =
+                if (isDarkTheme) {
+                    MaterialTheme.colorScheme.outlineVariant
+                } else {
+                    readableBeltAccent.copy(
+                        alpha = 0.24f
+                    )
+                }
         ),
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 6.dp)
+            .padding(horizontal = 2.dp)
             .padding(top = 0.dp)
             .padding(bottom = fabClearance + 2.dp)
     ) {
@@ -2485,7 +2518,10 @@ private fun TopicsCardForBelt(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .heightIn(min = rowMinHeight)
-                                .padding(horizontal = 10.dp, vertical = 1.dp)
+                                .padding(
+                                    horizontal = 3.dp,
+                                    vertical = 1.dp
+                                )
                                 .clickable {
                                     clickSound()
                                     haptic(true)
@@ -2506,7 +2542,21 @@ private fun TopicsCardForBelt(
                                     }
                                 },
                             shape = RoundedCornerShape(18.dp),
-                            color = Color.Transparent,
+                            color =
+                                if (isDarkTheme) {
+                                    MaterialTheme.colorScheme.surface
+                                } else {
+                                    beltBackgroundAccent
+                                        .copy(
+                                            alpha =
+                                                if (belt == Belt.YELLOW) {
+                                                    0.07f
+                                                } else {
+                                                    0.045f
+                                                }
+                                        )
+                                        .compositeOver(cardBg)
+                                },
                             tonalElevation = 0.dp,
                             shadowElevation = 0.dp,
                             border = null
@@ -2514,7 +2564,10 @@ private fun TopicsCardForBelt(
                             Column(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .padding(horizontal = 7.dp, vertical = 4.dp),
+                                    .padding(
+                                        horizontal = 5.dp,
+                                        vertical = 4.dp
+                                    ),
                                 horizontalAlignment = horizontalByLang
                             ) {
                                 val parentLocked =
@@ -2544,8 +2597,8 @@ private fun TopicsCardForBelt(
                                         if (topicImageRes != null) {
                                             Box(
                                                 modifier = Modifier
-                                                    .width(38.dp)
-                                                    .height(31.dp)
+                                                    .width(34.dp)
+                                                    .height(29.dp)
                                                     .clip(RoundedCornerShape(10.dp))
                                             ) {
                                                 Image(
@@ -2591,7 +2644,8 @@ private fun TopicsCardForBelt(
                                                 color = rowSubColor,
                                                 textAlign =
                                                     TextAlign.Start,
-                                                maxLines = 2,
+                                                maxLines = 1,
+                                                softWrap = false,
                                                 overflow =
                                                     TextOverflow.Ellipsis,
                                                 modifier =

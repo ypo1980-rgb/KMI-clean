@@ -24,6 +24,7 @@ import kotlinx.coroutines.tasks.await
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.collectAsState
 
 //=================================================================
 
@@ -281,9 +282,26 @@ fun NavGraphBuilder.attendanceNavGraph(
                     key = vmKey
                 )
 
+                val selectedAttendanceDateRaw by
+                e.savedStateHandle
+                    .getStateFlow<String?>(
+                        "attendance_selected_date",
+                        null
+                    )
+                    .collectAsState()
+
+                val selectedAttendanceDate =
+                    selectedAttendanceDateRaw
+                        ?.let { rawDate ->
+                            runCatching {
+                                LocalDate.parse(rawDate)
+                            }.getOrNull()
+                        }
+                        ?: LocalDate.now()
+
                 AttendanceScreen(
                     vm = attVm,
-                    date = LocalDate.now(),
+                    date = selectedAttendanceDate,
                     branch = branch,
                     groupKey = groupKey,
 

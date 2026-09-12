@@ -245,8 +245,51 @@ fun AppDrawerContent(
     fun tr(he: String, en: String): String = if (isEnglish) en else he
 
     val userSp = remember(contextLang) {
-        contextLang.getSharedPreferences("kmi_user", android.content.Context.MODE_PRIVATE)
+        contextLang.getSharedPreferences(
+            "kmi_user",
+            android.content.Context.MODE_PRIVATE
+        )
     }
+
+    var drawerUserRole by remember {
+        mutableStateOf(
+            userSp.getString(
+                "user_role",
+                "trainee"
+            ) ?: "trainee"
+        )
+    }
+
+    DisposableEffect(userSp) {
+        val listener =
+            android.content.SharedPreferences
+                .OnSharedPreferenceChangeListener { _, key ->
+
+                    if (key == "user_role") {
+                        drawerUserRole =
+                            userSp.getString(
+                                "user_role",
+                                "trainee"
+                            ) ?: "trainee"
+                    }
+                }
+
+        userSp.registerOnSharedPreferenceChangeListener(
+            listener
+        )
+
+        onDispose {
+            userSp.unregisterOnSharedPreferenceChangeListener(
+                listener
+            )
+        }
+    }
+
+    val drawerIsCoachMode =
+        drawerUserRole.equals(
+            "coach",
+            ignoreCase = true
+        )
 
     val drawerBranch = remember {
         userSp.getString("branch", "").orEmpty().trim()
@@ -1286,8 +1329,11 @@ fun AppDrawerContent(
                     ) {
 
                         //------------------------------------------------------------------------
-                        // ===== כפתורי מאמן — ורק למאמן =====
-                        if (isCoach) {
+                        // ===== אזור מאמן — רק למורשה שנמצא כרגע במצב מאמן =====
+                        if (
+                            isCoach &&
+                            drawerIsCoachMode
+                        ) {
                             Spacer(Modifier.height(8.dp))
 
                             Column(
