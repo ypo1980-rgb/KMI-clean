@@ -18,7 +18,6 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
@@ -50,7 +49,6 @@ import androidx.compose.foundation.border
 import il.kmi.shared.questions.model.util.ExerciseTitleFormatter
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.luminance
 import il.kmi.app.ui.ext.color
@@ -3832,22 +3830,6 @@ private fun HardBeltGroupsStickyContent(
             modifier = Modifier.fillMaxWidth()
         )
 
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(2.dp)
-                .background(
-                    MaterialTheme
-                        .colorScheme
-                        .primary
-                        .copy(alpha = 0.55f)
-                )
-        )
-
-        Spacer(
-            modifier = Modifier.height(18.dp)
-        )
-
         LazyColumn(
             state = listState,
             modifier = Modifier
@@ -3890,128 +3872,29 @@ private fun HardBeltGroupsStickyContent(
                             it.belt == row.belt
                         }
 
-                    val inlineTaughtCount =
-                        inlineRows.count { inlineRow ->
-                            coachProgressStates[
-                                coachMapKey(
-                                    inlineRow.belt,
-                                    statusIdFor(
-                                        inlineRow.belt,
-                                        inlineRow.rawItem
-                                    )
-                                )
-                            ]?.isSelected(
-                                CoachMaterialStatus.TAUGHT
-                            ) == true
-                        }
-
-                    val inlinePracticedCount =
-                        inlineRows.count { inlineRow ->
-                            coachProgressStates[
-                                coachMapKey(
-                                    inlineRow.belt,
-                                    statusIdFor(
-                                        inlineRow.belt,
-                                        inlineRow.rawItem
-                                    )
-                                )
-                            ]?.isSelected(
-                                CoachMaterialStatus.PRACTICED
-                            ) == true
-                        }
-
-                    val inlineReinforcementCount =
-                        inlineRows.count { inlineRow ->
-                            coachProgressStates[
-                                coachMapKey(
-                                    inlineRow.belt,
-                                    statusIdFor(
-                                        inlineRow.belt,
-                                        inlineRow.rawItem
-                                    )
-                                )
-                            ]?.isSelected(
-                                CoachMaterialStatus
-                                    .NEEDS_REINFORCEMENT
-                            ) == true
-                        }
-
-                    val inlineCoachUnmarkedCount =
-                        inlineRows.count { inlineRow ->
-                            val progress =
-                                coachProgressStates[
-                                    coachMapKey(
-                                        inlineRow.belt,
-                                        statusIdFor(
-                                            inlineRow.belt,
-                                            inlineRow.rawItem
-                                        )
-                                    )
-                                ]
-
-                            progress == null ||
-                                    progress.selectedStatuses
-                                        .isEmpty()
-                        }
-
-                    val inlineKnownCount = inlineRows.count { inlineRow ->
-                        itemStates[statusIdFor(inlineRow.belt, inlineRow.rawItem)] == true
-                    }
-
-                    val inlineUnknownCount = inlineRows.count { inlineRow ->
-                        itemStates[statusIdFor(inlineRow.belt, inlineRow.rawItem)] == false
-                    }
-
-                    val inlineUnmarkedCount = inlineRows.count { inlineRow ->
-                        itemStates[statusIdFor(inlineRow.belt, inlineRow.rawItem)] == null
-                    }
-
-                    val inlineFavorites = prefs.getStringSet(
-                        favKeyFor(row.belt),
-                        emptySet<String>()
-                    ) ?: emptySet()
-
-                    val inlineExcluded = prefs.getStringSet(
-                        excludedKeyFor(row.belt),
-                        emptySet<String>()
-                    ) ?: emptySet()
-
-                    val inlineFavoriteCount = inlineRows.count { inlineRow ->
-                        inlineFavorites.contains(
-                            statusIdFor(inlineRow.belt, inlineRow.rawItem)
-                        )
-                    }
-
-                    val inlineExcludedCount = inlineRows.count { inlineRow ->
-                        inlineExcluded.contains(
-                            statusIdFor(inlineRow.belt, inlineRow.rawItem)
-                        )
-                    }
-
                     Spacer(
-                        modifier = Modifier.height(14.dp)
+                        modifier = Modifier.height(45.dp)
                     )
 
                     HardBeltStickyHeaderForSubTopics(
                         belt = row.belt,
                         totalCount = inlineRows.size,
                         isCoach = isCoach,
-                        taughtCount = inlineTaughtCount,
-                        practicedCount = inlinePracticedCount,
-                        reinforcementCount =
-                            inlineReinforcementCount,
-                        coachUnmarkedCount =
-                            inlineCoachUnmarkedCount,
-                        knownCount = inlineKnownCount,
-                        unknownCount = inlineUnknownCount,
-                        favoriteCount =
-                            inlineFavoriteCount,
-                        excludedCount =
-                            inlineExcludedCount,
-                        unmarkedCount =
-                            inlineUnmarkedCount,
+
+                        // לא מוצגים כאשר showStats = false
+                        taughtCount = 0,
+                        practicedCount = 0,
+                        reinforcementCount = 0,
+                        coachUnmarkedCount = 0,
+                        knownCount = 0,
+                        unknownCount = 0,
+                        favoriteCount = 0,
+                        excludedCount = 0,
+                        unmarkedCount = 0,
+
                         isDarkMode = isDarkMode,
                         isEnglish = isEnglish,
+                        showStats = false,
                         modifier = Modifier.fillMaxWidth()
                     )
                 }
@@ -4151,6 +4034,7 @@ private fun HardBeltStickyHeaderForSubTopics(
     unmarkedCount: Int,
     isDarkMode: Boolean,
     isEnglish: Boolean,
+    showStats: Boolean = true,
     modifier: Modifier = Modifier
 ) {
     val title = if (isEnglish) {
@@ -4271,186 +4155,253 @@ private fun HardBeltStickyHeaderForSubTopics(
             }
         }
 
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .background(
-                color =
-                    MaterialTheme
-                        .colorScheme
-                        .surfaceVariant
-                        .copy(alpha = 0.55f)
-            )
-            .padding(
-                start = 6.dp,
-                top = 3.dp,
-                end = 6.dp,
-                bottom = 6.dp
-            )
-    ) {
+    if (showStats) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
                 .background(
-                    MaterialTheme
-                        .colorScheme
-                        .surfaceVariant
-                        .copy(alpha = 0.55f)
+                    color =
+                        MaterialTheme
+                            .colorScheme
+                            .surfaceVariant
+                            .copy(alpha = 0.55f)
                 )
                 .padding(
                     start = 6.dp,
-                    top = 2.dp,
+                    top = 3.dp,
                     end = 6.dp,
-                    bottom = 5.dp
+                    bottom = 0.dp
                 )
         ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement =
-                    Arrangement.spacedBy(7.dp),
-                verticalAlignment =
-                    Alignment.CenterVertically
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(
+                        MaterialTheme
+                            .colorScheme
+                            .surfaceVariant
+                            .copy(alpha = 0.55f)
+                    )
+                    .padding(
+                        start = 6.dp,
+                        top = 2.dp,
+                        end = 6.dp,
+                        bottom = 5.dp
+                    )
             ) {
-                if (isCoach) {
-                    HardGroupStatChip(
-                        value = taughtCount.toString(),
-                        label =
-                            if (isEnglish) {
-                                "Taught"
-                            } else {
-                                "נלמד"
-                            },
-                        symbol = "✓",
-                        accentColor =
-                            Color(0xFF16A36A),
-                        containerColor =
-                            Color(0xFFDFF7E9),
-                        modifier =
-                            Modifier.weight(1f)
-                    )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement =
+                        Arrangement.spacedBy(7.dp),
+                    verticalAlignment =
+                        Alignment.CenterVertically
+                ) {
+                    if (isCoach) {
+                        HardGroupStatChip(
+                            value = taughtCount.toString(),
+                            label =
+                                if (isEnglish) {
+                                    "Taught"
+                                } else {
+                                    "נלמד"
+                                },
+                            symbol = "✓",
+                            accentColor =
+                                Color(0xFF16A36A),
+                            containerColor =
+                                Color(0xFFDFF7E9),
+                            modifier =
+                                Modifier.weight(1f)
+                        )
 
-                    HardGroupStatChip(
-                        value = practicedCount.toString(),
-                        label =
-                            if (isEnglish) {
-                                "Practiced"
-                            } else {
-                                "תורגל"
-                            },
-                        symbol = "↻",
-                        accentColor =
-                            MaterialTheme.colorScheme.primary,
-                        containerColor =
-                            MaterialTheme.colorScheme.primaryContainer,
-                        modifier =
-                            Modifier.weight(1f)
-                    )
+                        HardGroupStatChip(
+                            value = practicedCount.toString(),
+                            label =
+                                if (isEnglish) {
+                                    "Practiced"
+                                } else {
+                                    "תורגל"
+                                },
+                            symbol = "↻",
+                            accentColor =
+                                MaterialTheme.colorScheme.primary,
+                            containerColor =
+                                MaterialTheme.colorScheme.primaryContainer,
+                            modifier =
+                                Modifier.weight(1f)
+                        )
 
-                    HardGroupStatChip(
-                        value =
-                            reinforcementCount.toString(),
-                        label =
-                            if (isEnglish) {
-                                "Reinforcement"
-                            } else {
-                                "לחיזוק"
-                            },
-                        symbol = "!",
-                        accentColor =
-                            Color(0xFFF59E0B),
-                        containerColor =
-                            Color(0xFFFFF1D6),
-                        modifier =
-                            Modifier.weight(1f)
-                    )
+                        HardGroupStatChip(
+                            value =
+                                reinforcementCount.toString(),
+                            label =
+                                if (isEnglish) {
+                                    "Reinforcement"
+                                } else {
+                                    "לחיזוק"
+                                },
+                            symbol = "!",
+                            accentColor =
+                                Color(0xFFF59E0B),
+                            containerColor =
+                                Color(0xFFFFF1D6),
+                            modifier =
+                                Modifier.weight(1f)
+                        )
 
-                    HardGroupStatChip(
-                        value =
-                            coachUnmarkedCount.toString(),
-                        label =
-                            if (isEnglish) {
-                                "Unmarked"
-                            } else {
-                                "לא סומן"
-                            },
-                        symbol = "−",
-                        accentColor =
-                            Color(0xFF64748B),
-                        containerColor =
-                            Color(0xFFE7EDF5),
-                        modifier =
-                            Modifier.weight(1f)
-                    )
-                } else {
-                    HardGroupStatChip(
-                        value = knownCount.toString(),
-                        label =
-                            if (isEnglish) {
-                                "Known"
-                            } else {
-                                "יודע"
-                            },
-                        symbol = "✓",
-                        accentColor =
-                            Color(0xFF16A36A),
-                        containerColor =
-                            Color(0xFFDFF7E9),
-                        modifier =
-                            Modifier.weight(1f)
-                    )
+                        HardGroupStatChip(
+                            value =
+                                coachUnmarkedCount.toString(),
+                            label =
+                                if (isEnglish) {
+                                    "Unmarked"
+                                } else {
+                                    "לא סומן"
+                                },
+                            symbol = "−",
+                            accentColor =
+                                Color(0xFF64748B),
+                            containerColor =
+                                Color(0xFFE7EDF5),
+                            modifier =
+                                Modifier.weight(1f)
+                        )
+                    } else {
+                        HardGroupStatChip(
+                            value = knownCount.toString(),
+                            label =
+                                if (isEnglish) {
+                                    "Known"
+                                } else {
+                                    "יודע"
+                                },
+                            symbol = "✓",
+                            accentColor =
+                                Color(0xFF16A36A),
+                            containerColor =
+                                Color(0xFFDFF7E9),
+                            modifier =
+                                Modifier.weight(1f)
+                        )
 
-                    HardGroupStatChip(
-                        value = unknownCount.toString(),
-                        label =
-                            if (isEnglish) {
-                                "Unknown"
-                            } else {
-                                "לא יודע"
-                            },
-                        symbol = "×",
-                        accentColor =
-                            Color(0xFFEF4444),
-                        containerColor =
-                            Color(0xFFFFE3E3),
-                        modifier =
-                            Modifier.weight(1f)
-                    )
+                        HardGroupStatChip(
+                            value = unknownCount.toString(),
+                            label =
+                                if (isEnglish) {
+                                    "Unknown"
+                                } else {
+                                    "לא יודע"
+                                },
+                            symbol = "×",
+                            accentColor =
+                                Color(0xFFEF4444),
+                            containerColor =
+                                Color(0xFFFFE3E3),
+                            modifier =
+                                Modifier.weight(1f)
+                        )
 
-                    HardGroupStatChip(
-                        value = favoriteCount.toString(),
-                        label =
-                            if (isEnglish) {
-                                "Favorites"
-                            } else {
-                                "מועדפים"
-                            },
-                        symbol = "★",
-                        accentColor =
-                            Color(0xFFE0A000),
-                        containerColor =
-                            Color(0xFFFFF4CC),
-                        modifier =
-                            Modifier.weight(1f)
-                    )
+                        HardGroupStatChip(
+                            value = favoriteCount.toString(),
+                            label =
+                                if (isEnglish) {
+                                    "Favorites"
+                                } else {
+                                    "מועדפים"
+                                },
+                            symbol = "★",
+                            accentColor =
+                                Color(0xFFE0A000),
+                            containerColor =
+                                Color(0xFFFFF4CC),
+                            modifier =
+                                Modifier.weight(1f)
+                        )
 
-                    HardGroupStatChip(
-                        value = excludedCount.toString(),
-                        label =
-                            if (isEnglish) {
-                                "Excluded"
-                            } else {
-                                "מוחרגים"
-                            },
-                        symbol = "−",
-                        accentColor =
-                            Color(0xFFB3261E),
-                        containerColor =
-                            Color(0xFFFFE4E1),
-                        modifier =
-                            Modifier.weight(1f)
-                    )
+                        HardGroupStatChip(
+                            value = excludedCount.toString(),
+                            label =
+                                if (isEnglish) {
+                                    "Excluded"
+                                } else {
+                                    "מוחרגים"
+                                },
+                            symbol = "−",
+                            accentColor =
+                                Color(0xFFB3261E),
+                            containerColor =
+                                Color(0xFFFFE4E1),
+                            modifier =
+                                Modifier.weight(1f)
+                        )
+                    }
                 }
             }
+        }
+
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(2.dp)
+                .background(
+                    beltContentColor.copy(
+                        alpha = 0.75f
+                    )
+                )
+        )
+    }
+}
+
+@Composable
+private fun ExerciseNameStatusIndicators(
+    isFav: Boolean,
+    hasNote: Boolean,
+    isEnglish: Boolean
+) {
+    if (!isFav && !hasNote) {
+        return
+    }
+
+    Spacer(
+        modifier = Modifier.width(6.dp)
+    )
+
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(3.dp)
+    ) {
+        if (isFav) {
+            HardLegacyMetaBadge(
+                text =
+                    if (isEnglish) {
+                        "Favorite"
+                    } else {
+                        "מועדף"
+                    },
+                containerColor =
+                    Color(0xFFF9D9B8),
+                contentColor =
+                    Color(0xFF9A5A00)
+            )
+        }
+
+        if (hasNote) {
+            HardLegacyMetaBadge(
+                text =
+                    if (isEnglish) {
+                        "Note"
+                    } else {
+                        "הערה"
+                    },
+                containerColor =
+                    MaterialTheme
+                        .colorScheme
+                        .primaryContainer,
+                contentColor =
+                    MaterialTheme
+                        .colorScheme
+                        .onPrimaryContainer
+            )
         }
     }
 }
@@ -4520,31 +4471,14 @@ private fun HardExerciseLegacyRow(
                     }
         ) {
             Column(
-                modifier = Modifier.fillMaxWidth()
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(
+                        horizontal = 16.dp,
+                        vertical = 2.dp
+                    )
             ) {
-                Text(
-                    text =
-                        if (isEnglish) {
-                            displayName.trim()
-                        } else {
-                            "\u200F${displayName.trim()}\u200F"
-                        },
-                    style =
-                        KmiTypography.cardTitle.copy(
-                            fontWeight =
-                                FontWeight.ExtraBold
-                        ),
-                    color =
-                        rowTextColor,
-                    textAlign =
-                        if (isEnglish) {
-                            TextAlign.Left
-                        } else {
-                            TextAlign.Right
-                        },
-                    maxLines = 3,
-                    overflow =
-                        TextOverflow.Ellipsis,
+                Row(
                     modifier = Modifier
                         .fillMaxWidth()
                         .clickable {
@@ -4555,8 +4489,43 @@ private fun HardExerciseLegacyRow(
                             end = 8.dp,
                             top = 2.dp,
                             bottom = 4.dp
-                        )
-                )
+                        ),
+                    verticalAlignment =
+                        Alignment.CenterVertically
+                ) {
+                    Text(
+                        text =
+                            if (isEnglish) {
+                                displayName.trim()
+                            } else {
+                                "\u200F${displayName.trim()}\u200F"
+                            },
+                        style =
+                            KmiTypography.cardTitle.copy(
+                                fontWeight =
+                                    FontWeight.ExtraBold
+                            ),
+                        color =
+                            rowTextColor,
+                        textAlign =
+                            if (isEnglish) {
+                                TextAlign.Left
+                            } else {
+                                TextAlign.Right
+                            },
+                        maxLines = 3,
+                        overflow =
+                            TextOverflow.Ellipsis,
+                        modifier =
+                            Modifier.weight(1f)
+                    )
+
+                    ExerciseNameStatusIndicators(
+                        isFav = isFav,
+                        hasNote = hasNote,
+                        isEnglish = isEnglish
+                    )
+                }
 
                 CoachMaterialStatusSelector(
                     progress =
@@ -4693,25 +4662,6 @@ private fun HardExerciseLegacyRow(
                                         onEditNote
                                 )
 
-                                if (isFav) {
-                                    Spacer(
-                                        Modifier.width(5.dp)
-                                    )
-
-                                    HardLegacyMetaBadge(
-                                        text =
-                                            if (isEnglish) {
-                                                "Favorite"
-                                            } else {
-                                                "מועדף"
-                                            },
-                                        containerColor =
-                                            Color(0xFFF9D9B8),
-                                        contentColor =
-                                            Color(0xFF9A5A00)
-                                    )
-                                }
-
                                 if (excluded) {
                                     Spacer(
                                         Modifier.width(5.dp)
@@ -4744,31 +4694,44 @@ private fun HardExerciseLegacyRow(
                                 Modifier.height(2.dp)
                             )
 
-                            Text(
-                                text =
-                                    if (isEnglish) {
-                                        displayName.trim()
-                                    } else {
-                                        "\u200F${displayName.trim()}\u200F"
-                                    },
-                                style =
-                                    KmiTypography.caption.copy(
-                                        fontWeight =
-                                            FontWeight.ExtraBold
-                                    ),
-                                color = rowTextColor,
-                                textAlign =
-                                    if (isEnglish) {
-                                        TextAlign.Left
-                                    } else {
-                                        TextAlign.Right
-                                    },
+                            Row(
                                 modifier =
                                     Modifier.fillMaxWidth(),
-                                maxLines = 3,
-                                overflow =
-                                    TextOverflow.Ellipsis
-                            )
+                                verticalAlignment =
+                                    Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text =
+                                        if (isEnglish) {
+                                            displayName.trim()
+                                        } else {
+                                            "\u200F${displayName.trim()}\u200F"
+                                        },
+                                    style =
+                                        KmiTypography.caption.copy(
+                                            fontWeight =
+                                                FontWeight.ExtraBold
+                                        ),
+                                    color = rowTextColor,
+                                    textAlign =
+                                        if (isEnglish) {
+                                            TextAlign.Left
+                                        } else {
+                                            TextAlign.Right
+                                        },
+                                    modifier =
+                                        Modifier.weight(1f),
+                                    maxLines = 3,
+                                    overflow =
+                                        TextOverflow.Ellipsis
+                                )
+
+                                ExerciseNameStatusIndicators(
+                                    isFav = isFav,
+                                    hasNote = hasNote,
+                                    isEnglish = isEnglish
+                                )
+                            }
                         }
                     }
 

@@ -13,12 +13,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material.icons.filled.List
-import androidx.compose.material.icons.filled.Summarize
-import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.FitnessCenter
 import il.kmi.shared.domain.Belt
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.luminance
 
 
 private fun floatingMenuColorForBelt(belt: Belt): Color {
@@ -87,33 +84,32 @@ fun KmiFloatingMenuOverlay(
                     KmiFabAction(
                         text = "כל הרשימות",
                         icon = Icons.Filled.List,
-                        enabled = (canUseExtras && effectiveBelt != Belt.WHITE),
-                        onClick = { onOpenLists(effectiveBelt) }
+                        enabled = (
+                                canUseExtras &&
+                                        effectiveBelt != Belt.WHITE
+                                ),
+                        onClick = {
+                            onOpenLists(effectiveBelt)
+                        }
                     ),
                     KmiFabAction(
                         text = "תרגול",
                         icon = Icons.Filled.FitnessCenter,
                         enabled = canUseExtras,
-                        onClick = { onOpenPracticeMenu() }
-                    ),
-                    KmiFabAction(
-                        text = "מסך סיכום",
-                        icon = Icons.Filled.Summarize,
-                        enabled = canUseExtras,
-                        onClick = { onOpenSummary(effectiveBelt) }
-                    ),
-                    KmiFabAction(
-                        text = "עוזר קולי",
-                        icon = Icons.Filled.Mic,
-                        enabled = canUseExtras,
-                        onClick = { onOpenAssistant() }
+                        onClick = {
+                            onOpenPracticeMenu()
+                        }
                     )
                 ),
                 scrimColor = menuColor.copy(alpha = 0.18f),
                 mainFabColor = menuColor,
                 actionIconTint = menuContentColor,
-                onHaptic = { onHaptic() },
-                onClickSound = { onClickSound() }
+                onHaptic = {
+                    onHaptic()
+                },
+                onClickSound = {
+                    onClickSound()
+                }
             )
         }
     }

@@ -303,12 +303,10 @@ fun MaterialsScreen(
     }
 
     /*
-     * מקור האמת לתפקיד הפעיל הוא kmi_user,
-     * בדיוק כמו תג התפקיד הגלובלי.
-     *
-     * הפרמטר isCoach נשאר רק כ־fallback למקרה
-     * שבו טרם נשמר user_role.
-     */
+    * מצב המשתמש הפעיל הוא מקור האמת לתצוגת המסך.
+    * user_role משמש רק כ־fallback כאשר עדיין לא
+    * נשמר active_user_mode.
+    */
     val rolePrefs = remember(context) {
         context.getSharedPreferences(
             "kmi_user",
@@ -318,13 +316,41 @@ fun MaterialsScreen(
 
     fun readActiveMaterialsRole(): String? {
         return rolePrefs
-            .getString("user_role", null)
+            .getString(
+                "active_user_mode",
+                null
+            )
             ?.trim()
-            ?.takeIf { it.isNotBlank() }
+            ?.takeIf {
+                it.isNotBlank()
+            }
             ?: rolePrefs
-                .getString("role", null)
+                .getString(
+                    "last_active_app_role",
+                    null
+                )
                 ?.trim()
-                ?.takeIf { it.isNotBlank() }
+                ?.takeIf {
+                    it.isNotBlank()
+                }
+            ?: rolePrefs
+                .getString(
+                    "user_role",
+                    null
+                )
+                ?.trim()
+                ?.takeIf {
+                    it.isNotBlank()
+                }
+            ?: rolePrefs
+                .getString(
+                    "role",
+                    null
+                )
+                ?.trim()
+                ?.takeIf {
+                    it.isNotBlank()
+                }
     }
 
     var activeMaterialsRole by remember {
@@ -335,17 +361,21 @@ fun MaterialsScreen(
 
     DisposableEffect(rolePrefs) {
         val roleListener =
-            SharedPreferences.OnSharedPreferenceChangeListener { _,
-                                                                 key ->
+            SharedPreferences
+                .OnSharedPreferenceChangeListener {
+                        _,
+                        key ->
 
-                if (
-                    key == "user_role" ||
-                    key == "role"
-                ) {
-                    activeMaterialsRole =
-                        readActiveMaterialsRole()
+                    if (
+                        key == "active_user_mode" ||
+                        key == "last_active_app_role" ||
+                        key == "user_role" ||
+                        key == "role"
+                    ) {
+                        activeMaterialsRole =
+                            readActiveMaterialsRole()
+                    }
                 }
-            }
 
         rolePrefs
             .registerOnSharedPreferenceChangeListener(
@@ -368,7 +398,8 @@ fun MaterialsScreen(
         ) {
             "coach",
             "trainer",
-            "מאמן" -> true
+            "מאמן",
+            "מדריך" -> true
 
             "trainee",
             "student",
@@ -1814,6 +1845,132 @@ fun MaterialsScreen(
     }
 
     @Composable
+    fun MaterialsBeltHeader() {
+        val beltTitle =
+            if (isEnglish) {
+                when (belt) {
+                    Belt.YELLOW -> "Yellow Belt"
+                    Belt.ORANGE -> "Orange Belt"
+                    Belt.GREEN -> "Green Belt"
+                    Belt.BLUE -> "Blue Belt"
+                    Belt.BROWN -> "Brown Belt"
+                    Belt.BLACK -> "Black Belt"
+                    else -> belt.en
+                }
+            } else {
+                when (belt) {
+                    Belt.YELLOW -> "חגורה צהובה"
+                    Belt.ORANGE -> "חגורה כתומה"
+                    Belt.GREEN -> "חגורה ירוקה"
+                    Belt.BLUE -> "חגורה כחולה"
+                    Belt.BROWN -> "חגורה חומה"
+                    Belt.BLACK -> "חגורה שחורה"
+                    else -> belt.heb
+                }
+            }
+
+        val beltContentColor =
+            if (
+                isDarkSurface &&
+                belt == Belt.BLACK
+            ) {
+                Color.White.copy(alpha = 0.94f)
+            } else {
+                belt.color
+            }
+
+        val countText =
+            if (isEnglish) {
+                if (summaryTotalCount == 1) {
+                    "1 exercise"
+                } else {
+                    "$summaryTotalCount exercises"
+                }
+            } else {
+                "\u200E$summaryTotalCount\u200E תרגילים"
+            }
+
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(
+                    color =
+                        if (isDarkSurface) {
+                            MaterialTheme.colorScheme.surface
+                        } else {
+                            belt.lightColor
+                        }
+                )
+                .border(
+                    width = 1.dp,
+                    color = beltContentColor.copy(
+                        alpha = 0.72f
+                    )
+                )
+                .padding(vertical = 4.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            CompositionLocalProvider(
+                LocalLayoutDirection provides
+                        if (isEnglish) {
+                            LayoutDirection.Ltr
+                        } else {
+                            LayoutDirection.Rtl
+                        }
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(min = 52.dp)
+                        .padding(
+                            start = 16.dp,
+                            end = 16.dp,
+                            top = 4.dp,
+                            bottom = 4.dp
+                        ),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = beltTitle,
+                        style =
+                            KmiTypography.screenTitle.copy(
+                                fontWeight = FontWeight.ExtraBold
+                            ),
+                        color = beltContentColor,
+                        textAlign =
+                            if (isEnglish) {
+                                TextAlign.Start
+                            } else {
+                                TextAlign.Right
+                            },
+                        modifier = Modifier.weight(1f),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+
+                    Text(
+                        text = countText,
+                        style =
+                            KmiTypography.caption.copy(
+                                fontWeight = FontWeight.Bold
+                            ),
+                        color = beltContentColor,
+                        textAlign =
+                            if (isEnglish) {
+                                TextAlign.End
+                            } else {
+                                TextAlign.Left
+                            },
+                        modifier = Modifier.weight(1f),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+            }
+        }
+    }
+
+    @Composable
     fun MaterialsTopStatusCards() {
         val colors = MaterialTheme.colorScheme
         val successColor = kmiSuccessColor()
@@ -1825,167 +1982,177 @@ fun MaterialsScreen(
             LocalLayoutDirection provides
                     if (isEnglish) LayoutDirection.Ltr else LayoutDirection.Rtl
         ) {
-            Row(
+            Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(
-                        start = 10.dp,
-                        top = 15.dp,
-                        end = 10.dp,
-                        bottom = 5.dp
-                    ),
-                horizontalArrangement = Arrangement.spacedBy(6.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                if (effectiveIsCoach) {
-                    val statuses = listOf(
-                        CoachMaterialStatus.NOT_TAUGHT,
-                        CoachMaterialStatus.TAUGHT,
-                        CoachMaterialStatus.PRACTICED,
-                        CoachMaterialStatus.NEEDS_REINFORCEMENT
+                    .background(
+                        MaterialTheme
+                            .colorScheme
+                            .surfaceVariant
+                            .copy(alpha = 0.55f)
                     )
+                    .padding(
+                        start = 6.dp,
+                        top = 3.dp,
+                        end = 6.dp,
+                        bottom = 6.dp
+                    )
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(7.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    if (effectiveIsCoach) {
+                        val statuses = listOf(
+                            CoachMaterialStatus.NOT_TAUGHT,
+                            CoachMaterialStatus.TAUGHT,
+                            CoachMaterialStatus.PRACTICED,
+                            CoachMaterialStatus.NEEDS_REINFORCEMENT
+                        )
 
-                    statuses.forEach { status ->
-                        val selected =
-                            selectedCoachTab == status.storageValue
+                        statuses.forEach { status ->
+                            val selected =
+                                selectedCoachTab == status.storageValue
 
-                        val label = when (status) {
-                            CoachMaterialStatus.NOT_TAUGHT ->
-                                if (isEnglish) "Unmarked" else "לא סומן"
+                            val label = when (status) {
+                                CoachMaterialStatus.NOT_TAUGHT ->
+                                    if (isEnglish) "Unmarked" else "לא סומן"
 
-                            CoachMaterialStatus.TAUGHT ->
-                                if (isEnglish) "Taught" else "נלמד"
+                                CoachMaterialStatus.TAUGHT ->
+                                    if (isEnglish) "Taught" else "נלמד"
 
-                            CoachMaterialStatus.PRACTICED ->
-                                if (isEnglish) "Practiced" else "תורגל"
+                                CoachMaterialStatus.PRACTICED ->
+                                    if (isEnglish) "Practiced" else "תורגל"
 
-                            CoachMaterialStatus.NEEDS_REINFORCEMENT ->
-                                if (isEnglish) "Reinforce" else "לחיזוק"
+                                CoachMaterialStatus.NEEDS_REINFORCEMENT ->
+                                    if (isEnglish) "Reinforce" else "לחיזוק"
+                            }
+
+                            val count = when (status) {
+                                CoachMaterialStatus.NOT_TAUGHT ->
+                                    coachNotTaughtCount
+
+                                CoachMaterialStatus.TAUGHT ->
+                                    coachTaughtCount
+
+                                CoachMaterialStatus.PRACTICED ->
+                                    coachPracticedCount
+
+                                CoachMaterialStatus.NEEDS_REINFORCEMENT ->
+                                    coachNeedsReinforcementCount
+                            }
+
+                            val accentColor = when (status) {
+                                CoachMaterialStatus.NOT_TAUGHT ->
+                                    Color(0xFF64748B)
+
+                                CoachMaterialStatus.TAUGHT ->
+                                    successColor
+
+                                CoachMaterialStatus.PRACTICED ->
+                                    colors.primary
+
+                                CoachMaterialStatus.NEEDS_REINFORCEMENT ->
+                                    warningColor
+                            }
+
+                            val containerColor = when (status) {
+                                CoachMaterialStatus.NOT_TAUGHT ->
+                                    Color(0xFFE7EDF5)
+
+                                CoachMaterialStatus.TAUGHT ->
+                                    successContainer
+
+                                CoachMaterialStatus.PRACTICED ->
+                                    colors.primaryContainer
+
+                                CoachMaterialStatus.NEEDS_REINFORCEMENT ->
+                                    warningContainer
+                            }
+
+                            val symbol = when (status) {
+                                CoachMaterialStatus.NOT_TAUGHT -> "−"
+                                CoachMaterialStatus.TAUGHT -> "✓"
+                                CoachMaterialStatus.PRACTICED -> "↻"
+                                CoachMaterialStatus.NEEDS_REINFORCEMENT -> "!"
+                            }
+
+                            MaterialsTopStatusCard(
+                                value = count.toString(),
+                                label = label,
+                                symbol = symbol,
+                                accentColor = accentColor,
+                                containerColor = containerColor,
+                                selected = selected,
+                                modifier = Modifier.weight(1f),
+                                onClick = {
+                                    selectedCoachTab =
+                                        if (selected) {
+                                            null
+                                        } else {
+                                            status.storageValue
+                                        }
+                                }
+                            )
                         }
-
-                        val count = when (status) {
-                            CoachMaterialStatus.NOT_TAUGHT ->
-                                coachNotTaughtCount
-
-                            CoachMaterialStatus.TAUGHT ->
-                                coachTaughtCount
-
-                            CoachMaterialStatus.PRACTICED ->
-                                coachPracticedCount
-
-                            CoachMaterialStatus.NEEDS_REINFORCEMENT ->
-                                coachNeedsReinforcementCount
-                        }
-
-                        val accentColor = when (status) {
-                            CoachMaterialStatus.NOT_TAUGHT ->
-                                Color(0xFF64748B)
-
-                            CoachMaterialStatus.TAUGHT ->
-                                successColor
-
-                            CoachMaterialStatus.PRACTICED ->
-                                colors.primary
-
-                            CoachMaterialStatus.NEEDS_REINFORCEMENT ->
-                                warningColor
-                        }
-
-                        val containerColor = when (status) {
-                            CoachMaterialStatus.NOT_TAUGHT ->
-                                Color(0xFFE7EDF5)
-
-                            CoachMaterialStatus.TAUGHT ->
-                                successContainer
-
-                            CoachMaterialStatus.PRACTICED ->
-                                colors.primaryContainer
-
-                            CoachMaterialStatus.NEEDS_REINFORCEMENT ->
-                                warningContainer
-                        }
-
-                        val symbol = when (status) {
-                            CoachMaterialStatus.NOT_TAUGHT -> "−"
-                            CoachMaterialStatus.TAUGHT -> "✓"
-                            CoachMaterialStatus.PRACTICED -> "↻"
-                            CoachMaterialStatus.NEEDS_REINFORCEMENT -> "!"
-                        }
+                    } else {
+                        MaterialsTopStatusCard(
+                            value = summaryTotalCount.toString(),
+                            label =
+                                if (isEnglish) {
+                                    "Exercises"
+                                } else {
+                                    "תרגילים"
+                                },
+                            symbol = "✣",
+                            accentColor = Color(0xFF64748B),
+                            containerColor = Color(0xFFE7EDF5),
+                            modifier = Modifier.weight(1f)
+                        )
 
                         MaterialsTopStatusCard(
-                            value = count.toString(),
-                            label = label,
-                            symbol = symbol,
-                            accentColor = accentColor,
-                            containerColor = containerColor,
-                            selected = selected,
-                            modifier = Modifier.weight(1f),
-                            onClick = {
-                                selectedCoachTab =
-                                    if (selected) {
-                                        null
-                                    } else {
-                                        status.storageValue
-                                    }
-                            }
+                            value = summaryMasteredCount.toString(),
+                            label =
+                                if (isEnglish) {
+                                    "Known"
+                                } else {
+                                    "יודע"
+                                },
+                            symbol = "✓",
+                            accentColor = Color(0xFF16A36A),
+                            containerColor = Color(0xFFDFF7E9),
+                            modifier = Modifier.weight(1f)
+                        )
+
+                        MaterialsTopStatusCard(
+                            value = summaryPartiallyKnownCount.toString(),
+                            label =
+                                if (isEnglish) {
+                                    "Partial"
+                                } else {
+                                    "חלקית"
+                                },
+                            symbol = "◐",
+                            accentColor = Color(0xFFF59E0B),
+                            containerColor = Color(0xFFFFF1D6),
+                            modifier = Modifier.weight(1f)
+                        )
+
+                        MaterialsTopStatusCard(
+                            value = summaryUnknownCount.toString(),
+                            label =
+                                if (isEnglish) {
+                                    "Unknown"
+                                } else {
+                                    "לא יודע"
+                                },
+                            symbol = "×",
+                            accentColor = Color(0xFFEF4444),
+                            containerColor = Color(0xFFFFE3E3),
+                            modifier = Modifier.weight(1f)
                         )
                     }
-                } else {
-                    MaterialsTopStatusCard(
-                        value = summaryTotalCount.toString(),
-                        label =
-                            if (isEnglish) {
-                                "Exercises"
-                            } else {
-                                "תרגילים"
-                            },
-                        symbol = "✣",
-                        accentColor = Color(0xFF64748B),
-                        containerColor = Color(0xFFE7EDF5),
-                        modifier = Modifier.weight(1f)
-                    )
-
-                    MaterialsTopStatusCard(
-                        value = summaryMasteredCount.toString(),
-                        label =
-                            if (isEnglish) {
-                                "Known"
-                            } else {
-                                "יודע"
-                            },
-                        symbol = "✓",
-                        accentColor = Color(0xFF16A36A),
-                        containerColor = Color(0xFFDFF7E9),
-                        modifier = Modifier.weight(1f)
-                    )
-
-                    MaterialsTopStatusCard(
-                        value = summaryPartiallyKnownCount.toString(),
-                        label =
-                            if (isEnglish) {
-                                "Partial"
-                            } else {
-                                "חלקית"
-                            },
-                        symbol = "◐",
-                        accentColor = Color(0xFFF59E0B),
-                        containerColor = Color(0xFFFFF1D6),
-                        modifier = Modifier.weight(1f)
-                    )
-
-                    MaterialsTopStatusCard(
-                        value = summaryUnknownCount.toString(),
-                        label =
-                            if (isEnglish) {
-                                "Unknown"
-                            } else {
-                                "לא יודע"
-                            },
-                        symbol = "×",
-                        accentColor = Color(0xFFEF4444),
-                        containerColor = Color(0xFFFFE3E3),
-                        modifier = Modifier.weight(1f)
-                    )
                 }
             }
         }
@@ -2218,7 +2385,24 @@ fun MaterialsScreen(
                     !isShowingNestedSubTopicPicker &&
                     itemList.isNotEmpty()
                 ) {
-                    MaterialsTopStatusCards()
+                    Column(
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        MaterialsBeltHeader()
+
+                        MaterialsTopStatusCards()
+
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(2.dp)
+                                .background(
+                                    belt.color.copy(
+                                        alpha = 0.75f
+                                    )
+                                )
+                        )
+                    }
                 }
             }
         },
@@ -2857,7 +3041,6 @@ fun MaterialsScreen(
                     ) {
 
 
-
                         if (isShowingNestedSubTopicPicker) {
                             nestedSubTopicTitles.forEach { nestedTitle ->
                                 val count =
@@ -3338,7 +3521,10 @@ fun MaterialsScreen(
                                                     modifier = Modifier
                                                         .fillMaxWidth()
                                                         .heightIn(min = 56.dp)
-                                                        .padding(horizontal = 8.dp, vertical = 2.dp)
+                                                        .padding(
+                                                            horizontal = 4.dp,
+                                                            vertical = 2.dp
+                                                        )
                                                 ) {
 
                                                     Column(
@@ -3426,25 +3612,6 @@ fun MaterialsScreen(
                                                                         TextOverflow.Ellipsis
                                                                 )
 
-                                                                if (isFavorite) {
-                                                                    Spacer(
-                                                                        Modifier.width(6.dp)
-                                                                    )
-
-                                                                    ExerciseMetaBadge(
-                                                                        text =
-                                                                            if (isEnglish) {
-                                                                                "Favorite"
-                                                                            } else {
-                                                                                "מועדף"
-                                                                            },
-                                                                        containerColor =
-                                                                            Color(0xFFF9D9B8),
-                                                                        contentColor =
-                                                                            Color(0xFF9A5A00)
-                                                                    )
-                                                                }
-
                                                                 if (isExcluded) {
                                                                     Spacer(
                                                                         Modifier.width(6.dp)
@@ -3466,31 +3633,58 @@ fun MaterialsScreen(
                                                                     )
                                                                 }
 
-                                                                if (noteText.isNotBlank()) {
+                                                                if (
+                                                                    isFavorite ||
+                                                                    noteText.isNotBlank()
+                                                                ) {
                                                                     Spacer(
                                                                         Modifier.width(6.dp)
                                                                     )
 
-                                                                    ExerciseMetaBadge(
-                                                                        text =
-                                                                            if (isEnglish) {
-                                                                                "Note"
-                                                                            } else {
-                                                                                "הערה"
-                                                                            },
-                                                                        containerColor =
-                                                                            if (isDarkSurface) {
-                                                                                Color(0xFF5B4A22)
-                                                                            } else {
-                                                                                Color(0xFFFFE7B3)
-                                                                            },
-                                                                        contentColor =
-                                                                            if (isDarkSurface) {
-                                                                                Color(0xFFFFD978)
-                                                                            } else {
-                                                                                Color(0xFF8A5A00)
-                                                                            }
-                                                                    )
+                                                                    Column(
+                                                                        horizontalAlignment =
+                                                                            Alignment.CenterHorizontally,
+                                                                        verticalArrangement =
+                                                                            Arrangement.spacedBy(3.dp)
+                                                                    ) {
+                                                                        if (isFavorite) {
+                                                                            ExerciseMetaBadge(
+                                                                                text =
+                                                                                    if (isEnglish) {
+                                                                                        "Favorite"
+                                                                                    } else {
+                                                                                        "מועדף"
+                                                                                    },
+                                                                                containerColor =
+                                                                                    Color(0xFFF9D9B8),
+                                                                                contentColor =
+                                                                                    Color(0xFF9A5A00)
+                                                                            )
+                                                                        }
+
+                                                                        if (noteText.isNotBlank()) {
+                                                                            ExerciseMetaBadge(
+                                                                                text =
+                                                                                    if (isEnglish) {
+                                                                                        "Note"
+                                                                                    } else {
+                                                                                        "הערה"
+                                                                                    },
+                                                                                containerColor =
+                                                                                    if (isDarkSurface) {
+                                                                                        Color(0xFF5B4A22)
+                                                                                    } else {
+                                                                                        Color(0xFFFFE7B3)
+                                                                                    },
+                                                                                contentColor =
+                                                                                    if (isDarkSurface) {
+                                                                                        Color(0xFFFFD978)
+                                                                                    } else {
+                                                                                        Color(0xFF8A5A00)
+                                                                                    }
+                                                                            )
+                                                                        }
+                                                                    }
                                                                 }
                                                             }
                                                         }
@@ -3587,10 +3781,18 @@ fun MaterialsScreen(
                                                                         excluded = isExcluded,
                                                                         isFav = isFavorite,
                                                                         hasNote = noteText.isNotBlank(),
-                                                                        onToggleExclude = { toggleExclude(canonicalId) },
+                                                                        onToggleExclude = {
+                                                                            toggleExclude(
+                                                                                canonicalId
+                                                                            )
+                                                                        },
                                                                         onInfo = {
                                                                             pressed = true
-                                                                            explainTriple = Triple(belt, materialRootTopic, item)
+                                                                            explainTriple = Triple(
+                                                                                belt,
+                                                                                materialRootTopic,
+                                                                                item
+                                                                            )
                                                                             scope.launch {
                                                                                 delay(150.milliseconds)
                                                                                 pressed = false
@@ -3602,12 +3804,17 @@ fun MaterialsScreen(
                                                                                 rawItem = item
                                                                             )
                                                                         },
-                                                                        onEditNote = { showNoteDialog = true }
+                                                                        onEditNote = {
+                                                                            showNoteDialog = true
+                                                                        }
                                                                     )
                                                                 }
                                                             ) {
                                                                 TraineeMaterialStatusSelector(
-                                                                    selectedStatus = traineeMaterialStatusFor(statusId, mastered),
+                                                                    selectedStatus = traineeMaterialStatusFor(
+                                                                        statusId,
+                                                                        mastered
+                                                                    ),
                                                                     dateText = traineeDateText,
                                                                     isEnglish = isEnglish,
                                                                     onSelect = { selectedStatus: TraineeMaterialStatus? ->
@@ -4847,7 +5054,7 @@ private fun MaterialsTopStatusCard(
         }
 
     Surface(
-        modifier = cardModifier.height(72.dp),
+        modifier = cardModifier.height(58.dp),
         shape = RoundedCornerShape(10.dp),
         color = colors.surface,
         tonalElevation = 0.dp,
@@ -4892,37 +5099,9 @@ private fun MaterialsTopStatusCard(
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.Center
             ) {
-                Surface(
-                    modifier = Modifier.size(22.dp),
-                    shape = CircleShape,
-                    color =
-                        accentColor.copy(
-                            alpha =
-                                if (isDark) {
-                                    0.22f
-                                } else {
-                                    0.14f
-                                }
-                        ),
-                    tonalElevation = 0.dp,
-                    shadowElevation = 0.dp
-                ) {
-                    Box(
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text(
-                            text = symbol,
-                            style = KmiTypography.caption.copy(
-                                fontWeight = FontWeight.ExtraBold
-                            ),
-                            color = accentColor,
-                            textAlign = TextAlign.Center,
-                            maxLines = 1
-                        )
-                    }
-                }
-
-                Spacer(Modifier.height(1.dp))
+                Spacer(
+                    modifier = Modifier.height(2.dp)
+                )
 
                 Text(
                     text = value,
@@ -4958,6 +5137,7 @@ private fun MaterialsTopStatusCard(
 private fun MaterialsExerciseStatusCard(
     isEnglish: Boolean,
     modifier: Modifier = Modifier,
+    compact: Boolean = false,
     info: @Composable () -> Unit,
     statuses: @Composable RowScope.() -> Unit
 ) {
@@ -4971,23 +5151,27 @@ private fun MaterialsExerciseStatusCard(
         Surface(
             modifier = modifier.fillMaxWidth(),
             shape = RoundedCornerShape(14.dp),
-            color =
-                if (dark) {
-                    colors.surface.copy(alpha = 0.94f)
-                } else {
-                    colors.surface.copy(alpha = 0.88f)
-                },
+            color = colors.surface,
             border = BorderStroke(
                 width = 1.dp,
-                color = colors.primary.copy(alpha = 0.20f)
+                color =
+                    colors.primary.copy(
+                        alpha = 0.20f
+                    )
             ),
-            shadowElevation = 1.dp,
+            shadowElevation = 0.dp,
             tonalElevation = 0.dp
         ) {
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(68.dp),
+                    .height(
+                        if (compact) {
+                            48.dp
+                        } else {
+                            68.dp
+                        }
+                    ),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Row(
@@ -5033,6 +5217,7 @@ private fun MaterialsExerciseStatusOption(
     dateText: String,
     activeColor: Color,
     modifier: Modifier = Modifier,
+    showSymbol: Boolean = true,
     onClick: () -> Unit
 ) {
     val colors = MaterialTheme.colorScheme
@@ -5050,49 +5235,19 @@ private fun MaterialsExerciseStatusOption(
             activeColor
         }
 
-    Surface(
-        modifier = modifier.fillMaxHeight(),
-        shape = RoundedCornerShape(
-            if (selected) {
-                10.dp
-            } else {
-                0.dp
-            }
-        ),
-        color =
-            if (selected) {
-                activeColor.copy(
-                    alpha =
-                        if (dark) {
-                            0.18f
-                        } else {
-                            0.10f
-                        }
-                )
-            } else {
-                Color.Transparent
-            },
-        border =
-            if (selected) {
-                BorderStroke(
-                    width = 1.dp,
-                    color = accent.copy(alpha = 0.28f)
-                )
-            } else {
-                null
-            },
-        tonalElevation = 0.dp,
-        shadowElevation = 0.dp
+    Box(
+        modifier = modifier
+            .fillMaxHeight()
+            .selectable(
+                selected = selected,
+                role =
+                    androidx.compose.ui.semantics.Role.Checkbox,
+                onClick = onClick
+            )
     ) {
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .selectable(
-                    selected = selected,
-                    role =
-                        androidx.compose.ui.semantics.Role.Checkbox,
-                    onClick = onClick
-                )
                 .padding(
                     horizontal = 2.dp,
                     vertical = 3.dp
@@ -5100,45 +5255,49 @@ private fun MaterialsExerciseStatusOption(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center
         ) {
-            Surface(
-                modifier = Modifier.size(
-                    if (selected) {
-                        26.dp
-                    } else {
-                        22.dp
-                    }
-                ),
-                shape = CircleShape,
-                color =
-                    if (selected) {
-                        activeColor
-                    } else {
-                        colors.surfaceVariant
-                    },
-                tonalElevation = 0.dp,
-                shadowElevation = 0.dp
-            ) {
-                Box(
-                    contentAlignment = Alignment.Center
+            if (showSymbol) {
+                Surface(
+                    modifier = Modifier.size(
+                        if (selected) {
+                            26.dp
+                        } else {
+                            22.dp
+                        }
+                    ),
+                    shape = CircleShape,
+                    color =
+                        if (selected) {
+                            activeColor
+                        } else {
+                            colors.surfaceVariant
+                        },
+                    tonalElevation = 0.dp,
+                    shadowElevation = 0.dp
                 ) {
-                    Text(
-                        text = symbol,
-                        style = KmiTypography.caption.copy(
-                            fontWeight = FontWeight.ExtraBold
-                        ),
-                        color =
-                            if (selected) {
-                                Color.White
-                            } else {
-                                colors.onSurfaceVariant
-                            },
-                        textAlign = TextAlign.Center,
-                        maxLines = 1
-                    )
+                    Box(
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = symbol,
+                            style = KmiTypography.caption.copy(
+                                fontWeight = FontWeight.ExtraBold
+                            ),
+                            color =
+                                if (selected) {
+                                    Color.White
+                                } else {
+                                    colors.onSurfaceVariant
+                                },
+                            textAlign = TextAlign.Center,
+                            maxLines = 1
+                        )
+                    }
                 }
-            }
 
-            Spacer(Modifier.height(2.dp))
+                Spacer(
+                    modifier = Modifier.height(2.dp)
+                )
+            }
 
             Text(
                 text = label,
@@ -5171,8 +5330,14 @@ private fun MaterialsExerciseStatusOption(
                 ) {
                     Text(
                         text = dateText,
-                        style = KmiTypography.caption,
-                        color = colors.onSurfaceVariant,
+                        style =
+                            KmiTypography.caption.copy(
+                                fontWeight = FontWeight.Bold
+                            ),
+                        color =
+                            accent.copy(
+                                alpha = 0.88f
+                            ),
                         textAlign = TextAlign.Center,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
@@ -5246,6 +5411,7 @@ internal fun CoachMaterialStatusSelector(
     MaterialsExerciseStatusCard(
         isEnglish = isEnglish,
         modifier = modifier,
+        compact = true,
         info = {
             ItemFloatingActions(
                 isEnglish = isEnglish,
@@ -5287,6 +5453,7 @@ internal fun CoachMaterialStatusSelector(
                     else -> Color(0xFFB96B12)
                 },
                 modifier = Modifier.weight(1f),
+                showSymbol = false,
                 onClick = {
                     if (selected || progress.selectedStatuses.size < 2) {
                         onSelect(status)

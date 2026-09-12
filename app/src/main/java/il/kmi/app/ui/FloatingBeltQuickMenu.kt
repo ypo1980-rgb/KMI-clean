@@ -499,28 +499,6 @@ fun FloatingQuickMenu(
                 )
             )
         }
-
-        if (includeSummary) {
-            add(
-                QuickMenuItemUi(
-                    title = tr("מסך סיכום", "Summary"),
-                    icon =
-                        Icons.AutoMirrored.Filled
-                            .ReceiptLong,
-                    action = onSummary,
-                    isLocked = isMenuLocked
-                )
-            )
-        }
-
-            add(
-                QuickMenuItemUi(
-                    title = tr("עוזר קולי", "Voice Assistant"),
-                    icon = Icons.Filled.Mic,
-                    action = onVoice,
-                    isLocked = isMenuLocked
-                )
-            )
         }
     }
 
@@ -804,86 +782,175 @@ private fun PremiumQuickMenuPanel(
                     .wrapContentWidth(if (isEnglish) Alignment.Start else Alignment.End),
                 horizontalAlignment = if (isEnglish) Alignment.Start else Alignment.End
             ) {
-                Row(
+                Surface(
                     modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically
+                    shape = RoundedCornerShape(16.dp),
+                    color = Color.Transparent,
+                    tonalElevation = 0.dp,
+                    shadowElevation = 2.dp
                 ) {
-                    if (isEnglish) {
-                        Box(
-                            modifier = Modifier.weight(1f),
-                            contentAlignment = Alignment.CenterStart
-                        ) {
-                            Text(
-                                text = title,
-                                style = KmiTypography.cardTitle,
-                                color = readableAccent,
-                                textAlign = TextAlign.Start,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                                modifier = Modifier.fillMaxWidth()
-                            )
-                        }
-
-                        Spacer(Modifier.width(8.dp))
-
-                        IconButton(
-                            onClick = onClose,
-                            modifier = Modifier.size(40.dp)
-                        ) {
-                            Icon(
-                                imageVector = Icons.Filled.Close,
-                                contentDescription =
-                                    if (isEnglish) {
-                                        "Close quick menu"
-                                    } else {
-                                        "סגור תפריט מהיר"
-                                    },
-                                tint = readableAccent,
-                                modifier = Modifier.size(
-                                    KmiIconSize.small
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .background(
+                                brush = Brush.verticalGradient(
+                                    colors =
+                                        if (isDarkMode) {
+                                            listOf(
+                                                Color(0xFF3A373E),
+                                                Color(0xFF302D34),
+                                                Color(0xFF28252C)
+                                            )
+                                        } else {
+                                            listOf(
+                                                Color(0xFFF4F2F7),
+                                                Color(0xFFE3DFE8),
+                                                Color(0xFFD4CEDA)
+                                            )
+                                        }
                                 )
                             )
-                        }
-                    } else {
+                            .padding(
+                                start = 10.dp,
+                                end = 10.dp,
+                                top = 9.dp,
+                                bottom = 9.dp
+                            )
+                    ) {
                         Box(
-                            modifier = Modifier.weight(1f),
-                            contentAlignment = BiasAbsoluteAlignment(1f, 0f)
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .heightIn(min = 48.dp)
                         ) {
-                            Text(
-                                text = title,
-                                style = KmiTypography.cardTitle,
-                                color = readableAccent,
-                                textAlign = TextAlign.Right,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                                modifier = Modifier.fillMaxWidth()
-                            )
-                        }
+                            Surface(
+                                modifier = Modifier
+                                    .align(
+                                        if (isEnglish) {
+                                            BiasAbsoluteAlignment(
+                                                horizontalBias = 1f,
+                                                verticalBias = 0f
+                                            )
+                                        } else {
+                                            BiasAbsoluteAlignment(
+                                                horizontalBias = -1f,
+                                                verticalBias = 0f
+                                            )
+                                        }
+                                    )
+                                    .size(38.dp),
+                                shape = CircleShape,
+                                color =
+                                    colorScheme.surface.copy(
+                                        alpha = 0.94f
+                                    ),
+                                border = BorderStroke(
+                                    width = 1.dp,
+                                    color =
+                                        if (isDarkMode) {
+                                            Color(0xFF625D68)
+                                        } else {
+                                            Color(0xFFC8C1CF)
+                                        }
+                                ),
+                                tonalElevation = 0.dp,
+                                shadowElevation = 1.dp,
+                                onClick = onClose
+                            ) {
+                                Box(
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Filled.Close,
+                                        contentDescription =
+                                            if (isEnglish) {
+                                                "Close quick menu"
+                                            } else {
+                                                "סגור תפריט מהיר"
+                                            },
+                                        tint = colorScheme.onSurface,
+                                        modifier = Modifier.size(
+                                            KmiIconSize.medium
+                                        )
+                                    )
+                                }
+                            }
 
-                        Spacer(Modifier.width(8.dp))
-
-                        IconButton(
-                            onClick = onClose,
-                            modifier = Modifier.size(40.dp)
-                        ) {
-                            Icon(
-                                imageVector = Icons.Filled.Close,
-                                contentDescription =
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(
+                                        start =
+                                            if (isEnglish) {
+                                                4.dp
+                                            } else {
+                                                2.dp
+                                            },
+                                        end =
+                                            if (isEnglish) {
+                                                2.dp
+                                            } else {
+                                                4.dp
+                                            }
+                                    )
+                                    .align(Alignment.Center),
+                                horizontalAlignment =
                                     if (isEnglish) {
-                                        "Close quick menu"
+                                        Alignment.Start
                                     } else {
-                                        "סגור תפריט מהיר"
-                                    },
-                                tint = readableAccent,
-                                modifier = Modifier.size(
-                                    KmiIconSize.small
+                                        Alignment.End
+                                    }
+                            ) {
+                                Text(
+                                    text = title,
+                                    style =
+                                        KmiTypography.cardTitle.copy(
+                                            fontWeight = FontWeight.Black
+                                        ),
+                                    color = colorScheme.onSurface,
+                                    textAlign =
+                                        if (isEnglish) {
+                                            TextAlign.Start
+                                        } else {
+                                            TextAlign.Right
+                                        },
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                    modifier = Modifier.fillMaxWidth()
                                 )
-                            )
+
+                                Spacer(Modifier.height(1.dp))
+
+                                Text(
+                                    text =
+                                        if (isEnglish) {
+                                            "Quick access to training tools"
+                                        } else {
+                                            "גישה מהירה לכלי אימון"
+                                        },
+                                    style =
+                                        KmiTypography.caption.copy(
+                                            fontWeight = FontWeight.SemiBold
+                                        ),
+                                    color =
+                                        colorScheme.onSurfaceVariant.copy(
+                                            alpha = 0.78f
+                                        ),
+                                    textAlign =
+                                        if (isEnglish) {
+                                            TextAlign.Start
+                                        } else {
+                                            TextAlign.Right
+                                        },
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                    modifier = Modifier.fillMaxWidth()
+                                )
+                            }
                         }
                     }
                 }
 
-                Spacer(Modifier.height(6.dp))
+                Spacer(Modifier.height(8.dp))
 
                 items.forEachIndexed { index, item ->
                     val lockedForUi = menuLocked && item.isLocked

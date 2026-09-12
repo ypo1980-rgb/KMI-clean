@@ -883,35 +883,254 @@ fun MainNavHost(
             .orEmpty()
     }
 
-    var isCoach by remember(ownerUid) {
-        mutableStateOf(false)
+    fun savedActiveRoleValue(): String {
+        fun SharedPreferences.readActiveRole(
+            key: String
+        ): String? {
+            return getString(
+                key,
+                null
+            )
+                ?.trim()
+                ?.lowercase()
+                ?.takeIf {
+                    it.isNotBlank()
+                }
+        }
+
+        return userPrefsForEntry
+            .readActiveRole(
+                "active_user_mode"
+            )
+            ?: sp.readActiveRole(
+                "active_user_mode"
+            )
+            ?: userPrefsForEntry
+                .readActiveRole(
+                    "last_active_app_role"
+                )
+            ?: sp.readActiveRole(
+                "last_active_app_role"
+            )
+            ?: ""
     }
 
+    fun savedProfileRoleValue(): String {
+        return userPrefsForEntry
+            .getString(
+                "user_role",
+                null
+            )
+            ?.trim()
+            ?.lowercase()
+            ?.takeIf {
+                it.isNotBlank()
+            }
+            ?: userPrefsForEntry
+                .getString(
+                    "role",
+                    null
+                )
+                ?.trim()
+                ?.lowercase()
+                ?.takeIf {
+                    it.isNotBlank()
+                }
+            ?: sp
+                .getString(
+                    "user_role",
+                    null
+                )
+                ?.trim()
+                ?.lowercase()
+                ?.takeIf {
+                    it.isNotBlank()
+                }
+            ?: sp
+                .getString(
+                    "role",
+                    null
+                )
+                ?.trim()
+                ?.lowercase()
+                .orEmpty()
+    }
+
+    fun isCoachRole(
+        role: String
+    ): Boolean {
+        return role == "coach" ||
+                role == "trainer" ||
+                role.contains("coach") ||
+                role.contains("מאמן") ||
+                role.contains("מדריך")
+    }
+
+    fun readSavedCoachMode(): Boolean {
+        val activeRole =
+            savedActiveRoleValue()
+
+        if (activeRole.isNotBlank()) {
+            return isCoachRole(activeRole)
+        }
+
+        val profileRole =
+            savedProfileRoleValue()
+
+        return if (profileRole.isNotBlank()) {
+            isCoachRole(profileRole)
+        } else {
+            userPrefsForEntry.getBoolean(
+                "isCoach",
+                sp.getBoolean(
+                    "isCoach",
+                    false
+                )
+            )
+        }
+    }
+
+    var isCoach by remember(ownerUid) {
+        mutableStateOf(
+            readSavedCoachMode()
+        )
+    }
+
+    /*
+     * מצב המשתמש הפעיל הוא מקור האמת להצגת ה־UI.
+     * שינוי בין מאמן למתאמן מתעדכן מיד גם בלי
+     * ליצור מחדש את MainNavHost.
+     */
+    DisposableEffect(
+        userPrefsForEntry,
+        sp
+    ) {
+        val roleListener =
+            SharedPreferences
+                .OnSharedPreferenceChangeListener {
+                        _,
+                        key ->
+
+                    if (
+                        key == "active_user_mode" ||
+                        key == "last_active_app_role" ||
+                        key == "user_role" ||
+                        key == "role" ||
+                        key == "isCoach"
+                    ) {
+                        isCoach =
+                            readSavedCoachMode()
+                    }
+                }
+
+        userPrefsForEntry
+            .registerOnSharedPreferenceChangeListener(
+                roleListener
+            )
+
+        sp.registerOnSharedPreferenceChangeListener(
+            roleListener
+        )
+
+        onDispose {
+            userPrefsForEntry
+                .unregisterOnSharedPreferenceChangeListener(
+                    roleListener
+                )
+
+            sp.unregisterOnSharedPreferenceChangeListener(
+                roleListener
+            )
+        }
+    }
+
+    /*
+     * Firestore משמש לאימות הרשאת מאמן בלבד.
+     * אם כבר נשמר מצב משתמש פעיל, לא דורסים אותו.
+     * כשל רשת גם אינו מחזיר אוטומטית למתאמן.
+     */
     LaunchedEffect(ownerUid) {
         if (ownerUid.isBlank()) {
-            isCoach = false
+            isCoach =
+                readSavedCoachMode()
+
+            return@LaunchedEffect
+        }
+
+        val savedActiveRole =
+            savedActiveRoleValue()
+
+        if (savedActiveRole.isNotBlank()) {
+            isCoach =
+                isCoachRole(
+                    savedActiveRole
+                )
+
             return@LaunchedEffect
         }
 
         val coachDoc =
             runCatching {
-                com.google.firebase.firestore.FirebaseFirestore
+                com.google.firebase.firestore
+                    .FirebaseFirestore
                     .getInstance()
-                    .collection("authorizedCoaches")
+                    .collection(
+                        "authorizedCoaches"
+                    )
                     .document(ownerUid)
                     .get()
                     .await()
-            }.getOrNull()
+            }
+                .getOrNull()
 
-        isCoach =
-            coachDoc?.exists() == true &&
-                    coachDoc.getBoolean("active") == true &&
-                    coachDoc.getString("role")
-                        .orEmpty()
-                        .equals(
-                            "coach",
-                            ignoreCase = true
+        if (coachDoc != null) {
+            val verifiedCoach =
+                coachDoc.exists() &&
+                        coachDoc.getBoolean(
+                            "active"
+                        ) == true &&
+                        coachDoc.getString(
+                            "role"
                         )
+                            .orEmpty()
+                            .equals(
+                                "coach",
+                                ignoreCase = true
+                            )
+
+            isCoach =
+                verifiedCoach
+
+            val verifiedRole =
+                if (verifiedCoach) {
+                    "coach"
+                } else {
+                    "trainee"
+                }
+
+            userPrefsForEntry
+                .edit()
+                .putBoolean(
+                    "isCoach",
+                    verifiedCoach
+                )
+                .putString(
+                    "last_active_app_role",
+                    verifiedRole
+                )
+                .apply()
+
+            sp.edit()
+                .putBoolean(
+                    "isCoach",
+                    verifiedCoach
+                )
+                .putString(
+                    "last_active_app_role",
+                    verifiedRole
+                )
+                .apply()
+        }
     }
 
     val ownerRole = remember(isCoach) {
@@ -1627,9 +1846,10 @@ fun MainNavHost(
             // --- NEW: Topics graph ---
             topicsNavGraph(
                 nav = nav,
-                vm  = vm,
-                sp  = sp,
-                kmiPrefs = kmiPrefs
+                vm = vm,
+                sp = sp,
+                kmiPrefs = kmiPrefs,
+                isCoach = isCoach
             )
 
             // --- NEW: SubTopics graphs ---

@@ -3674,48 +3674,6 @@ fun HomeScreen(
 
             val quickMenuItems = listOf(
                 Triple(
-                    (if (isEnglish) "Voice Assistant" else "עוזר קולי") + lockSuffix,
-                    Icons.Filled.Mic
-                ) {
-                    clickSound()
-                    haptic(true)
-                    fabExpanded = false
-
-                    if (hasFullAccess) {
-                        showAiDialog = true
-                    } else {
-                        onOpenSubscription()
-                    }
-                },
-                Triple(
-                    (if (isEnglish) "Monthly Calendar" else "לוח אימונים חודשי") + lockSuffix,
-                    Icons.Filled.DateRange
-                ) {
-                    clickSound()
-                    haptic(true)
-                    fabExpanded = false
-                    if (hasFullAccess) {
-                        onOpenMonthlyCalendar()
-                    } else {
-                        onOpenSubscription()
-                    }
-                },
-                Triple(
-                    (if (isEnglish) "Training Summary" else "סיכום אימון") + lockSuffix,
-                    Icons.Filled.EditNote
-                ) {
-                    clickSound()
-                    haptic(true)
-                    fabExpanded = false
-
-                    if (hasFullAccess) {
-                        onOpenTrainingSummary()
-                    } else {
-                        onOpenSubscription()
-                    }
-                },
-
-                Triple(
                     (
                             if (isEnglish) {
                                 "Training Archive"
@@ -3737,12 +3695,19 @@ fun HomeScreen(
                 },
 
                 Triple(
-                    (if (isEnglish) "Free Trainings" else "אימונים חופשיים") + lockSuffix,
+                    (
+                            if (isEnglish) {
+                                "Free Trainings"
+                            } else {
+                                "אימונים חופשיים"
+                            }
+                            ) + lockSuffix,
                     Icons.Filled.Add
                 ) {
                     clickSound()
                     haptic(true)
                     fabExpanded = false
+
                     if (hasFullAccess) {
                         onOpenFreeSessions(
                             freeBranchUi,
@@ -3761,7 +3726,6 @@ fun HomeScreen(
                     modifier = Modifier
                         .fillMaxSize()
                         .background(Color.Transparent)
-                        .clickable { fabExpanded = false }
                 )
             }
 
@@ -4693,77 +4657,20 @@ private fun HomePremiumQuickMenuPanel(
         ) {
             Column(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalAlignment = if (isEnglish) Alignment.Start else Alignment.End
-            ) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .heightIn(min = 40.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
+                horizontalAlignment =
                     if (isEnglish) {
-                        Text(
-                            text = title,
-                            color = menuAccent,
-                            fontWeight = FontWeight.ExtraBold,
-                            textAlign = TextAlign.Start,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                            style = KmiTypography.secondary.copy(
-                                fontWeight = FontWeight.ExtraBold
-                            ),
-                            modifier = Modifier.weight(1f)
-                        )
-
-                        Icon(
-                            imageVector =
-                                Icons.Filled.Close,
-                            contentDescription = "Close",
-                            tint = menuAccent,
-                            modifier =
-                                Modifier
-                                    .size(
-                                        KmiIconSize.small
-                                    )
-                                    .clickable {
-                                        onClose()
-                                    }
-                        )
+                        Alignment.Start
                     } else {
-                        Text(
-                            text = title,
-                            color = menuAccent,
-                            fontWeight =
-                                FontWeight.ExtraBold,
-                            textAlign = TextAlign.Right,
-                            maxLines = 1,
-                            overflow =
-                                TextOverflow.Ellipsis,
-                            style =
-                                KmiTypography.cardTitle,
-                            modifier = Modifier.weight(1f)
-                        )
-
-                        Spacer(Modifier.width(6.dp))
-
-                        Icon(
-                            imageVector =
-                                Icons.Filled.Close,
-                            contentDescription = "סגור",
-                            tint = menuAccent,
-                            modifier =
-                                Modifier
-                                    .size(
-                                        KmiIconSize.small
-                                    )
-                                    .clickable {
-                                        onClose()
-                                    }
-                        )
+                        Alignment.End
                     }
-                }
+            ) {
+                QuickMenuPremiumHeader(
+                    isEnglish = isEnglish,
+                    onClose = onClose,
+                    modifier = Modifier.fillMaxWidth()
+                )
 
-                Spacer(Modifier.height(6.dp))
+                Spacer(Modifier.height(8.dp))
 
                 items.forEachIndexed { index, item ->
                     HomePremiumQuickMenuRow(
@@ -4924,6 +4831,216 @@ private fun HomePremiumQuickMenuRow(
                                 alpha = 1f
                             }
                 )
+            }
+        }
+    }
+}
+
+@Composable
+private fun QuickMenuPremiumHeader(
+    isEnglish: Boolean,
+    onClose: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val colorScheme =
+        MaterialTheme.colorScheme
+
+    val isDarkMode =
+        colorScheme.background
+            .luminance() < 0.5f
+
+    val titleColor =
+        colorScheme.onSurface
+
+    val subtitleColor =
+        colorScheme.onSurfaceVariant
+
+    val graniteColors =
+        if (isDarkMode) {
+            listOf(
+                Color(0xFF3A373E),
+                Color(0xFF302D34),
+                Color(0xFF28252C)
+            )
+        } else {
+            listOf(
+                Color(0xFFF4F2F7),
+                Color(0xFFE3DFE8),
+                Color(0xFFD4CEDA)
+            )
+        }
+
+    Surface(
+        modifier = modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(
+            topStart = 18.dp,
+            topEnd = 18.dp,
+            bottomStart = 16.dp,
+            bottomEnd = 16.dp
+        ),
+        color = Color.Transparent,
+        tonalElevation = 0.dp,
+        shadowElevation = 2.dp
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(
+                    brush = Brush.verticalGradient(
+                        colors = graniteColors
+                    )
+                )
+                .padding(
+                    start = 10.dp,
+                    end = 10.dp,
+                    top = 9.dp,
+                    bottom = 9.dp
+                )
+        ) {
+            CompositionLocalProvider(
+                LocalLayoutDirection provides
+                        LayoutDirection.Ltr
+            ) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(min = 48.dp)
+                ) {
+                    Surface(
+                        modifier = Modifier
+                            .align(
+                                if (isEnglish) {
+                                    Alignment.CenterEnd
+                                } else {
+                                    Alignment.CenterStart
+                                }
+                            )
+                            .size(38.dp),
+                        shape = CircleShape,
+                        color =
+                            colorScheme.surface.copy(
+                                alpha = 0.94f
+                            ),
+                        border = BorderStroke(
+                            width = 1.dp,
+                            color =
+                                if (isDarkMode) {
+                                    Color(0xFF625D68)
+                                } else {
+                                    Color(0xFFC8C1CF)
+                                }
+                        ),
+                        tonalElevation = 0.dp,
+                        shadowElevation = 1.dp,
+                        onClick = onClose
+                    ) {
+                        Box(
+                            contentAlignment =
+                                Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector =
+                                    Icons.Filled.Close,
+                                contentDescription =
+                                    if (isEnglish) {
+                                        "Close quick menu"
+                                    } else {
+                                        "סגור תפריט מהיר"
+                                    },
+                                tint = titleColor,
+                                modifier =
+                                    Modifier.size(
+                                        KmiIconSize.medium
+                                    )
+                            )
+                        }
+                    }
+
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(
+                                start =
+                                    if (isEnglish) {
+                                        4.dp
+                                    } else {
+                                        50.dp
+                                    },
+                                end =
+                                    if (isEnglish) {
+                                        50.dp
+                                    } else {
+                                        4.dp
+                                    }
+                            )
+                            .align(Alignment.Center),
+                        horizontalAlignment =
+                            if (isEnglish) {
+                                Alignment.Start
+                            } else {
+                                Alignment.End
+                            }
+                    ) {
+                        Text(
+                            text =
+                                if (isEnglish) {
+                                    "Quick Menu"
+                                } else {
+                                    "תפריט מהיר"
+                                },
+                            style =
+                                KmiTypography.cardTitle.copy(
+                                    fontWeight =
+                                        FontWeight.Black
+                                ),
+                            color = titleColor,
+                            maxLines = 1,
+                            overflow =
+                                TextOverflow.Ellipsis,
+                            textAlign =
+                                if (isEnglish) {
+                                    TextAlign.Start
+                                } else {
+                                    TextAlign.Right
+                                },
+                            modifier =
+                                Modifier.fillMaxWidth()
+                        )
+
+                        Spacer(
+                            Modifier.height(1.dp)
+                        )
+
+                        Text(
+                            text =
+                                if (isEnglish) {
+                                    "Quick access to training tools"
+                                } else {
+                                    "גישה מהירה לכלי אימון"
+                                },
+                            style =
+                                KmiTypography.caption.copy(
+                                    fontWeight =
+                                        FontWeight.SemiBold
+                                ),
+                            color =
+                                subtitleColor.copy(
+                                    alpha = 0.78f
+                                ),
+                            maxLines = 1,
+                            overflow =
+                                TextOverflow.Ellipsis,
+                            textAlign =
+                                if (isEnglish) {
+                                    TextAlign.Start
+                                } else {
+                                    TextAlign.Right
+                                },
+                            modifier =
+                                Modifier.fillMaxWidth()
+                        )
+                    }
+                }
             }
         }
     }

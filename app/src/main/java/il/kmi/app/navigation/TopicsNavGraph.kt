@@ -50,13 +50,97 @@ fun NavGraphBuilder.topicsNavGraph(
     nav: NavHostController,
     vm: KmiViewModel,
     sp: SharedPreferences,
-    kmiPrefs: il.kmi.shared.prefs.KmiPrefs
+    kmiPrefs: il.kmi.shared.prefs.KmiPrefs,
+    isCoach: Boolean = false
 ) {
+    fun resolveCoachFlag(
+        userSp: SharedPreferences
+    ): Boolean {
+        fun roleIsCoach(
+            value: String
+        ): Boolean {
+            val clean =
+                value
+                    .trim()
+                    .lowercase()
+
+            return clean == "coach" ||
+                    clean == "trainer" ||
+                    clean.contains("coach") ||
+                    clean.contains("מאמן") ||
+                    clean.contains("מדריך")
+        }
+
+        /*
+         * מצב התצוגה האחרון הוא מקור האמת הראשון.
+         * אם הוא קיים, לא מערבבים אותו עם תפקיד
+         * הפרופיל או עם הרשאת המאמן.
+         */
+        val activeRole =
+            userSp.getString(
+                "last_active_app_role",
+                null
+            )
+                ?.takeIf {
+                    it.isNotBlank()
+                }
+                ?: sp.getString(
+                    "last_active_app_role",
+                    null
+                )
+                    ?.takeIf {
+                        it.isNotBlank()
+                    }
+
+        if (activeRole != null) {
+            return roleIsCoach(activeRole)
+        }
+
+        val userRole =
+            userSp.getString(
+                "user_role",
+                null
+            )
+                .orEmpty()
+
+        val primaryRole =
+            sp.getString(
+                "user_role",
+                null
+            )
+                .orEmpty()
+
+        return isCoach ||
+                roleIsCoach(userRole) ||
+                roleIsCoach(primaryRole) ||
+                userSp.getBoolean(
+                    "isCoach",
+                    false
+                ) ||
+                sp.getBoolean(
+                    "isCoach",
+                    false
+                )
+    }
     composable("hard_subject/{subjectId}") { backStackEntry ->
         val subjectId = backStackEntry.arguments
             ?.getString("subjectId")
             ?.let { Uri.decode(it) }
             .orEmpty()
+
+        val appContext =
+            LocalContext.current
+
+        val routeUserSp =
+            remember(appContext) {
+                appContext.getSharedPreferences(
+                    "kmi_user",
+                    Context.MODE_PRIVATE
+                )
+            }
+
+        val resolvedIsCoach =
+            resolveCoachFlag(routeUserSp)
 
         UnifiedSubjectExercisesScreen(
             subjectId = subjectId,
@@ -80,7 +164,8 @@ fun NavGraphBuilder.topicsNavGraph(
             onBack = {
                 nav.popBackStack()
             },
-            vm = vm
+            vm = vm,
+            isCoach = resolvedIsCoach
         )
     }
 
@@ -93,6 +178,20 @@ fun NavGraphBuilder.topicsNavGraph(
         val sectionId = backStackEntry.arguments
             ?.getString("sectionId")
             ?.let { Uri.decode(it) }
+
+        val appContext =
+            LocalContext.current
+
+        val routeUserSp =
+            remember(appContext) {
+                appContext.getSharedPreferences(
+                    "kmi_user",
+                    Context.MODE_PRIVATE
+                )
+            }
+
+        val resolvedIsCoach =
+            resolveCoachFlag(routeUserSp)
 
         UnifiedSubjectExercisesScreen(
             subjectId = subjectId,
@@ -116,7 +215,8 @@ fun NavGraphBuilder.topicsNavGraph(
             onBack = {
                 nav.popBackStack()
             },
-            vm = vm
+            vm = vm,
+            isCoach = resolvedIsCoach
         )
     }
 
@@ -193,6 +293,7 @@ fun NavGraphBuilder.topicsNavGraph(
         }
 
         BeltQuestionsByTopicScreen(
+            vm = vm,
             onOpenByBelt = {
                 val returnedToBeltScreen =
                     nav.popBackStack(
@@ -221,8 +322,6 @@ fun NavGraphBuilder.topicsNavGraph(
                 val cleanSubjectId = subjectId.trim()
 
                 when (cleanSubjectId) {
-                    "def_internal",
-                    "def_external",
                     "kicks",
                     "kicks_hard",
                     "knife_defense",

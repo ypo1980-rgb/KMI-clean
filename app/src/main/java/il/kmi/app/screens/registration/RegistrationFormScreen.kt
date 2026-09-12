@@ -307,17 +307,43 @@ fun RegistrationFormScreen(
     // 0=מתאמן, 1=מאמן
     // ✅ בעריכת פרופיל לא משתמשים בברירת המחדל "trainee".
     // קודם קוראים את התפקיד הקיים מהשמירה, כדי שמאמן יישאר מאמן.
-    val savedRoleForProfile = remember(startAtProfile, initial, sp, userSp) {
-        if (startAtProfile) {
-            userSp.getString("user_role", null)
-                ?: userSp.getString("role", null)
-                ?: sp.getString("user_role", null)
-                ?: sp.getString("role", null)
-                ?: initial
-        } else {
-            initial
+    val savedRoleForProfile =
+        remember(
+            startAtProfile,
+            initial,
+            sp,
+            userSp
+        ) {
+            if (startAtProfile) {
+                userSp.getString(
+                    "last_active_app_role",
+                    null
+                )
+                    ?: sp.getString(
+                        "last_active_app_role",
+                        null
+                    )
+                    ?: userSp.getString(
+                        "user_role",
+                        null
+                    )
+                    ?: userSp.getString(
+                        "role",
+                        null
+                    )
+                    ?: sp.getString(
+                        "user_role",
+                        null
+                    )
+                    ?: sp.getString(
+                        "role",
+                        null
+                    )
+                    ?: initial
+            } else {
+                initial
+            }
         }
-    }
 
     val initialIsCoach = savedRoleForProfile.equals("coach", ignoreCase = true)
 
@@ -508,17 +534,31 @@ fun RegistrationFormScreen(
         }
 
         val currentRole =
-            sp.getString(
-                "user_role",
-                "trainee"
-            ) ?: "trainee"
+            userSp.getString(
+                "last_active_app_role",
+                null
+            )
+                ?: sp.getString(
+                    "last_active_app_role",
+                    null
+                )
+                ?: userSp.getString(
+                    "user_role",
+                    null
+                )
+                ?: sp.getString(
+                    "user_role",
+                    "trainee"
+                )
+                ?: "trainee"
 
         selectedTab =
             if (
                 currentRole.equals(
                     "coach",
                     ignoreCase = true
-                )
+                ) &&
+                profileAllowsCoach
             ) {
                 1
             } else {
@@ -1171,13 +1211,16 @@ fun RegistrationFormScreen(
         )
 
         // role סופי:
-        // בעריכת פרופיל אסור להפוך למאמן דרך הטופס.
-        // מאמן נשאר מאמן רק אם כבר יש coach_authorized=true מהתחברות מול authorizedCoaches.
+        // בהרשמה רגילה נשמר התפקיד שנבחר.
+        // בעריכת פרופיל ניתן להישאר מאמן רק
+        // כאשר קיימת הרשאת מאמן מאומתת.
         val roleFinal =
             if (
-                startAtProfile &&
                 isCoach &&
-                profileAllowsCoach
+                (
+                        !startAtProfile ||
+                                profileAllowsCoach
+                        )
             ) {
                 "coach"
             } else {
@@ -1409,6 +1452,14 @@ fun RegistrationFormScreen(
             remove("remember_password")
             putBoolean("subscribeSms", subscribeSms)
             putString("user_role", roleFinal)
+            putString(
+                "active_user_mode",
+                roleFinal
+            )
+            putString(
+                "last_active_app_role",
+                roleFinal
+            )
             putString("role_locked_by", roleLockedBy)
             putBoolean(
                 "coach_authorized",
@@ -1480,6 +1531,14 @@ fun RegistrationFormScreen(
             putString("email", email.trim())
 
             putString("user_role", roleFinal)
+            putString(
+                "active_user_mode",
+                roleFinal
+            )
+            putString(
+                "last_active_app_role",
+                roleFinal
+            )
             putString("role_locked_by", roleLockedBy)
 
             putBoolean(

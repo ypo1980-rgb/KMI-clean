@@ -484,9 +484,19 @@ class KmiViewModel(
     }
 
     /** בדיקה אם פריט נלמד (ברירת מחדל = false) */
-    override suspend fun isMastered(belt: Belt, topic: String, item: String): Boolean {
-        val t = canonicalTopicKey(topic)
-        return ds.isItemMastered(belt, t, item)
+    override suspend fun isMastered(
+        belt: Belt,
+        topic: String,
+        item: String
+    ): Boolean {
+        val t =
+            canonicalTopicKey(topic)
+
+        return ds.isItemMastered(
+            belt = belt,
+            topic = t,
+            item = item
+        )
     }
 
     /** ✅ NEW: קביעה/איפוס מצב פריט (true/false/null) — מקור אמת יחיד: DataStore */

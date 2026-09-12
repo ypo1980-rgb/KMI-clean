@@ -79,6 +79,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
+import il.kmi.app.KmiViewModel
 import il.kmi.app.domain.DefenseKind
 import il.kmi.app.domain.TopicsBySubjectRegistry
 import il.kmi.app.ui.KmiTopBar
@@ -778,6 +779,7 @@ private fun createSubjectTopicsPdf(
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun BeltQuestionsByTopicScreen(
+    vm: KmiViewModel,
     onOpenByBelt: () -> Unit,
     onOpenSubject: (Belt, SubjectTopic) -> Unit,
     @Suppress("UNUSED_PARAMETER")
@@ -913,7 +915,8 @@ fun BeltQuestionsByTopicScreen(
                 } else {
                     localHardSubjectId = null
                 }
-            }
+            },
+            vm = vm
         )
         return
     }
@@ -1017,8 +1020,6 @@ fun BeltQuestionsByTopicScreen(
                         effectiveBelt = belt
 
                         when (val cleanSubjectId = subjectId.trim()) {
-                            "def_internal",
-                            "def_external",
                             "releases_hugs",
                             "kicks_hard" -> {
                                 pendingHardSubjectId = cleanSubjectId
@@ -1027,7 +1028,10 @@ fun BeltQuestionsByTopicScreen(
                             }
 
                             else -> {
-                                onOpenHardSubjectRoute(belt, cleanSubjectId)
+                                onOpenHardSubjectRoute(
+                                    belt,
+                                    cleanSubjectId
+                                )
                             }
                         }
                     },
@@ -2792,7 +2796,10 @@ internal fun TopicsBySubjectCard(
                                         }
 
                                         if (pickedForLogic == "הגנות נגד בעיטות") {
-                                            onOpenKicksHardLocal()
+                                            onOpenHardSubjectRoute(
+                                                currentBelt,
+                                                "kicks_hard"
+                                            )
                                         } else {
                                             when (val decision =
                                                 SubjectTopicsUiLogic.resolveDefenseDialogPick(
@@ -2817,7 +2824,10 @@ internal fun TopicsBySubjectCard(
                                                     when (decision.subjectId) {
                                                         "kicks",
                                                         "kicks_hard" -> {
-                                                            onOpenKicksHardLocal()
+                                                            onOpenHardSubjectRoute(
+                                                                currentBelt,
+                                                                "kicks_hard"
+                                                            )
                                                         }
 
                                                         else -> {

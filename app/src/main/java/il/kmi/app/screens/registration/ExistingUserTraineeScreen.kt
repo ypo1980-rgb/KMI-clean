@@ -229,12 +229,20 @@ fun ExistingUserTraineeScreen(
         }
     }
 
-// מצב נבחר: מתאמן / מאמן
-// ברירת המחדל היא מתאמן.
-// בחירת "מאמן" היא רק ניסיון התחברות;
-// ההרשאה האמיתית נבדקת מול authorizedCoaches/{uid}.
+// מצב נבחר: מתאמן / מאמן.
+// אם קיימת בחירה אחרונה, מציגים אותה מיד.
+// הרשאת מאמן עדיין נבדקת מול authorizedCoaches/{uid}.
     var isCoach by rememberSaveable {
-        mutableStateOf(false)
+        mutableStateOf(
+            sp.getString(
+                "last_active_app_role",
+                "trainee"
+            )
+                ?.equals(
+                    "coach",
+                    ignoreCase = true
+                ) == true
+        )
     }
 
     // שדות
@@ -903,6 +911,10 @@ fun ExistingUserTraineeScreen(
                                     "user_role",
                                     role
                                 )
+                                putString(
+                                    "last_active_app_role",
+                                    role
+                                )
                                 remove("coach_code")
                                 putString(
                                     "coach_name",
@@ -976,6 +988,10 @@ fun ExistingUserTraineeScreen(
                                 )
                                 putString(
                                     "user_role",
+                                    role
+                                )
+                                putString(
+                                    "last_active_app_role",
                                     role
                                 )
                                 remove("coach_code")

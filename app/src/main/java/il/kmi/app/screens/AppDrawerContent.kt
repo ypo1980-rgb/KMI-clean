@@ -333,7 +333,8 @@ fun AppDrawerContent(
                 Icons.Filled.Person
 
             clean.contains("Calendar", ignoreCase = true) ||
-                    clean.contains("לוח שנה") ->
+                    clean.contains("לוח שנה") ||
+                    clean.contains("לוח אימונים") ->
                 Icons.Filled.CalendarMonth
 
             clean.contains("Training Summary", ignoreCase = true) ||
@@ -804,6 +805,7 @@ fun AppDrawerContent(
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
+                        .height(58.dp)
                         .background(Color.Transparent)
                         .padding(
                             start = 10.dp,
@@ -811,13 +813,14 @@ fun AppDrawerContent(
                         )
                         .clickable(onClick = onClick)
                         .padding(
-                            top = 2.dp,
-                            bottom = 4.dp
+                            top = 3.dp,
+                            bottom = 3.dp
                         )
                 ) {
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
+                            .weight(1f)
                             .background(Color.Transparent)
                             .padding(
                                 horizontal = 4.dp,
@@ -855,14 +858,11 @@ fun AppDrawerContent(
                                         color =
                                             roleCardContentColor
                                     ),
-                                maxLines = 2,
-                                softWrap = true,
-                                textAlign =
-                                    TextAlign.Right,
-                                overflow =
-                                    TextOverflow.Ellipsis,
-                                modifier =
-                                    Modifier.fillMaxWidth()
+                                maxLines = 1,
+                                softWrap = false,
+                                textAlign = TextAlign.Right,
+                                overflow = TextOverflow.Ellipsis,
+                                modifier = Modifier.fillMaxWidth()
                             )
 
                             if (
@@ -874,10 +874,9 @@ fun AppDrawerContent(
 
                                 Text(
                                     text = subtitle,
-                                    maxLines = 2,
-                                    softWrap = true,
-                                    overflow =
-                                        TextOverflow.Ellipsis,
+                                    maxLines = 1,
+                                    softWrap = false,
+                                    overflow = TextOverflow.Ellipsis,
                                     style =
                                         KmiTypography
                                             .secondary
@@ -937,6 +936,7 @@ fun AppDrawerContent(
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
+                        .height(58.dp)
                         .background(Color.Transparent)
                         .padding(
                             start = 8.dp,
@@ -944,13 +944,14 @@ fun AppDrawerContent(
                         )
                         .clickable(onClick = onClick)
                         .padding(
-                            top = 2.dp,
-                            bottom = 4.dp
+                            top = 3.dp,
+                            bottom = 3.dp
                         )
                 ) {
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
+                            .weight(1f)
                             .background(Color.Transparent)
                             .padding(
                                 horizontal = 4.dp,
@@ -988,8 +989,8 @@ fun AppDrawerContent(
                                         color =
                                             roleCardContentColor
                                     ),
-                                maxLines = 2,
-                                softWrap = true,
+                                maxLines = 1,
+                                softWrap = false,
                                 textAlign =
                                     TextAlign.Start,
                                 overflow =
@@ -1007,8 +1008,8 @@ fun AppDrawerContent(
 
                                 Text(
                                     text = subtitle,
-                                    maxLines = 2,
-                                    softWrap = true,
+                                    maxLines = 1,
+                                    softWrap = false,
                                     overflow =
                                         TextOverflow.Ellipsis,
                                     style =
@@ -1265,52 +1266,187 @@ fun AppDrawerContent(
             }
 
             // עטיפה ב־Box כדי שנוכל ליישר את החץ לתחתית מעל התוכן
-
-            // עטיפה ב־Box כדי שנוכל ליישר את החץ לתחתית מעל התוכן
             Box(Modifier.fillMaxSize()) {
 
                 Column(
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     // ←—— כותרת + כפתור X קבועים מעל אזור הגלילה ——→
-                    val topInset =
-                        WindowInsets.statusBars
-                            .asPaddingValues()
-                            .calculateTopPadding()
-
-                    Row(
-                        modifier =
-                            Modifier
-                                .fillMaxWidth()
-                                .padding(
-                                    start = 8.dp,
-                                    end = 8.dp,
-                                    top = topInset + 8.dp
-                                )
-                                .heightIn(min = 42.dp),
-                        horizontalArrangement =
-                            Arrangement.SpaceBetween,
-                        verticalAlignment =
-                            Alignment.CenterVertically
+                    Surface(
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(
+                            bottomStart = 20.dp,
+                            bottomEnd = 20.dp
+                        ),
+                        color = Color.Transparent,
+                        tonalElevation = 0.dp,
+                        shadowElevation = 1.dp
                     ) {
-                        Text(
-                            text = tr("תפריט", "Menu"),
-                            style = KmiTypography.screenTitle,
-                            color = drawerContentColor,
-                            maxLines = 1
-                        )
-                        IconButton(
-                            onClick = onClose,
-                            modifier = Modifier.size(40.dp)
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .background(
+                                    brush = Brush.verticalGradient(
+                                        colors =
+                                            if (isDarkMode) {
+                                                listOf(
+                                                    Color(0xFF36333B),
+                                                    Color(0xFF2D2A31),
+                                                    Color(0xFF242228)
+                                                )
+                                            } else {
+                                                listOf(
+                                                    Color(0xFFF4F2F7),
+                                                    Color(0xFFE3DFE8),
+                                                    Color(0xFFD4CEDA)
+                                                )
+                                            }
+                                    )
+                                )
+                                .statusBarsPadding()
+                                .padding(
+                                    start = 12.dp,
+                                    end = 12.dp,
+                                    top = 6.dp,
+                                    bottom = 10.dp
+                                )
                         ) {
-                            Icon(
-                                imageVector = Icons.Filled.Close,
-                                contentDescription = tr("סגור תפריט", "Close menu"),
-                                tint = drawerContentColor,
-                                modifier = Modifier.size(KmiIconSize.medium)
-                            )
+                            CompositionLocalProvider(
+                                LocalLayoutDirection provides LayoutDirection.Ltr
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .heightIn(min = 48.dp)
+                                ) {
+                                    Surface(
+                                        modifier = Modifier
+                                            .align(
+                                                if (isEnglish) {
+                                                    Alignment.CenterEnd
+                                                } else {
+                                                    Alignment.CenterStart
+                                                }
+                                            )
+                                            .size(38.dp),
+                                        shape = CircleShape,
+                                        color =
+                                            MaterialTheme.colorScheme.surface.copy(
+                                                alpha = 0.92f
+                                            ),
+                                        border = BorderStroke(
+                                            width = 1.dp,
+                                            color =
+                                                if (isDarkMode) {
+                                                    Color(0xFF625D68)
+                                                } else {
+                                                    Color(0xFFC8C1CF)
+                                                }
+                                        ),
+                                        tonalElevation = 0.dp,
+                                        shadowElevation = 1.dp,
+                                        onClick = onClose
+                                    ) {
+                                        Box(
+                                            contentAlignment = Alignment.Center
+                                        ) {
+                                            Icon(
+                                                imageVector = Icons.Filled.Close,
+                                                contentDescription =
+                                                    tr(
+                                                        "סגור תפריט",
+                                                        "Close menu"
+                                                    ),
+                                                tint = drawerContentColor,
+                                                modifier =
+                                                    Modifier.size(
+                                                        KmiIconSize.medium
+                                                    )
+                                            )
+                                        }
+                                    }
+
+                                    Column(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(
+                                                start =
+                                                    if (isEnglish) {
+                                                        4.dp
+                                                    } else {
+                                                        52.dp
+                                                    },
+                                                end =
+                                                    if (isEnglish) {
+                                                        52.dp
+                                                    } else {
+                                                        4.dp
+                                                    }
+                                            )
+                                            .align(Alignment.Center),
+                                        horizontalAlignment =
+                                            if (isEnglish) {
+                                                Alignment.Start
+                                            } else {
+                                                Alignment.End
+                                            }
+                                    ) {
+                                        Text(
+                                            text = tr(
+                                                "תפריט",
+                                                "Menu"
+                                            ),
+                                            style =
+                                                KmiTypography.screenTitle.copy(
+                                                    fontWeight = FontWeight.Black
+                                                ),
+                                            color = drawerContentColor,
+                                            maxLines = 1,
+                                            textAlign =
+                                                if (isEnglish) {
+                                                    TextAlign.Start
+                                                } else {
+                                                    TextAlign.Right
+                                                },
+                                            modifier = Modifier.fillMaxWidth()
+                                        )
+
+                                        Spacer(
+                                            Modifier.height(1.dp)
+                                        )
+
+                                        Text(
+                                            text = tr(
+                                                "ניווט מהיר באפליקציה",
+                                                "Quick app navigation"
+                                            ),
+                                            style =
+                                                KmiTypography.caption.copy(
+                                                    fontWeight =
+                                                        FontWeight.SemiBold
+                                                ),
+                                            color =
+                                                drawerContentColor.copy(
+                                                    alpha = 0.72f
+                                                ),
+                                            maxLines = 1,
+                                            overflow =
+                                                TextOverflow.Ellipsis,
+                                            textAlign =
+                                                if (isEnglish) {
+                                                    TextAlign.Start
+                                                } else {
+                                                    TextAlign.Right
+                                                },
+                                            modifier = Modifier.fillMaxWidth()
+                                        )
+                                    }
+                                }
+                            }
                         }
                     }
+
+                    Spacer(Modifier.height(2.dp))
 
                     Column(
                         modifier =
@@ -1322,7 +1458,7 @@ fun AppDrawerContent(
                                     start = 8.dp,
                                     end = 8.dp,
                                     top = 0.dp,
-                                    bottom = 72.dp
+                                    bottom = 24.dp
                                 ),
                         horizontalAlignment =
                             Alignment.Start
@@ -1781,7 +1917,7 @@ fun AppDrawerContent(
                             } else {
 
                                 DrawerLineItemHe(
-                                    title = "לוח שנה חודשי",
+                                    title = "לוח אימונים חודשי",
                                     subtitle = "אימונים, חגים וסיכומים",
                                     onClick = {
                                         onClose()
@@ -1799,128 +1935,6 @@ fun AppDrawerContent(
                                 )
                             }
 
-                            // ===== כפתור ראשון: אודות אבי אביסידון =====
-                            if (isEnglish) {
-                                DrawerLineItemEn(
-                                    title = "About Avi Avisidon",
-                                    subtitle = "Head of the method",
-                                    onClick = {
-                                        onClose()
-                                        onOpenAboutAvi()
-                                    }
-                                )
-                            } else {
-                                DrawerLineItemHe(
-                                    title = "אודות אבי אביסידון",
-                                    subtitle = "ראש השיטה",
-                                    onClick = {
-                                        onClose()
-                                        onOpenAboutAvi()
-                                    }
-                                )
-                            }
-
-                            // ===== אודות המאמנים ברשת =====
-                            if (isEnglish) {
-                                DrawerLineItemEn(
-                                    title = "About Network Coaches",
-                                    subtitle = "Ranks, experience and certifications",
-                                    onClick = {
-                                        onClose()
-                                        onOpenAboutNetworkCoaches()
-                                    }
-                                )
-                            } else {
-                                DrawerLineItemHe(
-                                    title = "אודות המאמנים ברשת",
-                                    subtitle = "דרגות, ותק, הכשרות והסמכות",
-                                    onClick = {
-                                        onClose()
-                                        onOpenAboutNetworkCoaches()
-                                    }
-                                )
-                            }
-
-                            val showHiddenAboutItems = false
-
-                            if (showHiddenAboutItems) {
-
-                                if (isEnglish) {
-                                    DrawerLineItemEn(
-                                        title = "About Itzik Biton",
-                                        subtitle = "Senior coach",
-                                        onClick = {
-                                            onClose()
-                                            onOpenAboutItzik()
-                                        }
-                                    )
-                                } else {
-                                    DrawerLineItemHe(
-                                        title = "אודות איציק ביטון",
-                                        subtitle = "מאמן בכיר",
-                                        onClick = {
-                                            onClose()
-                                            onOpenAboutItzik()
-                                        }
-                                    )
-                                }
-
-                                if (isEnglish) {
-                                    DrawerLineItemEn(
-                                        title = "About the Network",
-                                        subtitle = "Knockout",
-                                        onClick = {
-                                            onClose()
-                                            onOpenAboutNetwork()
-                                        }
-                                    )
-                                } else {
-                                    DrawerLineItemHe(
-                                        title = "אודות הרשת",
-                                        subtitle = "Knockout",
-                                        onClick = {
-                                            onClose()
-                                            onOpenAboutNetwork()
-                                        }
-                                    )
-                                }
-
-                            }
-
-                            if (isEnglish) {
-                                DrawerLineItemEn(
-                                    title = "About the Method",
-                                    subtitle = "KAMI",
-                                    onClick = {
-                                        onClose()
-                                        onOpenAboutMethod()
-                                    }
-                                )
-                            } else {
-                                DrawerLineItemHe(
-                                    title = "אודות השיטה",
-                                    subtitle = "KAMI",
-                                    onClick = {
-                                        onClose()
-                                        onOpenAboutMethod()
-                                    }
-                                )
-                            }
-
-                            if (isEnglish) {
-                                DrawerLineItemEn(
-                                    title = "Exercises – Demo",
-                                    subtitle = "Short demo videos for exercises",
-                                    onClick = { showDemoVideos = true }
-                                )
-                            } else {
-                                DrawerLineItemHe(
-                                    title = "תרגילים – הדגמה",
-                                    subtitle = "סרטוני הסבר קצרים לתרגילים",
-                                    onClick = { showDemoVideos = true }
-                                )
-                            }
-
                             if (isEnglish) {
                                 DrawerLineItemEn(
                                     title = "Forms & Payments",
@@ -1933,26 +1947,6 @@ fun AppDrawerContent(
                                     title = "טפסים ותשלומים",
                                     onClick = {
                                         showFormsPaymentsDialog = true
-                                    }
-                                )
-                            }
-
-                            if (isEnglish) {
-                                DrawerLineItemEn(
-                                    title = "Contact Us",
-                                    subtitle = "Leave details and we will get back to you",
-                                    onClick = {
-                                        onClose()
-                                        onOpenContactUs()
-                                    }
-                                )
-                            } else {
-                                DrawerLineItemHe(
-                                    title = "צור קשר",
-                                    subtitle = "השאירו פרטים ונחזור אליכם",
-                                    onClick = {
-                                        onClose()
-                                        onOpenContactUs()
                                     }
                                 )
                             }
@@ -1983,68 +1977,6 @@ fun AppDrawerContent(
 
                             if (isEnglish) {
                                 DrawerLineItemEn(
-                                    leading = {
-                                        Icon(
-                                            imageVector = Icons.Filled.Language,
-                                            contentDescription = null,
-                                            tint = roleCardContentColor
-                                        )
-                                    },
-                                    title = "Language / שפה",
-                                    onClick = {
-                                        val newLang = AppLanguage.HEBREW
-
-                                        // ✅ רק MainApp שומר ומעדכן את ה-State.
-                                        // לא שומרים כאן ישירות כדי למנוע כפילות וערכים ישנים.
-                                        onLanguageChanged(newLang)
-
-                                        onClose()
-
-                                        scope.launch {
-                                            delay(180.milliseconds)
-
-                                            Toast.makeText(
-                                                contextLang,
-                                                "שפה: עברית",
-                                                Toast.LENGTH_SHORT
-                                            ).show()
-                                        }
-                                    }
-                                )
-                            } else {
-                                DrawerLineItemHe(
-                                    leading = {
-                                        Icon(
-                                            imageVector = Icons.Filled.Language,
-                                            contentDescription = null,
-                                            tint = roleCardContentColor
-                                        )
-                                    },
-                                    title = "שפה / Language",
-                                    onClick = {
-                                        val newLang = AppLanguage.ENGLISH
-
-                                        // ✅ רק MainApp שומר ומעדכן את ה-State.
-                                        // לא שומרים כאן ישירות כדי למנוע כפילות וערכים ישנים.
-                                        onLanguageChanged(newLang)
-
-                                        onClose()
-
-                                        scope.launch {
-                                            delay(180.milliseconds)
-
-                                            Toast.makeText(
-                                                contextLang,
-                                                "Language: English",
-                                                Toast.LENGTH_SHORT
-                                            ).show()
-                                        }
-                                    }
-                                )
-                            }
-
-                            if (isEnglish) {
-                                DrawerLineItemEn(
                                     title = "Manage Subscription",
                                     onClick = {
                                         onClose()
@@ -2060,8 +1992,243 @@ fun AppDrawerContent(
                                     }
                                 )
                             }
+                        }
+
+                        Spacer(Modifier.height(10.dp))
+
+// ===== מידע =====
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 10.dp)
+                                .clip(
+                                    RoundedCornerShape(24.dp)
+                                )
+                                .background(
+                                    brush = traineeRoleColors.background
+                                )
+                                .border(
+                                    width = 1.dp,
+                                    color = traineeRoleColors.border,
+                                    shape = RoundedCornerShape(24.dp)
+                                )
+                                .padding(vertical = 6.dp)
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(
+                                        horizontal = 16.dp,
+                                        vertical = 8.dp
+                                    ),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = tr(
+                                        "מידע",
+                                        "Information"
+                                    ),
+                                    style =
+                                        KmiTypography.sectionTitle.copy(
+                                            fontWeight = FontWeight.Black
+                                        ),
+                                    color = roleCardContentColor,
+                                    textAlign =
+                                        if (isEnglish) {
+                                            TextAlign.Start
+                                        } else {
+                                            TextAlign.Right
+                                        },
+                                    maxLines = 1,
+                                    modifier = Modifier.fillMaxWidth()
+                                )
+                            }
+
+                            HorizontalDivider(
+                                modifier = Modifier.padding(
+                                    horizontal = 16.dp,
+                                    vertical = 4.dp
+                                ),
+                                thickness = 1.dp,
+                                color =
+                                    roleCardContentColor.copy(
+                                        alpha = 0.16f
+                                    )
+                            )
 
                             if (isEnglish) {
+                                DrawerLineItemEn(
+                                    title = "About Avi Avisidon",
+                                    subtitle = "Head of the method",
+                                    onClick = {
+                                        onClose()
+                                        onOpenAboutAvi()
+                                    }
+                                )
+
+                                DrawerLineItemEn(
+                                    title = "About Network Coaches",
+                                    subtitle = "Ranks, experience and certifications",
+                                    onClick = {
+                                        onClose()
+                                        onOpenAboutNetworkCoaches()
+                                    }
+                                )
+
+                                DrawerLineItemEn(
+                                    title = "About the Method",
+                                    subtitle = "KAMI",
+                                    onClick = {
+                                        onClose()
+                                        onOpenAboutMethod()
+                                    }
+                                )
+
+                                DrawerLineItemEn(
+                                    title = "Exercises – Demo",
+                                    subtitle = "Short demo videos for exercises",
+                                    onClick = {
+                                        showDemoVideos = true
+                                    }
+                                )
+                            } else {
+                                DrawerLineItemHe(
+                                    title = "אודות אבי אביסדון",
+                                    subtitle = "ראש השיטה",
+                                    onClick = {
+                                        onClose()
+                                        onOpenAboutAvi()
+                                    }
+                                )
+
+                                DrawerLineItemHe(
+                                    title = "אודות המאמנים ברשת",
+                                    subtitle = "דרגות, ותק, הכשרות והסמכות",
+                                    onClick = {
+                                        onClose()
+                                        onOpenAboutNetworkCoaches()
+                                    }
+                                )
+
+                                DrawerLineItemHe(
+                                    title = "אודות השיטה",
+                                    subtitle = "KAMI",
+                                    onClick = {
+                                        onClose()
+                                        onOpenAboutMethod()
+                                    }
+                                )
+
+                                DrawerLineItemHe(
+                                    title = "תרגילים – הדגמה",
+                                    subtitle = "סרטוני הסבר קצרים לתרגילים",
+                                    onClick = {
+                                        showDemoVideos = true
+                                    }
+                                )
+                            }
+                        }
+
+                        Spacer(Modifier.height(10.dp))
+
+// ===== מערכת =====
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 10.dp)
+                                .clip(
+                                    RoundedCornerShape(24.dp)
+                                )
+                                .background(
+                                    brush = traineeRoleColors.background
+                                )
+                                .border(
+                                    width = 1.dp,
+                                    color = traineeRoleColors.border,
+                                    shape = RoundedCornerShape(24.dp)
+                                )
+                                .padding(vertical = 6.dp)
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(
+                                        horizontal = 16.dp,
+                                        vertical = 8.dp
+                                    ),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = tr(
+                                        "מערכת",
+                                        "System"
+                                    ),
+                                    style =
+                                        KmiTypography.sectionTitle.copy(
+                                            fontWeight = FontWeight.Black
+                                        ),
+                                    color = roleCardContentColor,
+                                    textAlign =
+                                        if (isEnglish) {
+                                            TextAlign.Start
+                                        } else {
+                                            TextAlign.Right
+                                        },
+                                    maxLines = 1,
+                                    modifier = Modifier.fillMaxWidth()
+                                )
+                            }
+
+                            HorizontalDivider(
+                                modifier = Modifier.padding(
+                                    horizontal = 16.dp,
+                                    vertical = 4.dp
+                                ),
+                                thickness = 1.dp,
+                                color =
+                                    roleCardContentColor.copy(
+                                        alpha = 0.16f
+                                    )
+                            )
+
+                            if (isEnglish) {
+                                DrawerLineItemEn(
+                                    title = "Contact Us",
+                                    subtitle = "Leave details and we will get back to you",
+                                    onClick = {
+                                        onClose()
+                                        onOpenContactUs()
+                                    }
+                                )
+
+                                DrawerLineItemEn(
+                                    leading = {
+                                        Icon(
+                                            imageVector = Icons.Filled.Language,
+                                            contentDescription = null,
+                                            tint = roleCardContentColor
+                                        )
+                                    },
+                                    title = "Language / שפה",
+                                    onClick = {
+                                        onLanguageChanged(
+                                            AppLanguage.HEBREW
+                                        )
+
+                                        onClose()
+
+                                        scope.launch {
+                                            delay(180.milliseconds)
+
+                                            Toast.makeText(
+                                                contextLang,
+                                                "שפה: עברית",
+                                                Toast.LENGTH_SHORT
+                                            ).show()
+                                        }
+                                    }
+                                )
+
                                 DrawerLineItemEn(
                                     title = "⭐ Rate Us ⭐",
                                     onClick = {
@@ -2069,17 +2236,7 @@ fun AppDrawerContent(
                                         onOpenRateUs()
                                     }
                                 )
-                            } else {
-                                DrawerLineItemHe(
-                                    title = "⭐ דרגו אותנו ⭐",
-                                    onClick = {
-                                        onClose()
-                                        onOpenRateUs()
-                                    }
-                                )
-                            }
 
-                            if (isEnglish) {
                                 DrawerLineItemEn(
                                     leading = {
                                         Icon(
@@ -2096,6 +2253,51 @@ fun AppDrawerContent(
                                     }
                                 )
                             } else {
+                                DrawerLineItemHe(
+                                    title = "צור קשר",
+                                    subtitle = "השאירו פרטים ונחזור אליכם",
+                                    onClick = {
+                                        onClose()
+                                        onOpenContactUs()
+                                    }
+                                )
+
+                                DrawerLineItemHe(
+                                    leading = {
+                                        Icon(
+                                            imageVector = Icons.Filled.Language,
+                                            contentDescription = null,
+                                            tint = roleCardContentColor
+                                        )
+                                    },
+                                    title = "שפה / Language",
+                                    onClick = {
+                                        onLanguageChanged(
+                                            AppLanguage.ENGLISH
+                                        )
+
+                                        onClose()
+
+                                        scope.launch {
+                                            delay(180.milliseconds)
+
+                                            Toast.makeText(
+                                                contextLang,
+                                                "Language: English",
+                                                Toast.LENGTH_SHORT
+                                            ).show()
+                                        }
+                                    }
+                                )
+
+                                DrawerLineItemHe(
+                                    title = "⭐ דרגו אותנו ⭐",
+                                    onClick = {
+                                        onClose()
+                                        onOpenRateUs()
+                                    }
+                                )
+
                                 DrawerLineItemHe(
                                     leading = {
                                         Icon(
@@ -2123,7 +2325,7 @@ fun AppDrawerContent(
                             textAlign = if (isEnglish) TextAlign.Start else TextAlign.End,
                             modifier = Modifier.fillMaxWidth()
                         )
-                        Spacer(Modifier.height(8.dp))
+                        Spacer(Modifier.height(1.dp))
                     } // end scroll Column
                 } // end drawer content Column
 

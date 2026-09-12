@@ -610,6 +610,7 @@ fun NavGraphBuilder.homeNavGraph(
         }
 
         BeltQuestionsByTopicScreen(
+            vm = vm,
 
             onOpenSubscription = {
                 nav.navigate(Route.Subscription.route) {

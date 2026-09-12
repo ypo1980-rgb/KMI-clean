@@ -74,10 +74,13 @@ class DataStoreManager(private val context: Context) {
             .replace(Regex("\\s+"), "_")
             .replace(Regex("[^a-z0-9_.-]"), "_")
 
-    private fun keyForItem(belt: String, topic: String, item: String) =
-        booleanPreferencesKey(
-            "itm_${normalizeForKey(belt)}_${normalizeForKey(topic)}_${normalizeForKey(item)}"
-        )
+    private fun keyForItem(
+        belt: String,
+        topic: String,
+        item: String
+    ) = booleanPreferencesKey(
+        "itm_${normalizeForKey(belt)}_${normalizeForKey(topic)}_${normalizeForKey(item)}"
+    )
 
     private fun topicAliases(topic: String): List<String> {
         val clean = topic
@@ -147,32 +150,68 @@ class DataStoreManager(private val context: Context) {
     }
 
     // ---------- item mastery API ----------
-    suspend fun setItemMastered(belt: Belt, topic: String, item: String, mastered: Boolean) {
+    suspend fun setItemMastered(
+        belt: Belt,
+        topic: String,
+        item: String,
+        mastered: Boolean
+    ) {
         context.kmiDataStore.edit { prefs ->
-            keysForItem(belt.id, topic, item).forEach { key ->
+            keysForItem(
+                belt.id,
+                topic,
+                item
+            ).forEach { key ->
                 prefs[key] = mastered
             }
         }
     }
 
-    suspend fun isItemMastered(belt: Belt, topic: String, item: String): Boolean {
-        val prefs = context.kmiDataStore.data.first()
+    suspend fun isItemMastered(
+        belt: Belt,
+        topic: String,
+        item: String
+    ): Boolean {
+        val prefs =
+            context.kmiDataStore.data.first()
 
-        return keysForItem(belt.id, topic, item).any { key ->
+        return keysForItem(
+            belt.id,
+            topic,
+            item
+        ).any { key ->
             prefs[key] == true
         }
     }
 
-    suspend fun readItemStatus(belt: Belt, topic: String, item: String): Boolean? {
-        val prefs = context.kmiDataStore.data.first()
+    suspend fun readItemStatus(
+        belt: Belt,
+        topic: String,
+        item: String
+    ): Boolean? {
+        val prefs =
+            context.kmiDataStore.data.first()
 
-        return keysForItem(belt.id, topic, item)
-            .firstNotNullOfOrNull { key -> prefs[key] }
+        return keysForItem(
+            belt.id,
+            topic,
+            item
+        ).firstNotNullOfOrNull { key ->
+            prefs[key]
+        }
     }
 
-    suspend fun clearItemStatus(belt: Belt, topic: String, item: String) {
+    suspend fun clearItemStatus(
+        belt: Belt,
+        topic: String,
+        item: String
+    ) {
         context.kmiDataStore.edit { prefs ->
-            keysForItem(belt.id, topic, item).forEach { key ->
+            keysForItem(
+                belt.id,
+                topic,
+                item
+            ).forEach { key ->
                 prefs.remove(key)
             }
         }

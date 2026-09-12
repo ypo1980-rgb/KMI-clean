@@ -359,6 +359,7 @@ fun NavGraphBuilder.trainingNavGraph(
         }
 
         BeltQuestionsByTopicScreen(
+            vm = vm,
             onOpenByBelt = {
                 val returnedToBeltScreen =
                     nav.popBackStack(
