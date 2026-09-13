@@ -999,13 +999,11 @@ fun HomeScreen(
             }
 
             Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(top = 0.dp),
-                horizontalAlignment = Alignment.CenterHorizontally
+                modifier =
+                    Modifier.fillMaxSize(),
+                horizontalAlignment =
+                    Alignment.CenterHorizontally
             ) {
-                Spacer(Modifier.height(2.dp))
-
                 // === KMI_MULTI_GROUPS (FIX) ===
                 var groupsRefreshTick by remember { mutableIntStateOf(0) }
 

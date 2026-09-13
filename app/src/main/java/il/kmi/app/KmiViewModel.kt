@@ -135,11 +135,30 @@ class KmiViewModel(
     private val masteredItems =
         mutableStateMapOf<String, MutableMap<String, MutableMap<String, Boolean?>>>()
 
-    // ✅ NEW: עוזר פנימי — כתיבה עקבית ל-cache
-    private fun putCache(belt: Belt, topicKey: String, item: String, value: Boolean?) {
-        val beltMap = masteredItems.getOrPut(belt.id) { mutableMapOf() }
-        val topicMap = beltMap.getOrPut(topicKey) { mutableMapOf() }
-        if (value == null) topicMap.remove(item) else topicMap[item] = value
+    /*
+    * כתיבה עקבית ל-cache.
+    *
+    * גם null נשמר במפה כדי לסמן שהפריט כבר נקרא
+    * מה־DataStore ונמצא במצב "לא סומן".
+    * כך המסכים אינם קוראים אותו מחדש בזמן הגלילה.
+    */
+    private fun putCache(
+        belt: Belt,
+        topicKey: String,
+        item: String,
+        value: Boolean?
+    ) {
+        val beltMap =
+            masteredItems.getOrPut(belt.id) {
+                mutableMapOf()
+            }
+
+        val topicMap =
+            beltMap.getOrPut(topicKey) {
+                mutableMapOf()
+            }
+
+        topicMap[item] = value
     }
 
     /**
@@ -152,31 +171,51 @@ class KmiViewModel(
         topic: String,
         items: Collection<String>
     ) {
-        val t = canonicalTopicKey(topic)
-        if (items.isEmpty()) return
+        val canonicalTopic =
+            canonicalTopicKey(topic)
+
+        if (items.isEmpty()) {
+            return
+        }
 
         viewModelScope.launch {
-            var changed = false
+            val loadedItems =
+                linkedMapOf<String, Boolean?>()
 
-            for (item in items) {
-                // אם כבר ב-cache — דילוג
-                val cached = masteredItems[belt.id]?.get(t)?.get(item)
-                if (cached != null || (masteredItems[belt.id]?.get(t)?.containsKey(item) == true)) {
-                    continue
+            items
+                .distinct()
+                .forEach { item ->
+                    val topicCache =
+                        masteredItems[belt.id]
+                            ?.get(canonicalTopic)
+
+                    if (topicCache?.containsKey(item) != true) {
+                        loadedItems[item] =
+                            ds.readItemStatus(
+                                belt = belt,
+                                topic = canonicalTopic,
+                                item = item
+                            )
+                    }
                 }
 
-                val v = ds.readItemStatus(belt, t, item) // ✅ מקור אמת
-                if (v != null) {
-                    putCache(belt, t, item, v)
-                    changed = true
-                }
-                // אם v == null אנחנו פשוט משאירים לא מסומן — אין מה לשמור ב-cache
+            if (loadedItems.isEmpty()) {
+                return@launch
             }
 
-            if (changed) {
-                recalcProgress()
-                _marksVersion.value = _marksVersion.value + 1L
+            loadedItems.forEach { (item, value) ->
+                putCache(
+                    belt = belt,
+                    topicKey = canonicalTopic,
+                    item = item,
+                    value = value
+                )
             }
+
+            recalcProgress()
+
+            _marksVersion.value =
+                _marksVersion.value + 1L
         }
     }
 
@@ -190,32 +229,44 @@ class KmiViewModel(
         belt: Belt,
         groups: Map<String, Collection<String>>
     ) = coroutineScope {
-        val loadedGroups = groups.map { (topic, items) ->
-            async {
-                val canonicalTopic = canonicalTopicKey(topic)
+        val loadedGroups =
+            groups.map { (topic, items) ->
+                async {
+                    val canonicalTopic =
+                        canonicalTopicKey(topic)
 
-                val loadedItems = items.distinct().mapNotNull { item ->
-                    val topicMap = masteredItems[belt.id]?.get(canonicalTopic)
-                    val alreadyCached = topicMap?.containsKey(item) == true
+                    val loadedItems =
+                        items
+                            .distinct()
+                            .mapNotNull { item ->
+                                val topicCache =
+                                    masteredItems[belt.id]
+                                        ?.get(canonicalTopic)
 
-                    if (alreadyCached) {
-                        null
-                    } else {
-                        ds.readItemStatus(
-                            belt = belt,
-                            topic = canonicalTopic,
-                            item = item
-                        )?.let { value ->
-                            item to value
-                        }
-                    }
+                                if (
+                                    topicCache?.containsKey(item) ==
+                                    true
+                                ) {
+                                    null
+                                } else {
+                                    item to
+                                            ds.readItemStatus(
+                                                belt = belt,
+                                                topic =
+                                                    canonicalTopic,
+                                                item = item
+                                            )
+                                }
+                            }
+
+                    canonicalTopic to loadedItems
                 }
-
-                canonicalTopic to loadedItems
             }
-        }.awaitAll()
+                .awaitAll()
 
-        loadedGroups.forEach { (canonicalTopic, loadedItems) ->
+        loadedGroups.forEach {
+                (canonicalTopic, loadedItems) ->
+
             loadedItems.forEach { (item, value) ->
                 putCache(
                     belt = belt,
@@ -466,19 +517,40 @@ class KmiViewModel(
         }
 
     /** קבלת מצב של פריט (Nullable: true/false/null) */
-    override suspend fun getItemStatusNullable(belt: Belt, topic: String, item: String): Boolean? {
-        val t = canonicalTopicKey(topic)
+    override suspend fun getItemStatusNullable(
+        belt: Belt,
+        topic: String,
+        item: String
+    ): Boolean? {
+        val canonicalTopic =
+            canonicalTopicKey(topic)
 
-        // cache
-        masteredItems[belt.id]?.get(t)?.get(item)?.let { return it }
+        val cachedTopic =
+            masteredItems[belt.id]
+                ?.get(canonicalTopic)
 
-        // datastore
-        val value = ds.readItemStatus(belt, t, item)
-
-        // שמירה ב-cache רק אם יש ערך אמיתי (true/false)
-        if (value != null) {
-            putCache(belt, t, item, value)
+        /*
+         * containsKey חשוב כאן:
+         * ערך null יכול להיות תוצאה שכבר נטענה,
+         * ולא בהכרח פריט שטרם נקרא.
+         */
+        if (cachedTopic?.containsKey(item) == true) {
+            return cachedTopic[item]
         }
+
+        val value =
+            ds.readItemStatus(
+                belt = belt,
+                topic = canonicalTopic,
+                item = item
+            )
+
+        putCache(
+            belt = belt,
+            topicKey = canonicalTopic,
+            item = item,
+            value = value
+        )
 
         return value
     }
@@ -499,21 +571,50 @@ class KmiViewModel(
         )
     }
 
-    /** ✅ NEW: קביעה/איפוס מצב פריט (true/false/null) — מקור אמת יחיד: DataStore */
-    fun setItemStatusNullable(belt: Belt, topic: String, item: String, value: Boolean?) {
-        val t = canonicalTopicKey(topic)
+    /**
+     * עדכון מצב פריט.
+     *
+     * ה-cache והמסכים מתעדכנים מיד.
+     * השמירה הקבועה מתבצעת לאחר מכן ברקע.
+     */
+    fun setItemStatusNullable(
+        belt: Belt,
+        topic: String,
+        item: String,
+        value: Boolean?
+    ) {
+        val canonicalTopic =
+            canonicalTopicKey(topic)
 
-        // עדכון cache מיידי כדי ששני המסכים יראו אותו דבר בלי "הבהובים"
-        putCache(belt, t, item, value)
+        putCache(
+            belt = belt,
+            topicKey = canonicalTopic,
+            item = item,
+            value = value
+        )
+
+        _marksVersion.value =
+            _marksVersion.value + 1L
 
         viewModelScope.launch {
             when (value) {
-                null -> ds.clearItemStatus(belt, t, item)
-                else -> ds.setItemMastered(belt, t, item, value)
+                null ->
+                    ds.clearItemStatus(
+                        belt = belt,
+                        topic = canonicalTopic,
+                        item = item
+                    )
+
+                else ->
+                    ds.setItemMastered(
+                        belt = belt,
+                        topic = canonicalTopic,
+                        item = item,
+                        mastered = value
+                    )
             }
 
             recalcProgress()
-            _marksVersion.value = _marksVersion.value + 1L
         }
     }
 
@@ -921,30 +1022,137 @@ private fun recalcProgress() {
     _progress.value = newProgress
 }
 
-fun preloadTopicsBySubjectCounts() {
-    viewModelScope.launch(context = kotlinx.coroutines.Dispatchers.Default) {
-        runCatching {
-            val subjects = il.kmi.app.domain.TopicsBySubjectRegistry.allSubjects()
-            val handsBase = subjects.firstOrNull { it.id == "hands_all" }
+    private var hasStartedStatusesPreload =
+        false
 
-            val beltForCounts =
-                selectedBelt.value
-                    ?: Belt.GREEN
+    private fun preloadAllItemStatuses() {
+        if (hasStartedStatusesPreload) {
+            return
+        }
 
-            SubjectTopicsUiLogic
-                .ensureTopicsUiCountsPreloaded(
-                    subjects = subjects,
-                    handsBase = handsBase,
-                    currentBelt = beltForCounts
+        hasStartedStatusesPreload =
+            true
+
+        viewModelScope.launch {
+            val belts =
+                listOf(
+                    Belt.WHITE,
+                    Belt.YELLOW,
+                    Belt.ORANGE,
+                    Belt.GREEN,
+                    Belt.BLUE,
+                    Belt.BROWN,
+                    Belt.BLACK
                 )
+
+            belts.forEach { belt ->
+                val groups =
+                    linkedMapOf<
+                            String,
+                            MutableSet<String>
+                            >()
+
+                getCatalogEntriesForBelt(belt)
+                    .forEach { entry ->
+                        val candidateIds =
+                            listOf(
+                                entry.rawItem.trim(),
+                                entry.displayItem.trim(),
+                                il.kmi.app.domain.CanonicalIds
+                                    .canonicalFor(
+                                        belt = belt,
+                                        topicTitle =
+                                            entry.topicTitle,
+                                        displayItem =
+                                            entry.rawItem
+                                    )
+                                    .trim(),
+                                il.kmi.app.domain.CanonicalIds
+                                    .canonicalFor(
+                                        belt = belt,
+                                        topicTitle =
+                                            entry.topicTitle,
+                                        displayItem =
+                                            entry.displayItem
+                                    )
+                                    .trim()
+                            )
+                                .filter {
+                                    it.isNotBlank()
+                                }
+
+                        val topicKeys =
+                            linkedSetOf(
+                                entry.topicTitle.trim()
+                            )
+
+                        entry.subTopicTitle
+                            ?.trim()
+                            ?.takeIf {
+                                it.isNotBlank()
+                            }
+                            ?.let { subTopicTitle ->
+                                topicKeys.add(
+                                    "${entry.topicTitle.trim()}__$subTopicTitle"
+                                )
+                            }
+
+                        topicKeys.forEach { topicKey ->
+                            groups
+                                .getOrPut(topicKey) {
+                                    linkedSetOf()
+                                }
+                                .addAll(candidateIds)
+                        }
+                    }
+
+                warmUpStatusGroupsAndAwait(
+                    belt = belt,
+                    groups = groups
+                )
+            }
+
+            recalcProgress()
+
+            _marksVersion.value =
+                _marksVersion.value + 1L
         }
     }
-}
 
-init {
-    recalcProgress()
-    preloadTopicsBySubjectCounts()
-}
+    fun preloadTopicsBySubjectCounts() {
+        viewModelScope.launch(
+            context =
+                kotlinx.coroutines.Dispatchers.Default
+        ) {
+            runCatching {
+                val subjects =
+                    il.kmi.app.domain.TopicsBySubjectRegistry
+                        .allSubjects()
+
+                val handsBase =
+                    subjects.firstOrNull {
+                        it.id == "hands_all"
+                    }
+
+                val beltForCounts =
+                    selectedBelt.value
+                        ?: Belt.GREEN
+
+                SubjectTopicsUiLogic
+                    .ensureTopicsUiCountsPreloaded(
+                        subjects = subjects,
+                        handsBase = handsBase,
+                        currentBelt = beltForCounts
+                    )
+            }
+        }
+    }
+
+    init {
+        recalcProgress()
+        preloadTopicsBySubjectCounts()
+        preloadAllItemStatuses()
+    }
 }
 
 // ─────────────────────────────────────────────

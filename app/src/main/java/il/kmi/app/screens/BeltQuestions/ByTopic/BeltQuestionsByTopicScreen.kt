@@ -49,7 +49,6 @@ import il.kmi.app.ui.FloatingQuickMenu
 import il.kmi.app.ui.QuickMenuTriggerMode
 import il.kmi.app.ui.KmiTypography
 import il.kmi.app.screens.PracticeByTopicsSelection
-import il.kmi.app.screens.PracticeMenuDialog
 import il.kmi.shared.domain.Belt
 import il.kmi.shared.domain.content.ExerciseTitlesEn
 import kotlinx.coroutines.Dispatchers
@@ -790,10 +789,23 @@ fun BeltQuestionsByTopicScreen(
     onOpenSubscription: () -> Unit,
     onOpenWeakPoints: (Belt) -> Unit = {},
     onOpenAllLists: (Belt) -> Unit = {},
+    onOpenPracticeMenu: (Belt) -> Unit = {},
+
+    /*
+     * נשמרים זמנית לתאימות ל־HomeNavGraph.
+     * לאחר חיבור המסך העצמאי נסיר אותם.
+     */
+    @Suppress("UNUSED_PARAMETER")
     onOpenRandomPractice: (Belt) -> Unit = {},
-    onOpenRandomPracticeByTopic: (Belt, String) -> Unit = { _, _ -> },
+    @Suppress("UNUSED_PARAMETER")
+    onOpenRandomPracticeByTopic:
+        (Belt, String) -> Unit = { _, _ -> },
+    @Suppress("UNUSED_PARAMETER")
     onOpenFinalExam: (Belt) -> Unit = {},
-    onPracticeByTopics: (PracticeByTopicsSelection) -> Unit = {},
+    @Suppress("UNUSED_PARAMETER")
+    onPracticeByTopics:
+        (PracticeByTopicsSelection) -> Unit = {},
+
     onOpenSummaryScreen: (Belt) -> Unit = {},
     onOpenVoiceAssistant: (Belt) -> Unit = {},
     onOpenPdfMaterials: (Belt) -> Unit = {}
@@ -922,34 +934,17 @@ fun BeltQuestionsByTopicScreen(
     }
 
     // State לניהול התפריט המהיר
-    var quickMenuExpanded by rememberSaveable { mutableStateOf(false) }
-    var showPracticeMenu by rememberSaveable { mutableStateOf(false) }
-    var effectiveBelt by rememberSaveable { mutableStateOf(Belt.GREEN) }
-    // החיפוש והסברי התרגילים עוברים דרך KmiTopBar + ExercisePremiumSearchDialog
-
-    if (showPracticeMenu) {
-        PracticeMenuDialog(
-            canUseExtras = hasAccess,
-            defaultBelt = effectiveBelt,
-            onDismiss = { showPracticeMenu = false },
-            onRandomPractice = { beltArg ->
-                showPracticeMenu = false
-                onOpenRandomPractice(beltArg)
-            },
-            onFinalExam = { beltArg ->
-                showPracticeMenu = false
-                onOpenFinalExam(beltArg)
-            },
-            onPracticeByTopics = { selection ->
-                showPracticeMenu = false
-                onPracticeByTopics(selection)
-            },
-            onPracticeByTopicSelected = { beltArg, topicArg ->
-                showPracticeMenu = false
-                onOpenRandomPracticeByTopic(beltArg, topicArg)
-            }
-        )
+    var quickMenuExpanded by
+    rememberSaveable {
+        mutableStateOf(false)
     }
+
+    var effectiveBelt by
+    rememberSaveable {
+        mutableStateOf(Belt.GREEN)
+    }
+
+    // החיפוש והסברי התרגילים עוברים דרך KmiTopBar + ExercisePremiumSearchDialog
 
     Scaffold(
         modifier = Modifier.fillMaxSize(),
@@ -1059,10 +1054,28 @@ fun BeltQuestionsByTopicScreen(
                 includePractice = true,
                 hasFullAccess = hasAccess,
                 onLockedItemClick = { onOpenSubscription() },
-                onWeakPoints = { onOpenWeakPoints(effectiveBelt) },
-                onAllLists = { onOpenAllLists(effectiveBelt) },
-                onPractice = { showPracticeMenu = true },
-                onSummary = { onOpenSummaryScreen(effectiveBelt) },
+                onWeakPoints = {
+                    onOpenWeakPoints(
+                        effectiveBelt
+                    )
+                },
+                onAllLists = {
+                    onOpenAllLists(
+                        effectiveBelt
+                    )
+                },
+                onPractice = {
+                    quickMenuExpanded = false
+
+                    onOpenPracticeMenu(
+                        effectiveBelt
+                    )
+                },
+                onSummary = {
+                    onOpenSummaryScreen(
+                        effectiveBelt
+                    )
+                },
                 onVoice = { onOpenVoiceAssistant(effectiveBelt) },
                 onPdf = { onOpenPdfMaterials(effectiveBelt) }
             )

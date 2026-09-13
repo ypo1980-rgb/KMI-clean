@@ -63,6 +63,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import android.content.Intent
 import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.runtime.mutableIntStateOf
@@ -88,19 +89,23 @@ import kotlin.time.Duration.Companion.milliseconds
    ------------------------------ */
 
 private fun isUserAuthedRelaxed(ctx: Context): Boolean {
-    val spKmi  = ctx.getSharedPreferences("kmi_settings", Context.MODE_PRIVATE)
-    val spUser = ctx.getSharedPreferences("kmi_user",      Context.MODE_PRIVATE)
+    val spKmi = ctx.getSharedPreferences("kmi_settings", Context.MODE_PRIVATE)
+    val spUser = ctx.getSharedPreferences("kmi_user", Context.MODE_PRIVATE)
 
-    val spFlag   = spKmi.getBoolean("is_registered", false)
-    val userId   = spKmi.getString("user_id", null).orEmpty()
+    val spFlag = spKmi.getBoolean("is_registered", false)
+    val userId = spKmi.getString("user_id", null).orEmpty()
     val profName = spKmi.getString("profile_name", null).orEmpty()
-    val role     = spUser.getString("user_role", null).orEmpty()
+    val role = spUser.getString("user_role", null).orEmpty()
 
-    val fbOk = runCatching { com.google.firebase.auth.FirebaseAuth.getInstance().currentUser != null }
-        .getOrDefault(false)
+    val fbOk =
+        runCatching { com.google.firebase.auth.FirebaseAuth.getInstance().currentUser != null }
+            .getOrDefault(false)
 
     // מספיק אחד מהסימנים הבולטים
-    return spFlag || userId.isNotBlank() || profName.isNotBlank() || role.equals("coach", true) || fbOk
+    return spFlag || userId.isNotBlank() || profName.isNotBlank() || role.equals(
+        "coach",
+        true
+    ) || fbOk
 }
 
 @Composable
@@ -108,8 +113,8 @@ private fun rememberAuthState(ctx: Context): State<Boolean> {
     val state = remember { mutableStateOf(isUserAuthedRelaxed(ctx)) }
 
     DisposableEffect(ctx) {
-        val spKmi  = ctx.getSharedPreferences("kmi_settings", Context.MODE_PRIVATE)
-        val spUser = ctx.getSharedPreferences("kmi_user",      Context.MODE_PRIVATE)
+        val spKmi = ctx.getSharedPreferences("kmi_settings", Context.MODE_PRIVATE)
+        val spUser = ctx.getSharedPreferences("kmi_user", Context.MODE_PRIVATE)
 
         val l1 = SharedPreferences.OnSharedPreferenceChangeListener { _, _ ->
             state.value = isUserAuthedRelaxed(ctx)
@@ -425,28 +430,29 @@ fun SubscriptionScreen(
         }
     }
 
-    val effectiveActive = remember(subscriptionUiRefreshTick, state.active, savedAccessUntil, savedProductId) {
-        val now = System.currentTimeMillis()
+    val effectiveActive =
+        remember(subscriptionUiRefreshTick, state.active, savedAccessUntil, savedProductId) {
+            val now = System.currentTimeMillis()
 
-        val userActive = KmiAccess.hasFullAccess(userSp)
-        val subsActive = KmiAccess.hasFullAccess(subsSp)
-        val timeActive = (savedAccessUntil ?: 0L) > now
+            val userActive = KmiAccess.hasFullAccess(userSp)
+            val subsActive = KmiAccess.hasFullAccess(subsSp)
+            val timeActive = (savedAccessUntil ?: 0L) > now
 
-        /*
-         * חשוב:
-         * SubscriptionScreen כבר לא מפעיל Billing אוטומטית בכניסה למסך.
-         * לכן state.active יכול להיות false גם כש-BillingRepository אחר כבר כתב
-         * מנוי פעיל ל-SharedPreferences.
-         *
-         * מקור האמת לתצוגה כאן הוא:
-         * sub_access_until בתוקף + דגלי גישה שנשמרו.
-         */
-        val active =
-            timeActive &&
-                    (userActive || subsActive || savedProductId != null)
+            /*
+             * חשוב:
+             * SubscriptionScreen כבר לא מפעיל Billing אוטומטית בכניסה למסך.
+             * לכן state.active יכול להיות false גם כש-BillingRepository אחר כבר כתב
+             * מנוי פעיל ל-SharedPreferences.
+             *
+             * מקור האמת לתצוגה כאן הוא:
+             * sub_access_until בתוקף + דגלי גישה שנשמרו.
+             */
+            val active =
+                timeActive &&
+                        (userActive || subsActive || savedProductId != null)
 
-        active
-    }
+            active
+        }
 
     val activePlanLabel = when (savedProductId) {
 
@@ -539,551 +545,579 @@ fun SubscriptionScreen(
                 )
         ) {
             Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .verticalScroll(scrollState)
-                    .navigationBarsPadding()
-                    .padding(horizontal = 16.dp, vertical = 14.dp),
-                verticalArrangement = Arrangement.spacedBy(16.dp),
-                horizontalAlignment = Alignment.CenterHorizontally
+                modifier = Modifier.fillMaxSize()
             ) {
 
-                Card(
+                Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .heightIn(min = 120.dp),
-                    shape = RoundedCornerShape(26.dp),
-                    colors = CardDefaults.cardColors(
-                        containerColor = Color.Transparent
-                    )
+                        .background(
+                            brush = kmiSectionHeaderBrush()
+                        )
+                        .padding(vertical = 4.dp)
                 ) {
-                    Box(
+                    Column(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .background(
-                                brush = kmiSectionHeaderBrush()
-                            )
-                            .padding(horizontal = 16.dp, vertical = 16.dp)
+                            .padding(horizontal = 16.dp),
+                        verticalArrangement = Arrangement.Center,
+                        horizontalAlignment = Alignment.CenterHorizontally
                     ) {
-                        Column(
+                        Text(
+                            text =
+                                if (isEnglish) {
+                                    "KMI Subscription"
+                                } else {
+                                    "ניהול מנוי KAMI"
+                                },
+                            style = KmiTypography.secondary.copy(
+                                fontWeight = FontWeight.Bold
+                            ),
+                            fontWeight = FontWeight.ExtraBold,
+                            color = kmiSectionHeaderContentColor(),
                             modifier = Modifier.fillMaxWidth(),
-                            verticalArrangement = Arrangement.spacedBy(6.dp),
-                            horizontalAlignment = Alignment.CenterHorizontally
-                        ) {
-                            Text(
-                                text = if (isEnglish) "KMI Subscription" else "ניהול מנוי KAMI",
-                                style = KmiTypography.sectionTitle,
-                                fontWeight = FontWeight.ExtraBold,
-                                color = kmiSectionHeaderContentColor(),
-                                modifier = Modifier.fillMaxWidth(),
-                                textAlign = TextAlign.Center,
-                                maxLines = 1
-                            )
+                            textAlign = TextAlign.Center,
+                            maxLines = 1
+                        )
 
-                            Text(
-                                text = if (isEnglish) {
+                        Spacer(Modifier.height(1.dp))
+
+                        Text(
+                            text =
+                                if (isEnglish) {
                                     "Here you can check your subscription status, purchase a new subscription, or restore previous purchases."
                                 } else {
                                     "כאן אפשר לבדוק סטטוס מנוי, לרכוש מנוי חדש או לשחזר רכישות קיימות."
                                 },
-                                style = KmiTypography.caption,
-                                color =
-                                    kmiSectionHeaderContentColor()
-                                        .copy(alpha = 0.92f),
-                                modifier = Modifier.fillMaxWidth(),
-                                textAlign = TextAlign.Center
-                            )
-                        }
+                            style = KmiTypography.caption,
+                            color =
+                                kmiSectionHeaderContentColor()
+                                    .copy(alpha = 0.92f),
+                            modifier = Modifier.fillMaxWidth(),
+                            textAlign = TextAlign.Center
+                        )
                     }
                 }
 
-                Card(
+                Column(
                     modifier = Modifier
-                        .fillMaxWidth(),
-                    shape = RoundedCornerShape(26.dp),
-                    colors = CardDefaults.cardColors(
-                        containerColor = mainCardColor,
-                        contentColor = MaterialTheme.colorScheme.onSurface
-                    ),
-                    elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
+                        .fillMaxSize()
+                        .verticalScroll(scrollState)
+                        .navigationBarsPadding()
+                        .padding(
+                            top = 16.dp,
+                            bottom = 14.dp
+                        ),
+                    verticalArrangement = Arrangement.spacedBy(16.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
                 ) {
-                    CompositionLocalProvider(LocalLayoutDirection provides layoutDirection) {
-                        Column(
-                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 16.dp),
-                            verticalArrangement = Arrangement.spacedBy(14.dp),
-                            horizontalAlignment = horizontalAlign
-                        ) {
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.spacedBy(12.dp),
-                                verticalAlignment = Alignment.CenterVertically
+
+                    Card(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp),
+                        shape = RoundedCornerShape(26.dp),
+                        colors = CardDefaults.cardColors(
+                            containerColor = mainCardColor,
+                            contentColor = MaterialTheme.colorScheme.onSurface
+                        ),
+                        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
+                    ) {
+                        CompositionLocalProvider(LocalLayoutDirection provides layoutDirection) {
+                            Column(
+                                modifier = Modifier.padding(horizontal = 16.dp, vertical = 16.dp),
+                                verticalArrangement = Arrangement.spacedBy(14.dp),
+                                horizontalAlignment = horizontalAlign
                             ) {
-                                if (!isEnglish) {
-                                    Column(
-                                        modifier = Modifier.weight(1f),
-                                        horizontalAlignment = Alignment.End,
-                                        verticalArrangement = Arrangement.spacedBy(6.dp)
-                                    ) {
-                                        Text(
-                                            text = "סטטוס מנוי",
-                                            style = KmiTypography.action,
-                                            color =
-                                                MaterialTheme.colorScheme.onSurfaceVariant,
-                                            textAlign = TextAlign.Right,
-                                            modifier = Modifier.fillMaxWidth()
-                                        )
-
-                                        Text(
-                                            text = if (effectiveActive) "פעיל" else "לא פעיל",
-                                            style = KmiTypography.screenTitle,
-                                            fontWeight = FontWeight.ExtraBold,
-                                            color =
-                                                if (effectiveActive) {
-                                                    kmiSuccessColor()
-                                                } else {
-                                                    MaterialTheme.colorScheme.error
-                                                },
-                                            textAlign = TextAlign.Right,
-                                            modifier = Modifier.fillMaxWidth()
-                                        )
-
-                                        Card(
-                                            shape = RoundedCornerShape(20.dp),
-                                            colors = CardDefaults.cardColors(
-                                                containerColor =
-                                                    if (effectiveActive) {
-                                                        kmiSuccessContainerColor()
-                                                    } else {
-                                                        MaterialTheme.colorScheme
-                                                            .errorContainer
-                                                    }
-                                            )
-                                        ) {
-                                            Text(
-                                                text =
-                                                    if (effectiveActive) {
-                                                        "מנוי פעיל"
-                                                    } else {
-                                                        "אין מנוי פעיל"
-                                                    },
-                                                color =
-                                                    if (effectiveActive) {
-                                                        kmiOnSuccessContainerColor()
-                                                    } else {
-                                                        MaterialTheme.colorScheme
-                                                            .onErrorContainer
-                                                    },
-                                                style = KmiTypography.action,
-                                                fontWeight = FontWeight.Bold,
-                                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
-                                                textAlign = TextAlign.Center
-                                            )
-                                        }
-                                    }
-
-                                    StatusIcon(effectiveActive)
-                                } else {
-                                    StatusIcon(effectiveActive)
-
-                                    Column(
-                                        modifier = Modifier.weight(1f),
-                                        horizontalAlignment = Alignment.Start,
-                                        verticalArrangement = Arrangement.spacedBy(6.dp)
-                                    ) {
-                                        Text(
-                                            text = "Subscription status",
-                                            style = KmiTypography.action,
-                                            color =
-                                                MaterialTheme.colorScheme.onSurfaceVariant,
-                                            textAlign = TextAlign.Left,
-                                            modifier = Modifier.fillMaxWidth()
-                                        )
-
-                                        Text(
-                                            text =
-                                                if (effectiveActive) {
-                                                    "Active"
-                                                } else {
-                                                    "Inactive"
-                                                },
-                                            style = KmiTypography.screenTitle,
-                                            fontWeight = FontWeight.ExtraBold,
-                                            color =
-                                                if (effectiveActive) {
-                                                    kmiSuccessColor()
-                                                } else {
-                                                    MaterialTheme.colorScheme.error
-                                                },
-                                            textAlign = TextAlign.Left,
-                                            modifier = Modifier.fillMaxWidth()
-                                        )
-
-                                        Card(
-                                            shape = RoundedCornerShape(20.dp),
-                                            colors = CardDefaults.cardColors(
-                                                containerColor =
-                                                    if (effectiveActive) {
-                                                        kmiSuccessContainerColor()
-                                                    } else {
-                                                        MaterialTheme.colorScheme
-                                                            .errorContainer
-                                                    }
-                                            )
-                                        ) {
-                                            Text(
-                                                text =
-                                                    if (effectiveActive) {
-                                                        "Subscription active"
-                                                    } else {
-                                                        "No active subscription"
-                                                    },
-                                                color =
-                                                    if (effectiveActive) {
-                                                        kmiOnSuccessContainerColor()
-                                                    } else {
-                                                        MaterialTheme.colorScheme
-                                                            .onErrorContainer
-                                                    },
-                                                style = KmiTypography.action,
-                                                fontWeight = FontWeight.Bold,
-                                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
-                                                textAlign = TextAlign.Center
-                                            )
-                                        }
-                                    }
-                                }
-                            }
-
-                            Text(
-                                text = if (effectiveActive) {
-                                    if (isEnglish) {
-                                        "All app content is currently unlocked for you."
-                                    } else {
-                                        "כל התכנים באפליקציה פתוחים עבורך כעת."
-                                    }
-                                } else {
-                                    if (isEnglish) {
-                                        "To unlock all content, choose an active subscription plan."
-                                    } else {
-                                        "כדי לפתוח את כל התכנים, יש לבחור מסלול מנוי פעיל."
-                                    }
-                                },
-                                style = KmiTypography.body,
-                                color = MaterialTheme.colorScheme.onSurface,
-                                modifier = Modifier.fillMaxWidth(),
-                                textAlign = textAlign
-                            )
-
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .height(1.dp)
-                                    .background(
-                                        MaterialTheme.colorScheme.outline.copy(
-                                            alpha = 0.28f
-                                        )
-                                    )
-                            )
-
-                            Card(
-                                modifier = Modifier.fillMaxWidth(),
-                                shape = RoundedCornerShape(16.dp),
-                                colors = CardDefaults.cardColors(
-                                    containerColor = innerCardColor,
-                                    contentColor =
-                                        MaterialTheme.colorScheme.onSurface
-                                )
-                            ) {
-                                Column(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(horizontal = 12.dp, vertical = 12.dp),
-                                    verticalArrangement = Arrangement.spacedBy(10.dp),
-                                    horizontalAlignment = horizontalAlign
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                                    verticalAlignment = Alignment.CenterVertically
                                 ) {
-                                    Text(
-                                        text = if (isEnglish) "Subscription details" else "פרטי המנוי",
-                                        style = KmiTypography.cardTitle,
-                                        fontWeight = FontWeight.Bold,
-                                        color = MaterialTheme.colorScheme.onSurface,
-                                        modifier = Modifier.fillMaxWidth(),
-                                        textAlign = textAlign
-                                    )
-
-                                    @Composable
-                                    fun DetailsRow(label: String, value: String, valueStyle: androidx.compose.ui.text.TextStyle) {
-                                        Row(
-                                            modifier = Modifier.fillMaxWidth(),
-                                            horizontalArrangement = Arrangement.SpaceBetween,
-                                            verticalAlignment = Alignment.CenterVertically
+                                    if (!isEnglish) {
+                                        Column(
+                                            modifier = Modifier.weight(1f),
+                                            horizontalAlignment = Alignment.End,
+                                            verticalArrangement = Arrangement.spacedBy(6.dp)
                                         ) {
                                             Text(
-                                                text = label,
-                                                style = KmiTypography.body.copy(
-                                                    fontWeight = FontWeight.SemiBold
-                                                ),
+                                                text = "סטטוס מנוי",
+                                                style = KmiTypography.action,
                                                 color =
                                                     MaterialTheme.colorScheme.onSurfaceVariant,
-                                                textAlign =
-                                                    if (isEnglish) {
-                                                        TextAlign.Left
-                                                    } else {
-                                                        TextAlign.Right
-                                                    }
+                                                textAlign = TextAlign.Right,
+                                                modifier = Modifier.fillMaxWidth()
                                             )
 
                                             Text(
-                                                text = value,
-                                                style = valueStyle,
+                                                text = if (effectiveActive) "פעיל" else "לא פעיל",
+                                                style = KmiTypography.screenTitle,
+                                                fontWeight = FontWeight.ExtraBold,
                                                 color =
-                                                    MaterialTheme.colorScheme.onSurface,
-                                                textAlign = if (isEnglish) TextAlign.Right else TextAlign.Left
+                                                    if (effectiveActive) {
+                                                        kmiSuccessColor()
+                                                    } else {
+                                                        MaterialTheme.colorScheme.error
+                                                    },
+                                                textAlign = TextAlign.Right,
+                                                modifier = Modifier.fillMaxWidth()
                                             )
+
+                                            Card(
+                                                shape = RoundedCornerShape(20.dp),
+                                                colors = CardDefaults.cardColors(
+                                                    containerColor =
+                                                        if (effectiveActive) {
+                                                            kmiSuccessContainerColor()
+                                                        } else {
+                                                            MaterialTheme.colorScheme
+                                                                .errorContainer
+                                                        }
+                                                )
+                                            ) {
+                                                Text(
+                                                    text =
+                                                        if (effectiveActive) {
+                                                            "מנוי פעיל"
+                                                        } else {
+                                                            "אין מנוי פעיל"
+                                                        },
+                                                    color =
+                                                        if (effectiveActive) {
+                                                            kmiOnSuccessContainerColor()
+                                                        } else {
+                                                            MaterialTheme.colorScheme
+                                                                .onErrorContainer
+                                                        },
+                                                    style = KmiTypography.action,
+                                                    fontWeight = FontWeight.Bold,
+                                                    modifier = Modifier.padding(
+                                                        horizontal = 12.dp,
+                                                        vertical = 6.dp
+                                                    ),
+                                                    textAlign = TextAlign.Center
+                                                )
+                                            }
+                                        }
+
+                                        StatusIcon(effectiveActive)
+                                    } else {
+                                        StatusIcon(effectiveActive)
+
+                                        Column(
+                                            modifier = Modifier.weight(1f),
+                                            horizontalAlignment = Alignment.Start,
+                                            verticalArrangement = Arrangement.spacedBy(6.dp)
+                                        ) {
+                                            Text(
+                                                text = "Subscription status",
+                                                style = KmiTypography.action,
+                                                color =
+                                                    MaterialTheme.colorScheme.onSurfaceVariant,
+                                                textAlign = TextAlign.Left,
+                                                modifier = Modifier.fillMaxWidth()
+                                            )
+
+                                            Text(
+                                                text =
+                                                    if (effectiveActive) {
+                                                        "Active"
+                                                    } else {
+                                                        "Inactive"
+                                                    },
+                                                style = KmiTypography.screenTitle,
+                                                fontWeight = FontWeight.ExtraBold,
+                                                color =
+                                                    if (effectiveActive) {
+                                                        kmiSuccessColor()
+                                                    } else {
+                                                        MaterialTheme.colorScheme.error
+                                                    },
+                                                textAlign = TextAlign.Left,
+                                                modifier = Modifier.fillMaxWidth()
+                                            )
+
+                                            Card(
+                                                shape = RoundedCornerShape(20.dp),
+                                                colors = CardDefaults.cardColors(
+                                                    containerColor =
+                                                        if (effectiveActive) {
+                                                            kmiSuccessContainerColor()
+                                                        } else {
+                                                            MaterialTheme.colorScheme
+                                                                .errorContainer
+                                                        }
+                                                )
+                                            ) {
+                                                Text(
+                                                    text =
+                                                        if (effectiveActive) {
+                                                            "Subscription active"
+                                                        } else {
+                                                            "No active subscription"
+                                                        },
+                                                    color =
+                                                        if (effectiveActive) {
+                                                            kmiOnSuccessContainerColor()
+                                                        } else {
+                                                            MaterialTheme.colorScheme
+                                                                .onErrorContainer
+                                                        },
+                                                    style = KmiTypography.action,
+                                                    fontWeight = FontWeight.Bold,
+                                                    modifier = Modifier.padding(
+                                                        horizontal = 12.dp,
+                                                        vertical = 6.dp
+                                                    ),
+                                                    textAlign = TextAlign.Center
+                                                )
+                                            }
                                         }
                                     }
-
-                                    DetailsRow(
-                                        label = if (isEnglish) "Renewal date:" else "תאריך חידוש:",
-                                        value = renewalLabel,
-                                        valueStyle = KmiTypography.body
-                                    )
-
-                                    DetailsRow(
-                                        label = if (isEnglish) "Plan:" else "מסלול:",
-                                        value = activePlanLabel,
-                                        valueStyle = KmiTypography.body
-                                    )
-
-                                    DetailsRow(
-                                        label = if (isEnglish) "Monthly price:" else "מחיר חודשי:",
-                                        value = monthlyPriceLabel,
-                                        valueStyle = KmiTypography.body
-                                    )
-
-                                    DetailsRow(
-                                        label = if (isEnglish) "Yearly price:" else "מחיר שנתי:",
-                                        value = yearlyPriceLabel,
-                                        valueStyle = KmiTypography.body
-                                    )
-
-                                    DetailsRow(
-                                        label = if (isEnglish) "Product ID:" else "מזהה מוצר:",
-                                        value = savedProductId ?: "-",
-                                        valueStyle = KmiTypography.caption
-                                    )
                                 }
-                            }
 
-                            OutlinedButton(
-                                onClick = {
-                                    openGooglePlaySubscriptions(
-                                        context = ctx,
-                                        packageName = ctx.packageName,
-                                        productId = savedProductId
-                                    )
-                                },
-                                modifier = Modifier.fillMaxWidth(),
-                                shape = RoundedCornerShape(18.dp)
-                            ) {
                                 Text(
-                                    text = if (isEnglish) {
-                                        "Manage subscription in Google Play"
+                                    text = if (effectiveActive) {
+                                        if (isEnglish) {
+                                            "All app content is currently unlocked for you."
+                                        } else {
+                                            "כל התכנים באפליקציה פתוחים עבורך כעת."
+                                        }
                                     } else {
-                                        "ניהול המנוי ב־Google Play"
+                                        if (isEnglish) {
+                                            "To unlock all content, choose an active subscription plan."
+                                        } else {
+                                            "כדי לפתוח את כל התכנים, יש לבחור מסלול מנוי פעיל."
+                                        }
                                     },
-                                    fontWeight = FontWeight.SemiBold
+                                    style = KmiTypography.body,
+                                    color = MaterialTheme.colorScheme.onSurface,
+                                    modifier = Modifier.fillMaxWidth(),
+                                    textAlign = textAlign
                                 )
-                            }
 
-                            if (showError) {
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .height(1.dp)
+                                        .background(
+                                            MaterialTheme.colorScheme.outline.copy(
+                                                alpha = 0.28f
+                                            )
+                                        )
+                                )
+
                                 Card(
                                     modifier = Modifier.fillMaxWidth(),
-                                    shape = RoundedCornerShape(18.dp),
+                                    shape = RoundedCornerShape(16.dp),
                                     colors = CardDefaults.cardColors(
-                                        containerColor =
-                                            MaterialTheme.colorScheme.errorContainer,
+                                        containerColor = innerCardColor,
                                         contentColor =
-                                            MaterialTheme.colorScheme.onErrorContainer
+                                            MaterialTheme.colorScheme.onSurface
                                     )
                                 ) {
                                     Column(
                                         modifier = Modifier
                                             .fillMaxWidth()
-                                            .padding(horizontal = 14.dp, vertical = 12.dp),
-                                        verticalArrangement = Arrangement.spacedBy(4.dp),
-                                        horizontalAlignment = Alignment.CenterHorizontally
+                                            .padding(horizontal = 12.dp, vertical = 12.dp),
+                                        verticalArrangement = Arrangement.spacedBy(10.dp),
+                                        horizontalAlignment = horizontalAlign
                                     ) {
                                         Text(
-                                            text =
-                                                if (isEnglish) {
-                                                    "Connection error"
-                                                } else {
-                                                    "שגיאת חיבור"
-                                                },
-                                            color =
-                                                MaterialTheme.colorScheme
-                                                    .onErrorContainer,
-                                            style = KmiTypography.action,
-                                            fontWeight = FontWeight.Bold
+                                            text = if (isEnglish) "Subscription details" else "פרטי המנוי",
+                                            style = KmiTypography.cardTitle,
+                                            fontWeight = FontWeight.Bold,
+                                            color = MaterialTheme.colorScheme.onSurface,
+                                            modifier = Modifier.fillMaxWidth(),
+                                            textAlign = textAlign
                                         )
 
-                                        Text(
-                                            text =
-                                                if (isEnglish) {
-                                                    "The billing service is temporarily unavailable. Please try again later."
-                                                } else {
-                                                    "שירות הרכישה אינו זמין כרגע. נסה שוב מאוחר יותר."
-                                                },
-                                            color =
-                                                MaterialTheme.colorScheme
-                                                    .onErrorContainer,
-                                            style = KmiTypography.body,
-                                            textAlign = TextAlign.Center
+                                        @Composable
+                                        fun DetailsRow(
+                                            label: String,
+                                            value: String,
+                                            valueStyle: androidx.compose.ui.text.TextStyle
+                                        ) {
+                                            Row(
+                                                modifier = Modifier.fillMaxWidth(),
+                                                horizontalArrangement = Arrangement.SpaceBetween,
+                                                verticalAlignment = Alignment.CenterVertically
+                                            ) {
+                                                Text(
+                                                    text = label,
+                                                    style = KmiTypography.body.copy(
+                                                        fontWeight = FontWeight.SemiBold
+                                                    ),
+                                                    color =
+                                                        MaterialTheme.colorScheme.onSurfaceVariant,
+                                                    textAlign =
+                                                        if (isEnglish) {
+                                                            TextAlign.Left
+                                                        } else {
+                                                            TextAlign.Right
+                                                        }
+                                                )
+
+                                                Text(
+                                                    text = value,
+                                                    style = valueStyle,
+                                                    color =
+                                                        MaterialTheme.colorScheme.onSurface,
+                                                    textAlign = if (isEnglish) TextAlign.Right else TextAlign.Left
+                                                )
+                                            }
+                                        }
+
+                                        DetailsRow(
+                                            label = if (isEnglish) "Renewal date:" else "תאריך חידוש:",
+                                            value = renewalLabel,
+                                            valueStyle = KmiTypography.body
                                         )
+
+                                        DetailsRow(
+                                            label = if (isEnglish) "Plan:" else "מסלול:",
+                                            value = activePlanLabel,
+                                            valueStyle = KmiTypography.body
+                                        )
+
+                                        DetailsRow(
+                                            label = if (isEnglish) "Monthly price:" else "מחיר חודשי:",
+                                            value = monthlyPriceLabel,
+                                            valueStyle = KmiTypography.body
+                                        )
+
+                                        DetailsRow(
+                                            label = if (isEnglish) "Yearly price:" else "מחיר שנתי:",
+                                            value = yearlyPriceLabel,
+                                            valueStyle = KmiTypography.body
+                                        )
+
+                                        DetailsRow(
+                                            label = if (isEnglish) "Product ID:" else "מזהה מוצר:",
+                                            value = savedProductId ?: "-",
+                                            valueStyle = KmiTypography.caption
+                                        )
+                                    }
+                                }
+
+                                OutlinedButton(
+                                    onClick = {
+                                        openGooglePlaySubscriptions(
+                                            context = ctx,
+                                            packageName = ctx.packageName,
+                                            productId = savedProductId
+                                        )
+                                    },
+                                    modifier = Modifier.fillMaxWidth(),
+                                    shape = RoundedCornerShape(18.dp)
+                                ) {
+                                    Text(
+                                        text = if (isEnglish) {
+                                            "Manage subscription in Google Play"
+                                        } else {
+                                            "ניהול המנוי ב־Google Play"
+                                        },
+                                        fontWeight = FontWeight.SemiBold
+                                    )
+                                }
+
+                                if (showError) {
+                                    Card(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        shape = RoundedCornerShape(18.dp),
+                                        colors = CardDefaults.cardColors(
+                                            containerColor =
+                                                MaterialTheme.colorScheme.errorContainer,
+                                            contentColor =
+                                                MaterialTheme.colorScheme.onErrorContainer
+                                        )
+                                    ) {
+                                        Column(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .padding(horizontal = 14.dp, vertical = 12.dp),
+                                            verticalArrangement = Arrangement.spacedBy(4.dp),
+                                            horizontalAlignment = Alignment.CenterHorizontally
+                                        ) {
+                                            Text(
+                                                text =
+                                                    if (isEnglish) {
+                                                        "Connection error"
+                                                    } else {
+                                                        "שגיאת חיבור"
+                                                    },
+                                                color =
+                                                    MaterialTheme.colorScheme
+                                                        .onErrorContainer,
+                                                style = KmiTypography.action,
+                                                fontWeight = FontWeight.Bold
+                                            )
+
+                                            Text(
+                                                text =
+                                                    if (isEnglish) {
+                                                        "The billing service is temporarily unavailable. Please try again later."
+                                                    } else {
+                                                        "שירות הרכישה אינו זמין כרגע. נסה שוב מאוחר יותר."
+                                                    },
+                                                color =
+                                                    MaterialTheme.colorScheme
+                                                        .onErrorContainer,
+                                                style = KmiTypography.body,
+                                                textAlign = TextAlign.Center
+                                            )
+                                        }
                                     }
                                 }
                             }
                         }
                     }
-                }
 
-                PremiumSubscriptionButton(
-                    text = if (isEnglish) "Buy / Extend subscription" else "רכוש / הארך מנוי",
-                    onClick = onOpenPlans
-                )
-
-                Card(
-                    modifier = Modifier
-                        .fillMaxWidth(),
-                    shape = RoundedCornerShape(24.dp),
-                    colors = CardDefaults.cardColors(
-                        containerColor = mainCardColor,
-                        contentColor = MaterialTheme.colorScheme.onSurface
-                    ),
-                    elevation = CardDefaults.cardElevation(
-                        defaultElevation = 0.dp
-                    )
-                ) {
-                    Column(
-                        modifier = Modifier.padding(16.dp),
-                        verticalArrangement = Arrangement.spacedBy(14.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp)
                     ) {
-
-                        Text(
-                            text =
-                                if (isEnglish) {
-                                    "More actions"
-                                } else {
-                                    "פעולות נוספות"
-                                },
-                            style = KmiTypography.sectionTitle,
-                            color = MaterialTheme.colorScheme.onSurface
+                        PremiumSubscriptionButton(
+                            text = if (isEnglish) "Buy / Extend subscription" else "רכוש / הארך מנוי",
+                            onClick = onOpenPlans
                         )
+                    }
 
-                        if (activity != null) {
+                    Card(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp),
+                        shape = RoundedCornerShape(24.dp),
+                        colors = CardDefaults.cardColors(
+                            containerColor = mainCardColor,
+                            contentColor = MaterialTheme.colorScheme.onSurface
+                        ),
+                        elevation = CardDefaults.cardElevation(
+                            defaultElevation = 0.dp
+                        )
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(16.dp),
+                            verticalArrangement = Arrangement.spacedBy(14.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
 
-                            // כפתור הרכישה הישירה היה מיועד לבדיקות בלבד.
-                            // כרגע מסתירים אותו כדי שמשתמשים ובודקים יעבדו רק דרך מסך המסלולים הרשמי.
-                            /*
-                            PremiumActionRow(
-                                icon = "💳",
-                                text = if (isEnglish) "Direct purchase (tests)" else "רכישה ישירה (בדיקות)",
-                                onClick = {
-
-                                    val isAssociationMember =
-                                        userSp.getBoolean("is_association_member", false)
-
-                                    val productId =
-                                        SubscriptionResolver.resolveMonthlyProduct(isAssociationMember)
-
-                                    if (repo != null && state.connected) {
-                                        repo.launchPurchase(
-                                            activity,
-                                            productId
-                                        )
+                            Text(
+                                text =
+                                    if (isEnglish) {
+                                        "More actions"
                                     } else {
-                                        Toast.makeText(
-                                            ctx,
-                                            if (isEnglish) "Billing service is unavailable on this device." else "שירות הרכישה אינו זמין במכשיר.",
-                                            Toast.LENGTH_LONG
-                                        ).show()
-                                    }
-                                }
+                                        "פעולות נוספות"
+                                    },
+                                style = KmiTypography.sectionTitle,
+                                color = MaterialTheme.colorScheme.onSurface
                             )
-                            */
 
-                            PremiumActionRow(
-                                icon = if (restoreInProgress) "⏳" else "🔄",
-                                text = when {
-                                    restoreInProgress && isEnglish -> "Restoring purchases..."
-                                    restoreInProgress -> "משחזר רכישות..."
-                                    isEnglish -> "Restore purchases"
-                                    else -> "שחזור רכישות"
-                                },
-                                onClick = {
-                                    if (restoreInProgress) return@PremiumActionRow
+                            if (activity != null) {
 
-                                    if (repo == null) {
-                                        Toast.makeText(
-                                            ctx,
-                                            if (isEnglish) {
-                                                "Billing service is unavailable on this device."
-                                            } else {
-                                                "שירות הרכישה אינו זמין במכשיר הזה."
-                                            },
-                                            Toast.LENGTH_LONG
-                                        ).show()
-                                        return@PremiumActionRow
-                                    }
+                                // כפתור הרכישה הישירה היה מיועד לבדיקות בלבד.
+                                // כרגע מסתירים אותו כדי שמשתמשים ובודקים יעבדו רק דרך מסך המסלולים הרשמי.
+                                /*
+                                PremiumActionRow(
+                                    icon = "💳",
+                                    text = if (isEnglish) "Direct purchase (tests)" else "רכישה ישירה (בדיקות)",
+                                    onClick = {
 
-                                    restoreScope.launch {
-                                        restoreInProgress = true
+                                        val isAssociationMember =
+                                            userSp.getBoolean("is_association_member", false)
 
-                                        Toast.makeText(
-                                            ctx,
-                                            if (isEnglish) {
-                                                "Checking Google Play purchases..."
-                                            } else {
-                                                "בודק רכישות מול Google Play..."
-                                            },
-                                            Toast.LENGTH_SHORT
-                                        ).show()
+                                        val productId =
+                                            SubscriptionResolver.resolveMonthlyProduct(isAssociationMember)
 
-                                        runCatching {
-                                            repo.startConnection()
-                                            delay(700.milliseconds)
-                                            repo.refreshPurchases()
-                                            delay(900.milliseconds)
-
-                                            // ✅ מכריח את מסך ניהול המנוי לקרוא שוב את הנתונים שנשמרו
-                                            subscriptionUiRefreshTick++
-                                        }.onFailure {
+                                        if (repo != null && state.connected) {
+                                            repo.launchPurchase(
+                                                activity,
+                                                productId
+                                            )
+                                        } else {
                                             Toast.makeText(
                                                 ctx,
-                                                if (isEnglish) {
-                                                    "Could not restore purchases. Please try again."
-                                                } else {
-                                                    "לא ניתן היה לשחזר רכישות. נסה שוב."
-                                                },
-                                                Toast.LENGTH_LONG
-                                            ).show()
-                                        }.onSuccess {
-                                            Toast.makeText(
-                                                ctx,
-                                                if (isEnglish) {
-                                                    "Restore completed. If an active subscription exists, it will appear here."
-                                                } else {
-                                                    "השחזור הסתיים. אם קיים מנוי פעיל, הוא יוצג כאן."
-                                                },
+                                                if (isEnglish) "Billing service is unavailable on this device." else "שירות הרכישה אינו זמין במכשיר.",
                                                 Toast.LENGTH_LONG
                                             ).show()
                                         }
-
-                                        restoreInProgress = false
                                     }
-                                }
-                            )
+                                )
+                                */
+
+                                PremiumActionRow(
+                                    icon = if (restoreInProgress) "⏳" else "🔄",
+                                    text = when {
+                                        restoreInProgress && isEnglish -> "Restoring purchases..."
+                                        restoreInProgress -> "משחזר רכישות..."
+                                        isEnglish -> "Restore purchases"
+                                        else -> "שחזור רכישות"
+                                    },
+                                    onClick = {
+                                        if (restoreInProgress) return@PremiumActionRow
+
+                                        if (repo == null) {
+                                            Toast.makeText(
+                                                ctx,
+                                                if (isEnglish) {
+                                                    "Billing service is unavailable on this device."
+                                                } else {
+                                                    "שירות הרכישה אינו זמין במכשיר הזה."
+                                                },
+                                                Toast.LENGTH_LONG
+                                            ).show()
+                                            return@PremiumActionRow
+                                        }
+
+                                        restoreScope.launch {
+                                            restoreInProgress = true
+
+                                            Toast.makeText(
+                                                ctx,
+                                                if (isEnglish) {
+                                                    "Checking Google Play purchases..."
+                                                } else {
+                                                    "בודק רכישות מול Google Play..."
+                                                },
+                                                Toast.LENGTH_SHORT
+                                            ).show()
+
+                                            runCatching {
+                                                repo.startConnection()
+                                                delay(700.milliseconds)
+                                                repo.refreshPurchases()
+                                                delay(900.milliseconds)
+
+                                                // ✅ מכריח את מסך ניהול המנוי לקרוא שוב את הנתונים שנשמרו
+                                                subscriptionUiRefreshTick++
+                                            }.onFailure {
+                                                Toast.makeText(
+                                                    ctx,
+                                                    if (isEnglish) {
+                                                        "Could not restore purchases. Please try again."
+                                                    } else {
+                                                        "לא ניתן היה לשחזר רכישות. נסה שוב."
+                                                    },
+                                                    Toast.LENGTH_LONG
+                                                ).show()
+                                            }.onSuccess {
+                                                Toast.makeText(
+                                                    ctx,
+                                                    if (isEnglish) {
+                                                        "Restore completed. If an active subscription exists, it will appear here."
+                                                    } else {
+                                                        "השחזור הסתיים. אם קיים מנוי פעיל, הוא יוצג כאן."
+                                                    },
+                                                    Toast.LENGTH_LONG
+                                                ).show()
+                                            }
+
+                                            restoreInProgress = false
+                                        }
+                                    }
+                                )
+                            }
                         }
                     }
                 }

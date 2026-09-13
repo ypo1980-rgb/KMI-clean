@@ -709,6 +709,36 @@ fun NavGraphBuilder.homeNavGraph(
                 }
             },
 
+            onOpenPracticeMenu = { belt ->
+                /*
+                 * החגורה נשמרת לפני הניווט כדי
+                 * שהמסך החדש ייפתח עליה כברירת מחדל.
+                 */
+                vm.setSelectedBelt(belt)
+
+                nav.navigate(
+                    Route.PracticeMenu.route
+                ) {
+                    launchSingleTop = true
+                    restoreState = false
+                }
+            },
+
+            onOpenWeakPoints = {
+                nav.navigate(Route.WeakPoints.route)
+            },
+
+            onOpenAllLists = { belt ->
+                vm.setSelectedBelt(belt)
+
+                nav.navigate(
+                    "ex_tabs_all/${belt.id}"
+                ) {
+                    launchSingleTop = true
+                    restoreState = true
+                }
+            },
+
             onOpenByBelt = {
                 val returnedToBeltScreen =
                     nav.popBackStack(

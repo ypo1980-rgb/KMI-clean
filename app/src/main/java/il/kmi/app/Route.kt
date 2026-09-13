@@ -130,8 +130,24 @@ sealed class Route(val route: String) {
     // ↓ הוסף לצד שאר המסלולים
     object AboutAvi : Route("about_avi")
 
-    object Practice : Route("practice/{beltId}?topic={topic}") {
-        fun make(belt: Belt, topic: String? = null): String =
+    /*
+     * מסך עצמאי לבחירת מסלול התרגול:
+     * אקראי / מבחן מסכם / לפי נושא.
+     */
+    object PracticeMenu :
+        Route("practice_menu")
+
+    /*
+     * מסך התרגול הפעיל לאחר שהמשתמש
+     * בחר חגורה ונושא.
+     */
+    object Practice :
+        Route("practice/{beltId}?topic={topic}") {
+
+        fun make(
+            belt: Belt,
+            topic: String? = null
+        ): String =
             if (topic.isNullOrEmpty()) {
                 "practice/${belt.id}"
             } else {

@@ -251,26 +251,60 @@ fun AppDrawerContent(
         )
     }
 
+    fun readDrawerActiveRole(): String {
+        return userSp.getString(
+            "active_user_mode",
+            null
+        )
+            ?.trim()
+            ?.takeIf {
+                it.isNotBlank()
+            }
+            ?: userSp.getString(
+                "last_active_app_role",
+                null
+            )
+                ?.trim()
+                ?.takeIf {
+                    it.isNotBlank()
+                }
+            ?: userSp.getString(
+                "user_role",
+                null
+            )
+                ?.trim()
+                ?.takeIf {
+                    it.isNotBlank()
+                }
+            ?: userSp.getString(
+                "role",
+                "trainee"
+            )
+                ?.trim()
+                .orEmpty()
+    }
+
     var drawerUserRole by remember {
         mutableStateOf(
-            userSp.getString(
-                "user_role",
-                "trainee"
-            ) ?: "trainee"
+            readDrawerActiveRole()
         )
     }
 
     DisposableEffect(userSp) {
         val listener =
             android.content.SharedPreferences
-                .OnSharedPreferenceChangeListener { _, key ->
+                .OnSharedPreferenceChangeListener {
+                        _,
+                        key ->
 
-                    if (key == "user_role") {
+                    if (
+                        key == "active_user_mode" ||
+                        key == "last_active_app_role" ||
+                        key == "user_role" ||
+                        key == "role"
+                    ) {
                         drawerUserRole =
-                            userSp.getString(
-                                "user_role",
-                                "trainee"
-                            ) ?: "trainee"
+                            readDrawerActiveRole()
                     }
                 }
 
@@ -289,7 +323,17 @@ fun AppDrawerContent(
         drawerUserRole.equals(
             "coach",
             ignoreCase = true
-        )
+        ) ||
+                drawerUserRole.equals(
+                    "trainer",
+                    ignoreCase = true
+                ) ||
+                drawerUserRole.contains(
+                    "מאמן"
+                ) ||
+                drawerUserRole.contains(
+                    "מדריך"
+                )
 
     val drawerBranch = remember {
         userSp.getString("branch", "").orEmpty().trim()
@@ -1464,11 +1508,13 @@ fun AppDrawerContent(
                             Alignment.Start
                     ) {
 
-                        //------------------------------------------------------------------------
-                        // ===== אזור מאמן — רק למורשה שנמצא כרגע במצב מאמן =====
+                        // ===== אזור מאמן — למאמן או למנהל מורשה במצב מאמן =====
                         if (
-                            isCoach &&
-                            drawerIsCoachMode
+                            drawerIsCoachMode &&
+                            (
+                                    isCoach ||
+                                            effectiveIsAdmin
+                                    )
                         ) {
                             Spacer(Modifier.height(8.dp))
 

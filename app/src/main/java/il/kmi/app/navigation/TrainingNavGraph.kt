@@ -284,15 +284,32 @@ fun NavGraphBuilder.trainingNavGraph(
                 }
             },
 
-            onOpenWeakPoints = { _ ->
-                nav.navigate(Route.WeakPoints.route) {
-                    launchSingleTop = true
-                    restoreState = true
-                }
+            onOpenWeakPoints = {
+                nav.navigate(Route.WeakPoints.route)
             },
 
             onOpenAllLists = { belt ->
-                runCatching { nav.navigate(route = "ex_tabs_all/${belt.id}") }
+                runCatching {
+                    nav.navigate(
+                        route =
+                            "ex_tabs_all/${belt.id}"
+                    )
+                }
+            },
+
+            onOpenPracticeMenu = { belt ->
+                /*
+                 * שומרים את החגורה שמוצגת
+                 * בקרוסלה לפני פתיחת המסך.
+                 */
+                vm.setSelectedBelt(belt)
+
+                nav.navigate(
+                    Route.PracticeMenu.route
+                ) {
+                    launchSingleTop = true
+                    restoreState = false
+                }
             },
 
             onOpenRandomPractice = { belt ->
@@ -511,11 +528,8 @@ fun NavGraphBuilder.trainingNavGraph(
                 }
             },
 
-            onOpenWeakPoints = { belt ->
-                nav.navigate(Route.WeakPoints.route) {
-                    launchSingleTop = true
-                    restoreState = true
-                }
+            onOpenWeakPoints = {
+                nav.navigate(Route.WeakPoints.route)
             },
 
             onOpenAllLists = { belt ->

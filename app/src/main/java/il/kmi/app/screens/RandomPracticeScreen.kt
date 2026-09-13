@@ -19,13 +19,8 @@ import androidx.compose.ui.unit.dp
 import il.kmi.shared.domain.Belt
 import kotlinx.coroutines.delay
 import androidx.compose.runtime.saveable.rememberSaveable
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
-import androidx.compose.animation.AnimatedContent
-import androidx.compose.animation.SizeTransform
-import androidx.compose.animation.core.spring
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.ui.draw.alpha
@@ -42,10 +37,10 @@ import il.kmi.app.ui.KmiTtsManager.speak
 import il.kmi.app.ui.dialogs.ExerciseExplanationDialog
 import il.kmi.app.ui.dialogs.ExerciseNoteEditorDialog
 import il.kmi.app.ui.ext.color
-import il.kmi.app.ui.ext.lightColor
 import il.kmi.shared.platform.PlatformSoundPlayer
 import java.net.URLDecoder   // ✅ נשאר רק זה
 import il.kmi.app.KmiViewModel
+import il.kmi.app.R
 import il.kmi.app.domain.CanonicalIds
 import il.kmi.app.domain.ExerciseExplanationResolver
 import il.kmi.app.favorites.FavoritesStore
@@ -65,6 +60,9 @@ import androidx.compose.ui.text.style.TextOverflow
 import il.kmi.app.ui.KmiTypography
 import il.kmi.shared.domain.content.ExerciseTitlesEn
 import il.kmi.shared.domain.content.ExerciseIdentityRegistry
+import il.yuval.ui.theme.kmiScreenBackgroundBrush
+import il.yuval.ui.theme.kmiSectionHeaderBrush
+import il.yuval.ui.theme.kmiSectionHeaderContentColor
 
 //==========================================================================
 
@@ -144,8 +142,108 @@ private fun savePracticeNote(
 }
 
 private fun decTokenPart(s: String): String =
-    runCatching { URLDecoder.decode(s, "UTF-8") }.getOrDefault(s)
+    runCatching {
+        URLDecoder.decode(s, Charsets.UTF_8.name())
+    }.getOrDefault(s)
 
+private data class PracticeSubjectFilter(
+    val topic: String,
+    val subTopic: String?
+)
+
+private fun resolvePracticeSubjectFilter(
+    rawFilter: String?,
+    belt: Belt
+): PracticeSubjectFilter? {
+    val cleanFilter =
+        rawFilter?.trim().orEmpty()
+
+    if (cleanFilter.isBlank()) {
+        return null
+    }
+
+    val selectedValue =
+        if (
+            cleanFilter.startsWith(
+                "$TOPICS_PICK_TOKEN:"
+            )
+        ) {
+            val beltSegment =
+                cleanFilter
+                    .removePrefix(
+                        "$TOPICS_PICK_TOKEN:"
+                    )
+                    .split(';')
+                    .firstOrNull { segment ->
+                        segment
+                            .substringBefore('|')
+                            .trim() == belt.id
+                    }
+                    ?: return null
+
+            val selectedTopics =
+                beltSegment
+                    .substringAfter('|', "")
+                    .split(',')
+                    .map { decTokenPart(it.trim()) }
+                    .filter { it.isNotBlank() }
+
+            selectedTopics.singleOrNull()
+                ?: return null
+        } else {
+            decTokenPart(cleanFilter)
+        }
+
+    if (
+        selectedValue.startsWith(
+            "__SUBTOPIC__:"
+        )
+    ) {
+        val selectionParts =
+            selectedValue
+                .removePrefix("__SUBTOPIC__:")
+                .split("::", limit = 2)
+
+        val topic =
+            selectionParts
+                .getOrNull(0)
+                ?.trim()
+                .orEmpty()
+
+        val subTopic =
+            selectionParts
+                .getOrNull(1)
+                ?.trim()
+                .orEmpty()
+
+        if (
+            topic.isBlank() ||
+            subTopic.isBlank()
+        ) {
+            return null
+        }
+
+        return PracticeSubjectFilter(
+            topic = topic,
+            subTopic = subTopic
+        )
+    }
+
+    if (
+        selectedValue.startsWith("__") ||
+        selectedValue.equals("all", ignoreCase = true) ||
+        selectedValue.equals("random", ignoreCase = true) ||
+        selectedValue == belt.id ||
+        selectedValue == belt.heb
+    ) {
+        return null
+    }
+
+    return PracticeSubjectFilter(
+        topic = selectedValue.trim(),
+        subTopic = null
+    )
+}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -238,11 +336,29 @@ fun RandomPracticeScreen(
     }
 
     // תוצאה שנבחרה מהחיפוש להצגת הסבר
-    var pickedSearchHit by rememberSaveable { mutableStateOf<Triple<Belt, String, String>?>(null) }
+    var pickedSearchHit by rememberSaveable {
+        mutableStateOf<Triple<Belt, String, String>?>(
+            null
+        )
+    }
+
+    val selectedSubjectFilter =
+        remember(belt, topicFilter) {
+            resolvePracticeSubjectFilter(
+                rawFilter = topicFilter,
+                belt = belt
+            )
+        }
 
     // ✅ מקור עיקרי: shared PracticeFacade (כולל __UNKNOWN__/__FAVS_ALL__/__ALL__/TOPICS_PICK_TOKEN)
-    val practiceItems: List<il.kmi.shared.practice.PracticeItem> = remember(belt, topicFilter) {
-        val rawFilter = topicFilter?.trim().orEmpty()
+    val practiceItems:
+            List<il.kmi.shared.practice.PracticeItem> =
+        remember(
+            belt,
+            topicFilter,
+            favorites
+        ) {
+            val rawFilter = topicFilter?.trim().orEmpty()
 
         // אם הגיע טוקן עם encoding, נעשה decode כאן (כמו קודם)
         val decodedTopicsToken = if (rawFilter.isNotBlank() && rawFilter.startsWith("$TOPICS_PICK_TOKEN:")) {
@@ -263,9 +379,13 @@ fun RandomPracticeScreen(
             rawFilter
         }
 
-        // ✅ Guard: אם ה"פילטר" הוא בעצם חגורה/אקראי/ריק — נלך על ALL
-        val fixedFilter = when {
-            decodedTopicsToken.isBlank() -> il.kmi.shared.practice.PracticeFilters.ALL
+            // בתרגול של תת־נושא, PracticeFacade מקבל את נושא האב.
+            val fixedFilter = when {
+                selectedSubjectFilter != null ->
+                    selectedSubjectFilter.topic
+
+                decodedTopicsToken.isBlank() ->
+                    il.kmi.shared.practice.PracticeFilters.ALL
 
             decodedTopicsToken.equals(belt.heb.trim(), ignoreCase = true) -> il.kmi.shared.practice.PracticeFilters.ALL
             decodedTopicsToken.equals(belt.id.trim(), ignoreCase = true) -> il.kmi.shared.practice.PracticeFilters.ALL
@@ -277,17 +397,69 @@ fun RandomPracticeScreen(
             else -> decodedTopicsToken
         }
 
-        // ✅ האם זה "פילטר של נושא בודד" (לא טוקן/לא ALL/UNKNOWN/FAVS)?
-        val isSingleTopicFilter =
-            fixedFilter.isNotBlank() &&
-                    !fixedFilter.startsWith("$TOPICS_PICK_TOKEN:") &&
-                    fixedFilter != il.kmi.shared.practice.PracticeFilters.ALL &&
-                    fixedFilter != il.kmi.shared.practice.PracticeFilters.UNKNOWN &&
-                    fixedFilter != il.kmi.shared.practice.PracticeFilters.FAVS_ALL
+            /*
+       * טוקנים שמייצגים טאב במסך הרשימות.
+       * הם אינם שמות של נושאים.
+       */
+            val isUnknownTab =
+                fixedFilter ==
+                        "__UNKNOWN__"
 
-        // ✅ אם זה נושא בודד — בונים ALL ואז מסננים אצלנו עם normHeb כדי שלא ניפול על התאמה מדויקת
-        val requestFilterForFacade =
-            if (isSingleTopicFilter) il.kmi.shared.practice.PracticeFilters.ALL else fixedFilter
+            val isFavoritesTab =
+                fixedFilter ==
+                        "__FAVS_ALL__"
+
+            val coachStatusForTab: String? =
+                when (fixedFilter) {
+                    "__COACH_TAUGHT__" ->
+                        "taught"
+
+                    "__COACH_PRACTICE__" ->
+                        "practiced"
+
+                    "__COACH_IMPROVEMENT__" ->
+                        "needs_reinforcement"
+
+                    else ->
+                        null
+                }
+
+            val isTabFilter =
+                isUnknownTab ||
+                        isFavoritesTab ||
+                        coachStatusForTab != null
+
+            // האם זה פילטר של נושא אמיתי בודד.
+            val isSingleTopicFilter =
+                fixedFilter.isNotBlank() &&
+                        !fixedFilter.startsWith(
+                            "$TOPICS_PICK_TOKEN:"
+                        ) &&
+                        fixedFilter !=
+                        il.kmi.shared.practice
+                            .PracticeFilters.ALL &&
+                        fixedFilter !=
+                        il.kmi.shared.practice
+                            .PracticeFilters.UNKNOWN &&
+                        fixedFilter !=
+                        il.kmi.shared.practice
+                            .PracticeFilters.FAVS_ALL &&
+                        !isTabFilter
+
+            /*
+             * עבור טאב בונים תחילה את כל תרגילי החגורה,
+             * ולאחר מכן מסננים לפי מקור האמת של אותו טאב.
+             */
+            val requestFilterForFacade =
+                if (
+                    isSingleTopicFilter ||
+                    isTabFilter
+                ) {
+                    il.kmi.shared.practice
+                        .PracticeFilters.ALL
+                } else {
+                    fixedFilter
+                }
 
         // ===================== ✅ NEW: resolve נושא יחיד =====================
         val resolvedSingleTopic: String? =
@@ -336,17 +508,48 @@ fun RandomPracticeScreen(
 
             // =====================================================================
 
-            itemsProvider = il.kmi.shared.practice.PracticeFacade.ItemsProvider { beltId, topicTitle ->
-                val b = Belt.fromId(beltId) ?: belt
+            itemsProvider =
+                il.kmi.shared.practice.PracticeFacade
+                    .ItemsProvider { beltId, topicTitle ->
 
-                // ✅ קודם shared (האמת)
-                val sharedItems = sharedItemsFor(b, topicTitle, subTopicTitle = null)
-                if (sharedItems.isNotEmpty()) return@ItemsProvider sharedItems
+                        val currentBelt =
+                            Belt.fromId(beltId) ?: belt
 
-                // ואז Bridge אם צריך
-                runCatching { il.kmi.app.search.KmiSearchBridge.itemsFor(b, topicTitle) }
-                    .getOrDefault(emptyList())
-            },
+                        val matchingSubTopic =
+                            selectedSubjectFilter
+                                ?.takeIf {
+                                    currentBelt.id == belt.id &&
+                                            it.topic.normHeb() ==
+                                            topicTitle.normHeb()
+                                }
+                                ?.subTopic
+
+                        val sharedItems =
+                            sharedItemsFor(
+                                b = currentBelt,
+                                topicTitle = topicTitle,
+                                subTopicTitle =
+                                    matchingSubTopic
+                            )
+
+                        if (sharedItems.isNotEmpty()) {
+                            return@ItemsProvider sharedItems
+                        }
+
+                        // Bridge הוא fallback לנושא ללא תת־נושא.
+                        if (matchingSubTopic == null) {
+                            runCatching {
+                                il.kmi.app.search
+                                    .KmiSearchBridge
+                                    .itemsFor(
+                                        currentBelt,
+                                        topicTitle
+                                    )
+                            }.getOrDefault(emptyList())
+                        } else {
+                            emptyList()
+                        }
+                    },
             setsProvider = il.kmi.shared.practice.PracticeFacade.SetProvider { key ->
                 sp.getStringSet(key, emptySet()) ?: emptySet()
             },
@@ -358,14 +561,152 @@ fun RandomPracticeScreen(
             displayNameFor = { rawItem -> displayName(rawItem) }
         )
 
-        if (!isSingleTopicFilter) {
-            built
-        } else {
-            val want = (resolvedSingleTopic ?: fixedFilter).normHeb()
-            // ✅ סינון רך לפי נושא (משווה נרמול)
-            built.filter { it.topicTitle.normHeb() == want }
+            /*
+       * מחזיר את אותו ex_XXX שבו משתמש
+       * ExercisesTabsScreen עבור אותו תרגיל.
+       */
+            fun exerciseIdForPracticeItem(
+                item:
+                il.kmi.shared.practice.PracticeItem
+            ): String {
+                return ExerciseIdentityRegistry.idFor(
+                    belt = belt,
+                    hebrewTitle =
+                        item.displayTitle.trim(),
+                    topicKey =
+                        item.topicTitle.trim()
+                )
+            }
+
+            when {
+                isUnknownTab -> {
+                    val storedUnknownIds =
+                        sp.all.keys
+                            .asSequence()
+                            .filter { key ->
+                                key.startsWith(
+                                    "unknown_${belt.id}_"
+                                )
+                            }
+                            .flatMap { key ->
+                                (
+                                        sp.getStringSet(
+                                            key,
+                                            emptySet()
+                                        )
+                                            ?: emptySet()
+                                        )
+                                    .asSequence()
+                            }
+                            .map {
+                                it.trim()
+                            }
+                            .filter {
+                                it.isNotBlank()
+                            }
+                            .toSet()
+
+                    built.filter { item ->
+                        val exerciseId =
+                            exerciseIdForPracticeItem(item)
+
+                        exerciseId in storedUnknownIds ||
+                                item.canonicalKey.trim() in
+                                storedUnknownIds ||
+                                item.displayTitle.trim() in
+                                storedUnknownIds
+                    }
+                }
+
+                isFavoritesTab -> {
+                    val favoriteIds =
+                        favorites
+                            .mapTo(linkedSetOf()) {
+                                    storedValue ->
+
+                                val cleanValue =
+                                    storedValue.trim()
+
+                                if (
+                                    cleanValue.matches(
+                                        Regex("ex_\\d+")
+                                    )
+                                ) {
+                                    cleanValue
+                                } else {
+                                    ExerciseIdentityRegistry
+                                        .idFor(
+                                            belt = belt,
+                                            hebrewTitle =
+                                                cleanValue,
+                                            topicKey = null
+                                        )
+                                }
+                            }
+
+                    built.filter { item ->
+                        exerciseIdForPracticeItem(item) in
+                                favoriteIds
+                    }
+                }
+
+                coachStatusForTab != null -> {
+                    built.filter { item ->
+                        val exerciseId =
+                            exerciseIdForPracticeItem(item)
+
+                        val topicKey =
+                            item.topicTitle.trim()
+
+                        val baseKey =
+                            buildString {
+                                append(
+                                    "coach_material_progress_"
+                                )
+                                append(belt.id)
+                                append("_")
+                                append(topicKey)
+                                append("_")
+                                append(exerciseId)
+                            }
+
+                        val selectedInNewStorage =
+                            sp.getBoolean(
+                                "${baseKey}_${coachStatusForTab}_selected",
+                                false
+                            )
+
+                        val selectedInLegacyStorage =
+                            sp.getString(
+                                "${baseKey}_status",
+                                null
+                            ) == coachStatusForTab
+
+                        selectedInNewStorage ||
+                                selectedInLegacyStorage
+                    }
+                }
+
+                isSingleTopicFilter -> {
+                    val wantedTopic =
+                        (
+                                resolvedSingleTopic
+                                    ?: fixedFilter
+                                )
+                            .normHeb()
+
+                    built.filter { item ->
+                        item.topicTitle
+                            .normHeb() ==
+                                wantedTopic
+                    }
+                }
+
+                else -> {
+                    built
+                }
+            }
         }
-    }
 
     // ✅ מפתח יציב לשמירת "לא יודע" (קאנוני) ב-SP לפי belt+filter
     val practiceKey = remember(topicFilter) {
@@ -407,7 +748,13 @@ fun RandomPracticeScreen(
         val allRawItems = sharedItemsFor(
             b = belt,
             topicTitle = statusTopic,
-            subTopicTitle = null
+            subTopicTitle =
+                selectedSubjectFilter
+                    ?.takeIf {
+                        it.topic.normHeb() ==
+                                statusTopic.normHeb()
+                    }
+                    ?.subTopic
         )
 
         return allRawItems.firstOrNull { raw ->
@@ -703,10 +1050,28 @@ fun RandomPracticeScreen(
 
     var currentIndex by remember { mutableStateOf(0) }
 
-    val currentPracticeItem = weightedPracticeItems.getOrNull(currentIndex)
-    val currentStatusId = currentPracticeItem?.let { primaryStatusIdForPractice(it) }
+    val currentPracticeItem =
+        remember(
+            weightedPracticeItems,
+            currentIndex
+        ) {
+            weightedPracticeItems.getOrNull(currentIndex)
+        }
+
+    val currentStatusId =
+        remember(
+            currentPracticeItem
+        ) {
+            currentPracticeItem
+                ?.let {
+                    primaryStatusIdForPractice(it)
+                }
+        }
+
     val currentPracticeStatus: Boolean? =
-        currentStatusId?.let { practiceStatusMap[it] }
+        currentStatusId?.let {
+            practiceStatusMap[it]
+        }
 
     suspend fun readPracticeStatusFromSources(
         safeVm: KmiViewModel?,
@@ -825,20 +1190,8 @@ fun RandomPracticeScreen(
         practiceStatusMap[statusId] = fromSources
     }
 
-    // ✅ טעינת כל הסימונים בתחילת התרגול / אחרי שינוי סימון.
-    // חשוב: לא עושים clear למפה, כדי שלא יהיה רגע שבו העיגול חוזר לריק.
-    LaunchedEffect(weightedPracticeItems, vm, marksVersion) {
-        weightedPracticeItems.forEach { item ->
-            val statusId = primaryStatusIdForPractice(item)
-
-            val (fromSources, _) = readPracticeStatusFromSources(
-                safeVm = vm,
-                item = item
-            )
-
-            practiceStatusMap[statusId] = fromSources
-        }
-    }
+    // הסטטוס נטען רק עבור התרגיל הנוכחי.
+    // אין לבצע טעינה מלאה של כל רשימת התרגילים בזמן פתיחת המסך.
 
 // ✅ Guard: אם הרשימה השתנתה והאינדקס יצא מהטווח – נתקן בעדינות
     LaunchedEffect(weightedItems.size) {
@@ -878,6 +1231,9 @@ fun RandomPracticeScreen(
     // 🔊 נגן צלילים רב-פלטפורמי (Android + iOS)
     val soundPlayer = remember { PlatformSoundPlayer(context) }
 
+    val practiceSoundScope =
+        rememberCoroutineScope()
+
     // ✅ צפצוף יציב לספירה לאחור — לא תלוי בקובץ beep ולא נבלע בין שניות
     val countdownTone = remember {
         ToneGenerator(AudioManager.STREAM_MUSIC, 95)
@@ -907,16 +1263,27 @@ fun RandomPracticeScreen(
         }
     }
 
-    // ניגון LETSGO ואז פעולה כשמסתיים
+    // מתחילים את התרגול מיד.
+    // הצליל מנוגן ברקע ואינו מעכב את הטיימר או את ה־UI.
     fun playLetsGo(onFinished: () -> Unit) {
-        runCatching { soundPlayer.play("letsgo") }
-        if (!isExiting) onFinished()
+        if (!isExiting) {
+            onFinished()
+        }
+
+        practiceSoundScope.launch(Dispatchers.IO) {
+            runCatching {
+                soundPlayer.play("letsgo")
+            }
+        }
     }
 
-    // ניגון STOP_REST ואז פעולה כשמסתיים
-    fun playStopRest(onFinished: () -> Unit) {
-        runCatching { soundPlayer.play("stop_rest") }
-        if (!isExiting) onFinished()
+    // הצליל אינו מעכב את פעולת הסיום.
+    fun playStopRest() {
+        practiceSoundScope.launch(Dispatchers.IO) {
+            runCatching {
+                soundPlayer.play("stop_rest")
+            }
+        }
     }
 
     fun beep(ms: Int = 120) {
@@ -1083,18 +1450,49 @@ fun RandomPracticeScreen(
             il.kmi.app.ui.KmiTopBar(
                 title = if (!topicFilter.isNullOrBlank()) {
                     if (isEnglish) {
-                        "Practice by Topic - ${belt.en}"
+                        "Practice by Topic"
                     } else {
-                        "תרגול לפי נושא - ${belt.heb}"
+                        "תרגול לפי נושא"
                     }
                 } else {
                     if (isEnglish) {
-                        "Random Practice - ${belt.en}"
+                        "Random Practice"
                     } else {
-                        "תרגול אקראי - ${belt.heb}"
+                        "תרגול אקראי"
                     }
                 },
                 onBack = null,
+                showBackNavigation = false,
+                topBeltIconRes =
+                    when (belt) {
+                        Belt.WHITE ->
+                            R.drawable.intro_belt_white
+
+                        Belt.YELLOW ->
+                            R.drawable.intro_belt_yellow
+
+                        Belt.ORANGE ->
+                            R.drawable.intro_belt_orange
+
+                        Belt.GREEN ->
+                            R.drawable.intro_belt_green
+
+                        Belt.BLUE ->
+                            R.drawable.intro_belt_blue
+
+                        Belt.BROWN ->
+                            R.drawable.intro_belt_brown
+
+                        Belt.BLACK ->
+                            R.drawable.intro_belt_black
+                    },
+                topBeltIconDescription =
+                    if (isEnglish) {
+                        belt.en
+                    } else {
+                        belt.heb
+                    },
+                showTopBeltIcon = true,
                 showBottomActions = true,
                 onHome = onHome,
                 onSettings = onOpenSettings,
@@ -1126,18 +1524,95 @@ fun RandomPracticeScreen(
                 .fillMaxSize()
                 .padding(padding)
                 .background(
-                    brush = Brush.verticalGradient(
-                        colors = listOf(
-                            MaterialTheme.colorScheme.background,
-                            MaterialTheme.colorScheme.surface,
-                            belt.color.copy(alpha = 0.16f)
-                        )
-                    )
+                    brush = kmiScreenBackgroundBrush()
                 )
         ) {
+            selectedSubjectFilter?.let { selectedFilter ->
+                PracticeSubjectHeader(
+                    topic = topicTitleForUi(
+                        selectedFilter.topic
+                    ),
+                    subTopic =
+                        selectedFilter.subTopic
+                            ?.let(::topicTitleForUi),
+                    isEnglish = isEnglish,
+                    modifier = Modifier
+                        .align(Alignment.TopCenter)
+                        .fillMaxWidth()
+                )
+            }
+
+            Box(
+                modifier = Modifier
+                    .align(Alignment.TopCenter)
+                    .fillMaxWidth()
+                    .heightIn(min = 72.dp)
+                    .then(
+                        if (selectedSubjectFilter == null) {
+                            Modifier.background(
+                                brush = kmiSectionHeaderBrush()
+                            )
+                        } else {
+                            Modifier.padding(top = 56.dp)
+                        }
+                    )
+                    .padding(
+                        horizontal = 16.dp,
+                        vertical = 12.dp
+                    ),
+                contentAlignment = Alignment.Center
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.Center,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+
+                    Text(
+                        text = String.format(
+                            "%02d:%02d",
+                            timeLeft / 60,
+                            timeLeft % 60
+                        ),
+                        style = KmiTypography.screenTitle.copy(
+                            fontSize =
+                                KmiTypography.screenTitle.fontSize * 1.5f,
+                            fontWeight = FontWeight.Black
+                        ),
+                        color =
+                            if (selectedSubjectFilter == null) {
+                                kmiSectionHeaderContentColor()
+                            } else {
+                                MaterialTheme.colorScheme.primary
+                            },
+                        textAlign = TextAlign.Center,
+                        maxLines = 1
+                    )
+
+                    Spacer(Modifier.width(12.dp))
+
+                    Text(
+                        text = "⏳",
+                        style = KmiTypography.screenTitle.copy(
+                            fontSize =
+                                KmiTypography.screenTitle.fontSize * 1.5f
+                        )
+                    )
+                }
+            }
+
+            val subjectHeaderPadding =
+                if (selectedSubjectFilter != null) {
+                    128.dp
+                } else {
+                    72.dp
+                }
+
             if (weightedItems.isEmpty()) {
                 Box(
-                    modifier = Modifier.fillMaxSize(),
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(top = subjectHeaderPadding),
                     contentAlignment = Alignment.Center
                 ) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
@@ -1158,7 +1633,11 @@ fun RandomPracticeScreen(
                 Column(
                     modifier = Modifier
                         .fillMaxSize()
-                        .padding(horizontal = 16.dp, vertical = 14.dp),
+                        .padding(top = subjectHeaderPadding)
+                        .padding(
+                            horizontal = 16.dp,
+                            vertical = 14.dp
+                        ),
                     verticalArrangement = Arrangement.SpaceBetween,
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
@@ -1166,34 +1645,6 @@ fun RandomPracticeScreen(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {
-                        // ✅ שורת טיימר נקייה בלבד — בלי רמקול ובלי כפתור עצירה
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.Center,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Text(
-                                text = "⏳",
-                                style = KmiTypography.metric
-                            )
-
-                            Spacer(Modifier.width(10.dp))
-
-                            Text(
-                                text = String.format(
-                                    "%02d:%02d",
-                                    timeLeft / 60,
-                                    timeLeft % 60
-                                ),
-                                style = KmiTypography.metric.copy(
-                                    color = MaterialTheme.colorScheme.primary,
-                                    fontWeight = FontWeight.Black
-                                )
-                            )
-                        }
-
-                        Spacer(Modifier.height(14.dp))
-
                         if (currentIndex in weightedItems.indices) {
                             Surface(
                                 onClick = {
@@ -1327,19 +1778,13 @@ fun RandomPracticeScreen(
                             sessionStarted = false
                             runCatching { KmiTtsManager.stop() }
 
-                            playStopRest {
-                                requestExit()
-                            }
+                            playStopRest()
+                            requestExit()
                         }
                     )
                 }
             }
         }
-
-        // ----- סדר עדיפויות לדיאלוגים -----
-        // 1) אם נבחר תרגיל מהחיפוש – מציגים רק את ההסבר הזה
-        // 2) אחרת אם נלחץ "עזרה" – מציגים עזרה לתרגיל הנוכחי
-        // 3) אחרת אם פתוח חיפוש – מציגים חיפוש
 
         when {
             pickedSearchHit != null -> {
@@ -1717,8 +2162,10 @@ private fun DurationPickerDialog(
     var playHalf by remember { mutableStateOf(initHalfAlert) }
     var playCountdown by remember { mutableStateOf(initLast10) }
 
-    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
-    val scope = rememberCoroutineScope()
+    val sheetState =
+        rememberModalBottomSheetState(
+            skipPartiallyExpanded = true
+        )
 
     // גרדיאנט רך שמתכנס לטון המותג
     val headerBrush = Brush.verticalGradient(
@@ -1796,23 +2243,16 @@ private fun DurationPickerDialog(
 
                         Spacer(Modifier.height(8.dp))
 
-                        // תצוגת הזמן הנבחר (אנימציה דקה)
-                        AnimatedContent(
-                            targetState = selectedMin,
-                            transitionSpec = {
-                                (fadeIn(spring()) togetherWith fadeOut(spring()))
-                                    .using(SizeTransform(clip = false))
-                            },
-                            label = "count-animation"
-                        ) { m ->
-                            Text(
-                                text = String.format("%02d:00", m),
-                                style = KmiTypography.metric.copy(
-                                    color = MaterialTheme.colorScheme.primary,
-                                    fontWeight = FontWeight.Black
-                                )
+                        Text(
+                            text = String.format(
+                                "%02d:00",
+                                selectedMin
+                            ),
+                            style = KmiTypography.metric.copy(
+                                color = MaterialTheme.colorScheme.primary,
+                                fontWeight = FontWeight.Black
                             )
-                        }
+                        )
                     }
                 }
             }
@@ -1913,11 +2353,6 @@ private fun DurationPickerDialog(
                 TextButton(
                     onClick = {
                         onDismiss()
-                        scope.launch {
-                            runCatching {
-                                sheetState.hide()
-                            }
-                        }
                     },
                     modifier = Modifier.heightIn(min = 52.dp)
                 ) {
@@ -1932,10 +2367,11 @@ private fun DurationPickerDialog(
 
                 Button(
                     onClick = {
-                        scope.launch {
-                            onConfirm(selectedMin * 60, playHalf, playCountdown)
-                            runCatching { sheetState.hide() }
-                        }
+                        onConfirm(
+                            selectedMin * 60,
+                            playHalf,
+                            playCountdown
+                        )
                     },
                     modifier = Modifier
                         .weight(1f)
@@ -2594,6 +3030,65 @@ private fun SettingRow(
                 }
             }
         )
+    }
+}
+
+@Composable
+private fun PracticeSubjectHeader(
+    topic: String,
+    subTopic: String?,
+    isEnglish: Boolean,
+    modifier: Modifier = Modifier
+) {
+    Box(
+        modifier = modifier
+            .heightIn(min = 52.dp)
+            .background(
+                brush = kmiSectionHeaderBrush()
+            )
+            .padding(
+                horizontal = 16.dp,
+                vertical = 4.dp
+            ),
+        contentAlignment = Alignment.Center
+    ) {
+        Column(
+            horizontalAlignment =
+                Alignment.CenterHorizontally,
+            verticalArrangement =
+                Arrangement.Center
+        ) {
+            Text(
+                text = topic,
+                color =
+                    kmiSectionHeaderContentColor(),
+                style =
+                    KmiTypography.secondary.copy(
+                        fontWeight = FontWeight.Bold
+                    ),
+                textAlign = TextAlign.Center,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+
+            if (!subTopic.isNullOrBlank()) {
+                Text(
+                    text =
+                        if (isEnglish) {
+                            "Subtopic: $subTopic"
+                        } else {
+                            "תת־נושא: $subTopic"
+                        },
+                    color =
+                        kmiSectionHeaderContentColor()
+                            .copy(alpha = 0.92f),
+                    style = KmiTypography.caption,
+                    textAlign = TextAlign.Center,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+        }
     }
 }
 

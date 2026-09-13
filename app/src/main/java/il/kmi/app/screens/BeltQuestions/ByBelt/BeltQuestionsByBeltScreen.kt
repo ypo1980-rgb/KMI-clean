@@ -39,7 +39,6 @@ import il.kmi.app.KmiViewModel
 import il.kmi.shared.domain.Belt
 import il.kmi.shared.domain.ContentRepo as SharedContentRepo
 import il.kmi.app.screens.PracticeByTopicsSelection
-import il.kmi.app.screens.PracticeMenuDialog
 import il.kmi.app.ui.ext.color
 import il.kmi.app.ui.rememberClickSound
 import il.kmi.app.ui.rememberHapticsGlobal
@@ -1267,6 +1266,7 @@ fun BeltQuestionsByBeltScreen(
     onOpenSubTopic: (Belt, String, String) -> Unit = { _, _, _ -> },
     onOpenWeakPoints: (Belt) -> Unit = {},
     onOpenAllLists: (Belt) -> Unit = {},
+    onOpenPracticeMenu: (Belt) -> Unit = {},
     onOpenRandomPractice: (Belt) -> Unit = {},
     onOpenRandomPracticeByTopic: (Belt, String) -> Unit = { _, _ -> },
     onOpenFinalExam: (Belt) -> Unit = {},
@@ -1286,6 +1286,7 @@ fun BeltQuestionsByBeltScreen(
         onOpenSubTopic = onOpenSubTopic,
         onOpenWeakPoints = onOpenWeakPoints,
         onOpenAllLists = onOpenAllLists,
+        onOpenPracticeMenu = onOpenPracticeMenu,
         onOpenRandomPractice = onOpenRandomPractice,
         onOpenRandomPracticeByTopic = onOpenRandomPracticeByTopic,
         onOpenFinalExam = onOpenFinalExam,
@@ -1298,6 +1299,7 @@ fun BeltQuestionsByBeltScreen(
 
 /* -------------------------------- Layout ראשי -------------------------------- */
 
+@Suppress("UNUSED_PARAMETER")
 @Composable
 internal fun BeltPangoLayout(
     vm: KmiViewModel,
@@ -1310,6 +1312,7 @@ internal fun BeltPangoLayout(
     onOpenSubTopic: (Belt, String, String) -> Unit,
     onOpenWeakPoints: (Belt) -> Unit,
     onOpenAllLists: (Belt) -> Unit,
+    onOpenPracticeMenu: (Belt) -> Unit,
     onOpenRandomPractice: (Belt) -> Unit,
     onOpenRandomPracticeByTopic: (Belt, String) -> Unit,
     onOpenFinalExam: (Belt) -> Unit,
@@ -1376,10 +1379,11 @@ internal fun BeltPangoLayout(
 
     // החיפוש והסברי התרגילים עוברים דרך KmiTopBar + ExercisePremiumSearchDialog
 
-    var showPracticeMenu by rememberSaveable { mutableStateOf(false) }
-
     // state לתפריט הצף במסך לפי חגורה
-    var quickMenuExpanded by rememberSaveable { mutableStateOf(false) }
+    var quickMenuExpanded by
+    rememberSaveable {
+        mutableStateOf(false)
+    }
 
     /*
      * הקרוסלה מציגה רק חגורות שיש בהן תרגילים.
@@ -1500,30 +1504,6 @@ internal fun BeltPangoLayout(
     val backgroundBrush =
         kmiScreenBackgroundBrush()
 
-    if (showPracticeMenu) {
-        PracticeMenuDialog(
-            canUseExtras = true,
-            defaultBelt = currentBelt,
-            onDismiss = { showPracticeMenu = false },
-            onRandomPractice = { beltArg ->
-                showPracticeMenu = false
-                onOpenRandomPractice(beltArg)
-            },
-            onFinalExam = { beltArg ->
-                showPracticeMenu = false
-                onOpenFinalExam(beltArg)
-            },
-            onPracticeByTopics = { selection ->
-                showPracticeMenu = false
-                onPracticeByTopics(selection)
-            },
-            onPracticeByTopicSelected = { beltArg, topicArg ->
-                showPracticeMenu = false
-                onOpenRandomPracticeByTopic(beltArg, topicArg)
-            }
-        )
-    }
-
     KmiLanguageDirection(
         isEnglish = isEnglish
     ) {
@@ -1615,11 +1595,11 @@ internal fun BeltPangoLayout(
                         TopicsCardForBelt(
                             belt = currentBelt,
                             lang = langManager.getCurrentLanguage(),
-                        accessMode = accessMode,
-                        onOpenSubscription = onOpenSubscription,
-                        onOpenTopic = onOpenTopic,
-                        onOpenSubTopic = onOpenSubTopic,
-                        onOpenDefenseMenu = onOpenDefenseMenu,
+                            accessMode = accessMode,
+                            onOpenSubscription = onOpenSubscription,
+                            onOpenTopic = onOpenTopic,
+                            onOpenSubTopic = onOpenSubTopic,
+                            onOpenDefenseMenu = onOpenDefenseMenu,
                             haptic = haptic,
                             clickSound = clickSound
                         )
@@ -1672,7 +1652,12 @@ internal fun BeltPangoLayout(
                     onPractice = {
                         clickSound()
                         haptic(true)
-                        showPracticeMenu = true
+
+                        quickMenuExpanded = false
+
+                        onOpenPracticeMenu(
+                            currentBelt
+                        )
                     },
                     onSummary = {
                         clickSound()
@@ -2375,644 +2360,375 @@ private fun TopicsCardForBelt(
         }
     }
 
-    Surface(
-        tonalElevation = 0.dp,
-        shadowElevation = 0.dp,
-        shape = RoundedCornerShape(24.dp),
-        color = cardBg,
-        border = BorderStroke(
-            width = 1.dp,
-            color =
-                if (isDarkTheme) {
-                    MaterialTheme.colorScheme.outlineVariant
-                } else {
-                    readableBeltAccent.copy(
-                        alpha = 0.24f
-                    )
-                }
-        ),
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 2.dp)
-            .padding(top = 0.dp)
-            .padding(bottom = fabClearance + 2.dp)
+    Column(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        Column(Modifier.padding(vertical = 6.dp)) {
-            Text(
-                text =
-                    if (isEnglish) {
-                        "Topics in Belt"
+        Text(
+            text =
+                if (isEnglish) {
+                    "Topics in Belt"
+                } else {
+                    "נושאים בחגורה"
+                },
+            style = KmiTypography.sectionTitle,
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 14.dp),
+            textAlign = TextAlign.Center,
+            color = titleColor,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
+        )
+
+        Spacer(Modifier.height(6.dp))
+
+        Surface(
+            tonalElevation = 0.dp,
+            shadowElevation = 0.dp,
+            shape = RoundedCornerShape(24.dp),
+            color = cardBg,
+            border = BorderStroke(
+                width = 1.dp,
+                color =
+                    if (isDarkTheme) {
+                        MaterialTheme.colorScheme.outlineVariant
                     } else {
-                        "נושאים בחגורה"
-                    },
-                style = KmiTypography.sectionTitle,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 14.dp),
-                textAlign = TextAlign.Center,
-                color = titleColor,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
-
-            Spacer(Modifier.height(2.dp))
-
-            if (topicTitles.isEmpty()) {
-                Text(
-                    text =
-                        if (isEnglish) {
-                            "No topics to display"
-                        } else {
-                            "אין נושאים להצגה"
-                        },
-                    style = KmiTypography.body,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(20.dp),
-                    textAlign = TextAlign.Center,
-                    color = rowSubColor
-                )
-            } else {
-                val topicsScroll = rememberScrollState(0)
-
-                // ✅ חשוב:
-                // כשעוברים חגורה, ScrollState עלול להישאר באמצע הרשימה מהחגורה הקודמת.
-                // לכן מאפסים לראש הרשימה, כדי שבאמת נראה את הנושאים עם תתי־נושאים למעלה.
-                LaunchedEffect(belt.id, topicTitles) {
-                    topicsScroll.scrollTo(0)
-                }
-
-                Column(
-                    modifier = Modifier
-                        .height(listHeight)
-                        .verticalScroll(topicsScroll)
-                ) {
-                    topicTitles.forEachIndexed { index, title ->
-
-                        val details = detailsByTitle[title]
-                            ?: TopicDetails(itemCount = 0, subTitles = emptyList())
-
-                        val displayTitle = topicTitleForUi(title, lang)
-
-                        val topicGeneralNote = remember(
-                            belt,
-                            title
-                        ) {
-                            SharedContentRepo.getTopicGeneralNote(
-                                belt = belt,
-                                topicTitle = title
-                            )
-                        }
-
-                        val subTitles: List<String> = details.subTitles
-                            .asSequence()
-                            .map { it.trim() }
-                            .filter { it.isNotBlank() }
-                            .filter { it != title.trim() }
-                            .distinct()
-                            .toList()
-
-                        val itemCount = exerciseCountByTitle[title]
-                            ?: topicExercisesCountForCurrentBelt(
-                                belt = belt,
-                                topicTitle = title
-                            )
-
-                        val subCount = subTitles.size
-                        val hasSubs = subCount > 0
-
-                        val countsLine = if (isEnglish) {
-                            if (subCount > 0) {
-                                "$subCount sub-topics · $itemCount exercises"
+                        readableBeltAccent.copy(
+                            alpha = 0.24f
+                        )
+                    }
+            ),
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 2.dp)
+                .padding(bottom = fabClearance + 2.dp)
+        ) {
+            Column(
+                modifier = Modifier.padding(vertical = 6.dp)
+            ) {
+                if (topicTitles.isEmpty()) {
+                    Text(
+                        text =
+                            if (isEnglish) {
+                                "No topics to display"
                             } else {
-                                "$itemCount exercises"
-                            }
-                        } else {
-                            if (subCount > 0) {
-                                "\u200F$subCount\u00A0תתי נושאים · $itemCount\u00A0תרגילים\u200F"
-                            } else {
-                                "$itemCount תרגילים"
-                            }
-                        }
+                                "אין נושאים להצגה"
+                            },
+                        style = KmiTypography.body,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(20.dp),
+                        textAlign = TextAlign.Center,
+                        color = rowSubColor
+                    )
+                } else {
+                    val topicsScroll = rememberScrollState(0)
 
-                        val isExpanded = expandedTopic == title
-                        val isDefenseTopic =
-                            title.trim().contains("הגנות")
+                    // ✅ חשוב:
+                    // כשעוברים חגורה, ScrollState עלול להישאר באמצע הרשימה מהחגורה הקודמת.
+                    // לכן מאפסים לראש הרשימה, כדי שבאמת נראה את הנושאים עם תתי־נושאים למעלה.
+                    LaunchedEffect(belt.id, topicTitles) {
+                        topicsScroll.scrollTo(0)
+                    }
 
-                        val floatingAccent =
-                            Brush.verticalGradient(
-                                colors = listOf(
-                                    readableBeltAccent,
-                                    readableBeltAccent.copy(
-                                        alpha =
-                                            if (isDarkTheme) {
-                                                0.90f
-                                            } else {
-                                                0.82f
-                                            }
-                                    )
+                    Column(
+                        modifier = Modifier
+                            .height(listHeight)
+                            .verticalScroll(topicsScroll)
+                    ) {
+                        topicTitles.forEachIndexed { index, title ->
+
+                            val details = detailsByTitle[title]
+                                ?: TopicDetails(itemCount = 0, subTitles = emptyList())
+
+                            val displayTitle = topicTitleForUi(title, lang)
+
+                            val topicGeneralNote = remember(
+                                belt,
+                                title
+                            ) {
+                                SharedContentRepo.getTopicGeneralNote(
+                                    belt = belt,
+                                    topicTitle = title
                                 )
-                            )
+                            }
 
-                        Surface(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .heightIn(min = rowMinHeight)
-                                .padding(
-                                    horizontal = 3.dp,
-                                    vertical = 1.dp
+                            val subTitles: List<String> = details.subTitles
+                                .asSequence()
+                                .map { it.trim() }
+                                .filter { it.isNotBlank() }
+                                .filter { it != title.trim() }
+                                .distinct()
+                                .toList()
+
+                            val itemCount = exerciseCountByTitle[title]
+                                ?: topicExercisesCountForCurrentBelt(
+                                    belt = belt,
+                                    topicTitle = title
                                 )
-                                .clickable {
-                                    clickSound()
-                                    haptic(true)
 
-                                    val canOpen =
-                                        LockedContentPolicy.canOpenTopic(accessMode, title)
+                            val subCount = subTitles.size
+                            val hasSubs = subCount > 0
 
-                                    if (!canOpen) {
-                                        onOpenSubscription()
-                                    } else if (hasSubs) {
-                                        expandedTopic = if (isExpanded) null else title
-                                    } else {
-                                        if (isDefenseTopic) {
-                                            onOpenDefenseMenu(belt, title)
-                                        } else {
-                                            onOpenTopic(belt, title)
-                                        }
-                                    }
-                                },
-                            shape = RoundedCornerShape(18.dp),
-                            color =
-                                if (isDarkTheme) {
-                                    MaterialTheme.colorScheme.surface
+                            val countsLine = if (isEnglish) {
+                                if (subCount > 0) {
+                                    "$subCount sub-topics · $itemCount exercises"
                                 } else {
-                                    beltBackgroundAccent
-                                        .copy(
+                                    "$itemCount exercises"
+                                }
+                            } else {
+                                if (subCount > 0) {
+                                    "\u200F$subCount\u00A0תתי נושאים · $itemCount\u00A0תרגילים\u200F"
+                                } else {
+                                    "$itemCount תרגילים"
+                                }
+                            }
+
+                            val isExpanded = expandedTopic == title
+                            val isDefenseTopic =
+                                title.trim().contains("הגנות")
+
+                            val floatingAccent =
+                                Brush.verticalGradient(
+                                    colors = listOf(
+                                        readableBeltAccent,
+                                        readableBeltAccent.copy(
                                             alpha =
-                                                if (belt == Belt.YELLOW) {
-                                                    0.07f
+                                                if (isDarkTheme) {
+                                                    0.90f
                                                 } else {
-                                                    0.045f
+                                                    0.82f
                                                 }
                                         )
-                                        .compositeOver(cardBg)
-                                },
-                            tonalElevation = 0.dp,
-                            shadowElevation = 0.dp,
-                            border = null
-                        ) {
-                            Column(
+                                    )
+                                )
+
+                            Surface(
                                 modifier = Modifier
                                     .fillMaxWidth()
+                                    .heightIn(min = rowMinHeight)
                                     .padding(
-                                        horizontal = 5.dp,
-                                        vertical = 4.dp
-                                    ),
-                                horizontalAlignment = horizontalByLang
+                                        horizontal = 3.dp,
+                                        vertical = 1.dp
+                                    )
+                                    .clickable {
+                                        clickSound()
+                                        haptic(true)
+
+                                        val canOpen =
+                                            LockedContentPolicy.canOpenTopic(accessMode, title)
+
+                                        if (!canOpen) {
+                                            onOpenSubscription()
+                                        } else if (hasSubs) {
+                                            expandedTopic = if (isExpanded) null else title
+                                        } else {
+                                            if (isDefenseTopic) {
+                                                onOpenDefenseMenu(belt, title)
+                                            } else {
+                                                onOpenTopic(belt, title)
+                                            }
+                                        }
+                                    },
+                                shape = RoundedCornerShape(18.dp),
+                                color =
+                                    if (isDarkTheme) {
+                                        MaterialTheme.colorScheme.surface
+                                    } else {
+                                        beltBackgroundAccent
+                                            .copy(
+                                                alpha =
+                                                    if (belt == Belt.YELLOW) {
+                                                        0.07f
+                                                    } else {
+                                                        0.045f
+                                                    }
+                                            )
+                                            .compositeOver(cardBg)
+                                    },
+                                tonalElevation = 0.dp,
+                                shadowElevation = 0.dp,
+                                border = null
                             ) {
-                                val parentLocked =
-                                    LockedContentPolicy.shouldShowLock(accessMode, title)
-
-                                val topicImageRes = beltTopicImageFor(belt, title)
-
-                                KmiLanguageDirection(
-                                    isEnglish = isEnglish
+                                Column(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(
+                                            horizontal = 5.dp,
+                                            vertical = 4.dp
+                                        ),
+                                    horizontalAlignment = horizontalByLang
                                 ) {
-                                    Row(
-                                        modifier =
-                                            Modifier.fillMaxWidth(),
-                                        verticalAlignment =
-                                            Alignment.CenterVertically
+                                    val parentLocked =
+                                        LockedContentPolicy.shouldShowLock(accessMode, title)
+
+                                    val topicImageRes = beltTopicImageFor(belt, title)
+
+                                    KmiLanguageDirection(
+                                        isEnglish = isEnglish
                                     ) {
-                                        Box(
-                                            modifier = Modifier
-                                                .width(3.dp)
-                                                .height(34.dp)
-                                                .clip(RoundedCornerShape(999.dp))
-                                                .background(floatingAccent)
-                                        )
-
-                                        Spacer(Modifier.width(5.dp))
-
-                                        if (topicImageRes != null) {
+                                        Row(
+                                            modifier =
+                                                Modifier.fillMaxWidth(),
+                                            verticalAlignment =
+                                                Alignment.CenterVertically
+                                        ) {
                                             Box(
                                                 modifier = Modifier
-                                                    .width(34.dp)
-                                                    .height(29.dp)
-                                                    .clip(RoundedCornerShape(10.dp))
+                                                    .width(3.dp)
+                                                    .height(34.dp)
+                                                    .clip(RoundedCornerShape(999.dp))
+                                                    .background(floatingAccent)
+                                            )
+
+                                            Spacer(Modifier.width(5.dp))
+
+                                            if (topicImageRes != null) {
+                                                Box(
+                                                    modifier = Modifier
+                                                        .width(34.dp)
+                                                        .height(29.dp)
+                                                        .clip(RoundedCornerShape(10.dp))
+                                                ) {
+                                                    Image(
+                                                        painter = painterResource(id = topicImageRes),
+                                                        contentDescription = null,
+                                                        contentScale = ContentScale.Crop,
+                                                        modifier = Modifier.fillMaxSize()
+                                                    )
+                                                }
+
+                                                Spacer(Modifier.width(6.dp))
+                                            }
+
+                                            Column(
+                                                modifier = Modifier.weight(1f),
+                                                horizontalAlignment = horizontalByLang
                                             ) {
-                                                Image(
-                                                    painter = painterResource(id = topicImageRes),
-                                                    contentDescription = null,
-                                                    contentScale = ContentScale.Crop,
-                                                    modifier = Modifier.fillMaxSize()
+                                                Text(
+                                                    text = displayTitle,
+                                                    style =
+                                                        KmiTypography.cardTitle,
+                                                    color = rowTitleColor,
+                                                    textAlign =
+                                                        TextAlign.Start,
+                                                    maxLines = 2,
+                                                    overflow =
+                                                        TextOverflow.Ellipsis,
+                                                    modifier =
+                                                        Modifier.fillMaxWidth()
+                                                )
+
+                                                Spacer(Modifier.height(1.dp))
+
+                                                Text(
+                                                    text = countsLine,
+                                                    style =
+                                                        KmiTypography
+                                                            .caption
+                                                            .copy(
+                                                                fontWeight =
+                                                                    FontWeight.ExtraBold
+                                                            ),
+                                                    color = rowSubColor,
+                                                    textAlign =
+                                                        TextAlign.Start,
+                                                    maxLines = 1,
+                                                    softWrap = false,
+                                                    overflow =
+                                                        TextOverflow.Ellipsis,
+                                                    modifier =
+                                                        Modifier.fillMaxWidth()
                                                 )
                                             }
 
-                                            Spacer(Modifier.width(6.dp))
-                                        }
+                                            /*
+                                             * שומרים אזור פעולות קבוע רק כאשר
+                                             * באמת קיימת לפחות פעולה אחת.
+                                             *
+                                             * נושא רגיל ללא הערה, מנעול או
+                                             * תתי־נושאים מקבל את מלוא רוחב השורה.
+                                             */
+                                            val hasTopicGeneralNote =
+                                                !topicGeneralNote.isNullOrBlank()
 
-                                        Column(
-                                            modifier = Modifier.weight(1f),
-                                            horizontalAlignment = horizontalByLang
-                                        ) {
-                                            Text(
-                                                text = displayTitle,
-                                                style =
-                                                    KmiTypography.cardTitle,
-                                                color = rowTitleColor,
-                                                textAlign =
-                                                    TextAlign.Start,
-                                                maxLines = 2,
-                                                overflow =
-                                                    TextOverflow.Ellipsis,
-                                                modifier =
-                                                    Modifier.fillMaxWidth()
-                                            )
+                                            val showTopicActions =
+                                                hasTopicGeneralNote ||
+                                                        parentLocked ||
+                                                        hasSubs
 
-                                            Spacer(Modifier.height(1.dp))
+                                            if (showTopicActions) {
+                                                Spacer(Modifier.width(4.dp))
 
-                                            Text(
-                                                text = countsLine,
-                                                style =
-                                                    KmiTypography
-                                                        .caption
-                                                        .copy(
-                                                            fontWeight =
-                                                                FontWeight.ExtraBold
-                                                        ),
-                                                color = rowSubColor,
-                                                textAlign =
-                                                    TextAlign.Start,
-                                                maxLines = 1,
-                                                softWrap = false,
-                                                overflow =
-                                                    TextOverflow.Ellipsis,
-                                                modifier =
-                                                    Modifier.fillMaxWidth()
-                                            )
-                                        }
-
-                                        /*
-                                         * שומרים אזור פעולות קבוע רק כאשר
-                                         * באמת קיימת לפחות פעולה אחת.
-                                         *
-                                         * נושא רגיל ללא הערה, מנעול או
-                                         * תתי־נושאים מקבל את מלוא רוחב השורה.
-                                         */
-                                        val hasTopicGeneralNote =
-                                            !topicGeneralNote.isNullOrBlank()
-
-                                        val showTopicActions =
-                                            hasTopicGeneralNote ||
-                                                    parentLocked ||
-                                                    hasSubs
-
-                                        if (showTopicActions) {
-                                            Spacer(Modifier.width(4.dp))
-
-                                            Box(
-                                                modifier =
-                                                    Modifier.size(30.dp),
-                                                contentAlignment = Alignment.Center
-                                            ) {
-                                                if (hasTopicGeneralNote) {
-                                                    Surface(
-                                                        modifier = Modifier
-                                                            .size(26.dp)
-                                                            .clickable {
-                                                                clickSound()
-                                                                haptic(false)
-
-                                                                generalNoteTitle =
-                                                                    if (isEnglish) {
-                                                                        "General note: $displayTitle"
-                                                                    } else {
-                                                                        "הערה כללית: $displayTitle"
-                                                                    }
-
-                                                                generalNoteText =
-                                                                    topicGeneralNote
-                                                            },
-                                                        shape = CircleShape,
-                                                        color =
-                                                            MaterialTheme.colorScheme.secondaryContainer,
-                                                        border = BorderStroke(
-                                                            width = 1.dp,
-                                                            color =
-                                                                MaterialTheme.colorScheme.secondary.copy(
-                                                                    alpha = 0.45f
-                                                                )
-                                                        ),
-                                                        tonalElevation = 0.dp,
-                                                        shadowElevation = 0.dp
-                                                    ) {
-                                                        Box(
-                                                            contentAlignment =
-                                                                Alignment.Center
-                                                        ) {
-                                                            Icon(
-                                                                imageVector =
-                                                                    Icons.Filled.Info,
-                                                                contentDescription =
-                                                                    if (isEnglish) {
-                                                                        "General note"
-                                                                    } else {
-                                                                        "הערה כללית"
-                                                                    },
-                                                                tint =
-                                                                    MaterialTheme.colorScheme.onSecondaryContainer,
-                                                                modifier =
-                                                                    Modifier.size(
-                                                                        17.dp * LocalAppIconScale.current
-                                                                    )
-                                                            )
-                                                        }
-                                                    }
-                                                }
-                                            }
-
-                                            Spacer(Modifier.width(4.dp))
-
-                                            Box(
-                                                modifier = Modifier.size(20.dp),
-                                                contentAlignment = Alignment.Center
-                                            ) {
-                                                if (parentLocked) {
-                                                    PremiumPulsingLockBadge(
-                                                        modifier =
-                                                            Modifier.size(
-                                                                16.dp * LocalAppIconScale.current
-                                                            )
-                                                    )
-                                                }
-                                            }
-
-                                            Spacer(Modifier.width(4.dp))
-
-                                            Box(
-                                                modifier =
-                                                    Modifier.size(20.dp),
-                                                contentAlignment =
-                                                    Alignment.Center
-                                            ) {
-                                                if (hasSubs) {
-                                                    Icon(
-                                                        imageVector =
-                                                            if (isExpanded) {
-                                                                Icons.Filled
-                                                                    .KeyboardArrowUp
-                                                            } else {
-                                                                Icons.Filled
-                                                                    .KeyboardArrowDown
-                                                            },
-                                                        contentDescription =
-                                                            null,
-                                                        tint =
-                                                            readableBeltAccent,
-                                                        modifier =
-                                                            Modifier.size(
-                                                                20.dp * LocalAppIconScale.current
-                                                            )
-                                                    )
-                                                }
-                                            }
-                                        }
-                                    }
-                                }
-
-                                if (hasSubs && isExpanded) {
-                                    Spacer(Modifier.height(4.dp))
-
-                                    val parentLockedForSubTopics =
-                                        LockedContentPolicy.shouldShowLock(accessMode, title)
-
-                                    Surface(
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .padding(
-                                                start = 0.dp,
-                                                end = 0.dp,
-                                                top = 2.dp,
-                                                bottom = 6.dp
-                                            ),
-                                        shape = RoundedCornerShape(18.dp),
-                                        color = subTopicsCardBg,
-                                        border = BorderStroke(
-                                            width = 1.dp,
-                                            color = subTopicsCardBorder
-                                        ),
-                                        shadowElevation = 0.dp,
-                                        tonalElevation = 0.dp
-                                    ) {
-                                        Column(
-                                            modifier = Modifier.padding(
-                                                horizontal = 10.dp,
-                                                vertical = 6.dp
-                                            ),
-                                            verticalArrangement = Arrangement.spacedBy(0.dp),
-                                            horizontalAlignment = horizontalByLang
-                                        ) {
-                                            subTitles.forEachIndexed { subIndex, sub ->
-                                                val displaySub =
-                                                    topicTitleForUi(sub, lang)
-
-                                                val subTopicGeneralNote =
-                                                    remember(
-                                                        belt,
-                                                        title,
-                                                        sub
-                                                    ) {
-                                                        SharedContentRepo
-                                                            .getSubTopicGeneralNote(
-                                                                belt = belt,
-                                                                topicTitle = title,
-                                                                subTopicTitle = sub
-                                                            )
-                                                    }
-
-                                                val subTopicStatsLine =
-                                                    remember(belt, title, sub, lang) {
-                                                        val matchedSubTopic: SharedContentRepo.SubTopic? =
-                                                            SharedContentRepo.getSubTopicsFor(
-                                                                belt = belt,
-                                                                topicTitle = title
-                                                            )
-                                                                .firstOrNull { candidate ->
-                                                                    candidate.title.trim() == sub.trim()
-                                                                }
-
-                                                        matchedSubTopic
-                                                            ?.let { resolvedSubTopic: SharedContentRepo.SubTopic ->
-                                                                subTopicStatsLineForUi(
-                                                                    subTopic = resolvedSubTopic,
-                                                                    lang = lang
-                                                                )
-                                                            }
-                                                            .orEmpty()
-                                                    }
-
-                                                Row(
-                                                    modifier = Modifier
-                                                        .fillMaxWidth()
-                                                        .clip(RoundedCornerShape(12.dp))
-                                                        .clickable {
-                                                            clickSound()
-                                                            haptic(true)
-
-                                                            val canOpenSubTopic =
-                                                                accessMode == AccessMode.OPEN ||
-                                                                        LockedContentPolicy.canOpenTopic(
-                                                                            accessMode,
-                                                                            title
-                                                                        )
-
-                                                            if (!canOpenSubTopic) {
-                                                                onOpenSubscription()
-                                                            } else {
-                                                                onOpenSubTopic(belt, title, sub)
-                                                            }
-                                                        }
-                                                        .padding(
-                                                            horizontal = 8.dp,
-                                                            vertical = 5.dp
-                                                        )
-                                                        .heightIn(min = 48.dp),
-                                                    verticalAlignment = Alignment.CenterVertically
+                                                Box(
+                                                    modifier =
+                                                        Modifier.size(30.dp),
+                                                    contentAlignment = Alignment.Center
                                                 ) {
-                                                    Icon(
-                                                        imageVector =
-                                                            Icons.Filled.ChevronLeft,
-                                                        contentDescription = null,
-                                                        tint = readableBeltAccent,
-                                                        modifier =
-                                                            Modifier.size(
-                                                                15.dp * LocalAppIconScale.current
-                                                            )
-                                                    )
+                                                    if (hasTopicGeneralNote) {
+                                                        Surface(
+                                                            modifier = Modifier
+                                                                .size(26.dp)
+                                                                .clickable {
+                                                                    clickSound()
+                                                                    haptic(false)
 
-                                                    Spacer(Modifier.width(6.dp))
+                                                                    generalNoteTitle =
+                                                                        if (isEnglish) {
+                                                                            "General note: $displayTitle"
+                                                                        } else {
+                                                                            "הערה כללית: $displayTitle"
+                                                                        }
 
-                                                    Column(
-                                                        modifier = Modifier.weight(1f),
-                                                        horizontalAlignment = horizontalByLang
-                                                    ) {
-                                                        Text(
-                                                            text = displaySub,
-                                                            modifier =
-                                                                Modifier.fillMaxWidth(),
-                                                            textAlign =
-                                                                TextAlign.Start,
-                                                            color = rowTitleColor,
-                                                            style =
-                                                                KmiTypography.cardTitle,
-                                                            maxLines = 2,
-                                                            overflow =
-                                                                TextOverflow.Ellipsis
-                                                        )
-
-                                                        if (subTopicStatsLine.isNotBlank()) {
-                                                            Spacer(Modifier.height(1.dp))
-
-                                                            Text(
-                                                                text =
-                                                                    subTopicStatsLine,
-                                                                modifier =
-                                                                    Modifier.fillMaxWidth(),
-                                                                textAlign =
-                                                                    TextAlign.Start,
+                                                                    generalNoteText =
+                                                                        topicGeneralNote
+                                                                },
+                                                            shape = CircleShape,
+                                                            color =
+                                                                MaterialTheme.colorScheme.secondaryContainer,
+                                                            border = BorderStroke(
+                                                                width = 1.dp,
                                                                 color =
-                                                                    readableBeltAccent,
-                                                                style =
-                                                                    KmiTypography
-                                                                        .caption
-                                                                        .copy(
-                                                                            fontWeight =
-                                                                                FontWeight.Bold
-                                                                    ),
-                                                                maxLines = 2,
-                                                                overflow =
-                                                                    TextOverflow.Ellipsis
-                                                            )
-                                                        }
-                                                    }
-
-                                                    if (
-                                                        !subTopicGeneralNote
-                                                            .isNullOrBlank()
-                                                    ) {
-                                                        Spacer(
-                                                            Modifier.width(4.dp)
-                                                        )
-
-                                                        Box(
-                                                            modifier =
-                                                                Modifier.size(30.dp),
-                                                            contentAlignment =
-                                                                Alignment.Center
-                                                        ) {
-                                                            Surface(
-                                                                modifier = Modifier
-                                                                    .size(26.dp)
-                                                                    .clickable {
-                                                                        clickSound()
-                                                                        haptic(false)
-
-                                                                        generalNoteTitle =
-                                                                            if (isEnglish) {
-                                                                                "General note: $displaySub"
-                                                                            } else {
-                                                                                "הערה כללית: $displaySub"
-                                                                            }
-
-                                                                        generalNoteText =
-                                                                            subTopicGeneralNote
-                                                                    },
-                                                                shape = CircleShape,
-                                                                color =
-                                                                    MaterialTheme.colorScheme.secondaryContainer,
-                                                                border =
-                                                                    BorderStroke(
-                                                                        width = 1.dp,
-                                                                        color =
-                                                                            MaterialTheme.colorScheme.secondary.copy(
-                                                                                alpha = 0.45f
-                                                                            )
-                                                                    ),
-                                                                tonalElevation = 0.dp,
-                                                                shadowElevation = 0.dp
-                                                            ) {
-                                                                Box(
-                                                                    contentAlignment =
-                                                                        Alignment.Center
-                                                                ) {
-                                                                    Icon(
-                                                                        imageVector =
-                                                                            Icons.Filled.Info,
-                                                                        contentDescription =
-                                                                            if (isEnglish) {
-                                                                                "General note"
-                                                                            } else {
-                                                                                "הערה כללית"
-                                                                            },
-                                                                        tint =
-                                                                            MaterialTheme.colorScheme.onSecondaryContainer,
-                                                                        modifier =
-                                                                            Modifier.size(
-                                                                                17.dp *
-                                                                                        LocalAppIconScale.current
-                                                                            )
+                                                                    MaterialTheme.colorScheme.secondary.copy(
+                                                                        alpha = 0.45f
                                                                     )
-                                                                }
+                                                            ),
+                                                            tonalElevation = 0.dp,
+                                                            shadowElevation = 0.dp
+                                                        ) {
+                                                            Box(
+                                                                contentAlignment =
+                                                                    Alignment.Center
+                                                            ) {
+                                                                Icon(
+                                                                    imageVector =
+                                                                        Icons.Filled.Info,
+                                                                    contentDescription =
+                                                                        if (isEnglish) {
+                                                                            "General note"
+                                                                        } else {
+                                                                            "הערה כללית"
+                                                                        },
+                                                                    tint =
+                                                                        MaterialTheme.colorScheme.onSecondaryContainer,
+                                                                    modifier =
+                                                                        Modifier.size(
+                                                                            17.dp * LocalAppIconScale.current
+                                                                        )
+                                                                )
                                                             }
                                                         }
                                                     }
+                                                }
 
-                                                    if (parentLockedForSubTopics) {
-                                                        Spacer(
-                                                            Modifier.width(8.dp)
-                                                        )
+                                                Spacer(Modifier.width(4.dp))
 
+                                                Box(
+                                                    modifier = Modifier.size(20.dp),
+                                                    contentAlignment = Alignment.Center
+                                                ) {
+                                                    if (parentLocked) {
                                                         PremiumPulsingLockBadge(
                                                             modifier =
                                                                 Modifier.size(
@@ -3022,98 +2738,370 @@ private fun TopicsCardForBelt(
                                                     }
                                                 }
 
-                                                if (subIndex != subTitles.lastIndex) {
-                                                    HorizontalDivider(
-                                                        color = subDividerColor,
-                                                        thickness = 0.8.dp,
-                                                        modifier = Modifier.padding(horizontal = 8.dp)
-                                                    )
+                                                Spacer(Modifier.width(4.dp))
+
+                                                Box(
+                                                    modifier =
+                                                        Modifier.size(20.dp),
+                                                    contentAlignment =
+                                                        Alignment.Center
+                                                ) {
+                                                    if (hasSubs) {
+                                                        Icon(
+                                                            imageVector =
+                                                                if (isExpanded) {
+                                                                    Icons.Filled
+                                                                        .KeyboardArrowUp
+                                                                } else {
+                                                                    Icons.Filled
+                                                                        .KeyboardArrowDown
+                                                                },
+                                                            contentDescription =
+                                                                null,
+                                                            tint =
+                                                                readableBeltAccent,
+                                                            modifier =
+                                                                Modifier.size(
+                                                                    20.dp * LocalAppIconScale.current
+                                                                )
+                                                        )
+                                                    }
                                                 }
                                             }
+                                        }
+                                    }
 
-                                            Spacer(Modifier.height(4.dp))
+                                    if (hasSubs && isExpanded) {
+                                        Spacer(Modifier.height(4.dp))
 
-                                            Text(
-                                                text =
-                                                    if (isEnglish) {
-                                                        "Close topic"
-                                                    } else {
-                                                        "סגור נושא"
-                                                    },
-                                                modifier = Modifier
-                                                    .align(horizontalByLang)
-                                                    .clip(RoundedCornerShape(12.dp))
-                                                    .clickable {
-                                                        clickSound()
-                                                        haptic(true)
-                                                        expandedTopic = null
-                                                    }
-                                                    .padding(
-                                                        horizontal = 8.dp,
-                                                        vertical = 4.dp
-                                                    ),
-                                                color =
-                                                    readableBeltAccent,
-                                                style = KmiTypography.action
-                                            )
+                                        val parentLockedForSubTopics =
+                                            LockedContentPolicy.shouldShowLock(accessMode, title)
 
-                                            Spacer(Modifier.height(2.dp))
+                                        Surface(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .padding(
+                                                    start = 0.dp,
+                                                    end = 0.dp,
+                                                    top = 2.dp,
+                                                    bottom = 6.dp
+                                                ),
+                                            shape = RoundedCornerShape(18.dp),
+                                            color = subTopicsCardBg,
+                                            border = BorderStroke(
+                                                width = 1.dp,
+                                                color = subTopicsCardBorder
+                                            ),
+                                            shadowElevation = 0.dp,
+                                            tonalElevation = 0.dp
+                                        ) {
+                                            Column(
+                                                modifier = Modifier.padding(
+                                                    horizontal = 10.dp,
+                                                    vertical = 6.dp
+                                                ),
+                                                verticalArrangement = Arrangement.spacedBy(0.dp),
+                                                horizontalAlignment = horizontalByLang
+                                            ) {
+                                                subTitles.forEachIndexed { subIndex, sub ->
+                                                    val displaySub =
+                                                        topicTitleForUi(sub, lang)
 
-                                            Text(
-                                                text =
-                                                    if (isEnglish) {
-                                                        "Open full topic"
-                                                    } else {
-                                                        "פתח את כל הנושא"
-                                                    },
-                                                modifier = Modifier
-                                                    .align(horizontalByLang)
-                                                    .clip(RoundedCornerShape(12.dp))
-                                                    .clickable {
-                                                        clickSound()
-                                                        haptic(true)
+                                                    val subTopicGeneralNote =
+                                                        remember(
+                                                            belt,
+                                                            title,
+                                                            sub
+                                                        ) {
+                                                            SharedContentRepo
+                                                                .getSubTopicGeneralNote(
+                                                                    belt = belt,
+                                                                    topicTitle = title,
+                                                                    subTopicTitle = sub
+                                                                )
+                                                        }
 
-                                                        if (isDefenseTopic) {
-                                                            onOpenDefenseMenu(
-                                                                belt,
-                                                                title
+                                                    val subTopicStatsLine =
+                                                        remember(belt, title, sub, lang) {
+                                                            val matchedSubTopic: SharedContentRepo.SubTopic? =
+                                                                SharedContentRepo.getSubTopicsFor(
+                                                                    belt = belt,
+                                                                    topicTitle = title
+                                                                )
+                                                                    .firstOrNull { candidate ->
+                                                                        candidate.title.trim() == sub.trim()
+                                                                    }
+
+                                                            matchedSubTopic
+                                                                ?.let { resolvedSubTopic: SharedContentRepo.SubTopic ->
+                                                                    subTopicStatsLineForUi(
+                                                                        subTopic = resolvedSubTopic,
+                                                                        lang = lang
+                                                                    )
+                                                                }
+                                                                .orEmpty()
+                                                        }
+
+                                                    Row(
+                                                        modifier = Modifier
+                                                            .fillMaxWidth()
+                                                            .clip(RoundedCornerShape(12.dp))
+                                                            .clickable {
+                                                                clickSound()
+                                                                haptic(true)
+
+                                                                val canOpenSubTopic =
+                                                                    accessMode == AccessMode.OPEN ||
+                                                                            LockedContentPolicy.canOpenTopic(
+                                                                                accessMode,
+                                                                                title
+                                                                            )
+
+                                                                if (!canOpenSubTopic) {
+                                                                    onOpenSubscription()
+                                                                } else {
+                                                                    onOpenSubTopic(belt, title, sub)
+                                                                }
+                                                            }
+                                                            .padding(
+                                                                horizontal = 8.dp,
+                                                                vertical = 5.dp
                                                             )
-                                                        } else {
-                                                            onOpenTopic(
-                                                                belt,
-                                                                title
+                                                            .heightIn(min = 48.dp),
+                                                        verticalAlignment = Alignment.CenterVertically
+                                                    ) {
+                                                        Icon(
+                                                            imageVector =
+                                                                Icons.Filled.ChevronLeft,
+                                                            contentDescription = null,
+                                                            tint = readableBeltAccent,
+                                                            modifier =
+                                                                Modifier.size(
+                                                                    15.dp * LocalAppIconScale.current
+                                                                )
+                                                        )
+
+                                                        Spacer(Modifier.width(6.dp))
+
+                                                        Column(
+                                                            modifier = Modifier.weight(1f),
+                                                            horizontalAlignment = horizontalByLang
+                                                        ) {
+                                                            Text(
+                                                                text = displaySub,
+                                                                modifier =
+                                                                    Modifier.fillMaxWidth(),
+                                                                textAlign =
+                                                                    TextAlign.Start,
+                                                                color = rowTitleColor,
+                                                                style =
+                                                                    KmiTypography.cardTitle,
+                                                                maxLines = 2,
+                                                                overflow =
+                                                                    TextOverflow.Ellipsis
+                                                            )
+
+                                                            if (subTopicStatsLine.isNotBlank()) {
+                                                                Spacer(Modifier.height(1.dp))
+
+                                                                Text(
+                                                                    text =
+                                                                        subTopicStatsLine,
+                                                                    modifier =
+                                                                        Modifier.fillMaxWidth(),
+                                                                    textAlign =
+                                                                        TextAlign.Start,
+                                                                    color =
+                                                                        readableBeltAccent,
+                                                                    style =
+                                                                        KmiTypography
+                                                                            .caption
+                                                                            .copy(
+                                                                                fontWeight =
+                                                                                    FontWeight.Bold
+                                                                            ),
+                                                                    maxLines = 2,
+                                                                    overflow =
+                                                                        TextOverflow.Ellipsis
+                                                                )
+                                                            }
+                                                        }
+
+                                                        if (
+                                                            !subTopicGeneralNote
+                                                                .isNullOrBlank()
+                                                        ) {
+                                                            Spacer(
+                                                                Modifier.width(4.dp)
+                                                            )
+
+                                                            Box(
+                                                                modifier =
+                                                                    Modifier.size(30.dp),
+                                                                contentAlignment =
+                                                                    Alignment.Center
+                                                            ) {
+                                                                Surface(
+                                                                    modifier = Modifier
+                                                                        .size(26.dp)
+                                                                        .clickable {
+                                                                            clickSound()
+                                                                            haptic(false)
+
+                                                                            generalNoteTitle =
+                                                                                if (isEnglish) {
+                                                                                    "General note: $displaySub"
+                                                                                } else {
+                                                                                    "הערה כללית: $displaySub"
+                                                                                }
+
+                                                                            generalNoteText =
+                                                                                subTopicGeneralNote
+                                                                        },
+                                                                    shape = CircleShape,
+                                                                    color =
+                                                                        MaterialTheme.colorScheme.secondaryContainer,
+                                                                    border =
+                                                                        BorderStroke(
+                                                                            width = 1.dp,
+                                                                            color =
+                                                                                MaterialTheme.colorScheme.secondary.copy(
+                                                                                    alpha = 0.45f
+                                                                                )
+                                                                        ),
+                                                                    tonalElevation = 0.dp,
+                                                                    shadowElevation = 0.dp
+                                                                ) {
+                                                                    Box(
+                                                                        contentAlignment =
+                                                                            Alignment.Center
+                                                                    ) {
+                                                                        Icon(
+                                                                            imageVector =
+                                                                                Icons.Filled.Info,
+                                                                            contentDescription =
+                                                                                if (isEnglish) {
+                                                                                    "General note"
+                                                                                } else {
+                                                                                    "הערה כללית"
+                                                                                },
+                                                                            tint =
+                                                                                MaterialTheme.colorScheme.onSecondaryContainer,
+                                                                            modifier =
+                                                                                Modifier.size(
+                                                                                    17.dp *
+                                                                                            LocalAppIconScale.current
+                                                                                )
+                                                                        )
+                                                                    }
+                                                                }
+                                                            }
+                                                        }
+
+                                                        if (parentLockedForSubTopics) {
+                                                            Spacer(
+                                                                Modifier.width(8.dp)
+                                                            )
+
+                                                            PremiumPulsingLockBadge(
+                                                                modifier =
+                                                                    Modifier.size(
+                                                                        16.dp * LocalAppIconScale.current
+                                                                    )
                                                             )
                                                         }
                                                     }
-                                                    .padding(
-                                                        horizontal = 8.dp,
-                                                        vertical = 4.dp
-                                                    ),
-                                                color =
-                                                    belt.color.copy(alpha = 1f),
-                                                style = KmiTypography.action
-                                            )
+
+                                                    if (subIndex != subTitles.lastIndex) {
+                                                        HorizontalDivider(
+                                                            color = subDividerColor,
+                                                            thickness = 0.8.dp,
+                                                            modifier = Modifier.padding(horizontal = 8.dp)
+                                                        )
+                                                    }
+                                                }
+
+                                                Spacer(Modifier.height(4.dp))
+
+                                                Text(
+                                                    text =
+                                                        if (isEnglish) {
+                                                            "Close topic"
+                                                        } else {
+                                                            "סגור נושא"
+                                                        },
+                                                    modifier = Modifier
+                                                        .align(horizontalByLang)
+                                                        .clip(RoundedCornerShape(12.dp))
+                                                        .clickable {
+                                                            clickSound()
+                                                            haptic(true)
+                                                            expandedTopic = null
+                                                        }
+                                                        .padding(
+                                                            horizontal = 8.dp,
+                                                            vertical = 4.dp
+                                                        ),
+                                                    color =
+                                                        readableBeltAccent,
+                                                    style = KmiTypography.action
+                                                )
+
+                                                Spacer(Modifier.height(2.dp))
+
+                                                Text(
+                                                    text =
+                                                        if (isEnglish) {
+                                                            "Open full topic"
+                                                        } else {
+                                                            "פתח את כל הנושא"
+                                                        },
+                                                    modifier = Modifier
+                                                        .align(horizontalByLang)
+                                                        .clip(RoundedCornerShape(12.dp))
+                                                        .clickable {
+                                                            clickSound()
+                                                            haptic(true)
+
+                                                            if (isDefenseTopic) {
+                                                                onOpenDefenseMenu(
+                                                                    belt,
+                                                                    title
+                                                                )
+                                                            } else {
+                                                                onOpenTopic(
+                                                                    belt,
+                                                                    title
+                                                                )
+                                                            }
+                                                        }
+                                                        .padding(
+                                                            horizontal = 8.dp,
+                                                            vertical = 4.dp
+                                                        ),
+                                                    color =
+                                                        belt.color.copy(alpha = 1f),
+                                                    style = KmiTypography.action
+                                                )
+                                            }
                                         }
                                     }
                                 }
                             }
-                        }
 
-                        if (index != topicTitles.lastIndex) {
-                            HorizontalDivider(
-                                thickness = 1.dp,
-                                color =
-                                    MaterialTheme.colorScheme.outlineVariant,
-                                modifier = Modifier.padding(horizontal = 18.dp)
-                            )
-                        }
+                            if (index != topicTitles.lastIndex) {
+                                HorizontalDivider(
+                                    thickness = 1.dp,
+                                    color =
+                                        MaterialTheme.colorScheme.outlineVariant,
+                                    modifier = Modifier.padding(horizontal = 18.dp)
+                                )
+                            }
 
-                        Spacer(Modifier.height(4.dp))
+                            Spacer(Modifier.height(4.dp))
+                        }
+                        Spacer(Modifier.height(56.dp))
                     }
-
-                    // ✅ רווח גלילה תחתון:
-                    // מונע מצב שהסרגל הצף / הקרוסלה מסתירים את הנושא האחרון.
-                    Spacer(Modifier.height(56.dp))
                 }
             }
         }

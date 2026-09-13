@@ -14,8 +14,6 @@ import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -23,6 +21,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.core.content.edit
 import il.kmi.shared.domain.Belt
+import il.kmi.app.R
 import il.kmi.app.favorites.FavoritesStore
 import il.kmi.app.ui.KmiTtsManager
 import il.kmi.app.ui.dialogs.ExerciseExplanationDialog
@@ -32,6 +31,9 @@ import il.kmi.app.ui.KmiTypography
 import il.kmi.app.ui.ext.color
 import il.kmi.app.ui.ext.lightColor
 import il.kmi.shared.localization.AppLanguage
+import il.yuval.ui.theme.kmiScreenBackgroundBrush
+import il.yuval.ui.theme.kmiSectionHeaderBrush
+import il.yuval.ui.theme.kmiSectionHeaderContentColor
 import il.kmi.shared.localization.AppLanguageManager
 import kotlinx.coroutines.delay
 import java.util.Locale
@@ -337,26 +339,6 @@ fun ExamScreen(
     val isDarkMode =
         colorScheme.background.luminance() < 0.5f
 
-    val backgroundBrush =
-        Brush.verticalGradient(
-            colors =
-                if (isDarkMode) {
-                    listOf(
-                        colorScheme.background,
-                        colorScheme.surface,
-                        colorScheme.primaryContainer.copy(
-                            alpha = 0.30f
-                        )
-                    )
-                } else {
-                    listOf(
-                        Color(0xFFF7F2FF),
-                        Color(0xFFECE4FF),
-                        Color(0xFFE3F2FF)
-                    )
-                }
-        )
-
     val headerCardColor =
         if (isDarkMode) {
             colorScheme.surfaceVariant.copy(
@@ -378,9 +360,41 @@ fun ExamScreen(
             il.kmi.app.ui.KmiTopBar(
                 title =
                     tr(
-                        "מבחן מסכם – ${belt.heb}",
-                        "Final Exam – ${belt.en}"
+                        "מבחן מסכם",
+                        "Final Exam"
                     ),
+                onBack = null,
+                showBackNavigation = false,
+                topBeltIconRes =
+                    when (belt) {
+                        Belt.WHITE ->
+                            R.drawable.intro_belt_white
+
+                        Belt.YELLOW ->
+                            R.drawable.intro_belt_yellow
+
+                        Belt.ORANGE ->
+                            R.drawable.intro_belt_orange
+
+                        Belt.GREEN ->
+                            R.drawable.intro_belt_green
+
+                        Belt.BLUE ->
+                            R.drawable.intro_belt_blue
+
+                        Belt.BROWN ->
+                            R.drawable.intro_belt_brown
+
+                        Belt.BLACK ->
+                            R.drawable.intro_belt_black
+                    },
+                topBeltIconDescription =
+                    if (isEnglish) {
+                        belt.en
+                    } else {
+                        belt.heb
+                    },
+                showTopBeltIcon = true,
                 showTopHome = false,
                 showTopSearch = false,
                 showBottomActions = true,
@@ -397,7 +411,9 @@ fun ExamScreen(
             Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .background(backgroundBrush)
+                    .background(
+                        brush = kmiScreenBackgroundBrush()
+                    )
                     .padding(padding),
                 contentAlignment = Alignment.Center
             ) {
@@ -417,11 +433,68 @@ fun ExamScreen(
         }
 
         Column(
-            modifier =
-                Modifier
+            modifier = Modifier
+                .fillMaxSize()
+                .background(
+                    brush = kmiScreenBackgroundBrush()
+                )
+                .padding(padding)
+        ) {
+
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(
+                        brush = kmiSectionHeaderBrush()
+                    )
+                    .padding(
+                        horizontal = 16.dp,
+                        vertical = 7.dp
+                    ),
+                contentAlignment = Alignment.Center
+            ) {
+                Column(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.Center
+                ) {
+                    Text(
+                        text =
+                            tr(
+                                "בדקו את הידע וההתקדמות שלכם",
+                                "Test your knowledge and progress"
+                            ),
+                        modifier = Modifier.fillMaxWidth(),
+                        color = kmiSectionHeaderContentColor(),
+                        style = KmiTypography.secondary.copy(
+                            fontWeight = FontWeight.Black
+                        ),
+                        textAlign = TextAlign.Center,
+                        maxLines = 1
+                    )
+
+                    Spacer(Modifier.height(2.dp))
+
+                    Text(
+                        text =
+                            tr(
+                                "20 שניות לכל תרגיל",
+                                "20 seconds per exercise"
+                            ),
+                        modifier = Modifier.fillMaxWidth(),
+                        color =
+                            kmiSectionHeaderContentColor()
+                                .copy(alpha = 0.92f),
+                        style = KmiTypography.caption,
+                        textAlign = TextAlign.Center,
+                        maxLines = 1
+                    )
+                }
+            }
+
+            Column(
+                modifier = Modifier
                     .fillMaxSize()
-                    .background(backgroundBrush)
-                    .padding(padding)
                     .verticalScroll(
                         rememberScrollState()
                     )
@@ -430,11 +503,11 @@ fun ExamScreen(
                         horizontal = 16.dp,
                         vertical = 12.dp
                     ),
-            verticalArrangement =
-                Arrangement.spacedBy(12.dp)
-        ) {
+                verticalArrangement =
+                    Arrangement.spacedBy(12.dp)
+            ) {
 
-            Surface(
+                Surface(
                 shape = MaterialTheme.shapes.large,
                 color = headerCardColor,
                 tonalElevation = 0.dp,
@@ -723,6 +796,7 @@ fun ExamScreen(
                                 FontWeight.Bold
                         )
                 )
+            }
             }
         }
 

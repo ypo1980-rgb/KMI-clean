@@ -15,7 +15,9 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -29,19 +31,17 @@ import androidx.compose.material.icons.filled.Casino
 import androidx.compose.material.icons.filled.ChevronLeft
 import androidx.compose.material.icons.filled.Topic
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.ExposedDropdownMenuBox
-import androidx.compose.material3.ExposedDropdownMenuDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.MenuAnchorType
+import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.Immutable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -62,12 +62,18 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import il.kmi.app.domain.ContentRepo
+import il.kmi.app.ui.KmiPremiumDropdown
+import il.kmi.app.ui.KmiTopBar
 import il.kmi.app.ui.KmiTypography
 import il.kmi.app.ui.ext.color
 import il.kmi.shared.domain.Belt
 import il.kmi.shared.domain.catalog.CatalogRepo
 import il.kmi.shared.localization.AppLanguage
 import il.kmi.shared.localization.AppLanguageManager
+import il.yuval.ui.theme.kmiScreenBackgroundBrush
+import il.yuval.ui.theme.kmiSectionHeaderBrush
+import il.yuval.ui.theme.kmiSectionHeaderContentColor
+import kotlinx.coroutines.delay
 
 
 //============================================================================
@@ -78,6 +84,778 @@ data class PracticeByTopicsSelection(
     /** topic title strings כפי שמופיעים במערכת */
     val topicsByBelt: Map<Belt, Set<String>>
 )
+
+@Composable
+fun PracticeMenuScreen(
+    defaultBelt: Belt,
+    canUseExtras: Boolean,
+    onBack: () -> Unit,
+    onHome: () -> Unit,
+    onLocked: () -> Unit,
+    onRandomPractice: (Belt) -> Unit,
+    onFinalExam: (Belt) -> Unit,
+    onPracticeByTopicSelected:
+        (
+        belt: Belt,
+        topicToken: String
+    ) -> Unit
+) {
+    val context =
+        androidx.compose.ui.platform.LocalContext.current
+
+    val languageManager =
+        remember(context) {
+            AppLanguageManager(context)
+        }
+
+    val isEnglish =
+        languageManager.getCurrentLanguage() ==
+                AppLanguage.ENGLISH
+
+    fun tr(
+        he: String,
+        en: String
+    ): String {
+        return if (isEnglish) {
+            en
+        } else {
+            he
+        }
+    }
+
+    val textAlign =
+        if (isEnglish) {
+            TextAlign.Start
+        } else {
+            TextAlign.Right
+        }
+
+    val allBelts =
+        remember {
+            Belt.order.filterNot {
+                it == Belt.WHITE
+            }
+        }
+
+    var selectedBelt by rememberSaveable {
+        mutableStateOf(
+            defaultBelt.takeIf {
+                it != Belt.WHITE
+            } ?: allBelts.first()
+        )
+    }
+
+    var showTopicSelection by rememberSaveable {
+        mutableStateOf(false)
+    }
+
+    var selectedTopic by rememberSaveable {
+        mutableStateOf("")
+    }
+
+    var selectedSubTopic by rememberSaveable {
+        mutableStateOf("")
+    }
+
+    val contentScrollState =
+        rememberScrollState()
+
+    val beltOptions =
+        remember(
+            allBelts,
+            isEnglish
+        ) {
+            allBelts.map { belt ->
+                if (isEnglish) {
+                    belt.en
+                } else {
+                    belt.heb
+                }
+            }
+        }
+
+    val topicOptions =
+        remember(selectedBelt) {
+            ContentRepo
+                .listTopicTitles(selectedBelt)
+                .map {
+                    it.trim()
+                }
+                .filter {
+                    it.isNotBlank()
+                }
+                .distinct()
+        }
+
+    /*
+     * כאשר קיים נושא יחיד בלבד הוא נבחר
+     * אוטומטית ואין צורך לפתוח רשימה.
+     */
+    val effectiveTopic =
+        selectedTopic
+            .takeIf {
+                it in topicOptions
+            }
+            ?: topicOptions.singleOrNull()
+                .orEmpty()
+
+    val realSubTopics =
+        remember(
+            selectedBelt,
+            effectiveTopic
+        ) {
+            if (effectiveTopic.isBlank()) {
+                emptyList()
+            } else {
+                ContentRepo
+                    .listSubTopicTitles(
+                        belt = selectedBelt,
+                        topicTitle = effectiveTopic
+                    )
+                    .map {
+                        it.trim()
+                    }
+                    .filter {
+                        it.isNotBlank()
+                    }
+                    .filterNot {
+                        it.equals(
+                            effectiveTopic,
+                            ignoreCase = true
+                        )
+                    }
+                    .distinct()
+            }
+        }
+
+    /*
+     * שדה תת־נושא מוצג רק כאשר קיימות
+     * לפחות שתי אפשרויות אמיתיות.
+     */
+    val showSubTopicDropdown =
+        realSubTopics.size > 1
+
+    val allSubTopicsLabel =
+        tr(
+            "כל תתי הנושאים",
+            "All subtopics"
+        )
+
+    /*
+     * כאשר נפתח או משתנה שדה בחירת התרגול,
+     * ממתינים לסיום שינוי ה־layout ומביאים
+     * את כפתור ההתחלה לתצוגה.
+     */
+    LaunchedEffect(
+        showTopicSelection,
+        selectedBelt,
+        effectiveTopic,
+        selectedSubTopic,
+        showSubTopicDropdown
+    ) {
+        if (showTopicSelection) {
+            delay(220)
+
+            contentScrollState.animateScrollTo(
+                contentScrollState.maxValue
+            )
+        }
+    }
+
+    val selectedBeltName =
+        if (isEnglish) {
+            selectedBelt.en
+        } else {
+            selectedBelt.heb
+        }
+
+    @Composable
+    fun PracticeActionCard(
+        title: String,
+        subtitle: String,
+        icon: ImageVector,
+        expanded: Boolean = false,
+        onClick: () -> Unit
+    ) {
+        Surface(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(
+                    horizontal = 16.dp
+                )
+                .clip(
+                    RoundedCornerShape(22.dp)
+                )
+                .clickable(
+                    onClick = onClick
+                ),
+            shape =
+                RoundedCornerShape(22.dp),
+            color =
+                MaterialTheme.colorScheme.surface,
+            border =
+                BorderStroke(
+                    width = 1.dp,
+                    color =
+                        if (expanded) {
+                            selectedBelt.color.copy(
+                                alpha = 0.70f
+                            )
+                        } else {
+                            MaterialTheme.colorScheme
+                                .outlineVariant
+                                .copy(alpha = 0.72f)
+                        }
+                ),
+            tonalElevation = 0.dp,
+            shadowElevation = 0.dp
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(
+                        horizontal = 14.dp,
+                        vertical = 13.dp
+                    ),
+                verticalAlignment =
+                    Alignment.CenterVertically,
+                horizontalArrangement =
+                    Arrangement.spacedBy(12.dp)
+            ) {
+                Surface(
+                    modifier =
+                        Modifier.size(46.dp),
+                    shape =
+                        RoundedCornerShape(15.dp),
+                    color =
+                        selectedBelt.color.copy(
+                            alpha = 0.13f
+                        ),
+                    border =
+                        BorderStroke(
+                            width = 1.dp,
+                            color =
+                                selectedBelt.color.copy(
+                                    alpha = 0.30f
+                                )
+                        )
+                ) {
+                    Box(
+                        modifier =
+                            Modifier.fillMaxSize(),
+                        contentAlignment =
+                            Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = icon,
+                            contentDescription = null,
+                            tint =
+                                selectedBelt.color,
+                            modifier =
+                                Modifier.size(23.dp)
+                        )
+                    }
+                }
+
+                Column(
+                    modifier =
+                        Modifier.weight(1f),
+                    horizontalAlignment =
+                        if (isEnglish) {
+                            Alignment.Start
+                        } else {
+                            Alignment.End
+                        }
+                ) {
+                    Text(
+                        text = title,
+                        modifier =
+                            Modifier.fillMaxWidth(),
+                        color =
+                            MaterialTheme.colorScheme
+                                .onSurface,
+                        style =
+                            KmiTypography.cardTitle.copy(
+                                fontWeight =
+                                    FontWeight.Black
+                            ),
+                        textAlign = textAlign,
+                        maxLines = 2,
+                        overflow =
+                            TextOverflow.Ellipsis
+                    )
+
+                    Spacer(
+                        Modifier.height(3.dp)
+                    )
+
+                    Text(
+                        text = subtitle,
+                        modifier =
+                            Modifier.fillMaxWidth(),
+                        color =
+                            MaterialTheme.colorScheme
+                                .onSurfaceVariant,
+                        style =
+                            KmiTypography.secondary.copy(
+                                fontWeight =
+                                    FontWeight.Medium
+                            ),
+                        textAlign = textAlign,
+                        maxLines = 2,
+                        overflow =
+                            TextOverflow.Ellipsis
+                    )
+                }
+
+                Icon(
+                    imageVector =
+                        Icons.Filled.ChevronLeft,
+                    contentDescription = null,
+                    tint =
+                        selectedBelt.color,
+                    modifier = Modifier
+                        .size(20.dp)
+                        .graphicsLayer {
+                            rotationZ =
+                                if (expanded) {
+                                    -90f
+                                } else {
+                                    0f
+                                }
+
+                            scaleX =
+                                if (isEnglish) {
+                                    -1f
+                                } else {
+                                    1f
+                                }
+                        }
+                )
+            }
+        }
+    }
+
+    Scaffold(
+        containerColor = Color.Transparent,
+        topBar = {
+            KmiTopBar(
+                title = tr(
+                    "תרגול",
+                    "Practice"
+                ),
+                onBack = onBack,
+                onHome = onHome,
+                showMenu = true,
+                showBottomActions = true,
+                showBottomHelp = false,
+                showBottomShare = false,
+                showTopSearch = false,
+                showTopShare = false,
+                showSettings = false,
+                showCoachBroadcastFab = false
+            )
+        }
+    ) { innerPadding ->
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(
+                    brush =
+                        kmiScreenBackgroundBrush()
+                )
+                .padding(innerPadding)
+        ) {
+            Column(
+                modifier = Modifier.fillMaxSize()
+            ) {
+                // הפס הכחול נשאר קבוע מתחת ל־KmiTopBar.
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(
+                            brush =
+                                kmiSectionHeaderBrush()
+                        )
+                        .padding(
+                            horizontal = 16.dp,
+                            vertical = 7.dp
+                        ),
+                    contentAlignment =
+                        Alignment.Center
+                ) {
+                    Column(
+                        modifier =
+                            Modifier.fillMaxWidth(),
+                        horizontalAlignment =
+                            Alignment.CenterHorizontally,
+                        verticalArrangement =
+                            Arrangement.Center
+                    ) {
+                        Text(
+                            text = tr(
+                                "בחרו את מסלול התרגול",
+                                "Choose your practice path"
+                            ),
+                            modifier =
+                                Modifier.fillMaxWidth(),
+                            color =
+                                kmiSectionHeaderContentColor(),
+                            style =
+                                KmiTypography.secondary.copy(
+                                    fontWeight =
+                                        FontWeight.Black
+                                ),
+                            textAlign =
+                                TextAlign.Center,
+                            maxLines = 1,
+                            overflow =
+                                TextOverflow.Ellipsis
+                        )
+
+                        Spacer(Modifier.height(2.dp))
+
+                        Text(
+                            text = tr(
+                                "שפרו את היכולות שלכם, צעד אחר צעד",
+                                "Improve your skills, step by step"
+                            ),
+                            modifier =
+                                Modifier.fillMaxWidth(),
+                            color =
+                                kmiSectionHeaderContentColor()
+                                    .copy(alpha = 0.92f),
+                            style =
+                                KmiTypography.caption.copy(
+                                    fontWeight =
+                                        FontWeight.SemiBold
+                                ),
+                            textAlign =
+                                TextAlign.Center,
+                            maxLines = 1,
+                            overflow =
+                                TextOverflow.Ellipsis
+                        )
+                    }
+                }
+
+                // רק התוכן שמתחת לפס משתתף בגלילה.
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .verticalScroll(contentScrollState)
+                        .navigationBarsPadding()
+                        .padding(vertical = 14.dp),
+                    verticalArrangement = Arrangement.spacedBy(16.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Spacer(Modifier.height(2.dp))
+
+                    PracticeActionCard(
+                        title = tr(
+                            "תרגול אקראי",
+                            "Random practice"
+                        ),
+                        subtitle = tr(
+                            "תרגול מגוון מכל חומר החגורה",
+                            "A varied practice from the belt material"
+                        ),
+                        icon =
+                            Icons.Filled.Casino,
+                        onClick = {
+                            if (canUseExtras) {
+                                onRandomPractice(
+                                    selectedBelt
+                                )
+                            } else {
+                                onLocked()
+                            }
+                        }
+                    )
+
+                    PracticeActionCard(
+                        title = tr(
+                            "מבחן מסכם",
+                            "Final exam"
+                        ),
+                        subtitle = tr(
+                            "בדיקת ידע והתקדמות בחגורה",
+                            "Test your belt knowledge and progress"
+                        ),
+                        icon =
+                            Icons.Filled.AssignmentTurnedIn,
+                        onClick = {
+                            if (canUseExtras) {
+                                onFinalExam(
+                                    selectedBelt
+                                )
+                            } else {
+                                onLocked()
+                            }
+                        }
+                    )
+
+                    PracticeActionCard(
+                        title = tr(
+                            "תרגול לפי נושא",
+                            "Practice by topic"
+                        ),
+                        subtitle = tr(
+                            "בחירת חגורה, נושא ותת־נושא",
+                            "Choose a belt, topic and subtopic"
+                        ),
+                        icon =
+                            Icons.Filled.Topic,
+                        expanded =
+                            showTopicSelection,
+                        onClick = {
+                            showTopicSelection =
+                                !showTopicSelection
+                        }
+                    )
+
+                    AnimatedVisibility(
+                        visible =
+                            showTopicSelection
+                    ) {
+                        Surface(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(
+                                    horizontal = 16.dp
+                                ),
+                            shape =
+                                RoundedCornerShape(24.dp),
+                            color =
+                                MaterialTheme.colorScheme
+                                    .surface.copy(
+                                        alpha = 0.94f
+                                    ),
+                            border =
+                                BorderStroke(
+                                    width = 1.dp,
+                                    color =
+                                        selectedBelt.color
+                                            .copy(alpha = 0.38f)
+                                ),
+                            tonalElevation = 0.dp,
+                            shadowElevation = 0.dp
+                        ) {
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(14.dp),
+                                verticalArrangement =
+                                    Arrangement.spacedBy(10.dp)
+                            ) {
+                                KmiPremiumDropdown(
+                                    title = tr(
+                                        "חגורה",
+                                        "Belt"
+                                    ),
+                                    options =
+                                        beltOptions,
+                                    selectedValue =
+                                        selectedBeltName,
+                                    isEnglish =
+                                        isEnglish,
+                                    onSelected = { selectedValue ->
+
+                                        val belt =
+                                            allBelts
+                                                .firstOrNull { candidate ->
+
+                                                    val name =
+                                                        if (
+                                                            isEnglish
+                                                        ) {
+                                                            candidate.en
+                                                        } else {
+                                                            candidate.heb
+                                                        }
+
+                                                    name ==
+                                                            selectedValue
+                                                }
+                                                ?: return@KmiPremiumDropdown
+
+                                        selectedBelt = belt
+                                        selectedTopic = ""
+                                        selectedSubTopic = ""
+                                    }
+                                )
+
+                                /*
+                                 * כשקיים נושא יחיד הרכיב מציג
+                                 * אותו אך אינו פותח תפריט.
+                                 */
+                                KmiPremiumDropdown(
+                                    title = tr(
+                                        "נושא",
+                                        "Topic"
+                                    ),
+                                    options =
+                                        topicOptions,
+                                    selectedValue =
+                                        effectiveTopic,
+                                    isEnglish =
+                                        isEnglish,
+                                    placeholder = tr(
+                                        "בחר נושא",
+                                        "Choose a topic"
+                                    ),
+                                    enabled =
+                                        topicOptions.isNotEmpty(),
+                                    onSelected = { selectedValue ->
+
+                                        selectedTopic =
+                                            selectedValue
+
+                                        selectedSubTopic =
+                                            ""
+                                    }
+                                )
+
+                                AnimatedVisibility(
+                                    visible =
+                                        effectiveTopic
+                                            .isNotBlank() &&
+                                                showSubTopicDropdown
+                                ) {
+                                    KmiPremiumDropdown(
+                                        title = tr(
+                                            "תת־נושא",
+                                            "Subtopic"
+                                        ),
+                                        options =
+                                            listOf(
+                                                allSubTopicsLabel
+                                            ) + realSubTopics,
+                                        selectedValue =
+                                            selectedSubTopic,
+                                        isEnglish =
+                                            isEnglish,
+                                        placeholder =
+                                            allSubTopicsLabel,
+                                        onSelected = {
+                                            selectedSubTopic =
+                                                it
+                                        }
+                                    )
+                                }
+
+                                val canStart =
+                                    effectiveTopic
+                                        .isNotBlank()
+
+                                Surface(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .heightIn(
+                                            min = 52.dp
+                                        )
+                                        .clip(
+                                            RoundedCornerShape(
+                                                17.dp
+                                            )
+                                        )
+                                        .clickable(
+                                            enabled = canStart
+                                        ) {
+                                            if (!canUseExtras) {
+                                                onLocked()
+                                                return@clickable
+                                            }
+
+                                            val topicToken =
+                                                if (
+                                                    showSubTopicDropdown &&
+                                                    selectedSubTopic
+                                                        .isNotBlank() &&
+                                                    selectedSubTopic !=
+                                                    allSubTopicsLabel
+                                                ) {
+                                                    "__SUBTOPIC__:$effectiveTopic::$selectedSubTopic"
+                                                } else {
+                                                    effectiveTopic
+                                                }
+
+                                            onPracticeByTopicSelected(
+                                                selectedBelt,
+                                                topicToken
+                                            )
+                                        },
+                                    shape =
+                                        RoundedCornerShape(
+                                            17.dp
+                                        ),
+                                    color =
+                                        if (canStart) {
+                                            MaterialTheme
+                                                .colorScheme
+                                                .primary
+                                        } else {
+                                            MaterialTheme
+                                                .colorScheme
+                                                .surfaceVariant
+                                        },
+                                    border =
+                                        BorderStroke(
+                                            width = 1.dp,
+                                            color =
+                                                selectedBelt.color
+                                                    .copy(
+                                                        alpha = 0.45f
+                                                    )
+                                        )
+                                ) {
+                                    Box(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(
+                                                horizontal = 14.dp,
+                                                vertical = 13.dp
+                                            ),
+                                        contentAlignment =
+                                            Alignment.Center
+                                    ) {
+                                        Text(
+                                            text = tr(
+                                                "התחילו לתרגל",
+                                                "Start practice"
+                                            ),
+                                            color =
+                                                if (canStart) {
+                                                    MaterialTheme
+                                                        .colorScheme
+                                                        .onPrimary
+                                                } else {
+                                                    MaterialTheme
+                                                        .colorScheme
+                                                        .onSurfaceVariant
+                                                },
+                                            style =
+                                                KmiTypography.action.copy(
+                                                    fontWeight =
+                                                        FontWeight.Black
+                                                ),
+                                            textAlign =
+                                                TextAlign.Center
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    Spacer(
+                        Modifier.height(8.dp)
+                    )
+                }
+            }
+        }
+    }
+}
 
 @Composable
 fun PracticeMenuDialog(
@@ -582,7 +1360,9 @@ private fun PracticeByTopicsPickerDialog(
         val allBelts = remember { Belt.order.filterNot { it == Belt.WHITE } }
 
         @Composable
-        fun topicTitlesForBelt(belt: Belt): List<String> {
+        fun topicTitlesForBelt(
+            belt: Belt
+        ): List<String> {
             return remember(belt) {
                 val sharedBelt =
                     runCatching {
@@ -590,28 +1370,42 @@ private fun PracticeByTopicsPickerDialog(
                     }.getOrNull()
                         ?: Belt.WHITE
 
-                val ordered = LinkedHashSet<String>()
+                val ordered =
+                    LinkedHashSet<String>()
 
-                val viaBridge = runCatching {
-                    il.kmi.app.search.KmiSearchBridge.topicTitlesFor(belt)
-                }.getOrDefault(emptyList())
+                val viaBridge =
+                    runCatching {
+                        il.kmi.app.search.KmiSearchBridge
+                            .topicTitlesFor(belt)
+                    }.getOrDefault(emptyList())
 
-                val viaCatalog = runCatching {
-                    CatalogRepo.listTopicTitles(sharedBelt)
-                }.getOrDefault(emptyList())
+                val viaCatalog =
+                    runCatching {
+                        CatalogRepo.listTopicTitles(
+                            sharedBelt
+                        )
+                    }.getOrDefault(emptyList())
 
-                val viaSubTopics = runCatching {
-                    il.kmi.shared.domain.SubTopicRegistry
-                        .allForBelt(sharedBelt)
-                        .keys
-                        .toList()
-                }.getOrDefault(emptyList())
+                val viaSubTopics =
+                    runCatching {
+                        il.kmi.shared.domain.SubTopicRegistry
+                            .allForBelt(sharedBelt)
+                            .keys
+                            .toList()
+                    }.getOrDefault(emptyList())
 
                 fun addAll(items: List<String>) {
-                    items.asSequence()
-                        .map { it.trim() }
-                        .filter { it.isNotEmpty() }
-                        .forEach { ordered.add(it) }
+                    items
+                        .asSequence()
+                        .map {
+                            it.trim()
+                        }
+                        .filter {
+                            it.isNotEmpty()
+                        }
+                        .forEach {
+                            ordered.add(it)
+                        }
                 }
 
                 addAll(viaBridge)
@@ -619,6 +1413,39 @@ private fun PracticeByTopicsPickerDialog(
                 addAll(viaSubTopics)
 
                 ordered.toList()
+            }
+        }
+
+        @Composable
+        fun subTopicTitlesFor(
+            belt: Belt?,
+            topic: String?
+        ): List<String> {
+            return remember(
+                belt,
+                topic
+            ) {
+                if (
+                    belt == null ||
+                    topic.isNullOrBlank()
+                ) {
+                    emptyList()
+                } else {
+                    runCatching {
+                        ContentRepo
+                            .listSubTopicTitles(
+                                belt = belt,
+                                topicTitle = topic
+                            )
+                            .map {
+                                it.trim()
+                            }
+                            .filter {
+                                it.isNotBlank()
+                            }
+                            .distinct()
+                    }.getOrDefault(emptyList())
+                }
             }
         }
 
@@ -636,8 +1463,8 @@ private fun PracticeByTopicsPickerDialog(
             mutableStateOf<String?>(null)
         }
 
-        var beltMenuExpanded by rememberSaveable {
-            mutableStateOf(false)
+        var selectedSubTopic by rememberSaveable {
+            mutableStateOf<String?>(null)
         }
 
         val topics =
@@ -646,6 +1473,12 @@ private fun PracticeByTopicsPickerDialog(
                     topicTitlesForBelt(it)
                 }
                 .orEmpty()
+
+        val subTopics =
+            subTopicTitlesFor(
+                belt = selectedBelt,
+                topic = selectedTopic
+            )
 
         val selectedBeltAccent =
             selectedBelt?.color
@@ -737,210 +1570,58 @@ private fun PracticeByTopicsPickerDialog(
                         verticalArrangement =
                             Arrangement.spacedBy(10.dp)
                     ) {
-                        /*
-                         * בחירת חגורה נשארת Dropdown.
-                         */
-                        ExposedDropdownMenuBox(
-                            expanded = beltMenuExpanded,
-                            onExpandedChange = {
-                                beltMenuExpanded =
-                                    !beltMenuExpanded
+                        val beltOptions =
+                            allBelts.map { belt ->
+                                if (isEnglish) {
+                                    belt.en
+                                } else {
+                                    belt.heb
+                                }
                             }
-                        ) {
-                            Surface(
-                                modifier = Modifier
-                                    .menuAnchor(
-                                        type =
-                                            MenuAnchorType
-                                                .PrimaryNotEditable,
-                                        enabled = true
-                                    )
-                                    .fillMaxWidth(),
-                                shape = RoundedCornerShape(20.dp),
-                                color =
-                                    if (isDarkMode) {
-                                        colorScheme.surfaceVariant
-                                    } else {
-                                        Color.White
-                                    },
-                                tonalElevation = 0.dp,
-                                shadowElevation = 0.dp,
-                                border = BorderStroke(
-                                    width = 1.dp,
-                                    color =
-                                        selectedBeltAccent.copy(
-                                            alpha = 0.30f
-                                        )
-                                )
-                            ) {
-                                Row(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(
-                                            horizontal = 12.dp,
-                                            vertical = 10.dp
-                                        ),
-                                    verticalAlignment =
-                                        Alignment.CenterVertically,
-                                    horizontalArrangement =
-                                        Arrangement.spacedBy(10.dp)
-                                ) {
-                                    Surface(
-                                        modifier = Modifier.size(36.dp),
-                                        shape = CircleShape,
-                                        color =
-                                            selectedBeltAccent.copy(
-                                                alpha = 0.11f
-                                            ),
-                                        border = BorderStroke(
-                                            width = 1.dp,
-                                            color =
-                                                selectedBeltAccent.copy(
-                                                    alpha = 0.22f
-                                                )
-                                        )
-                                    ) {
-                                        Box(
-                                            modifier =
-                                                Modifier.fillMaxSize(),
-                                            contentAlignment =
-                                                Alignment.Center
-                                        ) {
-                                            Box(
-                                                modifier = Modifier
-                                                    .size(12.dp)
-                                                    .background(
-                                                        color =
-                                                            selectedBeltAccent,
-                                                        shape =
-                                                            CircleShape
-                                                    )
-                                            )
+
+                        KmiPremiumDropdown(
+                            title = tr(
+                                "חגורה",
+                                "Belt"
+                            ),
+                            options = beltOptions,
+                            selectedValue =
+                                selectedBelt
+                                    ?.let { belt ->
+                                        if (isEnglish) {
+                                            belt.en
+                                        } else {
+                                            belt.heb
                                         }
                                     }
+                                    .orEmpty(),
+                            isEnglish = isEnglish,
+                            placeholder = tr(
+                                "בחר חגורה",
+                                "Choose Belt"
+                            ),
+                            onSelected = { selectedValue ->
 
-                                    Text(
-                                        text =
-                                            selectedBelt?.let { belt ->
-                                                if (isEnglish) {
-                                                    belt.en
-                                                } else {
-                                                    belt.heb
-                                                }
-                                            } ?: tr(
-                                                "בחר חגורה",
-                                                "Choose Belt"
-                                            ),
-                                        modifier =
-                                            Modifier.weight(1f),
-                                        color =
-                                            if (selectedBelt != null) {
-                                                colorScheme.onSurface
+                                val belt =
+                                    allBelts.firstOrNull { candidate ->
+
+                                        val displayName =
+                                            if (isEnglish) {
+                                                candidate.en
                                             } else {
-                                                colorScheme.onSurfaceVariant
-                                            },
-                                        style =
-                                            KmiTypography.cardTitle.copy(
-                                                fontWeight =
-                                                    if (selectedBelt != null) {
-                                                        FontWeight.Bold
-                                                    } else {
-                                                        FontWeight.Medium
-                                                    }
-                                            ),
-                                        textAlign =
-                                            textAlignPrimary,
-                                        maxLines = 1
-                                    )
-
-                                    Surface(
-                                        modifier = Modifier.size(30.dp),
-                                        shape = CircleShape,
-                                        color =
-                                            selectedBeltAccent.copy(
-                                                alpha = 0.09f
-                                            )
-                                    ) {
-                                        Box(
-                                            modifier =
-                                                Modifier.fillMaxSize(),
-                                            contentAlignment =
-                                                Alignment.Center
-                                        ) {
-                                            ExposedDropdownMenuDefaults
-                                                .TrailingIcon(
-                                                    expanded =
-                                                        beltMenuExpanded
-                                                )
-                                        }
-                                    }
-                                }
-                            }
-
-                            ExposedDropdownMenu(
-                                expanded = beltMenuExpanded,
-                                onDismissRequest = {
-                                    beltMenuExpanded = false
-                                }
-                            ) {
-                                allBelts.forEach { belt ->
-                                    DropdownMenuItem(
-                                        text = {
-                                            Row(
-                                                verticalAlignment =
-                                                    Alignment.CenterVertically,
-                                                horizontalArrangement =
-                                                    Arrangement.spacedBy(
-                                                        10.dp
-                                                    )
-                                            ) {
-                                                Box(
-                                                    modifier = Modifier
-                                                        .size(10.dp)
-                                                        .background(
-                                                            color =
-                                                                belt.color,
-                                                            shape =
-                                                                CircleShape
-                                                        )
-                                                )
-
-                                                Text(
-                                                    text =
-                                                        if (isEnglish) {
-                                                            belt.en
-                                                        } else {
-                                                            belt.heb
-                                                        },
-                                                    style =
-                                                        KmiTypography.body.copy(
-                                                            fontWeight =
-                                                                if (
-                                                                    selectedBelt ==
-                                                                    belt
-                                                                ) {
-                                                                    FontWeight.Bold
-                                                                } else {
-                                                                    FontWeight.Medium
-                                                                }
-                                                        ),
-                                                    color =
-                                                        colorScheme.onSurface,
-                                                    maxLines = 1,
-                                                    overflow =
-                                                        TextOverflow.Ellipsis
-                                                )
+                                                candidate.heb
                                             }
-                                        },
-                                        onClick = {
-                                            selectedBelt = belt
-                                            selectedTopic = null
-                                            beltMenuExpanded = false
-                                        }
-                                    )
-                                }
+
+                                        displayName ==
+                                                selectedValue
+                                    }
+                                        ?: return@KmiPremiumDropdown
+
+                                selectedBelt = belt
+                                selectedTopic = null
+                                selectedSubTopic = null
                             }
-                        }
+                        )
 
                         AnimatedVisibility(
                             visible = selectedBelt == null
@@ -1084,21 +1765,51 @@ private fun PracticeByTopicsPickerDialog(
                                                     selectedBelt
                                                         ?: return@clickable
 
-                                                selectedTopic = topic
+                                                selectedTopic =
+                                                    topic
 
-                                                onConfirm(
-                                                    PracticeByTopicsSelection(
-                                                        belts =
-                                                            setOf(belt),
-                                                        topicsByBelt =
-                                                            mapOf(
-                                                                belt to
-                                                                        setOf(
-                                                                            topic
-                                                                        )
-                                                            )
+                                                selectedSubTopic =
+                                                    null
+
+                                                val topicSubTopics =
+                                                    ContentRepo
+                                                        .listSubTopicTitles(
+                                                            belt = belt,
+                                                            topicTitle =
+                                                                topic
+                                                        )
+                                                        .map {
+                                                            it.trim()
+                                                        }
+                                                        .filter {
+                                                            it.isNotBlank()
+                                                        }
+                                                        .distinct()
+
+                                                /*
+                                                 * כשאין תתי־נושאים אפשר
+                                                 * להתחיל מיד את התרגול.
+                                                 */
+                                                if (
+                                                    topicSubTopics
+                                                        .isEmpty()
+                                                ) {
+                                                    onConfirm(
+                                                        PracticeByTopicsSelection(
+                                                            belts =
+                                                                setOf(
+                                                                    belt
+                                                                ),
+                                                            topicsByBelt =
+                                                                mapOf(
+                                                                    belt to
+                                                                            setOf(
+                                                                                topic
+                                                                            )
+                                                                )
+                                                        )
                                                     )
-                                                )
+                                                }
                                             },
                                         shape = topicShape,
                                         color = topicBackground,
@@ -1233,6 +1944,97 @@ private fun PracticeByTopicsPickerDialog(
                                                     }
                                             )
                                         }
+                                    }
+
+                                    /*
+                                     * תת־הנושא מוצג בתוך אותו
+                                     * iteration של הנושא שנבחר,
+                                     * ולכן הוא צמוד לכרטיס שלו.
+                                     */
+                                    AnimatedVisibility(
+                                        visible =
+                                            isSelected &&
+                                                    subTopics
+                                                        .isNotEmpty()
+                                    ) {
+                                        val allSubTopicsLabel =
+                                            tr(
+                                                "כל תתי הנושאים",
+                                                "All subtopics"
+                                            )
+
+                                        KmiPremiumDropdown(
+                                            title = tr(
+                                                "תת־נושא",
+                                                "Subtopic"
+                                            ),
+                                            options =
+                                                listOf(
+                                                    allSubTopicsLabel
+                                                ) + subTopics,
+                                            selectedValue =
+                                                selectedSubTopic
+                                                    .orEmpty(),
+                                            isEnglish =
+                                                isEnglish,
+                                            placeholder = tr(
+                                                "בחר תת־נושא",
+                                                "Choose a subtopic"
+                                            ),
+                                            modifier =
+                                                Modifier.padding(
+                                                    start = 12.dp,
+                                                    end = 12.dp,
+                                                    top = 7.dp,
+                                                    bottom = 3.dp
+                                                ),
+                                            onSelected = { selectedValue ->
+
+                                                val belt =
+                                                    selectedBelt
+                                                        ?: return@KmiPremiumDropdown
+
+                                                selectedSubTopic =
+                                                    selectedValue
+
+                                                if (
+                                                    selectedValue ==
+                                                    allSubTopicsLabel
+                                                ) {
+                                                    onConfirm(
+                                                        PracticeByTopicsSelection(
+                                                            belts =
+                                                                setOf(
+                                                                    belt
+                                                                ),
+                                                            topicsByBelt =
+                                                                mapOf(
+                                                                    belt to
+                                                                            setOf(
+                                                                                topic
+                                                                            )
+                                                                )
+                                                        )
+                                                    )
+                                                } else {
+                                                    onConfirm(
+                                                        PracticeByTopicsSelection(
+                                                            belts =
+                                                                setOf(
+                                                                    belt
+                                                                ),
+                                                            topicsByBelt =
+                                                                mapOf(
+                                                                    belt to
+                                                                            setOf(
+                                                                                "__SUBTOPIC__:$topic::$selectedValue"
+                                                                            )
+                                                                )
+                                                        )
+                                                    )
+                                                }
+                                            }
+                                        )
                                     }
                                 }
                             }

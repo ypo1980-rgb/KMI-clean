@@ -556,17 +556,92 @@ fun ExercisesTabsScreen(
         )
     }
 
-    val currentRole = sp
-        .getString("user_role", "")
-        .orEmpty()
-        .trim()
-        .lowercase()
+    val roleSp = remember(ctx) {
+        ctx.getSharedPreferences(
+            "kmi_user",
+            android.content.Context.MODE_PRIVATE
+        )
+    }
+
+    fun readActiveExercisesRole(): String {
+        return roleSp.getString(
+            "active_user_mode",
+            null
+        )
+            ?.trim()
+            ?.takeIf {
+                it.isNotBlank()
+            }
+            ?: roleSp.getString(
+                "last_active_app_role",
+                null
+            )
+                ?.trim()
+                ?.takeIf {
+                    it.isNotBlank()
+                }
+            ?: roleSp.getString(
+                "user_role",
+                null
+            )
+                ?.trim()
+                ?.takeIf {
+                    it.isNotBlank()
+                }
+            ?: roleSp.getString(
+                "role",
+                ""
+            )
+                ?.trim()
+                .orEmpty()
+    }
+
+    var currentRole by remember(roleSp) {
+        mutableStateOf(
+            readActiveExercisesRole()
+        )
+    }
+
+    DisposableEffect(roleSp) {
+        val roleListener =
+            android.content.SharedPreferences
+                .OnSharedPreferenceChangeListener {
+                        _,
+                        key ->
+
+                    if (
+                        key == "active_user_mode" ||
+                        key == "last_active_app_role" ||
+                        key == "user_role" ||
+                        key == "role"
+                    ) {
+                        currentRole =
+                            readActiveExercisesRole()
+                    }
+                }
+
+        roleSp.registerOnSharedPreferenceChangeListener(
+            roleListener
+        )
+
+        onDispose {
+            roleSp.unregisterOnSharedPreferenceChangeListener(
+                roleListener
+            )
+        }
+    }
+
+    val normalizedRole =
+        currentRole
+            .trim()
+            .lowercase()
 
     val isCoach =
-        currentRole == "coach" ||
-                currentRole.contains("coach") ||
-                currentRole.contains("מאמן") ||
-                currentRole.contains("מדריך")
+        normalizedRole == "coach" ||
+                normalizedRole == "trainer" ||
+                normalizedRole.contains("coach") ||
+                normalizedRole.contains("מאמן") ||
+                normalizedRole.contains("מדריך")
 
 // ⭐ Favorites גלובלי – source of truth אחד לכל האפליקציה
     val favorites: Set<String> by FavoritesStore
@@ -803,12 +878,41 @@ fun ExercisesTabsScreen(
         }
     }
 
-    fun isFavoriteRawItem(raw: String): Boolean {
-        return exerciseIdentityIdFor(raw) in favoriteExerciseIds
+    val exerciseIdByRaw: Map<String, String> =
+        remember(
+            itemList,
+            belt
+        ) {
+            itemList.associateWith { raw ->
+                exerciseIdentityIdFor(raw)
+            }
+        }
+
+    val favoriteRawItems: Set<String> =
+        remember(
+            exerciseIdByRaw,
+            favoriteExerciseIds
+        ) {
+            exerciseIdByRaw
+                .filterValues { exerciseId ->
+                    exerciseId in favoriteExerciseIds
+                }
+                .keys
+        }
+
+    fun isFavoriteRawItem(
+        raw: String
+    ): Boolean {
+        return raw in favoriteRawItems
     }
 
-    fun noteKeyFor(raw: String): String =
-        "note_${belt.id}_${exerciseIdentityIdFor(raw)}"
+    fun noteKeyFor(raw: String): String {
+        val exerciseId =
+            exerciseIdByRaw[raw]
+                ?: exerciseIdentityIdFor(raw)
+
+        return "note_${belt.id}_$exerciseId"
+    }
 
     fun loadNote(raw: String): String =
         notesSp.getString(
@@ -848,9 +952,21 @@ fun ExercisesTabsScreen(
         notesRefreshKey++
     }
 
-    fun hasNote(raw: String): Boolean {
-        notesRefreshKey
-        return loadNote(raw).isNotBlank()
+    val notePresenceByRaw: Map<String, Boolean> =
+        remember(
+            itemList,
+            notesRefreshKey,
+            exerciseIdByRaw
+        ) {
+            itemList.associateWith { raw ->
+                loadNote(raw).isNotBlank()
+            }
+        }
+
+    fun hasNote(
+        raw: String
+    ): Boolean {
+        return notePresenceByRaw[raw] == true
     }
 
 // סטטוסים מה-VM
@@ -870,39 +986,44 @@ fun ExercisesTabsScreen(
         allTopicItems,
         marksVersion
     ) {
-        itemStates.clear()
+        /*
+         * אוספים תחילה את כל המצבים למפה רגילה.
+         * כך הרשימה אינה עוברת recomposition אחרי
+         * כל תרגיל בזמן הטעינה.
+         */
+        val loadedStates =
+            linkedMapOf<String, Boolean?>()
 
         itemList.forEach { raw ->
-            val itemTopic = topicForRawItem(raw)
-            val canonicalId = CanonicalIds.canonicalFor(
-                belt,
-                itemTopic,
-                raw
-            )
+            val itemTopic =
+                topicForRawItem(raw)
 
-            val status = runCatching {
-                vm.getItemStatusNullable(
+            val canonicalId =
+                CanonicalIds.canonicalFor(
                     belt = belt,
-                    topic = itemTopic,
-                    item = canonicalId
+                    topicTitle = itemTopic,
+                    displayItem = raw
                 )
-            }.getOrNull()
-                ?: runCatching {
-                    if (
-                        vm.isMastered(
-                            belt = belt,
-                            topic = itemTopic,
-                            item = canonicalId
-                        )
-                    ) {
-                        true
-                    } else {
-                        null
-                    }
-                }.getOrNull()
 
-            itemStates[raw] = status
+            loadedStates[raw] =
+                runCatching {
+                    vm.getItemStatusNullable(
+                        belt = belt,
+                        topic = itemTopic,
+                        item = canonicalId
+                    )
+                }.getOrNull()
         }
+
+        /*
+         * עדכון מרוכז אחד בלבד לאחר סיום הקריאה.
+         *
+         * אין צורך ב-isMastered:
+         * getItemStatusNullable כבר מחזיר
+         * true / false / null ממקור האמת.
+         */
+        itemStates.clear()
+        itemStates.putAll(loadedStates)
     }
 
 // ========= ⭐ / X =========
@@ -1875,12 +1996,19 @@ fun ExercisesTabsScreen(
                 }
             }
 
-            // ✅ מפת raw -> display מחושבת רק כשהרשימה באמת משתנה
-            val displayByRaw: Map<String, String> = remember(filtered) {
-                filtered.associateWith { raw: String ->
-                    formattedExerciseTitle(raw)
+            // שמות התצוגה מחושבים פעם אחת לכל הרשימה.
+// מעבר בין טאבים וגלילה אינם מחשבים אותם מחדש.
+            val displayByRaw: Map<String, String> =
+                remember(
+                    itemList,
+                    belt,
+                    topic,
+                    isEnglish
+                ) {
+                    itemList.associateWith { raw ->
+                        formattedExerciseTitle(raw)
+                    }
                 }
-            }
 
             LazyColumn(
                 modifier = Modifier
@@ -1891,12 +2019,15 @@ fun ExercisesTabsScreen(
             ) {
                 itemsIndexed(
                     items = filtered,
-                    key = { _, item ->
-                        buildString {
-                            append(topicForRawItem(item))
-                            append("::")
-                            append(exerciseIdentityIdFor(item))
-                        }
+                    key = { index, item ->
+                        exerciseIdByRaw[item]
+                            ?.let { exerciseId ->
+                                "$exerciseId::$index"
+                            }
+                            ?: "$item::$index"
+                    },
+                    contentType = { _, _ ->
+                        "exercise_row"
                     }
                 ) { index, item ->
                     var pressed by remember(item) {
@@ -1914,9 +2045,8 @@ fun ExercisesTabsScreen(
 
                     val isFav = isFavoriteRawItem(item)
 
-                    val itemHasNote = remember(item, notesRefreshKey) {
-                        hasNote(item)
-                    }
+                    val itemHasNote =
+                        notePresenceByRaw[item] == true
 
                     val itemIsUnknown = item in unknownItems
 

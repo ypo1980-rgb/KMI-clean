@@ -71,6 +71,8 @@ import il.kmi.app.ui.KmiTypography
 import il.kmi.app.ui.loading.KmiLoadingRings
 import il.kmi.app.ui.scaledIconSize
 import il.yuval.ui.theme.kmiScreenBackgroundBrush
+import il.yuval.ui.theme.kmiSectionHeaderBrush
+import il.yuval.ui.theme.kmiSectionHeaderContentColor
 import il.yuval.ui.theme.kmiSubscriptionMonthlyColor
 import il.yuval.ui.theme.kmiSubscriptionMonthlyContentColor
 import il.yuval.ui.theme.kmiSubscriptionYearlyColor
@@ -311,38 +313,77 @@ fun SubscriptionPlansScreen(
             val scrollState = rememberScrollState()
 
             Column(
-                modifier =
-                    Modifier
-                        .fillMaxSize()
-                        .verticalScroll(scrollState)
-                        .navigationBarsPadding()
-                        .padding(
-                            horizontal = 16.dp,
-                            vertical = 10.dp
-                        ),
-                horizontalAlignment =
-                    Alignment.CenterHorizontally
+                modifier = Modifier.fillMaxSize()
             ) {
-                Spacer(Modifier.height(4.dp))
 
-                Text(
-                    text =
-                        if (isEnglish) {
-                            "Choose the plan that fits you:"
-                        } else {
-                            "בחר/י במסלול המתאים לך:"
-                        },
-                    style = KmiTypography.sectionTitle.copy(
-                        fontWeight = FontWeight.SemiBold
-                    ),
-                    color = MaterialTheme.colorScheme.onSurface,
-                    textAlign = TextAlign.Center,
-                    modifier = Modifier.fillMaxWidth()
-                )
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(
+                            brush = kmiSectionHeaderBrush()
+                        )
+                        .padding(vertical = 4.dp)
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp),
+                        verticalArrangement = Arrangement.Center,
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        Text(
+                            text =
+                                if (isEnglish) {
+                                    "KMI Subscription Plans"
+                                } else {
+                                    "תוכניות מנוי KAMI"
+                                },
+                            style = KmiTypography.secondary.copy(
+                                fontWeight = FontWeight.Bold
+                            ),
+                            color = kmiSectionHeaderContentColor(),
+                            textAlign = TextAlign.Center,
+                            modifier = Modifier.fillMaxWidth(),
+                            maxLines = 1
+                        )
 
-                Spacer(Modifier.height(12.dp))
+                        Spacer(Modifier.height(1.dp))
 
-                if (
+                        Text(
+                            text =
+                                if (isEnglish) {
+                                    "Choose the plan that fits you"
+                                } else {
+                                    "בחר/י במסלול המתאים לך"
+                                },
+                            style = KmiTypography.caption,
+                            color =
+                                kmiSectionHeaderContentColor()
+                                    .copy(alpha = 0.92f),
+                            textAlign = TextAlign.Center,
+                            modifier = Modifier.fillMaxWidth(),
+                            maxLines = 1
+                        )
+                    }
+                }
+
+                Column(
+                    modifier =
+                        Modifier
+                            .fillMaxSize()
+                            .verticalScroll(scrollState)
+                            .navigationBarsPadding()
+                            .padding(
+                                start = 16.dp,
+                                top = 12.dp,
+                                end = 16.dp,
+                                bottom = 10.dp
+                            ),
+                    horizontalAlignment =
+                        Alignment.CenterHorizontally
+                ) {
+
+                    if (
                     !state.productsLoaded &&
                     state.error == null
                 ) {
@@ -641,7 +682,8 @@ fun SubscriptionPlansScreen(
                     }
                 }
 
-                Spacer(modifier = Modifier.height(8.dp))
+                    Spacer(modifier = Modifier.height(8.dp))
+                }
             }
 
             if (showPurchaseSuccessDialog) {

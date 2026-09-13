@@ -1,8 +1,6 @@
 package il.kmi.app.screens.BeltQuestions.Materials
 
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -69,7 +67,6 @@ import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.foundation.border
 import androidx.compose.foundation.relocation.BringIntoViewRequester
-import androidx.compose.ui.unit.Dp
 import il.kmi.app.domain.ContentRepo
 import il.kmi.app.ui.color
 import il.kmi.app.ui.KmiIconSize
@@ -87,6 +84,8 @@ import il.kmi.app.ui.KmiTopBar
 import il.kmi.app.ui.pdf.KmiPdfHeader
 import il.kmi.app.ui.pdf.KmiPdfFooter
 import il.yuval.ui.theme.kmiScreenBackgroundBrush
+import il.yuval.ui.theme.kmiSectionHeaderBrush
+import il.yuval.ui.theme.kmiSectionHeaderContentColor
 import il.yuval.ui.theme.kmiSuccessColor
 import il.yuval.ui.theme.kmiSuccessContainerColor
 import il.yuval.ui.theme.kmiWarningColor
@@ -1869,14 +1868,26 @@ fun MaterialsScreen(
                 }
             }
 
-        val beltContentColor =
-            if (
-                isDarkSurface &&
-                belt == Belt.BLACK
-            ) {
-                Color.White.copy(alpha = 0.94f)
-            } else {
-                belt.color
+        /*
+         * צבע החגורה נשמר בכותרת.
+         * חגורה שחורה/לבנה מקבלות צבע קריא
+         * על רקע הפס הכחול.
+         */
+        val beltTitleColor =
+            when (belt) {
+                /*
+                 * חגורה לבנה זקוקה לצבע חלופי
+                 * כדי להישאר קריאה על הפס.
+                 */
+                Belt.WHITE ->
+                    kmiSectionHeaderContentColor()
+
+                /*
+                 * כל שאר החגורות, כולל שחורה,
+                 * מוצגות בצבע החגורה המקורי.
+                 */
+                else ->
+                    belt.color
             }
 
         val countText =
@@ -1894,21 +1905,15 @@ fun MaterialsScreen(
             modifier = Modifier
                 .fillMaxWidth()
                 .background(
-                    color =
-                        if (isDarkSurface) {
-                            MaterialTheme.colorScheme.surface
-                        } else {
-                            belt.lightColor
-                        }
+                    brush =
+                        kmiSectionHeaderBrush()
                 )
-                .border(
-                    width = 1.dp,
-                    color = beltContentColor.copy(
-                        alpha = 0.72f
-                    )
-                )
-                .padding(vertical = 4.dp),
-            contentAlignment = Alignment.Center
+                .padding(
+                    horizontal = 16.dp,
+                    vertical = 6.dp
+                ),
+            contentAlignment =
+                Alignment.Center
         ) {
             CompositionLocalProvider(
                 LocalLayoutDirection provides
@@ -1918,52 +1923,53 @@ fun MaterialsScreen(
                             LayoutDirection.Rtl
                         }
             ) {
-                Row(
+                Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .heightIn(min = 52.dp)
-                        .padding(
-                            start = 16.dp,
-                            end = 16.dp,
-                            top = 4.dp,
-                            bottom = 4.dp
-                        ),
-                    verticalAlignment = Alignment.CenterVertically
+                        .heightIn(min = 50.dp),
+                    horizontalAlignment =
+                        Alignment.CenterHorizontally,
+                    verticalArrangement =
+                        Arrangement.Center
                 ) {
                     Text(
                         text = beltTitle,
+                        modifier =
+                            Modifier.fillMaxWidth(),
                         style =
-                            KmiTypography.screenTitle.copy(
-                                fontWeight = FontWeight.ExtraBold
+                            KmiTypography.sectionTitle.copy(
+                                fontWeight =
+                                    FontWeight.Black
                             ),
-                        color = beltContentColor,
+                        color = beltTitleColor,
                         textAlign =
-                            if (isEnglish) {
-                                TextAlign.Start
-                            } else {
-                                TextAlign.Right
-                            },
-                        modifier = Modifier.weight(1f),
+                            TextAlign.Center,
                         maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
+                        overflow =
+                            TextOverflow.Ellipsis
+                    )
+
+                    Spacer(
+                        Modifier.height(1.dp)
                     )
 
                     Text(
                         text = countText,
+                        modifier =
+                            Modifier.fillMaxWidth(),
                         style =
                             KmiTypography.caption.copy(
-                                fontWeight = FontWeight.Bold
+                                fontWeight =
+                                    FontWeight.Bold
                             ),
-                        color = beltContentColor,
+                        color =
+                            kmiSectionHeaderContentColor()
+                                .copy(alpha = 0.92f),
                         textAlign =
-                            if (isEnglish) {
-                                TextAlign.End
-                            } else {
-                                TextAlign.Left
-                            },
-                        modifier = Modifier.weight(1f),
+                            TextAlign.Center,
                         maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
+                        overflow =
+                            TextOverflow.Ellipsis
                     )
                 }
             }
