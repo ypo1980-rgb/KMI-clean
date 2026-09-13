@@ -69,6 +69,8 @@ import com.google.firebase.firestore.ktx.firestore
 import com.google.firebase.ktx.Firebase
 import il.kmi.app.ui.KmiTypography
 import il.kmi.app.ui.pdf.KmiPdfDirection
+import il.yuval.ui.theme.kmiSectionHeaderBackground
+import il.yuval.ui.theme.kmiSectionHeaderContentColor
 import il.kmi.app.ui.pdf.KmiPdfFooter
 import il.kmi.app.ui.pdf.KmiPdfHeader
 import java.text.SimpleDateFormat
@@ -1764,53 +1766,45 @@ fun AdminDiagnosticsScreen(
                     )
                 )
         ) {
-            LazyColumn(
-                modifier = Modifier.fillMaxSize(),
-                contentPadding = PaddingValues(
-                    start = 14.dp,
-                    end = 14.dp,
-                    top = 12.dp,
-                    bottom = 96.dp
-                ),
-                verticalArrangement = Arrangement.spacedBy(10.dp)
+            Column(
+                modifier = Modifier.fillMaxSize()
             ) {
-                item {
-                    Surface(
-                        modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(14.dp),
-                        color = introCardColor,
-                        tonalElevation = 0.dp,
-                        shadowElevation = 0.dp,
-                        border = BorderStroke(
-                            width = 1.dp,
-                            color = introCardBorderColor
-                        )
-                    ) {
-                        Text(
-                            text = tr(
-                                "ניתוח פעילות, תקלות ושימוש באפליקציה",
-                                "Activity, errors and app diagnostics"
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(56.dp)
+                        .kmiSectionHeaderBackground(),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text =
+                            tr(
+                                "ניתוח פעולות, תקלות\nושימוש באפליקציה",
+                                "Activity, issues\nand app usage"
                             ),
-                            color = colorScheme.onSurface,
-                            style =
-                                KmiTypography.secondary.copy(
-                                    fontWeight = FontWeight.ExtraBold
-                                ),
-                            textAlign =
-                                if (isEnglish) {
-                                    TextAlign.Start
-                                } else {
-                                    TextAlign.Right
-                                },
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(
-                                    horizontal = 12.dp,
-                                    vertical = 9.dp
-                                )
-                        )
-                    }
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp),
+                        style = KmiTypography.secondary.copy(
+                            fontWeight = FontWeight.Black
+                        ),
+                        color = kmiSectionHeaderContentColor(),
+                        textAlign = TextAlign.Center,
+                        maxLines = 2,
+                        overflow = TextOverflow.Clip
+                    )
                 }
+
+                LazyColumn(
+                    modifier = Modifier.weight(1f),
+                    contentPadding = PaddingValues(
+                        start = 14.dp,
+                        end = 14.dp,
+                        top = 12.dp,
+                        bottom = 96.dp
+                    ),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
 
                 item {
                     Row(
@@ -1953,7 +1947,7 @@ fun AdminDiagnosticsScreen(
                         }
                     }
                 }
-            }
+            }}
         }
     }
 }

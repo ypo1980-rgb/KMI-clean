@@ -14,7 +14,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.sizeIn
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -46,7 +45,7 @@ import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import il.kmi.app.ui.KmiTypography
-import il.yuval.ui.theme.kmiSectionHeaderBrush
+import il.yuval.ui.theme.kmiSectionHeaderBackground
 import il.yuval.ui.theme.kmiSectionHeaderContentColor
 import java.time.LocalDate
 import java.time.YearMonth
@@ -95,9 +94,7 @@ fun KmiCalendarMonthHeader(
         Box(
             modifier = modifier
                 .fillMaxWidth()
-                .background(
-                    brush = kmiSectionHeaderBrush()
-                )
+                .kmiSectionHeaderBackground()
                 .padding(vertical = 4.dp),
             contentAlignment = Alignment.Center
         ) {
@@ -111,9 +108,23 @@ fun KmiCalendarMonthHeader(
 
                 Surface(
                     onClick = {
-                        onVisibleMonthChange(
-                            visibleMonth.minusMonths(1)
-                        )
+                        val targetMonth =
+                            if (isEnglish) {
+                                visibleMonth.minusMonths(1)
+                            } else {
+                                visibleMonth.plusMonths(1)
+                            }
+
+                        val currentMonth =
+                            YearMonth.from(
+                                LocalDate.now()
+                            )
+
+                        if (!targetMonth.isAfter(currentMonth)) {
+                            onVisibleMonthChange(
+                                targetMonth
+                            )
+                        }
                     },
                     shape = CircleShape,
                     color = Color.Transparent,
@@ -155,9 +166,23 @@ fun KmiCalendarMonthHeader(
 
                 Surface(
                     onClick = {
-                        onVisibleMonthChange(
-                            visibleMonth.plusMonths(1)
-                        )
+                        val targetMonth =
+                            if (isEnglish) {
+                                visibleMonth.plusMonths(1)
+                            } else {
+                                visibleMonth.minusMonths(1)
+                            }
+
+                        val currentMonth =
+                            YearMonth.from(
+                                LocalDate.now()
+                            )
+
+                        if (!targetMonth.isAfter(currentMonth)) {
+                            onVisibleMonthChange(
+                                targetMonth
+                            )
+                        }
                     },
                     shape = CircleShape,
                     color = Color.Transparent,
@@ -350,13 +375,20 @@ fun KmiCalendarMonth(
                                 visibleMonth.atDay(it)
                             }
 
+                            val today =
+                                LocalDate.now()
+
                             val isSelected =
                                 cellDate != null &&
                                         cellDate == selectedDate
 
                             val isToday =
                                 cellDate != null &&
-                                        cellDate == LocalDate.now()
+                                        cellDate == today
+
+                            val isFuture =
+                                cellDate != null &&
+                                        cellDate.isAfter(today)
 
                             val hasTraining =
                                 cellDate != null &&
@@ -373,7 +405,7 @@ fun KmiCalendarMonth(
                             Box(
                                 modifier = Modifier
                                     .weight(1f)
-                                    .heightIn(min = 42.dp),
+                                    .height(42.dp),
                                 contentAlignment = Alignment.Center
                             ) {
                                 if (
@@ -382,11 +414,10 @@ fun KmiCalendarMonth(
                                 ) {
                                     Surface(
                                         modifier = Modifier
-                                            .sizeIn(
-                                                minWidth = 34.dp,
-                                                minHeight = 34.dp
-                                            )
-                                            .clickable {
+                                            .size(34.dp)
+                                            .clickable(
+                                                enabled = !isFuture
+                                            ) {
                                                 onDateSelected(cellDate)
                                             },
                                         shape = CircleShape,
@@ -418,10 +449,17 @@ fun KmiCalendarMonth(
                                             Text(
                                                 text = day.toString(),
                                                 color =
-                                                    if (isSelected) {
-                                                        selectedDayTextColor
-                                                    } else {
-                                                        primaryTextColor
+                                                    when {
+                                                        isFuture ->
+                                                            colorScheme.onSurfaceVariant.copy(
+                                                                alpha = 0.38f
+                                                            )
+
+                                                        isSelected ->
+                                                            selectedDayTextColor
+
+                                                        else ->
+                                                            primaryTextColor
                                                     },
                                                 style =
                                                     KmiTypography.body.copy(
@@ -544,11 +582,22 @@ fun KmiCalendarPickerDialog(
     isEnglish: Boolean,
     onDismiss: () -> Unit,
     onDateSelected: (LocalDate) -> Unit,
-    markers: KmiCalendarMarkers = KmiCalendarMarkers()
+    markers: KmiCalendarMarkers = KmiCalendarMarkers(),
+    startAtMonthBeginning: Boolean = false
 ) {
-    val initialDate = selectedDate ?: LocalDate.now()
+    val initialDate =
+        (selectedDate ?: LocalDate.now()).let { date ->
+            if (startAtMonthBeginning) {
+                date.withDayOfMonth(1)
+            } else {
+                date
+            }
+        }
 
-    var visibleMonth by remember(initialDate) {
+    var visibleMonth by remember(
+        initialDate,
+        startAtMonthBeginning
+    ) {
         mutableStateOf(
             YearMonth.from(initialDate)
         )
@@ -649,7 +698,12 @@ fun KmiCalendarPickerDialog(
 
                             KmiCalendarMonth(
                                 visibleMonth = visibleMonth,
-                                selectedDate = selectedDate,
+                                selectedDate =
+                                    if (startAtMonthBeginning) {
+                                        initialDate
+                                    } else {
+                                        selectedDate
+                                    },
                                 isEnglish = isEnglish,
                                 onVisibleMonthChange = {
                                     visibleMonth = it

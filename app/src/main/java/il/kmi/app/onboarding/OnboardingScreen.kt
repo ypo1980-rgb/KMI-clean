@@ -55,6 +55,7 @@ import androidx.compose.ui.unit.dp
 import il.kmi.app.R
 import il.kmi.app.ui.KmiTopBar
 import il.kmi.app.ui.KmiTypography
+import il.yuval.ui.theme.kmiSectionHeaderBackground
 import il.yuval.ui.theme.kmiSectionHeaderBrush
 
 @Composable
@@ -175,9 +176,7 @@ fun OnboardingScreen(
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(58.dp)
-                        .background(
-                            brush = kmiSectionHeaderBrush()
-                        )
+                        .kmiSectionHeaderBackground()
                 ) {
                     OnboardingFixedProgressHeader(
                         currentStepIndex = currentStepIndex,

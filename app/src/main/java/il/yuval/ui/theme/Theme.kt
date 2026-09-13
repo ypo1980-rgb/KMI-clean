@@ -1,12 +1,17 @@
 package il.yuval.ui.theme
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.graphics.luminance
 import il.kmi.shared.domain.Belt
 
@@ -156,6 +161,41 @@ fun kmiSectionHeaderBrush(): Brush {
             Color(0xFF062B4A)
         )
     )
+}
+
+/**
+ * רקע גלובלי לכותרות המשנה העליונות,
+ * כולל קו ההפרדה התחתון האחיד.
+ */
+@Composable
+fun Modifier.kmiSectionHeaderBackground(): Modifier {
+    val headerBrush =
+        kmiSectionHeaderBrush()
+
+    val dividerColor =
+        MaterialTheme.colorScheme.outlineVariant
+
+    return this
+        .background(
+            brush = headerBrush
+        )
+        .drawBehind {
+            val dividerHeight =
+                4.dp.toPx()
+
+            drawLine(
+                color = dividerColor,
+                start = Offset(
+                    x = 0f,
+                    y = size.height - dividerHeight / 2f
+                ),
+                end = Offset(
+                    x = size.width,
+                    y = size.height - dividerHeight / 2f
+                ),
+                strokeWidth = dividerHeight
+            )
+        }
 }
 
 /**

@@ -77,6 +77,7 @@ import il.yuval.ui.theme.kmiSectionHeaderBrush
 import il.yuval.ui.theme.kmiScreenBackgroundBrush
 import il.kmi.shared.localization.AppLanguage
 import il.kmi.shared.localization.AppLanguageManager
+import il.yuval.ui.theme.kmiSectionHeaderBackground
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.launch
@@ -239,9 +240,7 @@ private fun CoachTraineesTopTabs(
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .background(
-                    brush = kmiSectionHeaderBrush()
-                )
+                .kmiSectionHeaderBackground()
         ) {
 
             // קו מפריד במרכז
@@ -283,6 +282,10 @@ private fun CoachTraineesTopTabs(
                                     "רשימת\nמתאמנים",
                                     "Trainees\nlist"
                                 ),
+                            modifier = Modifier.offset(
+                                x = 18.dp,
+                                y = (-6).dp
+                            ),
                             style = KmiTypography.caption.copy(
                                 fontWeight =
                                     if (!selectionSelected) {
@@ -305,7 +308,11 @@ private fun CoachTraineesTopTabs(
                             Box(
                                 modifier = Modifier
                                     .align(Alignment.BottomCenter)
-                                    .width(88.dp)
+                                    .offset(
+                                        x = 18.dp,
+                                        y = (-8).dp
+                                    )
+                                    .width(76.dp)
                                     .height(3.dp)
                                     .background(Color.White)
                             )
@@ -329,6 +336,10 @@ private fun CoachTraineesTopTabs(
                                     "בחירת\nמתאמן",
                                     "Select\ntrainee"
                                 ),
+                            modifier = Modifier.offset(
+                                x = (-18).dp,
+                                y = (-6).dp
+                            ),
                             style = KmiTypography.caption.copy(
                                 fontWeight =
                                     if (selectionSelected) {
@@ -351,7 +362,11 @@ private fun CoachTraineesTopTabs(
                             Box(
                                 modifier = Modifier
                                     .align(Alignment.BottomCenter)
-                                    .width(88.dp)
+                                    .offset(
+                                        x = (-18).dp,
+                                        y = (-8).dp
+                                    )
+                                    .width(76.dp)
                                     .height(3.dp)
                                     .background(Color.White)
                             )
@@ -844,22 +859,12 @@ fun CoachTraineesScreen(
             effectiveBranch.isBlank() ||
             effectiveBranch.contains(",")
         ) {
-            val activeBranch =
-                readCoachPrefList(
-                    "active_branch",
-                    "activeBranch",
-                    "branch",
-                    "selected_branch",
-                    "current_branch"
-                )
-                    .firstOrNull {
-                        it in availableBranches
-                    }
-
             effectiveBranch =
-                activeBranch
-                    ?: availableBranches.firstOrNull()
-                        .orEmpty()
+                if (availableBranches.size == 1) {
+                    availableBranches.first()
+                } else {
+                    ""
+                }
         }
 
         if (

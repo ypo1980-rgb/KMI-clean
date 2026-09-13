@@ -81,6 +81,7 @@ import androidx.core.net.toUri
 import il.yuval.ui.theme.KmiDrawerRoleType
 import il.yuval.ui.theme.kmiDrawerBackgroundBrush
 import il.yuval.ui.theme.kmiDrawerRoleColors
+import il.yuval.ui.theme.kmiGraniteActionBrush
 import il.yuval.ui.theme.kmiOnSuccessContainerColor
 import il.yuval.ui.theme.kmiSectionHeaderContentColor
 import il.yuval.ui.theme.kmiSuccessColor
@@ -2387,82 +2388,108 @@ fun AppDrawerContent(
                                 style = KmiTypography.screenTitle.copy(
                                     fontWeight = FontWeight.ExtraBold
                                 ),
-                                color = drawerContentColor,
+                                color = Color.White,
                                 textAlign = if (isEnglish) TextAlign.Start else TextAlign.End,
                                 modifier = Modifier.fillMaxWidth()
                             )
                         },
                         text = {
-                            Column(
-                                modifier = Modifier.fillMaxWidth(),
-                                verticalArrangement = Arrangement.spacedBy(12.dp)
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clip(RoundedCornerShape(24.dp))
+                                    .background(
+                                        brush = kmiGraniteActionBrush()
+                                    )
+                                    .padding(16.dp)
                             ) {
-                                Surface(
-                                    onClick = {
-                                        showFormsPaymentsDialog = false
-                                        showFormsListDialog = true
-                                    },
-                                    shape = RoundedCornerShape(18.dp),
-                                    color = drawerContentColor.copy(alpha = 0.10f),
-                                    border = BorderStroke(1.dp, drawerContentColor.copy(alpha = 0.18f)),
-                                    modifier = Modifier.fillMaxWidth()
+                                Column(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    verticalArrangement = Arrangement.spacedBy(12.dp)
                                 ) {
-                                    Column(
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .padding(horizontal = 16.dp, vertical = 14.dp)
+                                    Surface(
+                                        onClick = {
+                                            showFormsPaymentsDialog = false
+                                            showFormsListDialog = true
+                                        },
+                                        shape = RoundedCornerShape(18.dp),
+                                        color = Color.White.copy(alpha = 0.14f),
+                                        border = BorderStroke(
+                                            1.dp,
+                                            Color.White.copy(alpha = 0.28f)
+                                        ),
+                                        modifier = Modifier.fillMaxWidth()
                                     ) {
-                                        Text(
-                                            text = tr("טפסים", "Forms"),
-                                            color = drawerContentColor,
-                                            style = KmiTypography.cardTitle.copy(
-                                                fontWeight = FontWeight.ExtraBold
+                                        Column(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .padding(
+                                                    horizontal = 16.dp,
+                                                    vertical = 14.dp
+                                                )
+                                        ) {
+                                            Text(
+                                                text = tr("טפסים", "Forms"),
+                                                color = Color.White,
+                                                style = KmiTypography.cardTitle.copy(
+                                                    fontWeight = FontWeight.ExtraBold
+                                                )
                                             )
-                                        )
-                                        Spacer(Modifier.height(4.dp))
-                                        Text(
-                                            text = tr(
-                                                "פתיחת טופס ההרשמה הקיים לעמותה",
-                                                "Open the existing association registration form"
-                                            ),
-                                            color = drawerContentColor.copy(alpha = 0.78f),
-                                            style = KmiTypography.secondary
-                                        )
-                                    }
-                                }
 
-                                Surface(
-                                    onClick = {
-                                        showFormsPaymentsDialog = false
-                                        onClose()
-                                        onOpenMembershipPayment()
-                                    },
-                                    shape = RoundedCornerShape(18.dp),
-                                    color = drawerContentColor.copy(alpha = 0.10f),
-                                    border = BorderStroke(1.dp, drawerContentColor.copy(alpha = 0.18f)),
-                                    modifier = Modifier.fillMaxWidth()
-                                ) {
-                                    Column(
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .padding(horizontal = 16.dp, vertical = 14.dp)
-                                    ) {
-                                        Text(
-                                            text = tr("תשלומים", "Payments"),
-                                            color = drawerContentColor,
-                                            style = KmiTypography.cardTitle.copy(
-                                                fontWeight = FontWeight.ExtraBold
+                                            Spacer(Modifier.height(4.dp))
+
+                                            Text(
+                                                text = tr(
+                                                    "פתיחת טופס ההרשמה הקיים לעמותה",
+                                                    "Open the existing association registration form"
+                                                ),
+                                                color = Color.White.copy(alpha = 0.82f),
+                                                style = KmiTypography.secondary
                                             )
-                                        )
-                                        Spacer(Modifier.height(4.dp))
-                                        Text(
-                                            text = tr(
-                                                "פתיחת טופס תשלום דמי חבר לעמותה",
-                                                "Open the membership fee payment form"
-                                            ),
-                                            color = drawerContentColor.copy(alpha = 0.78f),
-                                            style = KmiTypography.secondary
-                                        )
+                                        }
+                                    }
+
+                                    Surface(
+                                        onClick = {
+                                            showFormsPaymentsDialog = false
+                                            onClose()
+                                            onOpenMembershipPayment()
+                                        },
+                                        shape = RoundedCornerShape(18.dp),
+                                        color = Color.White.copy(alpha = 0.14f),
+                                        border = BorderStroke(
+                                            1.dp,
+                                            Color.White.copy(alpha = 0.28f)
+                                        ),
+                                        modifier = Modifier.fillMaxWidth()
+                                    ) {
+                                        Column(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .padding(
+                                                    horizontal = 16.dp,
+                                                    vertical = 14.dp
+                                                )
+                                        ) {
+                                            Text(
+                                                text = tr("תשלומים", "Payments"),
+                                                color = Color.White,
+                                                style = KmiTypography.cardTitle.copy(
+                                                    fontWeight = FontWeight.ExtraBold
+                                                )
+                                            )
+
+                                            Spacer(Modifier.height(4.dp))
+
+                                            Text(
+                                                text = tr(
+                                                    "פתיחת טופס תשלום דמי חבר לעמותה",
+                                                    "Open the membership fee payment form"
+                                                ),
+                                                color = Color.White.copy(alpha = 0.82f),
+                                                style = KmiTypography.secondary
+                                            )
+                                        }
                                     }
                                 }
                             }
@@ -2482,15 +2509,15 @@ fun AppDrawerContent(
                                 )
                             }
                         },
-                        containerColor = dialogContainerColor,
-                        titleContentColor = drawerContentColor,
-                        textContentColor = drawerContentColor
+                        containerColor = Color.Transparent,
+                        titleContentColor = Color.White,
+                        textContentColor = Color.White
                     )
                 }
 
                 // ─────────────────────────────────────────────
-                // 📄 דיאלוג: רשימת טפסים
-                // ─────────────────────────────────────────────
+// 📄 דיאלוג: רשימת טפסים
+// ─────────────────────────────────────────────
                 if (showFormsListDialog) {
                     val ctx = LocalContext.current
 
@@ -2501,50 +2528,81 @@ fun AppDrawerContent(
                         enabled: Boolean,
                         onClick: () -> Unit = {}
                     ) {
-                        val cardTextAlign = if (isEnglish) TextAlign.Start else TextAlign.End
+                        val cardTextAlign =
+                            if (isEnglish) {
+                                TextAlign.Start
+                            } else {
+                                TextAlign.End
+                            }
+
                         Surface(
                             onClick = {
-                                if (enabled) onClick()
+                                if (enabled) {
+                                    onClick()
+                                }
                             },
                             shape = RoundedCornerShape(18.dp),
-                            color = if (enabled) {
-                                drawerContentColor.copy(alpha = 0.10f)
-                            } else {
-                                drawerContentColor.copy(alpha = 0.06f)
-                            },
+                            color =
+                                Color.White.copy(
+                                    alpha =
+                                        if (enabled) {
+                                            0.14f
+                                        } else {
+                                            0.08f
+                                        }
+                                ),
                             border = BorderStroke(
                                 1.dp,
-                                if (enabled) drawerContentColor.copy(alpha = 0.18f)
-                                else drawerContentColor.copy(alpha = 0.10f)
+                                Color.White.copy(
+                                    alpha =
+                                        if (enabled) {
+                                            0.28f
+                                        } else {
+                                            0.16f
+                                        }
+                                )
                             ),
                             modifier = Modifier.fillMaxWidth()
                         ) {
                             Column(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .padding(horizontal = 16.dp, vertical = 14.dp)
+                                    .padding(
+                                        horizontal = 16.dp,
+                                        vertical = 14.dp
+                                    )
                             ) {
                                 Text(
                                     text = title,
-                                    color = if (enabled) {
-                                        drawerContentColor
-                                    } else {
-                                        drawerContentColor.copy(alpha = 0.72f)
-                                    },
+                                    color =
+                                        Color.White.copy(
+                                            alpha =
+                                                if (enabled) {
+                                                    1f
+                                                } else {
+                                                    0.62f
+                                                }
+                                        ),
                                     style = KmiTypography.cardTitle.copy(
                                         fontWeight = FontWeight.ExtraBold
                                     ),
                                     textAlign = cardTextAlign,
                                     modifier = Modifier.fillMaxWidth()
                                 )
+
                                 Spacer(Modifier.height(4.dp))
+
                                 Text(
                                     text = subtitle,
-                                    color = if (enabled) {
-                                        drawerContentColor.copy(alpha = 0.78f)
-                                    } else {
-                                        drawerContentColor.copy(alpha = 0.55f)
-                                    },
+                                    color =
+                                        Color.White.copy(
+                                            alpha =
+                                                if (enabled) {
+                                                    0.82f
+                                                } else {
+                                                    0.52f
+                                                }
+                                        ),
                                     style = KmiTypography.secondary,
                                     textAlign = cardTextAlign,
                                     modifier = Modifier.fillMaxWidth()
@@ -2554,63 +2612,98 @@ fun AppDrawerContent(
                     }
 
                     AlertDialog(
-                        onDismissRequest = { showFormsListDialog = false },
+                        onDismissRequest = {
+                            showFormsListDialog = false
+                        },
                         title = {
                             Text(
-                                text = tr("טפסים", "Forms"),
+                                text = tr(
+                                    "טפסים",
+                                    "Forms"
+                                ),
                                 style = KmiTypography.screenTitle.copy(
                                     fontWeight = FontWeight.ExtraBold
                                 ),
-                                color = drawerContentColor,
-                                textAlign = if (isEnglish) TextAlign.Start else TextAlign.End,
+                                color = Color.White,
+                                textAlign =
+                                    if (isEnglish) {
+                                        TextAlign.Start
+                                    } else {
+                                        TextAlign.End
+                                    },
                                 modifier = Modifier.fillMaxWidth()
                             )
                         },
                         text = {
-                            Column(
-                                modifier = Modifier.fillMaxWidth(),
-                                verticalArrangement = Arrangement.spacedBy(12.dp)
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clip(
+                                        RoundedCornerShape(24.dp)
+                                    )
+                                    .background(
+                                        brush = kmiGraniteActionBrush()
+                                    )
+                                    .padding(16.dp)
                             ) {
-                                FormCard(
-                                    title = tr(
-                                        "טופס רישום לעמותה",
-                                        "Association Registration Form"
-                                    ),
-                                    subtitle = tr(
-                                        "פתיחת טופס הרישום הקיים לעמותה",
-                                        "Open the existing association registration form"
-                                    ),
-                                    enabled = true,
-                                    onClick = {
-                                        val uri =
-                                            "https://10nokout.com/files/Kami-Register.pdf".toUri()
-                                        try {
-                                            CustomTabsIntent.Builder()
-                                                .setShowTitle(true)
-                                                .setUrlBarHidingEnabled(true)
-                                                .build()
-                                                .launchUrl(ctx, uri)
-                                        } catch (_: Exception) {
-                                            try {
-                                                val i = Intent(Intent.ACTION_VIEW, uri)
-                                                    .addCategory(Intent.CATEGORY_BROWSABLE)
-                                                ctx.startActivity(i)
-                                            } catch (_: Exception) {
-                                                Toast.makeText(
-                                                    ctx,
-                                                    tr(
-                                                        "לא ניתן לפתוח את הקובץ",
-                                                        "Unable to open the file"
-                                                    ),
-                                                    Toast.LENGTH_SHORT
-                                                ).show()
-                                            }
-                                        }
+                                Column(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    verticalArrangement =
+                                        Arrangement.spacedBy(12.dp)
+                                ) {
+                                    FormCard(
+                                        title = tr(
+                                            "טופס רישום לעמותה",
+                                            "Association Registration Form"
+                                        ),
+                                        subtitle = tr(
+                                            "פתיחת טופס הרישום הקיים לעמותה",
+                                            "Open the existing association registration form"
+                                        ),
+                                        enabled = true,
+                                        onClick = {
+                                            val uri =
+                                                "https://10nokout.com/files/Kami-Register.pdf"
+                                                    .toUri()
 
-                                        showFormsListDialog = false
-                                        onClose()
-                                    }
-                                )
+                                            try {
+                                                CustomTabsIntent.Builder()
+                                                    .setShowTitle(true)
+                                                    .setUrlBarHidingEnabled(true)
+                                                    .build()
+                                                    .launchUrl(
+                                                        ctx,
+                                                        uri
+                                                    )
+                                            } catch (_: Exception) {
+                                                try {
+                                                    val i =
+                                                        Intent(
+                                                            Intent.ACTION_VIEW,
+                                                            uri
+                                                        )
+                                                            .addCategory(
+                                                                Intent.CATEGORY_BROWSABLE
+                                                            )
+
+                                                    ctx.startActivity(i)
+                                                } catch (_: Exception) {
+                                                    Toast.makeText(
+                                                        ctx,
+                                                        tr(
+                                                            "לא ניתן לפתוח את הקובץ",
+                                                            "Unable to open the file"
+                                                        ),
+                                                        Toast.LENGTH_SHORT
+                                                    ).show()
+                                                }
+                                            }
+
+                                            showFormsListDialog = false
+                                            onClose()
+                                        }
+                                    )
+                                }
                             }
                         },
                         confirmButton = {
@@ -2620,17 +2713,20 @@ fun AppDrawerContent(
                                 }
                             ) {
                                 Text(
-                                    text = tr("סגור", "Close"),
+                                    text = tr(
+                                        "סגור",
+                                        "Close"
+                                    ),
                                     style = KmiTypography.action.copy(
                                         fontWeight = FontWeight.Bold
                                     ),
-                                    color = drawerContentColor
+                                    color = Color.White
                                 )
                             }
                         },
-                        containerColor = dialogContainerColor,
-                        titleContentColor = drawerContentColor,
-                        textContentColor = drawerContentColor
+                        containerColor = Color.Transparent,
+                        titleContentColor = Color.White,
+                        textContentColor = Color.White
                     )
                 }
 

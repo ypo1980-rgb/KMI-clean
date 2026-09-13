@@ -71,6 +71,7 @@ import il.kmi.app.ui.KmiTypography
 import il.kmi.app.ui.loading.KmiLoadingRings
 import il.kmi.app.ui.scaledIconSize
 import il.yuval.ui.theme.kmiScreenBackgroundBrush
+import il.yuval.ui.theme.kmiSectionHeaderBackground
 import il.yuval.ui.theme.kmiSectionHeaderBrush
 import il.yuval.ui.theme.kmiSectionHeaderContentColor
 import il.yuval.ui.theme.kmiSubscriptionMonthlyColor
@@ -319,10 +320,9 @@ fun SubscriptionPlansScreen(
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .background(
-                            brush = kmiSectionHeaderBrush()
-                        )
-                        .padding(vertical = 4.dp)
+                        .height(56.dp)
+                        .kmiSectionHeaderBackground(),
+                    contentAlignment = Alignment.Center
                 ) {
                     Column(
                         modifier = Modifier

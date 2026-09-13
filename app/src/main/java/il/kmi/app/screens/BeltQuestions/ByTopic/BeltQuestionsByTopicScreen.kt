@@ -87,6 +87,7 @@ import il.kmi.app.ui.loading.KmiLoadingRings
 import il.kmi.app.ui.pdf.KmiPdfHeader
 import il.kmi.app.ui.pdf.KmiPdfFooter
 import il.yuval.ui.theme.kmiScreenBackgroundBrush
+import il.yuval.ui.theme.kmiSectionHeaderBackground
 import il.yuval.ui.theme.kmiSectionHeaderBrush
 import kotlinx.coroutines.yield
 import kotlin.math.ceil
@@ -1119,10 +1120,8 @@ private fun TopicQuestionsModeSwitcher(
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .heightIn(min = 48.dp)
-                .background(
-                    brush = kmiSectionHeaderBrush()
-                )
+                .heightIn(min = 56.dp)
+                .kmiSectionHeaderBackground()
         ) {
             Box(
                 modifier = Modifier

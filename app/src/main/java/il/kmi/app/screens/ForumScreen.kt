@@ -1,4 +1,5 @@
 @file:OptIn(ExperimentalMaterial3Api::class)
+
 package il.kmi.app.screens
 
 import android.content.Intent
@@ -97,6 +98,8 @@ import il.kmi.app.ui.scaledIconSize
 import il.kmi.app.privacy.TraineeDisplayNameMapper
 import il.kmi.app.screens.registration.CoachBranchAssignmentsCodec
 import il.yuval.ui.theme.kmiScreenBackgroundBrush
+import il.yuval.ui.theme.kmiSectionHeaderBackground
+import il.yuval.ui.theme.kmiSectionHeaderContentColor
 
 //==================================================================
 
@@ -981,26 +984,26 @@ fun ForumScreen(
                         forumBranchAssignments
                     )
             } else {
-        listOf(userSp, sp, legacySp, settingsSp)
-            .flatMap { prefs ->
-                forumPrefsList(
-                    prefs,
-                    "active_branch",
-                    "activeBranch",
-                    "branches_json",
-                    "selected_branches",
-                    "selectedBranches",
-                    "branches",
-                    "branchesCsv",
-                    "branches_csv",
-                    "branchNames",
-                    "branch_names",
-                    "branch"
-                )
-            }
-            .map { it.trim() }
-            .filter { it.isNotBlank() }
-            .distinct()
+                listOf(userSp, sp, legacySp, settingsSp)
+                    .flatMap { prefs ->
+                        forumPrefsList(
+                            prefs,
+                            "active_branch",
+                            "activeBranch",
+                            "branches_json",
+                            "selected_branches",
+                            "selectedBranches",
+                            "branches",
+                            "branchesCsv",
+                            "branches_csv",
+                            "branchNames",
+                            "branch_names",
+                            "branch"
+                        )
+                    }
+                    .map { it.trim() }
+                    .filter { it.isNotBlank() }
+                    .distinct()
             }
         }
 
@@ -1011,31 +1014,31 @@ fun ForumScreen(
             legacySp,
             settingsSp
         ) {
-        listOf(userSp, sp, legacySp, settingsSp)
-            .flatMap { prefs ->
-                forumPrefsList(
-                    prefs,
-                    "active_group",
-                    "activeGroup",
-                    "groups_json",
-                    "selected_groups",
-                    "selectedGroups",
-                    "groups",
-                    "groupsCsv",
-                    "groups_csv",
-                    "primaryGroup",
-                    "groupKey",
-                    "group_key",
-                    "groupName",
-                    "group_name",
-                    "age_group",
-                    "group"
-                )
-            }
-            .map { it.trim() }
-            .filter { it.isNotBlank() }
-            .distinct()
-    }
+            listOf(userSp, sp, legacySp, settingsSp)
+                .flatMap { prefs ->
+                    forumPrefsList(
+                        prefs,
+                        "active_group",
+                        "activeGroup",
+                        "groups_json",
+                        "selected_groups",
+                        "selectedGroups",
+                        "groups",
+                        "groupsCsv",
+                        "groups_csv",
+                        "primaryGroup",
+                        "groupKey",
+                        "group_key",
+                        "groupName",
+                        "group_name",
+                        "age_group",
+                        "group"
+                    )
+                }
+                .map { it.trim() }
+                .filter { it.isNotBlank() }
+                .distinct()
+        }
 
     var selectedForumBranch by
     rememberSaveable(
@@ -1051,14 +1054,13 @@ fun ForumScreen(
                 .trim()
 
         mutableStateOf(
-            lastBranch
-                .takeIf {
-                    it.isNotBlank() &&
-                            it in availableForumBranches
-                }
-                ?: availableForumBranches
-                    .firstOrNull()
-                    .orEmpty()
+            when {
+                availableForumBranches.size == 1 ->
+                    availableForumBranches.first()
+
+                else ->
+                    ""
+            }
         )
     }
 
@@ -1115,35 +1117,42 @@ fun ForumScreen(
             .trim()
 
         mutableStateOf(
-            lastGroup
-                .takeIf { it.isNotBlank() && it in availableForumGroups }
-                ?: availableForumGroups.firstOrNull().orEmpty()
+            if (availableForumGroups.size == 1) {
+                availableForumGroups.first()
+            } else {
+                ""
+            }
         )
     }
 
     LaunchedEffect(availableForumBranches) {
-        if (selectedForumBranch.isBlank() || selectedForumBranch !in availableForumBranches) {
-            val lastBranch = userSp
-                .getString(FORUM_LAST_SELECTED_BRANCH_KEY, "")
-                .orEmpty()
-                .trim()
-
-            selectedForumBranch = lastBranch
-                .takeIf { it.isNotBlank() && it in availableForumBranches }
-                ?: availableForumBranches.firstOrNull().orEmpty()
+        if (
+            selectedForumBranch.isBlank() ||
+            selectedForumBranch !in availableForumBranches
+        ) {
+            selectedForumBranch =
+                if (availableForumBranches.size == 1) {
+                    availableForumBranches.first()
+                } else {
+                    ""
+                }
         }
     }
 
-    LaunchedEffect(availableForumGroups) {
-        if (selectedForumGroup.isBlank() || selectedForumGroup !in availableForumGroups) {
-            val lastGroup = userSp
-                .getString(FORUM_LAST_SELECTED_GROUP_KEY, "")
-                .orEmpty()
-                .trim()
-
-            selectedForumGroup = lastGroup
-                .takeIf { it.isNotBlank() && it in availableForumGroups }
-                ?: availableForumGroups.firstOrNull().orEmpty()
+    LaunchedEffect(
+        availableForumGroups,
+        selectedForumBranch
+    ) {
+        if (
+            selectedForumGroup.isBlank() ||
+            selectedForumGroup !in availableForumGroups
+        ) {
+            selectedForumGroup =
+                if (availableForumGroups.size == 1) {
+                    availableForumGroups.first()
+                } else {
+                    ""
+                }
         }
     }
 
@@ -1307,109 +1316,109 @@ fun ForumScreen(
 
             val registration =
                 db.collection("branches")
-                .document(branch)
-                .collection("forumRooms")
-                .document(forumRoomId)
-                .collection("messages")
-                .orderBy("createdAt", Query.Direction.DESCENDING)
-                .limit(200)
-                .addSnapshotListener { snap, error ->
+                    .document(branch)
+                    .collection("forumRooms")
+                    .document(forumRoomId)
+                    .collection("messages")
+                    .orderBy("createdAt", Query.Direction.DESCENDING)
+                    .limit(200)
+                    .addSnapshotListener { snap, error ->
 
-                    if (error != null) {
-                        isMessagesLoading = false
-                        messages = emptyList()
+                        if (error != null) {
+                            isMessagesLoading = false
+                            messages = emptyList()
 
-                        return@addSnapshotListener
-                    }
-
-                    val currentUid =
-                        FirebaseAuth
-                            .getInstance()
-                            .currentUser
-                            ?.uid
-
-                    val uiList = snap?.documents
-                        ?.mapNotNull { doc ->
-                            val rawTs = doc.getTimestamp("createdAt")
-                            val instant = rawTs
-                                ?.toDate()
-                                ?.toInstant()
-                                ?.toKotlinInstant()
-                                ?: return@mapNotNull null
-
-                            // 👇 שם השולח – מנסה כמה שדות: authorName / fullName / name / displayName
-                            val authorNameDoc =
-                                doc.getString("authorName")
-                                    ?: doc.getString("fullName")
-                                    ?: doc.getString("name")
-                                    ?: doc.getString("displayName")
-                                    ?: ""
-
-                            val authorEmailDoc = doc.getString("authorEmail") ?: ""
-                            val authorUidDoc = doc.getString("authorUid")
-
-                            ForumUiMessage(
-                                id = doc.id,
-                                messageId = doc.getString("messageId") ?: doc.id,
-                                branch = doc.getString("branch") ?: branch,
-                                groupKey = doc.getString("groupKey") ?: groupKey,
-                                authorName = authorNameDoc,
-                                authorEmail = authorEmailDoc,
-                                authorUid = authorUidDoc,
-                                text = doc.getString("text") ?: "",
-                                createdAt = instant,
-                                createdAtMillis = doc.getLong("createdAtMillis")
-                                    ?: instant.toEpochMilliseconds(),
-                                updatedAtMillis = doc.getLong("updatedAtMillis"),
-                                mediaUrl = doc.getString("mediaUrl"),
-                                mediaType = doc.getString("mediaType"),
-                                isMine = (authorUidDoc != null && authorUidDoc == currentUid)
-                            )
+                            return@addSnapshotListener
                         }
-                        ?: emptyList()
 
-                    messages = uiList
-                    isMessagesLoading = false
+                        val currentUid =
+                            FirebaseAuth
+                                .getInstance()
+                                .currentUser
+                                ?.uid
 
-                    scope.launch {
-                        if (
-                            !pendingPushHandled &&
-                            pendingPushMessageId.isNotBlank() &&
-                            uiList.isNotEmpty()
-                        ) {
-                            val targetIndex = uiList.indexOfFirst { msg ->
-                                msg.id == pendingPushMessageId ||
-                                        msg.messageId == pendingPushMessageId
+                        val uiList = snap?.documents
+                            ?.mapNotNull { doc ->
+                                val rawTs = doc.getTimestamp("createdAt")
+                                val instant = rawTs
+                                    ?.toDate()
+                                    ?.toInstant()
+                                    ?.toKotlinInstant()
+                                    ?: return@mapNotNull null
+
+                                // 👇 שם השולח – מנסה כמה שדות: authorName / fullName / name / displayName
+                                val authorNameDoc =
+                                    doc.getString("authorName")
+                                        ?: doc.getString("fullName")
+                                        ?: doc.getString("name")
+                                        ?: doc.getString("displayName")
+                                        ?: ""
+
+                                val authorEmailDoc = doc.getString("authorEmail") ?: ""
+                                val authorUidDoc = doc.getString("authorUid")
+
+                                ForumUiMessage(
+                                    id = doc.id,
+                                    messageId = doc.getString("messageId") ?: doc.id,
+                                    branch = doc.getString("branch") ?: branch,
+                                    groupKey = doc.getString("groupKey") ?: groupKey,
+                                    authorName = authorNameDoc,
+                                    authorEmail = authorEmailDoc,
+                                    authorUid = authorUidDoc,
+                                    text = doc.getString("text") ?: "",
+                                    createdAt = instant,
+                                    createdAtMillis = doc.getLong("createdAtMillis")
+                                        ?: instant.toEpochMilliseconds(),
+                                    updatedAtMillis = doc.getLong("updatedAtMillis"),
+                                    mediaUrl = doc.getString("mediaUrl"),
+                                    mediaType = doc.getString("mediaType"),
+                                    isMine = (authorUidDoc != null && authorUidDoc == currentUid)
+                                )
                             }
+                            ?: emptyList()
 
-                            if (targetIndex >= 0) {
-                                listState.animateScrollToItem(targetIndex)
-                                pendingPushHandled = true
+                        messages = uiList
+                        isMessagesLoading = false
 
-                                sp.edit {
-                                    putBoolean(
-                                        "forum_open_from_push",
-                                        false
-                                    )
-                                    remove("forum_push_message_id")
-                                    remove("forum_push_room_id")
-                                    remove("forum_push_room_name")
-                                    remove("forum_push_branch_id")
-                                    remove("forum_push_group_key")
-                                    remove("forum_push_sender_id")
-                                    remove("forum_push_received_at")
+                        scope.launch {
+                            if (
+                                !pendingPushHandled &&
+                                pendingPushMessageId.isNotBlank() &&
+                                uiList.isNotEmpty()
+                            ) {
+                                val targetIndex = uiList.indexOfFirst { msg ->
+                                    msg.id == pendingPushMessageId ||
+                                            msg.messageId == pendingPushMessageId
                                 }
 
-                                pendingPushMessageId = ""
-                                pendingPushRoomId = ""
-                            } else {
+                                if (targetIndex >= 0) {
+                                    listState.animateScrollToItem(targetIndex)
+                                    pendingPushHandled = true
+
+                                    sp.edit {
+                                        putBoolean(
+                                            "forum_open_from_push",
+                                            false
+                                        )
+                                        remove("forum_push_message_id")
+                                        remove("forum_push_room_id")
+                                        remove("forum_push_room_name")
+                                        remove("forum_push_branch_id")
+                                        remove("forum_push_group_key")
+                                        remove("forum_push_sender_id")
+                                        remove("forum_push_received_at")
+                                    }
+
+                                    pendingPushMessageId = ""
+                                    pendingPushRoomId = ""
+                                } else {
+                                    listState.animateScrollToItem(0)
+                                }
+                            } else if (uiList.isNotEmpty()) {
                                 listState.animateScrollToItem(0)
                             }
-                        } else if (uiList.isNotEmpty()) {
-                            listState.animateScrollToItem(0)
                         }
                     }
-                }
 
             onDispose {
                 registration.remove()
@@ -1648,8 +1657,7 @@ fun ForumScreen(
          * true/false פירושם שהמבנה החדש קיים והוא
          * מקור האמת היחיד עבור השיוך.
          */
-        fun DocumentSnapshot
-                .matchesNewForumAssignment(
+        fun DocumentSnapshot.matchesNewForumAssignment(
             branchCandidates: Set<String>,
             groupCandidates: Set<String>
         ): Boolean? {
@@ -1663,8 +1671,7 @@ fun ForumScreen(
                 return null
             }
 
-            return rawAssignments.any {
-                    rawAssignment ->
+            return rawAssignments.any { rawAssignment ->
 
                 val assignmentMap =
                     rawAssignment as? Map<*, *>
@@ -1700,8 +1707,7 @@ fun ForumScreen(
 
                 val branchMatches =
                     assignmentBranch.isNotBlank() &&
-                            branchCandidates.any {
-                                    candidate ->
+                            branchCandidates.any { candidate ->
 
                                 candidate == assignmentBranch
                             }
@@ -1919,7 +1925,10 @@ fun ForumScreen(
                         .filter { it.isDigit() }
                         .let { digits ->
                             when {
-                                digits.startsWith("972") && digits.length >= 11 -> "0" + digits.drop(3)
+                                digits.startsWith("972") && digits.length >= 11 -> "0" + digits.drop(
+                                    3
+                                )
+
                                 digits.startsWith("05") -> digits
                                 digits.length == 9 && digits.startsWith("5") -> "0$digits"
                                 else -> digits
@@ -1977,32 +1986,32 @@ fun ForumScreen(
                         .groupBy {
                             it.participantUniqueKey()
                         }
-                    .values
-                    .mapNotNull { samePersonDocs ->
-                        val doc = samePersonDocs.firstOrNull() ?: return@mapNotNull null
-                        val cleanName = doc.userNameOrNull() ?: return@mapNotNull null
+                        .values
+                        .mapNotNull { samePersonDocs ->
+                            val doc = samePersonDocs.firstOrNull() ?: return@mapNotNull null
+                            val cleanName = doc.userNameOrNull() ?: return@mapNotNull null
 
-                        val docEmail = doc.getString("email").orEmpty().trim()
-                        val docUid =
-                            doc.getString("uid")
-                                ?: doc.getString("authUid")
-                                ?: doc.id
+                            val docEmail = doc.getString("email").orEmpty().trim()
+                            val docUid =
+                                doc.getString("uid")
+                                    ?: doc.getString("authUid")
+                                    ?: doc.id
 
-                        ForumParticipantUi(
-                            id = docUid.ifBlank { doc.id },
-                            name = cleanName,
-                            isMe = (
-                                    (currentUid != null && docUid == currentUid) ||
-                                            (currentEmail.isNotBlank() && docEmail == currentEmail) ||
-                                            (currentName.isNotBlank() && cleanName.trim() == currentName)
-                                    )
-                        )
-                    }
-                    .distinctBy {
-                        normalizeParticipantName(it.name)
-                    }
-                    .sortedBy { it.name }
-                    .toList()
+                            ForumParticipantUi(
+                                id = docUid.ifBlank { doc.id },
+                                name = cleanName,
+                                isMe = (
+                                        (currentUid != null && docUid == currentUid) ||
+                                                (currentEmail.isNotBlank() && docEmail == currentEmail) ||
+                                                (currentName.isNotBlank() && cleanName.trim() == currentName)
+                                        )
+                            )
+                        }
+                        .distinctBy {
+                            normalizeParticipantName(it.name)
+                        }
+                        .sortedBy { it.name }
+                        .toList()
 
                 participantsByUsers = realParticipants
                 isParticipantsLoading = false
@@ -2437,968 +2446,1026 @@ fun ForumScreen(
         ) {
 
             Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(12.dp)
+                modifier = Modifier.fillMaxSize()
             ) {
 
-                // 🔒 קודם כל – נעילת מסך הפורום לפי מנוי / ניסיון
-                if (!canUseExtras) {
-                    val lockText =
-                        if (isTrial) {
-                            forumTr(
-                                isEnglish,
-                                "במהלך תקופת הניסיון מסך הפורום נעול.\nאחרי רכישת מנוי המסך ייפתח עבורך.",
-                                "During the trial period, the forum is locked.\nAfter purchasing a subscription, this screen will be available."
-                            )
-                        } else {
-                            forumTr(
-                                isEnglish,
-                                "מסך הפורום זמין למנויים בלבד.\nכדי להמשיך יש לרכוש מנוי פעיל.",
-                                "The forum is available to subscribers only.\nTo continue, please purchase an active subscription."
-                            )
-                        }
-
-                    Surface(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            // ✅ מוריד את כרטיס הנעילה מעט למטה כדי שלא יתנגש
-                            // עם הידית/סרגל האייקונים הנסתר של KmiTopBar.
-                            .padding(top = 24.dp),
-                        color =
-                            MaterialTheme.colorScheme.surface.copy(
-                                alpha = 0.96f
-                            ),
-                        shape = RoundedCornerShape(20.dp),
-                        tonalElevation = 0.dp,
-                        shadowElevation = 0.dp,
-                        border = BorderStroke(
-                            width = 1.dp,
-                            color =
-                                MaterialTheme.colorScheme.outline.copy(
-                                    alpha = 0.52f
-                                )
-                        )
-                    ) {
-                        Column(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = 18.dp, vertical = 26.dp),
-                            horizontalAlignment = Alignment.CenterHorizontally
-                        ) {
-                            Surface(
-                                shape = RoundedCornerShape(22.dp),
-                                color =
-                                    MaterialTheme.colorScheme.primaryContainer.copy(
-                                        alpha = 0.72f
-                                    ),
-                                border = BorderStroke(
-                                    width = 1.dp,
-                                    color =
-                                        MaterialTheme.colorScheme.primary.copy(
-                                            alpha = 0.28f
-                                        )
-                                ),
-                                modifier = Modifier.size(
-                                    scaledIconSize(64.dp)
-                                )
-                            ) {
-                                Box(
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Filled.Lock,
-                                        contentDescription = null,
-                                        tint =
-                                            MaterialTheme.colorScheme.primary,
-                                        modifier = Modifier.size(
-                                            scaledIconSize(30.dp)
-                                        )
-                                    )
-                                }
-                            }
-
-                            Spacer(Modifier.height(14.dp))
-
-                            Text(
-                                text = forumTr(
-                                    isEnglish,
-                                    "גישה לפורום",
-                                    "Forum Access"
-                                ),
-                                color =
-                                    MaterialTheme.colorScheme.primary,
-                                style = KmiTypography.sectionTitle,
-                                textAlign = TextAlign.Center,
-                                modifier = Modifier.fillMaxWidth()
-                            )
-
-                            Spacer(Modifier.height(12.dp))
-
-                            Text(
-                                text = lockText,
-                                color =
-                                    MaterialTheme.colorScheme.onSurface,
-                                style = KmiTypography.body,
-                                textAlign = TextAlign.Center,
-                                modifier = Modifier.fillMaxWidth()
-                            )
-
-                            Spacer(Modifier.height(18.dp))
-
-                            Button(
-                                onClick = onOpenSubscription,
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .height(48.dp),
-                                shape = RoundedCornerShape(999.dp)
-                            ) {
-                                Text(
-                                    text = forumTr(
-                                        isEnglish,
-                                        "עבור למסך המנוי",
-                                        "Go to Subscription"
-                                    ),
-                                    style = KmiTypography.action
-                                )
-                            }
-
-                            Spacer(Modifier.height(12.dp))
-
-                            Text(
-                                text = forumTr(
-                                    isEnglish,
-                                    "ניתן לחזור תמיד למסך זה לאחר רכישת מנוי.",
-                                    "You can always return to this screen after purchasing a subscription."
-                                ),
-                                color =
-                                    MaterialTheme.colorScheme.onSurfaceVariant,
-                                style = KmiTypography.caption,
-                                textAlign = TextAlign.Center,
-                                modifier = Modifier.fillMaxWidth()
-                            )
-                        }
-                    }
-
-                    // לא מציירים שורת כתיבה כשאין גישה
-                    return@Column
-                }
-
-                // רק אם יש גישה – בודקים שהמשתמש משויך לסניף/קבוצה
-                if (branch.isBlank() || groupKey.isBlank()) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(56.dp)
+                        .kmiSectionHeaderBackground(),
+                    contentAlignment = Alignment.Center
+                ) {
                     Text(
                         text = forumTr(
                             isEnglish,
-                            "לא אותרו סניף/קבוצה במשתמש.\nודאו ש־\"branch\" ו־\"groupKey\" מוגדרים בפרופיל.",
-                            "No branch/group was found for this user.\nPlease make sure \"branch\" and \"groupKey\" are set in the profile."
+                            "שיח, עדכונים ושיתוף\nבקבוצת האימון",
+                            "Discussion, updates and sharing\nin the training group"
                         ),
-                        color =
-                            MaterialTheme.colorScheme.error,
-                        style = KmiTypography.body,
-                        textAlign = screenTextAlign,
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                    return@Column
-                }
-
-                // ===== כרטיס שליטה עליון מאוחד: חדר פורום + משתתפים =====
-                val participants = participantsByUsers
-
-                if (isForumControlsCollapsed) {
-                    ForumControlsMiniHandle(
-                        isDarkMode = isDarkMode,
-                        isEnglish = isEnglish,
-                        text = if (selectedForumBranch.isNotBlank() || selectedForumGroup.isNotBlank()) {
-                            "${selectedForumBranch.ifBlank { "—" }} • ${selectedForumGroup.ifBlank { "—" }}"
-                        } else {
-                            forumTr(
-                                isEnglish,
-                                "לחץ לבחירת חדר הפורום ומשתתפים",
-                                "Tap to choose forum room and participants"
-                            )
-                        },
-                        onClick = {
-                            isForumControlsCollapsed = false
-                            isRoomPickerExpanded = true
-                            isParticipantsExpanded = false
-                        }
-                    )
-
-                    Spacer(Modifier.height(5.dp))
-                } else {
-                    ForumPremiumControlCard(
-                        branches = availableForumBranches,
-                        groups = availableForumGroups,
-                        selectedBranch = selectedForumBranch,
-                        selectedGroup = selectedForumGroup,
-                        participants = participants,
-                        participantsText = participantsText,
-                        roomTitle = forumTr(isEnglish, "בחירת חדר פורום", "Forum room"),
-                        roomSubtitle = forumTr(
-                            isEnglish,
-                            "${selectedForumBranch.ifBlank { "—" }} • ${selectedForumGroup.ifBlank { "—" }}",
-                            "${selectedForumBranch.ifBlank { "—" }} • ${selectedForumGroup.ifBlank { "—" }}"
-                        ),
-                        participantsTitle = when {
-                            isParticipantsLoading -> forumTr(
-                                isEnglish,
-                                "טוען משתתפים...",
-                                "Loading participants..."
-                            )
-
-                            participants.isNotEmpty() -> forumTr(
-                                isEnglish,
-                                "משתתפים בפורום (${participants.size})",
-                                "Forum participants (${participants.size})"
-                            )
-
-                            else -> forumTr(
-                                isEnglish,
-                                "משתתפים בפורום",
-                                "Forum participants"
-                            )
-                        },
-                        participantsSubtitle = when {
-                            isParticipantsLoading -> forumTr(
-                                isEnglish,
-                                "בודק מי רשום לחדר הזה",
-                                "Checking who belongs to this room"
-                            )
-
-                            participants.isNotEmpty() -> ""
-
-                            else -> forumTr(
-                                isEnglish,
-                                "אין משתתפים רשומים בקבוצה הזו עדיין",
-                                "No registered participants in this group yet"
-                            )
-                        },
-                        isRoomExpanded = isRoomPickerExpanded,
-                        isParticipantsExpanded = isParticipantsExpanded,
-                        canOpenRoomPicker = availableForumBranches.size > 1 || availableForumGroups.size > 1,
-                        canOpenParticipants = !isParticipantsLoading && participants.isNotEmpty(),
-                        isDarkMode = isDarkMode,
-                        isEnglish = isEnglish,
-                        onCollapseAll = {
-                            isRoomPickerExpanded = false
-                            isParticipantsExpanded = false
-                            isForumControlsCollapsed = true
-                        },
-                        onRoomClick = {
-                            if (availableForumBranches.size > 1 || availableForumGroups.size > 1) {
-                                isRoomPickerExpanded = true
-                                isParticipantsExpanded = false
-                            }
-                        },
-                        onParticipantsClick = {
-                            if (!isParticipantsLoading && participants.isNotEmpty()) {
-                                isParticipantsExpanded = !isParticipantsExpanded
-                                if (isParticipantsExpanded) {
-                                    isRoomPickerExpanded = false
-                                }
-                            }
-                        },
-                        onBranchSelected = {
-                            selectedForumBranch = it
-
-                            isRoomPickerExpanded = false
-                            isParticipantsExpanded = false
-                            isForumControlsCollapsed = true
-                        },
-                        onGroupSelected = {
-                            selectedForumGroup = it
-
-                            isRoomPickerExpanded = false
-                            isParticipantsExpanded = false
-                            isForumControlsCollapsed = true
-                        }
-                    )
-
-                    Spacer(Modifier.height(8.dp))
-                }
-
-                if (
-                    isMessagesLoading ||
-                    isParticipantsLoading
-                ) {
-                    Surface(
-                        modifier =
-                            Modifier
-                                .fillMaxWidth()
-                                .padding(
-                                    bottom = 8.dp
-                                ),
-                        shape =
-                            RoundedCornerShape(18.dp),
-                        color = forumHeaderColor,
-                        tonalElevation = 0.dp,
-                        shadowElevation = 0.dp,
-                        border =
-                            BorderStroke(
-                                width = 1.dp,
-                                color = forumHeaderBorder
-                            )
-                    ) {
-                        KmiLoadingRings(
-                            modifier =
-                                Modifier
-                                    .fillMaxWidth()
-                                    .padding(
-                                        horizontal = 16.dp,
-                                        vertical = 16.dp
-                                    ),
-                            text =
-                                if (isMessagesLoading) {
-                                    forumTr(
-                                        isEnglish,
-                                        "טוען הודעות מהפורום...",
-                                        "Loading forum messages..."
-                                    )
-                                } else {
-                                    forumTr(
-                                        isEnglish,
-                                        "טוען את משתתפי הקבוצה...",
-                                        "Loading group participants..."
-                                    )
-                                }
-                        )
-                    }
-                }
-
-                // ================= רשימת הודעות =================
-                LazyColumn(
-                    state = listState,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .weight(1f),
-                    reverseLayout = true,
-                    verticalArrangement = Arrangement.spacedBy(4.dp)
-                ) {
-                    if (messages.isEmpty()) {
-                        item(key = "empty_forum_room") {
-                            EmptyForumRoomCard(
-                                branch = branch,
-                                groupKey = groupKey,
-                                isEnglish = isEnglish
-                            )
-                        }
-                    }
-
-                    items(
-                        items = messages,
-                        key = { it.id }
-                    ) { msg ->
-                        val bubbleColor =
-                            if (msg.isMine) myBubbleColor else otherBubbleColor
-                        val textColor =
-                            if (msg.isMine) myBubbleText else otherBubbleText
-
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = 2.dp),
-                            horizontalArrangement = if (msg.isMine) Arrangement.End else Arrangement.Start
-                        ) {
-                            Box {
-                                Surface(
-                                    color = bubbleColor,
-                                    shape = RoundedCornerShape(
-                                        topStart = 18.dp,
-                                        topEnd = 18.dp,
-                                        bottomStart = if (msg.isMine) 18.dp else 6.dp,
-                                        bottomEnd = if (msg.isMine) 6.dp else 18.dp
-                                    ),
-                                    tonalElevation = 0.dp,
-                                    shadowElevation = 0.dp
-                                ) {
-                                    Column(
-                                        modifier = Modifier
-                                            .widthIn(max = 260.dp)
-                                            .padding(horizontal = 10.dp, vertical = 7.dp),
-                                        verticalArrangement = Arrangement.spacedBy(4.dp)
-                                    ) {
-                                        val participantNameByUid = msg.authorUid
-                                            ?.let { uid ->
-                                                participantsByUsers.firstOrNull { it.id == uid }?.name
-                                            }
-                                            .orEmpty()
-
-                                        val realMessageAuthorName =
-                                            msg.authorName
-                                                .ifBlank {
-                                                    participantNameByUid
-                                                }
-                                                .ifBlank {
-                                                    msg.authorEmail
-                                                }
-
-                                        val messageAuthorDemoIndex =
-                                            participantsByUsers
-                                                .indexOfFirst { participant ->
-                                                    (
-                                                            !msg.authorUid.isNullOrBlank() &&
-                                                                    participant.id == msg.authorUid
-                                                            ) ||
-                                                            (
-                                                                    msg.authorEmail.isNotBlank() &&
-                                                                            participant.id.equals(
-                                                                                msg.authorEmail,
-                                                                                ignoreCase = true
-                                                                            )
-                                                                    ) ||
-                                                            (
-                                                                    realMessageAuthorName.isNotBlank() &&
-                                                                            participant.name.trim().equals(
-                                                                                realMessageAuthorName.trim(),
-                                                                                ignoreCase = true
-                                                                            )
-                                                                    )
-                                                }
-                                                .takeIf { index ->
-                                                    index >= 0
-                                                }
-
-                                        val messageAuthorName =
-                                            forumDisplayPersonName(
-                                                realName =
-                                                    realMessageAuthorName,
-                                                stableKey =
-                                                    msg.authorUid
-                                                        ?.takeIf {
-                                                            it.isNotBlank()
-                                                        }
-                                                        ?: msg.authorEmail
-                                                            .takeIf {
-                                                                it.isNotBlank()
-                                                            }
-                                                        ?: msg.id,
-                                                demoIndex =
-                                                    messageAuthorDemoIndex,
-                                                isEnglish =
-                                                    isEnglish
-                                            )
-
-                                        Text(
-                                            text = messageAuthorName,
-                                            color = textColor.copy(alpha = 0.78f),
-                                            style = KmiTypography.caption.copy(
-                                                fontWeight = FontWeight.Black
-                                            ),
-                                            textAlign = screenTextAlign,
-                                            maxLines = 1,
-                                            modifier = Modifier.fillMaxWidth()
-                                        )
-
-                                        if (msg.text.isNotBlank()) {
-                                            Text(
-                                                text = msg.text,
-                                                color = textColor,
-                                                style = KmiTypography.body.copy(
-                                                    fontWeight = FontWeight.SemiBold
-                                                ),
-                                                textAlign = screenTextAlign,
-                                                modifier = Modifier.fillMaxWidth()
-                                            )
-                                        }
-
-                                        msg.mediaUrl?.let { url ->
-                                            Spacer(Modifier.height(4.dp))
-                                            when (msg.mediaType) {
-                                                "image" -> {
-                                                    Surface(
-                                                        shape = RoundedCornerShape(14.dp),
-                                                        color = Color.Black.copy(alpha = 0.16f)
-                                                    ) {
-                                                        AsyncImage(
-                                                            model = url,
-                                                            contentDescription = forumTr(isEnglish, "תמונה מצורפת", "Attached image"),
-                                                            modifier = Modifier
-                                                                .fillMaxWidth()
-                                                                .heightIn(min = 120.dp, max = 220.dp)
-                                                        )
-                                                    }
-                                                }
-
-                                                "video" -> {
-                                                    val context = LocalContext.current
-                                                    Surface(
-                                                        shape = RoundedCornerShape(14.dp),
-                                                        color = Color.Black.copy(alpha = 0.28f),
-                                                        modifier = Modifier
-                                                            .fillMaxWidth()
-                                                            .height(108.dp)
-                                                    ) {
-                                                        Row(
-                                                            modifier = Modifier
-                                                                .fillMaxSize()
-                                                                .padding(horizontal = 10.dp, vertical = 8.dp),
-                                                            verticalAlignment = Alignment.CenterVertically,
-                                                            horizontalArrangement = Arrangement.SpaceBetween
-                                                        ) {
-                                                            Column(
-                                                                modifier = Modifier.weight(1f),
-                                                                horizontalAlignment = if (isEnglish) Alignment.Start else Alignment.End
-                                                            ) {
-                                                                Text(
-                                                                    text = forumTr(
-                                                                        isEnglish,
-                                                                        "סרטון מצורף",
-                                                                        "Attached video"
-                                                                    ),
-                                                                    color = Color.White,
-                                                                    style = KmiTypography.body.copy(
-                                                                        fontWeight = FontWeight.SemiBold
-                                                                    ),
-                                                                    textAlign = screenTextAlign,
-                                                                    modifier = Modifier.fillMaxWidth()
-                                                                )
-
-                                                                Text(
-                                                                    text = forumTr(
-                                                                        isEnglish,
-                                                                        "לחיצה לפתיחה בנגן",
-                                                                        "Tap to open in player"
-                                                                    ),
-                                                                    color = Color.White.copy(
-                                                                        alpha = 0.78f
-                                                                    ),
-                                                                    style = KmiTypography.caption,
-                                                                    textAlign = screenTextAlign,
-                                                                    modifier = Modifier.fillMaxWidth()
-                                                                )
-                                                            }
-                                                            FilledTonalButton(
-                                                                onClick = {
-                                                                    val videoUri =
-                                                                        url.toUri()
-
-                                                                    val intent =
-                                                                        Intent(
-                                                                            Intent.ACTION_VIEW,
-                                                                            videoUri
-                                                                        ).apply {
-                                                                            setDataAndType(
-                                                                                videoUri,
-                                                                                "video/*"
-                                                                            )
-                                                                        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                                                                    }
-                                                                    context.startActivity(intent)
-                                                                }
-                                                            ) {
-                                                                Icon(
-                                                                    imageVector =
-                                                                        Icons.Filled.VideoLibrary,
-                                                                    contentDescription = null,
-                                                                    modifier = Modifier.size(
-                                                                        KmiIconSize.medium
-                                                                    )
-                                                                )
-
-                                                                Spacer(Modifier.width(6.dp))
-
-                                                                Text(
-                                                                    text = forumTr(
-                                                                        isEnglish,
-                                                                        "פתח",
-                                                                        "Open"
-                                                                    ),
-                                                                    style = KmiTypography.action
-                                                                )
-                                                            }
-                                                        }
-                                                    }
-                                                }
-
-                                                else -> {}
-                                            }
-                                        }
-
-                                        Row(
-                                            modifier = Modifier.fillMaxWidth(),
-                                            horizontalArrangement = if (isEnglish) {
-                                                Arrangement.End
-                                            } else {
-                                                Arrangement.Start
-                                            },
-                                            verticalAlignment = Alignment.CenterVertically
-                                        ) {
-                                            val canModifyMessage = msg.isMine || isManagerOverride
-
-                                            if (canModifyMessage) {
-                                                IconButton(
-                                                    onClick = {
-                                                        editingMessage = msg
-                                                        editText = msg.text
-                                                        input = ""
-                                                        attachedUri = null
-                                                        attachedMediaType = null
-                                                    },
-                                                    modifier = Modifier.size(scaledIconSize(18.dp))
-                                                ) {
-                                                    Icon(
-                                                        Icons.Filled.Edit,
-                                                        contentDescription = forumTr(isEnglish, "עריכת הודעה", "Edit message"),
-                                                        tint = textColor.copy(alpha = 0.72f)
-                                                    )
-                                                }
-                                                Spacer(Modifier.width(2.dp))
-                                                IconButton(
-                                                    onClick = {
-                                                        scope.launch {
-                                                            val roomIdForMessage = msg.groupKey
-                                                                .takeIf { it.isNotBlank() }
-                                                                ?.let { forumRoomDocId(msg.branch, it) }
-                                                                ?: forumRoomId
-
-                                                            db.collection("branches")
-                                                                .document(msg.branch)
-                                                                .collection("forumRooms")
-                                                                .document(roomIdForMessage)
-                                                                .collection("messages")
-                                                                .document(msg.id)
-                                                                .delete()
-                                                                .await()
-
-                                                            val deleteAtMillis = System.currentTimeMillis()
-
-                                                            db.collection("branches")
-                                                                .document(msg.branch)
-                                                                .collection("forumRooms")
-                                                                .document(roomIdForMessage)
-                                                                .set(
-                                                                    mapOf(
-                                                                        "updatedAt" to FieldValue.serverTimestamp(),
-                                                                        "updatedAtMillis" to deleteAtMillis,
-                                                                        "lastModerationAction" to "message_deleted",
-                                                                        "lastModerationByUid" to FirebaseAuth.getInstance().currentUser?.uid.orEmpty(),
-                                                                        "lastDeletedMessageId" to msg.messageId,
-                                                                        "lastDeletedAt" to FieldValue.serverTimestamp(),
-                                                                        "lastDeletedAtMillis" to deleteAtMillis
-                                                                    ),
-                                                                    SetOptions.merge()
-                                                                )
-                                                                .await()
-                                                        }
-                                                    },
-                                                    modifier = Modifier.size(scaledIconSize(18.dp))
-                                                ) {
-                                                    Icon(
-                                                        Icons.Filled.Delete,
-                                                        contentDescription = forumTr(isEnglish, "מחיקת הודעה", "Delete message"),
-                                                        tint = textColor.copy(alpha = 0.72f)
-                                                    )
-                                                }
-                                                Spacer(Modifier.width(4.dp))
-                                            }
-
-                                            Text(
-                                                text = formatInstant(
-                                                    msg.createdAt
-                                                ),
-                                                style = KmiTypography.caption,
-                                                color = textColor.copy(
-                                                    alpha = 0.62f
-                                                ),
-                                                textAlign = screenTextAlign
-                                            )
-                                        }
-                                    }
-                                }
-
-                                Canvas(
-                                    modifier = Modifier
-                                        .size(10.dp)
-                                        .align(
-                                            if (msg.isMine) Alignment.BottomEnd else Alignment.BottomStart
-                                        )
-                                ) {
-                                    val path = Path()
-
-                                    if (msg.isMine) {
-                                        path.moveTo(size.width, size.height)
-                                        path.lineTo(0f, size.height)
-                                        path.lineTo(size.width, 0f)
-                                    } else {
-                                        path.moveTo(0f, size.height)
-                                        path.lineTo(size.width, size.height)
-                                        path.lineTo(0f, 0f)
-                                    }
-
-                                    drawPath(
-                                        path = path,
-                                        color = bubbleColor,
-                                        style = Fill
-                                    )
-                                }
-                            }
-                        }
-                    }
-                }
-
-                Spacer(Modifier.height(8.dp))
-
-                // צ'יפ למדיה מצורפת (אם יש)
-                if (attachedUri != null && attachedMediaType != null) {
-                    Surface(
-                        shape = RoundedCornerShape(18.dp),
-                        color = attachmentChipColor,
-                        border = BorderStroke(1.dp, forumHeaderBorder),
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(bottom = 6.dp)
-                    ) {
-                        Row(
+                            .padding(horizontal = 16.dp),
+                        style = KmiTypography.secondary.copy(
+                            fontWeight = FontWeight.Black
+                        ),
+                        color = kmiSectionHeaderContentColor(),
+                        textAlign = TextAlign.Center,
+                        maxLines = 2
+                    )
+                }
+
+                Column(
+                    modifier = Modifier
+                        .weight(1f)
+                        .padding(12.dp)
+                ) {
+
+                    // 🔒 קודם כל – נעילת מסך הפורום לפי מנוי / ניסיון
+                    if (!canUseExtras) {
+                        val lockText =
+                            if (isTrial) {
+                                forumTr(
+                                    isEnglish,
+                                    "במהלך תקופת הניסיון מסך הפורום נעול.\nאחרי רכישת מנוי המסך ייפתח עבורך.",
+                                    "During the trial period, the forum is locked.\nAfter purchasing a subscription, this screen will be available."
+                                )
+                            } else {
+                                forumTr(
+                                    isEnglish,
+                                    "מסך הפורום זמין למנויים בלבד.\nכדי להמשיך יש לרכוש מנוי פעיל.",
+                                    "The forum is available to subscribers only.\nTo continue, please purchase an active subscription."
+                                )
+                            }
+
+                        Surface(
                             modifier = Modifier
-                                .padding(horizontal = 12.dp, vertical = 8.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.SpaceBetween
-                        ) {
-                            Text(
-                                text = when (attachedMediaType) {
-                                    "image" -> forumTr(isEnglish, "תמונה מצורפת לשליחה", "Image attached")
-                                    "video" -> forumTr(isEnglish, "סרטון מצורף לשליחה", "Video attached")
-                                    else -> forumTr(isEnglish, "קובץ מצורף", "Attachment")
-                                },
-                                color = attachmentChipText,
-                                style = KmiTypography.secondary
+                                .fillMaxWidth()
+                                // ✅ מוריד את כרטיס הנעילה מעט למטה כדי שלא יתנגש
+                                // עם הידית/סרגל האייקונים הנסתר של KmiTopBar.
+                                .padding(top = 24.dp),
+                            color =
+                                MaterialTheme.colorScheme.surface.copy(
+                                    alpha = 0.96f
+                                ),
+                            shape = RoundedCornerShape(20.dp),
+                            tonalElevation = 0.dp,
+                            shadowElevation = 0.dp,
+                            border = BorderStroke(
+                                width = 1.dp,
+                                color =
+                                    MaterialTheme.colorScheme.outline.copy(
+                                        alpha = 0.52f
+                                    )
                             )
-                            TextButton(
-                                onClick = {
-                                    attachedUri = null
-                                    attachedMediaType = null
-                                }
+                        ) {
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 18.dp, vertical = 26.dp),
+                                horizontalAlignment = Alignment.CenterHorizontally
                             ) {
+                                Surface(
+                                    shape = RoundedCornerShape(22.dp),
+                                    color =
+                                        MaterialTheme.colorScheme.primaryContainer.copy(
+                                            alpha = 0.72f
+                                        ),
+                                    border = BorderStroke(
+                                        width = 1.dp,
+                                        color =
+                                            MaterialTheme.colorScheme.primary.copy(
+                                                alpha = 0.28f
+                                            )
+                                    ),
+                                    modifier = Modifier.size(
+                                        scaledIconSize(64.dp)
+                                    )
+                                ) {
+                                    Box(
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Filled.Lock,
+                                            contentDescription = null,
+                                            tint =
+                                                MaterialTheme.colorScheme.primary,
+                                            modifier = Modifier.size(
+                                                scaledIconSize(30.dp)
+                                            )
+                                        )
+                                    }
+                                }
+
+                                Spacer(Modifier.height(14.dp))
+
                                 Text(
                                     text = forumTr(
                                         isEnglish,
-                                        "הסר",
-                                        "Remove"
+                                        "גישה לפורום",
+                                        "Forum Access"
                                     ),
-                                    style = KmiTypography.action
+                                    color =
+                                        MaterialTheme.colorScheme.primary,
+                                    style = KmiTypography.sectionTitle,
+                                    textAlign = TextAlign.Center,
+                                    modifier = Modifier.fillMaxWidth()
+                                )
+
+                                Spacer(Modifier.height(12.dp))
+
+                                Text(
+                                    text = lockText,
+                                    color =
+                                        MaterialTheme.colorScheme.onSurface,
+                                    style = KmiTypography.body,
+                                    textAlign = TextAlign.Center,
+                                    modifier = Modifier.fillMaxWidth()
+                                )
+
+                                Spacer(Modifier.height(18.dp))
+
+                                Button(
+                                    onClick = onOpenSubscription,
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .height(48.dp),
+                                    shape = RoundedCornerShape(999.dp)
+                                ) {
+                                    Text(
+                                        text = forumTr(
+                                            isEnglish,
+                                            "עבור למסך המנוי",
+                                            "Go to Subscription"
+                                        ),
+                                        style = KmiTypography.action
+                                    )
+                                }
+
+                                Spacer(Modifier.height(12.dp))
+
+                                Text(
+                                    text = forumTr(
+                                        isEnglish,
+                                        "ניתן לחזור תמיד למסך זה לאחר רכישת מנוי.",
+                                        "You can always return to this screen after purchasing a subscription."
+                                    ),
+                                    color =
+                                        MaterialTheme.colorScheme.onSurfaceVariant,
+                                    style = KmiTypography.caption,
+                                    textAlign = TextAlign.Center,
+                                    modifier = Modifier.fillMaxWidth()
                                 )
                             }
                         }
-                    }
-                }
 
-                // ================= שורת שליחה =================
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .heightIn(min = 60.dp)
-                        .padding(
-                            top = 4.dp,
-                            bottom = 4.dp
-                        )
-                        .imePadding()
-                        .navigationBarsPadding(),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    Surface(
-                        modifier = Modifier
-                            .weight(1f)
-                            .heightIn(min = 52.dp),
-                        shape = RoundedCornerShape(28.dp),
-                        color = inputSurfaceColor,
-                        tonalElevation = 0.dp,
-                        shadowElevation = 0.dp,
-                        border = BorderStroke(
-                            width = 1.dp,
-                            color = forumHeaderBorder
-                        )
+                        // לא מציירים שורת כתיבה כשאין גישה
+                        return@Column
+                    }
+
+                    // רק אם יש גישה – בודקים שהמשתמש משויך לסניף/קבוצה
+                    if (
+                        availableForumBranches.isEmpty()
                     ) {
-                        Row(
+                        Text(
+                            text = forumTr(
+                                isEnglish,
+                                "לא נמצאו סניפים המשויכים למשתמש.",
+                                "No branches are assigned to this user."
+                            ),
+                            color = MaterialTheme.colorScheme.error,
+                            style = KmiTypography.body,
+                            textAlign = screenTextAlign,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+
+                        return@Column
+                    }
+
+                    // ===== כרטיס שליטה עליון מאוחד: חדר פורום + משתתפים =====
+                    val participants = participantsByUsers
+
+                    if (isForumControlsCollapsed) {
+                        ForumControlsMiniHandle(
+                            isDarkMode = isDarkMode,
+                            isEnglish = isEnglish,
+                            text = if (selectedForumBranch.isNotBlank() || selectedForumGroup.isNotBlank()) {
+                                "${selectedForumBranch.ifBlank { "—" }} • ${selectedForumGroup.ifBlank { "—" }}"
+                            } else {
+                                forumTr(
+                                    isEnglish,
+                                    "לחץ לבחירת חדר הפורום ומשתתפים",
+                                    "Tap to choose forum room and participants"
+                                )
+                            },
+                            onClick = {
+                                isForumControlsCollapsed = false
+                                isRoomPickerExpanded = true
+                                isParticipantsExpanded = false
+                            }
+                        )
+
+                        Spacer(Modifier.height(5.dp))
+                    } else {
+                        ForumPremiumControlCard(
+                            branches = availableForumBranches,
+                            groups = availableForumGroups,
+                            selectedBranch = selectedForumBranch,
+                            selectedGroup = selectedForumGroup,
+                            participants = participants,
+                            participantsText = participantsText,
+                            participantsTitle = when {
+                                isParticipantsLoading -> forumTr(
+                                    isEnglish,
+                                    "טוען משתתפים...",
+                                    "Loading participants..."
+                                )
+
+                                participants.isNotEmpty() -> forumTr(
+                                    isEnglish,
+                                    "משתתפים בפורום (${participants.size})",
+                                    "Forum participants (${participants.size})"
+                                )
+
+                                else -> forumTr(
+                                    isEnglish,
+                                    "משתתפים בפורום",
+                                    "Forum participants"
+                                )
+                            },
+                            participantsSubtitle = when {
+                                isParticipantsLoading -> forumTr(
+                                    isEnglish,
+                                    "בודק מי רשום לחדר הזה",
+                                    "Checking who belongs to this room"
+                                )
+
+                                participants.isNotEmpty() -> ""
+
+                                else -> forumTr(
+                                    isEnglish,
+                                    "אין משתתפים רשומים בקבוצה הזו עדיין",
+                                    "No registered participants in this group yet"
+                                )
+                            },
+                            isParticipantsExpanded = isParticipantsExpanded,
+                            canOpenParticipants = !isParticipantsLoading && participants.isNotEmpty(),
+                            isDarkMode = isDarkMode,
+                            isEnglish = isEnglish,
+                            onCollapseAll = {
+                                isRoomPickerExpanded = false
+                                isParticipantsExpanded = false
+                                isForumControlsCollapsed = true
+                            },
+                            onParticipantsClick = {
+                                if (!isParticipantsLoading && participants.isNotEmpty()) {
+                                    isParticipantsExpanded = !isParticipantsExpanded
+                                    if (isParticipantsExpanded) {
+                                        isRoomPickerExpanded = false
+                                    }
+                                }
+                            },
+                            onBranchSelected = {
+                                selectedForumBranch = it
+                                selectedForumGroup = ""
+
+                                isParticipantsExpanded = false
+                            },
+                            onGroupSelected = {
+                                selectedForumGroup = it
+
+                                isRoomPickerExpanded = false
+                                isParticipantsExpanded = false
+                                isForumControlsCollapsed = true
+                            }
+                        )
+
+                        Spacer(Modifier.height(8.dp))
+                    }
+
+                    if (
+                        isMessagesLoading ||
+                        isParticipantsLoading
+                    ) {
+                        Surface(
                             modifier =
                                 Modifier
                                     .fillMaxWidth()
-                                    .heightIn(
-                                        min = 52.dp,
-                                        max = 84.dp
-                                    )
                                     .padding(
-                                        horizontal = 6.dp,
-                                        vertical = 2.dp
+                                        bottom = 8.dp
                                     ),
-                            verticalAlignment =
-                                Alignment.CenterVertically
+                            shape =
+                                RoundedCornerShape(18.dp),
+                            color = forumHeaderColor,
+                            tonalElevation = 0.dp,
+                            shadowElevation = 0.dp,
+                            border =
+                                BorderStroke(
+                                    width = 1.dp,
+                                    color = forumHeaderBorder
+                                )
                         ) {
-                            IconButton(
-                                onClick = { imagePicker.launch("image/*") },
-                                modifier = Modifier.size(
-                                    scaledIconSize(36.dp)
-                                )
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Outlined.Add,
-                                    contentDescription = forumTr(
-                                        isEnglish,
-                                        "צרף תמונה",
-                                        "Attach image"
-                                    ),
-                                    tint = inputIconTint,
-                                    modifier = Modifier.size(
-                                        KmiIconSize.medium
-                                    )
-                                )
-                            }
-
-                            BasicTextField(
-                                value = if (editingMessage != null) editText else input,
-                                onValueChange = {
-                                    if (editingMessage != null) {
-                                        editText = it
-                                    } else {
-                                        input = it
-                                    }
-                                },
+                            KmiLoadingRings(
                                 modifier =
                                     Modifier
-                                        .weight(1f)
-                                        .heightIn(
-                                            min = 52.dp,
-                                            max = 84.dp
+                                        .fillMaxWidth()
+                                        .padding(
+                                            horizontal = 16.dp,
+                                            vertical = 16.dp
                                         ),
-                                textStyle =
-                                    KmiTypography.body.copy(
-                                    color = inputTextColor,
-                                    textAlign = screenTextAlign,
-                                    fontWeight = FontWeight.SemiBold
-                                ),
-                                cursorBrush =
-                                    SolidColor(
-                                        MaterialTheme.colorScheme.primary
-                                    ),
-                                singleLine = true,
-                                decorationBox = { innerTextField ->
-                                    Box(
-                                        modifier =
-                                            Modifier
-                                                .fillMaxWidth()
-                                                .heightIn(
-                                                    min = 52.dp,
-                                                    max = 84.dp
-                                                )
-                                                .padding(
-                                                    horizontal = 8.dp
-                                                ),
-                                        contentAlignment =
-                                            if (isEnglish) {
-                                                Alignment.CenterStart
-                                            } else {
-                                                Alignment.CenterEnd
-                                            }
-                                    ) {
-                                        val currentText =
-                                            if (editingMessage != null) editText else input
+                                text =
+                                    if (isMessagesLoading) {
+                                        forumTr(
+                                            isEnglish,
+                                            "טוען הודעות מהפורום...",
+                                            "Loading forum messages..."
+                                        )
+                                    } else {
+                                        forumTr(
+                                            isEnglish,
+                                            "טוען את משתתפי הקבוצה...",
+                                            "Loading group participants..."
+                                        )
+                                    }
+                            )
+                        }
+                    }
 
-                                        if (currentText.isBlank()) {
+                    // ================= רשימת הודעות =================
+                    LazyColumn(
+                        state = listState,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .weight(1f),
+                        reverseLayout = true,
+                        verticalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        if (messages.isEmpty()) {
+                            item(key = "empty_forum_room") {
+                                EmptyForumRoomCard(
+                                    branch = branch,
+                                    groupKey = groupKey,
+                                    isEnglish = isEnglish
+                                )
+                            }
+                        }
+
+                        items(
+                            items = messages,
+                            key = { it.id }
+                        ) { msg ->
+                            val bubbleColor =
+                                if (msg.isMine) myBubbleColor else otherBubbleColor
+                            val textColor =
+                                if (msg.isMine) myBubbleText else otherBubbleText
+
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 2.dp),
+                                horizontalArrangement = if (msg.isMine) Arrangement.End else Arrangement.Start
+                            ) {
+                                Box {
+                                    Surface(
+                                        color = bubbleColor,
+                                        shape = RoundedCornerShape(
+                                            topStart = 18.dp,
+                                            topEnd = 18.dp,
+                                            bottomStart = if (msg.isMine) 18.dp else 6.dp,
+                                            bottomEnd = if (msg.isMine) 6.dp else 18.dp
+                                        ),
+                                        tonalElevation = 0.dp,
+                                        shadowElevation = 0.dp
+                                    ) {
+                                        Column(
+                                            modifier = Modifier
+                                                .widthIn(max = 260.dp)
+                                                .padding(horizontal = 10.dp, vertical = 7.dp),
+                                            verticalArrangement = Arrangement.spacedBy(4.dp)
+                                        ) {
+                                            val participantNameByUid = msg.authorUid
+                                                ?.let { uid ->
+                                                    participantsByUsers.firstOrNull { it.id == uid }?.name
+                                                }
+                                                .orEmpty()
+
+                                            val realMessageAuthorName =
+                                                msg.authorName
+                                                    .ifBlank {
+                                                        participantNameByUid
+                                                    }
+                                                    .ifBlank {
+                                                        msg.authorEmail
+                                                    }
+
+                                            val messageAuthorDemoIndex =
+                                                participantsByUsers
+                                                    .indexOfFirst { participant ->
+                                                        (
+                                                                !msg.authorUid.isNullOrBlank() &&
+                                                                        participant.id == msg.authorUid
+                                                                ) ||
+                                                                (
+                                                                        msg.authorEmail.isNotBlank() &&
+                                                                                participant.id.equals(
+                                                                                    msg.authorEmail,
+                                                                                    ignoreCase = true
+                                                                                )
+                                                                        ) ||
+                                                                (
+                                                                        realMessageAuthorName.isNotBlank() &&
+                                                                                participant.name.trim()
+                                                                                    .equals(
+                                                                                        realMessageAuthorName.trim(),
+                                                                                        ignoreCase = true
+                                                                                    )
+                                                                        )
+                                                    }
+                                                    .takeIf { index ->
+                                                        index >= 0
+                                                    }
+
+                                            val messageAuthorName =
+                                                forumDisplayPersonName(
+                                                    realName =
+                                                        realMessageAuthorName,
+                                                    stableKey =
+                                                        msg.authorUid
+                                                            ?.takeIf {
+                                                                it.isNotBlank()
+                                                            }
+                                                            ?: msg.authorEmail
+                                                                .takeIf {
+                                                                    it.isNotBlank()
+                                                                }
+                                                            ?: msg.id,
+                                                    demoIndex =
+                                                        messageAuthorDemoIndex,
+                                                    isEnglish =
+                                                        isEnglish
+                                                )
+
                                             Text(
-                                                text = if (!isCurrentUserForumParticipant) {
-                                                    forumTr(
-                                                        isEnglish,
-                                                        "אין הרשאה לשלוח בחדר זה",
-                                                        "No permission to send in this room"
-                                                    )
-                                                } else if (editingMessage != null) {
-                                                    forumTr(isEnglish, "עריכת הודעה...", "Editing message...")
-                                                } else {
-                                                    forumTr(isEnglish, "הודעה", "Message")
-                                                },
-                                                color = inputPlaceholderColor,
+                                                text = messageAuthorName,
+                                                color = textColor.copy(alpha = 0.78f),
+                                                style = KmiTypography.caption.copy(
+                                                    fontWeight = FontWeight.Black
+                                                ),
                                                 textAlign = screenTextAlign,
-                                                style = KmiTypography.body,
+                                                maxLines = 1,
                                                 modifier = Modifier.fillMaxWidth()
                                             )
-                                        }
 
-                                        Box(
-                                            modifier = Modifier.fillMaxWidth(),
-                                            contentAlignment = if (isEnglish) Alignment.CenterStart else Alignment.CenterEnd
-                                        ) {
-                                            innerTextField()
+                                            if (msg.text.isNotBlank()) {
+                                                Text(
+                                                    text = msg.text,
+                                                    color = textColor,
+                                                    style = KmiTypography.body.copy(
+                                                        fontWeight = FontWeight.SemiBold
+                                                    ),
+                                                    textAlign = screenTextAlign,
+                                                    modifier = Modifier.fillMaxWidth()
+                                                )
+                                            }
+
+                                            msg.mediaUrl?.let { url ->
+                                                Spacer(Modifier.height(4.dp))
+                                                when (msg.mediaType) {
+                                                    "image" -> {
+                                                        Surface(
+                                                            shape = RoundedCornerShape(14.dp),
+                                                            color = Color.Black.copy(alpha = 0.16f)
+                                                        ) {
+                                                            AsyncImage(
+                                                                model = url,
+                                                                contentDescription = forumTr(
+                                                                    isEnglish,
+                                                                    "תמונה מצורפת",
+                                                                    "Attached image"
+                                                                ),
+                                                                modifier = Modifier
+                                                                    .fillMaxWidth()
+                                                                    .heightIn(
+                                                                        min = 120.dp,
+                                                                        max = 220.dp
+                                                                    )
+                                                            )
+                                                        }
+                                                    }
+
+                                                    "video" -> {
+                                                        val context = LocalContext.current
+                                                        Surface(
+                                                            shape = RoundedCornerShape(14.dp),
+                                                            color = Color.Black.copy(alpha = 0.28f),
+                                                            modifier = Modifier
+                                                                .fillMaxWidth()
+                                                                .height(108.dp)
+                                                        ) {
+                                                            Row(
+                                                                modifier = Modifier
+                                                                    .fillMaxSize()
+                                                                    .padding(
+                                                                        horizontal = 10.dp,
+                                                                        vertical = 8.dp
+                                                                    ),
+                                                                verticalAlignment = Alignment.CenterVertically,
+                                                                horizontalArrangement = Arrangement.SpaceBetween
+                                                            ) {
+                                                                Column(
+                                                                    modifier = Modifier.weight(1f),
+                                                                    horizontalAlignment = if (isEnglish) Alignment.Start else Alignment.End
+                                                                ) {
+                                                                    Text(
+                                                                        text = forumTr(
+                                                                            isEnglish,
+                                                                            "סרטון מצורף",
+                                                                            "Attached video"
+                                                                        ),
+                                                                        color = Color.White,
+                                                                        style = KmiTypography.body.copy(
+                                                                            fontWeight = FontWeight.SemiBold
+                                                                        ),
+                                                                        textAlign = screenTextAlign,
+                                                                        modifier = Modifier.fillMaxWidth()
+                                                                    )
+
+                                                                    Text(
+                                                                        text = forumTr(
+                                                                            isEnglish,
+                                                                            "לחיצה לפתיחה בנגן",
+                                                                            "Tap to open in player"
+                                                                        ),
+                                                                        color = Color.White.copy(
+                                                                            alpha = 0.78f
+                                                                        ),
+                                                                        style = KmiTypography.caption,
+                                                                        textAlign = screenTextAlign,
+                                                                        modifier = Modifier.fillMaxWidth()
+                                                                    )
+                                                                }
+                                                                FilledTonalButton(
+                                                                    onClick = {
+                                                                        val videoUri =
+                                                                            url.toUri()
+
+                                                                        val intent =
+                                                                            Intent(
+                                                                                Intent.ACTION_VIEW,
+                                                                                videoUri
+                                                                            ).apply {
+                                                                                setDataAndType(
+                                                                                    videoUri,
+                                                                                    "video/*"
+                                                                                )
+                                                                                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                                                                            }
+                                                                        context.startActivity(intent)
+                                                                    }
+                                                                ) {
+                                                                    Icon(
+                                                                        imageVector =
+                                                                            Icons.Filled.VideoLibrary,
+                                                                        contentDescription = null,
+                                                                        modifier = Modifier.size(
+                                                                            KmiIconSize.medium
+                                                                        )
+                                                                    )
+
+                                                                    Spacer(Modifier.width(6.dp))
+
+                                                                    Text(
+                                                                        text = forumTr(
+                                                                            isEnglish,
+                                                                            "פתח",
+                                                                            "Open"
+                                                                        ),
+                                                                        style = KmiTypography.action
+                                                                    )
+                                                                }
+                                                            }
+                                                        }
+                                                    }
+
+                                                    else -> {}
+                                                }
+                                            }
+
+                                            Row(
+                                                modifier = Modifier.fillMaxWidth(),
+                                                horizontalArrangement = if (isEnglish) {
+                                                    Arrangement.End
+                                                } else {
+                                                    Arrangement.Start
+                                                },
+                                                verticalAlignment = Alignment.CenterVertically
+                                            ) {
+                                                val canModifyMessage =
+                                                    msg.isMine || isManagerOverride
+
+                                                if (canModifyMessage) {
+                                                    IconButton(
+                                                        onClick = {
+                                                            editingMessage = msg
+                                                            editText = msg.text
+                                                            input = ""
+                                                            attachedUri = null
+                                                            attachedMediaType = null
+                                                        },
+                                                        modifier = Modifier.size(scaledIconSize(18.dp))
+                                                    ) {
+                                                        Icon(
+                                                            Icons.Filled.Edit,
+                                                            contentDescription = forumTr(
+                                                                isEnglish,
+                                                                "עריכת הודעה",
+                                                                "Edit message"
+                                                            ),
+                                                            tint = textColor.copy(alpha = 0.72f)
+                                                        )
+                                                    }
+                                                    Spacer(Modifier.width(2.dp))
+                                                    IconButton(
+                                                        onClick = {
+                                                            scope.launch {
+                                                                val roomIdForMessage = msg.groupKey
+                                                                    .takeIf { it.isNotBlank() }
+                                                                    ?.let {
+                                                                        forumRoomDocId(
+                                                                            msg.branch,
+                                                                            it
+                                                                        )
+                                                                    }
+                                                                    ?: forumRoomId
+
+                                                                db.collection("branches")
+                                                                    .document(msg.branch)
+                                                                    .collection("forumRooms")
+                                                                    .document(roomIdForMessage)
+                                                                    .collection("messages")
+                                                                    .document(msg.id)
+                                                                    .delete()
+                                                                    .await()
+
+                                                                val deleteAtMillis =
+                                                                    System.currentTimeMillis()
+
+                                                                db.collection("branches")
+                                                                    .document(msg.branch)
+                                                                    .collection("forumRooms")
+                                                                    .document(roomIdForMessage)
+                                                                    .set(
+                                                                        mapOf(
+                                                                            "updatedAt" to FieldValue.serverTimestamp(),
+                                                                            "updatedAtMillis" to deleteAtMillis,
+                                                                            "lastModerationAction" to "message_deleted",
+                                                                            "lastModerationByUid" to FirebaseAuth.getInstance().currentUser?.uid.orEmpty(),
+                                                                            "lastDeletedMessageId" to msg.messageId,
+                                                                            "lastDeletedAt" to FieldValue.serverTimestamp(),
+                                                                            "lastDeletedAtMillis" to deleteAtMillis
+                                                                        ),
+                                                                        SetOptions.merge()
+                                                                    )
+                                                                    .await()
+                                                            }
+                                                        },
+                                                        modifier = Modifier.size(scaledIconSize(18.dp))
+                                                    ) {
+                                                        Icon(
+                                                            Icons.Filled.Delete,
+                                                            contentDescription = forumTr(
+                                                                isEnglish,
+                                                                "מחיקת הודעה",
+                                                                "Delete message"
+                                                            ),
+                                                            tint = textColor.copy(alpha = 0.72f)
+                                                        )
+                                                    }
+                                                    Spacer(Modifier.width(4.dp))
+                                                }
+
+                                                Text(
+                                                    text = formatInstant(
+                                                        msg.createdAt
+                                                    ),
+                                                    style = KmiTypography.caption,
+                                                    color = textColor.copy(
+                                                        alpha = 0.62f
+                                                    ),
+                                                    textAlign = screenTextAlign
+                                                )
+                                            }
                                         }
                                     }
-                                }
-                            )
 
-                            IconButton(
-                                onClick = { videoPicker.launch("video/*") },
-                                modifier = Modifier.size(
-                                    scaledIconSize(36.dp)
-                                )
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Filled.VideoLibrary,
-                                    contentDescription = forumTr(
-                                        isEnglish,
-                                        "צרף וידאו",
-                                        "Attach video"
-                                    ),
-                                    tint = inputIconTint,
-                                    modifier = Modifier.size(
-                                        KmiIconSize.medium
-                                    )
-                                )
+                                    Canvas(
+                                        modifier = Modifier
+                                            .size(10.dp)
+                                            .align(
+                                                if (msg.isMine) Alignment.BottomEnd else Alignment.BottomStart
+                                            )
+                                    ) {
+                                        val path = Path()
+
+                                        if (msg.isMine) {
+                                            path.moveTo(size.width, size.height)
+                                            path.lineTo(0f, size.height)
+                                            path.lineTo(size.width, 0f)
+                                        } else {
+                                            path.moveTo(0f, size.height)
+                                            path.lineTo(size.width, size.height)
+                                            path.lineTo(0f, 0f)
+                                        }
+
+                                        drawPath(
+                                            path = path,
+                                            color = bubbleColor,
+                                            style = Fill
+                                        )
+                                    }
+                                }
                             }
                         }
                     }
 
-                    val canSendContent =
-                        (if (editingMessage != null) editText else input).trim().isNotEmpty() || attachedUri != null
+                    Spacer(Modifier.height(8.dp))
 
-                    val canSend = canSendContent && isCurrentUserForumParticipant
-
-                    Surface(
-                        onClick = {
-                            if (canSend) {
-                                scope.launch { sendMessageInternal() }
-                            }
-                        },
-                        shape = RoundedCornerShape(999.dp),
-                        color =
-                            if (canSend) {
-                                MaterialTheme.colorScheme.primary
-                            } else {
-                                MaterialTheme.colorScheme.surfaceVariant
-                            },
-                        modifier = Modifier.size(
-                            scaledIconSize(48.dp)
-                        ),
-                        tonalElevation = 0.dp,
-                        shadowElevation = 0.dp
-                    ) {
-                        Box(
-                            contentAlignment = Alignment.Center,
-                            modifier = Modifier.fillMaxSize()
+                    // צ'יפ למדיה מצורפת (אם יש)
+                    if (attachedUri != null && attachedMediaType != null) {
+                        Surface(
+                            shape = RoundedCornerShape(18.dp),
+                            color = attachmentChipColor,
+                            border = BorderStroke(1.dp, forumHeaderBorder),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(bottom = 6.dp)
                         ) {
-                            Icon(
-                                imageVector =
-                                    if (canSend) {
-                                        Icons.AutoMirrored.Filled.Send
-                                    } else {
-                                        Icons.Outlined.Mic
+                            Row(
+                                modifier = Modifier
+                                    .padding(horizontal = 12.dp, vertical = 8.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Text(
+                                    text = when (attachedMediaType) {
+                                        "image" -> forumTr(
+                                            isEnglish,
+                                            "תמונה מצורפת לשליחה",
+                                            "Image attached"
+                                        )
+
+                                        "video" -> forumTr(
+                                            isEnglish,
+                                            "סרטון מצורף לשליחה",
+                                            "Video attached"
+                                        )
+
+                                        else -> forumTr(isEnglish, "קובץ מצורף", "Attachment")
                                     },
-                                contentDescription = if (canSend) {
-                                    if (editingMessage != null) {
-                                        forumTr(isEnglish, "עדכן הודעה", "Update message")
-                                    } else {
-                                        forumTr(isEnglish, "שלח", "Send")
-                                    }
-                                } else {
-                                    forumTr(isEnglish, "הקלטה", "Voice recording")
-                                },
-                                tint =
-                                    if (canSend) {
-                                        MaterialTheme.colorScheme.onPrimary
-                                    } else {
-                                        MaterialTheme.colorScheme.onSurfaceVariant
-                                    },
-                                modifier = Modifier.size(
-                                    KmiIconSize.medium
+                                    color = attachmentChipText,
+                                    style = KmiTypography.secondary
                                 )
+                                TextButton(
+                                    onClick = {
+                                        attachedUri = null
+                                        attachedMediaType = null
+                                    }
+                                ) {
+                                    Text(
+                                        text = forumTr(
+                                            isEnglish,
+                                            "הסר",
+                                            "Remove"
+                                        ),
+                                        style = KmiTypography.action
+                                    )
+                                }
+                            }
+                        }
+                    }
+
+                    // ================= שורת שליחה =================
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(min = 60.dp)
+                            .padding(
+                                top = 4.dp,
+                                bottom = 4.dp
                             )
+                            .imePadding()
+                            .navigationBarsPadding(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Surface(
+                            modifier = Modifier
+                                .weight(1f)
+                                .heightIn(min = 52.dp),
+                            shape = RoundedCornerShape(28.dp),
+                            color = inputSurfaceColor,
+                            tonalElevation = 0.dp,
+                            shadowElevation = 0.dp,
+                            border = BorderStroke(
+                                width = 1.dp,
+                                color = forumHeaderBorder
+                            )
+                        ) {
+                            Row(
+                                modifier =
+                                    Modifier
+                                        .fillMaxWidth()
+                                        .heightIn(
+                                            min = 52.dp,
+                                            max = 84.dp
+                                        )
+                                        .padding(
+                                            horizontal = 6.dp,
+                                            vertical = 2.dp
+                                        ),
+                                verticalAlignment =
+                                    Alignment.CenterVertically
+                            ) {
+                                IconButton(
+                                    onClick = { imagePicker.launch("image/*") },
+                                    modifier = Modifier.size(
+                                        scaledIconSize(36.dp)
+                                    )
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Outlined.Add,
+                                        contentDescription = forumTr(
+                                            isEnglish,
+                                            "צרף תמונה",
+                                            "Attach image"
+                                        ),
+                                        tint = inputIconTint,
+                                        modifier = Modifier.size(
+                                            KmiIconSize.medium
+                                        )
+                                    )
+                                }
+
+                                BasicTextField(
+                                    value = if (editingMessage != null) editText else input,
+                                    onValueChange = {
+                                        if (editingMessage != null) {
+                                            editText = it
+                                        } else {
+                                            input = it
+                                        }
+                                    },
+                                    modifier =
+                                        Modifier
+                                            .weight(1f)
+                                            .heightIn(
+                                                min = 52.dp,
+                                                max = 84.dp
+                                            ),
+                                    textStyle =
+                                        KmiTypography.body.copy(
+                                            color = inputTextColor,
+                                            textAlign = screenTextAlign,
+                                            fontWeight = FontWeight.SemiBold
+                                        ),
+                                    cursorBrush =
+                                        SolidColor(
+                                            MaterialTheme.colorScheme.primary
+                                        ),
+                                    singleLine = true,
+                                    decorationBox = { innerTextField ->
+                                        Box(
+                                            modifier =
+                                                Modifier
+                                                    .fillMaxWidth()
+                                                    .heightIn(
+                                                        min = 52.dp,
+                                                        max = 84.dp
+                                                    )
+                                                    .padding(
+                                                        horizontal = 8.dp
+                                                    ),
+                                            contentAlignment =
+                                                if (isEnglish) {
+                                                    Alignment.CenterStart
+                                                } else {
+                                                    Alignment.CenterEnd
+                                                }
+                                        ) {
+                                            val currentText =
+                                                if (editingMessage != null) editText else input
+
+                                            if (currentText.isBlank()) {
+                                                Text(
+                                                    text = if (!isCurrentUserForumParticipant) {
+                                                        forumTr(
+                                                            isEnglish,
+                                                            "אין הרשאה לשלוח בחדר זה",
+                                                            "No permission to send in this room"
+                                                        )
+                                                    } else if (editingMessage != null) {
+                                                        forumTr(
+                                                            isEnglish,
+                                                            "עריכת הודעה...",
+                                                            "Editing message..."
+                                                        )
+                                                    } else {
+                                                        forumTr(isEnglish, "הודעה", "Message")
+                                                    },
+                                                    color = inputPlaceholderColor,
+                                                    textAlign = screenTextAlign,
+                                                    style = KmiTypography.body,
+                                                    modifier = Modifier.fillMaxWidth()
+                                                )
+                                            }
+
+                                            Box(
+                                                modifier = Modifier.fillMaxWidth(),
+                                                contentAlignment = if (isEnglish) Alignment.CenterStart else Alignment.CenterEnd
+                                            ) {
+                                                innerTextField()
+                                            }
+                                        }
+                                    }
+                                )
+
+                                IconButton(
+                                    onClick = { videoPicker.launch("video/*") },
+                                    modifier = Modifier.size(
+                                        scaledIconSize(36.dp)
+                                    )
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Filled.VideoLibrary,
+                                        contentDescription = forumTr(
+                                            isEnglish,
+                                            "צרף וידאו",
+                                            "Attach video"
+                                        ),
+                                        tint = inputIconTint,
+                                        modifier = Modifier.size(
+                                            KmiIconSize.medium
+                                        )
+                                    )
+                                }
+                            }
+                        }
+
+                        val canSendContent =
+                            (if (editingMessage != null) editText else input).trim()
+                                .isNotEmpty() || attachedUri != null
+
+                        val canSend = canSendContent && isCurrentUserForumParticipant
+
+                        Surface(
+                            onClick = {
+                                if (canSend) {
+                                    scope.launch { sendMessageInternal() }
+                                }
+                            },
+                            shape = RoundedCornerShape(999.dp),
+                            color =
+                                if (canSend) {
+                                    MaterialTheme.colorScheme.primary
+                                } else {
+                                    MaterialTheme.colorScheme.surfaceVariant
+                                },
+                            modifier = Modifier.size(
+                                scaledIconSize(48.dp)
+                            ),
+                            tonalElevation = 0.dp,
+                            shadowElevation = 0.dp
+                        ) {
+                            Box(
+                                contentAlignment = Alignment.Center,
+                                modifier = Modifier.fillMaxSize()
+                            ) {
+                                Icon(
+                                    imageVector =
+                                        if (canSend) {
+                                            Icons.AutoMirrored.Filled.Send
+                                        } else {
+                                            Icons.Outlined.Mic
+                                        },
+                                    contentDescription = if (canSend) {
+                                        if (editingMessage != null) {
+                                            forumTr(isEnglish, "עדכן הודעה", "Update message")
+                                        } else {
+                                            forumTr(isEnglish, "שלח", "Send")
+                                        }
+                                    } else {
+                                        forumTr(isEnglish, "הקלטה", "Voice recording")
+                                    },
+                                    tint =
+                                        if (canSend) {
+                                            MaterialTheme.colorScheme.onPrimary
+                                        } else {
+                                            MaterialTheme.colorScheme.onSurfaceVariant
+                                        },
+                                    modifier = Modifier.size(
+                                        KmiIconSize.medium
+                                    )
+                                )
+                            }
                         }
                     }
                 }
@@ -3530,18 +3597,13 @@ private fun ForumPremiumControlCard(
     selectedGroup: String,
     participants: List<ForumParticipantUi>,
     participantsText: Color,
-    roomTitle: String,
-    roomSubtitle: String,
     participantsTitle: String,
     participantsSubtitle: String,
-    isRoomExpanded: Boolean,
     isParticipantsExpanded: Boolean,
-    canOpenRoomPicker: Boolean,
     canOpenParticipants: Boolean,
     isDarkMode: Boolean,
     isEnglish: Boolean,
     onCollapseAll: () -> Unit,
-    onRoomClick: () -> Unit,
     onParticipantsClick: () -> Unit,
     onBranchSelected: (String) -> Unit,
     onGroupSelected: (String) -> Unit
@@ -3604,78 +3666,61 @@ private fun ForumPremiumControlCard(
                 .padding(horizontal = 10.dp, vertical = 8.dp),
             verticalArrangement = Arrangement.spacedBy(6.dp)
         ) {
-            ForumPremiumControlRow(
-                iconText = "⌂",
-                title = roomTitle,
-                subtitle = roomSubtitle,
-                accentColor = blueAccent,
-                titleColor = titleColor,
-                subtitleColor = subtitleColor,
-                mutedColor = mutedColor,
-                isExpanded = isRoomExpanded,
-                enabled = canOpenRoomPicker,
-                isDarkMode = isDarkMode,
-                isEnglish = isEnglish,
-                onClick = onRoomClick
-            )
-
-            if (isRoomExpanded && canOpenRoomPicker) {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(top = 2.dp, bottom = 4.dp),
-                    verticalArrangement = Arrangement.spacedBy(6.dp)
-                ) {
-                    if (branches.size > 1) {
-                        KmiPremiumDropdown(
-                            title =
-                                forumTr(
-                                    isEnglish,
-                                    "סניף",
-                                    "Branch"
-                                ),
-                            options = branches,
-                            selectedValue = selectedBranch,
-                            isEnglish = isEnglish,
-                            placeholder =
-                                forumTr(
-                                    isEnglish,
-                                    "בחר סניף",
-                                    "Select branch"
-                                ),
-                            onSelected = { selectedBranchValue ->
-                                onBranchSelected(
-                                    selectedBranchValue
-                                )
-                            }
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(
+                        top = 2.dp,
+                        bottom = 4.dp
+                    ),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                KmiPremiumDropdown(
+                    title =
+                        forumTr(
+                            isEnglish,
+                            "סניף",
+                            "Branch"
+                        ),
+                    options = branches,
+                    selectedValue = selectedBranch,
+                    isEnglish = isEnglish,
+                    placeholder =
+                        forumTr(
+                            isEnglish,
+                            "בחר סניף",
+                            "Select branch"
+                        ),
+                    onSelected = { selectedBranchValue ->
+                        onBranchSelected(
+                            selectedBranchValue
                         )
                     }
+                )
 
-                    if (groups.size > 1) {
-                        KmiPremiumDropdown(
-                            title =
-                                forumTr(
-                                    isEnglish,
-                                    "קבוצה",
-                                    "Group"
-                                ),
-                            options = groups,
-                            selectedValue = selectedGroup,
-                            isEnglish = isEnglish,
-                            placeholder =
-                                forumTr(
-                                    isEnglish,
-                                    "בחר קבוצה",
-                                    "Select group"
-                                ),
-                            onSelected = { selectedGroupValue ->
-                                onGroupSelected(
-                                    selectedGroupValue
-                                )
-                            }
+                KmiPremiumDropdown(
+                    title =
+                        forumTr(
+                            isEnglish,
+                            "קבוצה",
+                            "Group"
+                        ),
+                    options = groups,
+                    selectedValue = selectedGroup,
+                    isEnglish = isEnglish,
+                    placeholder =
+                        forumTr(
+                            isEnglish,
+                            "בחר קבוצה",
+                            "Select group"
+                        ),
+                    enabled = selectedBranch.isNotBlank(),
+                    onSelected = { selectedGroupValue ->
+                        onGroupSelected(
+                            selectedGroupValue
                         )
                     }
-                }
+                )
             }
 
             Box(

@@ -20,7 +20,6 @@ import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -29,13 +28,11 @@ import androidx.compose.material.icons.automirrored.filled.Message
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Phone
 import androidx.compose.material.icons.automirrored.filled.Send
-import androidx.compose.material.icons.filled.SupportAgent
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
@@ -43,7 +40,6 @@ import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -57,6 +53,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import il.yuval.ui.theme.kmiScreenBackgroundBrush
+import il.yuval.ui.theme.kmiSectionHeaderBackground
+import il.yuval.ui.theme.kmiSectionHeaderContentColor
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
@@ -436,6 +434,32 @@ fun ContactUsScreen(
                         .fillMaxSize()
                         .padding(innerPadding)
                 ) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(56.dp)
+                            .kmiSectionHeaderBackground(),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text =
+                                if (effectiveEnglish) {
+                                    "Leave your details and an association representative\nwill contact you"
+                                } else {
+                                    "השאירו פרטים ונציג העמותה\nיחזור אליכם"
+                                },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 16.dp),
+                            style = KmiTypography.secondary.copy(
+                                fontWeight = FontWeight.Black
+                            ),
+                            color = kmiSectionHeaderContentColor(),
+                            textAlign = TextAlign.Center,
+                            maxLines = 2
+                        )
+                    }
+
                     // ✅ רק התוכן שמתחת ל־KmiTopBar הגלובלי נגלל
                     Column(
                         modifier = Modifier
@@ -452,109 +476,6 @@ fun ContactUsScreen(
                         horizontalAlignment =
                             Alignment.Start
                     ) {
-                        AnimatedVisibility(
-                            visible = true,
-                            enter = fadeIn() + slideInVertically { it / 4 }
-                        ) {
-                            Card(
-                                modifier = Modifier.fillMaxWidth(),
-                                shape = RoundedCornerShape(24.dp),
-                                colors = CardDefaults.cardColors(
-                                    containerColor = cardContainerColor,
-                                    contentColor = MaterialTheme.colorScheme.onSurface
-                                ),
-                                elevation = CardDefaults.cardElevation(
-                                    defaultElevation = 1.dp,
-                                    pressedElevation = 0.dp
-                                )
-                            ) {
-                                Column(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(
-                                            horizontal = 14.dp,
-                                            vertical = 10.dp
-                                        ),
-                                    verticalArrangement =
-                                        Arrangement.spacedBy(8.dp),
-                                    horizontalAlignment =
-                                        Alignment.Start
-                                ) {
-                                    Text(
-                                        text = subtitle,
-                                        style =
-                                            KmiTypography.cardTitle.copy(
-                                                fontWeight =
-                                                    FontWeight.ExtraBold
-                                            ),
-                                        color =
-                                            MaterialTheme.colorScheme.onSurface,
-                                        textAlign = TextAlign.Start,
-                                        modifier = Modifier.fillMaxWidth()
-                                    )
-
-                                    HorizontalDivider(
-                                        color = MaterialTheme.colorScheme.outline.copy(
-                                            alpha = 0.28f
-                                        )
-                                    )
-
-                                    Surface(
-                                        modifier = Modifier.fillMaxWidth(),
-                                        shape = RoundedCornerShape(16.dp),
-                                        color = innerContainerColor,
-                                        contentColor = MaterialTheme.colorScheme.onSurface
-                                    ) {
-                                        Box(
-                                            modifier = Modifier
-                                                .fillMaxWidth()
-                                                .padding(horizontal = 12.dp, vertical = 10.dp)
-                                        ) {
-                                            Icon(
-                                                imageVector =
-                                                    Icons.Default.SupportAgent,
-                                                contentDescription = null,
-                                                tint =
-                                                    MaterialTheme
-                                                        .colorScheme
-                                                        .primary,
-                                                modifier = Modifier
-                                                    .align(
-                                                        Alignment.CenterStart
-                                                    )
-                                                    .size(
-                                                        KmiIconSize.medium
-                                                    )
-                                            )
-
-                                            Text(
-                                                text =
-                                                    if (effectiveEnglish) {
-                                                        "KAMI representative will contact you soon."
-                                                    } else {
-                                                        "נציג מטעם ק.מ.י יחזור אליכם בהקדם."
-                                                    },
-                                                style =
-                                                    KmiTypography.body.copy(
-                                                        fontWeight =
-                                                            FontWeight.Bold
-                                                    ),
-                                                color =
-                                                    MaterialTheme
-                                                        .colorScheme
-                                                        .onSurface,
-                                                textAlign = TextAlign.Start,
-                                                modifier = Modifier
-                                                    .fillMaxWidth()
-                                                    .padding(
-                                                        start = 34.dp
-                                                    )
-                                            )
-                                        }
-                                    }
-                                }
-                            }
-                        }
 
                         AnimatedVisibility(
                             visible = true,

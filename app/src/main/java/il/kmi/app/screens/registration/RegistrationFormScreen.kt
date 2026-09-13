@@ -53,6 +53,7 @@ import il.kmi.app.hasCalendarPermission
 import il.kmi.app.training.TrainingAlarmReceiver
 import il.kmi.app.ui.KmiIconSize
 import il.kmi.app.ui.KmiTypography
+import il.yuval.ui.theme.kmiSectionHeaderBackground
 import il.yuval.ui.theme.kmiSectionHeaderBrush
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -2113,8 +2114,6 @@ fun RegistrationFormScreen(
                 }
             )
 
-            Spacer(Modifier.height(6.dp))
-
 // כל התוכן עבר לפה:
             RegistrationFormContent(
                 isCoach = isCoach,
@@ -2387,17 +2386,16 @@ private fun RegistrationTabsBilingual(
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .height(54.dp)
-            .background(
-                brush = kmiSectionHeaderBrush()
-            )
+            .height(56.dp)
+            .kmiSectionHeaderBackground()
     ) {
         CompositionLocalProvider(
             LocalLayoutDirection provides LayoutDirection.Rtl
         ) {
             Row(
                 modifier = Modifier
-                    .fillMaxSize(),
+                    .fillMaxSize()
+                    .padding(horizontal = 34.dp),
                 verticalAlignment =
                     Alignment.CenterVertically
             ) {
@@ -2454,6 +2452,9 @@ private fun RegistrationRoleTabButton(
     ) {
         Text(
             text = text,
+            modifier = Modifier.offset(
+                y = (-5).dp
+            ),
             style =
                 KmiTypography.action.copy(
                     fontWeight =
@@ -2483,10 +2484,10 @@ private fun RegistrationRoleTabButton(
                     .align(
                         Alignment.BottomCenter
                     )
-                    .padding(
-                        bottom = 4.dp
+                    .offset(
+                        y = (-11).dp
                     )
-                    .width(88.dp)
+                    .width(76.dp)
                     .height(3.dp)
                     .background(
                         color = Color.White,

@@ -77,6 +77,7 @@ import il.yuval.ui.theme.kmiGraniteActionBrush
 import il.yuval.ui.theme.kmiGraniteActionHighlightColor
 import il.yuval.ui.theme.kmiOnSuccessContainerColor
 import il.yuval.ui.theme.kmiScreenBackgroundBrush
+import il.yuval.ui.theme.kmiSectionHeaderBackground
 import il.yuval.ui.theme.kmiSectionHeaderBrush
 import il.yuval.ui.theme.kmiSectionHeaderContentColor
 import il.yuval.ui.theme.kmiSuccessColor
@@ -551,9 +552,7 @@ fun SubscriptionScreen(
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .background(
-                            brush = kmiSectionHeaderBrush()
-                        )
+                        .kmiSectionHeaderBackground()
                         .padding(vertical = 4.dp)
                 ) {
                     Column(

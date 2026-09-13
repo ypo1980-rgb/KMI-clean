@@ -48,6 +48,7 @@ import il.kmi.app.screens.coach.statistics.NationalStatisticsScreen
 import il.kmi.app.ui.KmiTypography
 import il.yuval.ui.theme.kmiSectionHeaderBrush
 import il.yuval.ui.theme.kmiScreenBackgroundBrush
+import il.yuval.ui.theme.kmiSectionHeaderBackground
 import java.io.File
 import java.io.FileOutputStream
 
@@ -910,9 +911,7 @@ private fun StatisticsTabsSelector(
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .background(
-                    brush = kmiSectionHeaderBrush()
-                )
+                .kmiSectionHeaderBackground()
         ) {
 
             // קו מפריד בין שני הטאבים

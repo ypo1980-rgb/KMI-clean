@@ -90,6 +90,7 @@ import android.graphics.Typeface
 import android.graphics.pdf.PdfDocument
 import androidx.compose.material3.LocalContentColor
 import androidx.core.content.FileProvider
+import il.yuval.ui.theme.kmiSectionHeaderBackground
 import java.io.File
 import java.io.FileOutputStream
 import java.text.SimpleDateFormat
@@ -218,9 +219,7 @@ fun AttendanceGroupStatsScreen(
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(54.dp)
-                    .background(
-                        brush = kmiSectionHeaderBrush()
-                    )
+                    .kmiSectionHeaderBackground()
             ) {
 
                 // קו מפריד במרכז

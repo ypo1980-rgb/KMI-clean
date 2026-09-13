@@ -33,6 +33,7 @@ import il.kmi.app.ui.KmiTypography
 import il.kmi.app.ui.pdf.KmiPdfFooter
 import il.kmi.app.ui.pdf.KmiPdfHeader
 import il.yuval.ui.theme.kmiScreenBackgroundBrush
+import il.yuval.ui.theme.kmiSectionHeaderBackground
 import il.yuval.ui.theme.kmiSectionHeaderBrush
 import il.yuval.ui.theme.kmiSectionHeaderContentColor
 
@@ -1175,10 +1176,8 @@ private fun SafetyWarningCard(
         Box(
             modifier = Modifier
                 .requiredWidth(maxWidth + 32.dp)
-                .heightIn(min = 52.dp)
-                .background(
-                    brush = kmiSectionHeaderBrush()
-                )
+                .heightIn(min = 56.dp)
+                .kmiSectionHeaderBackground()
                 .padding(
                     horizontal = 16.dp,
                     vertical = 4.dp

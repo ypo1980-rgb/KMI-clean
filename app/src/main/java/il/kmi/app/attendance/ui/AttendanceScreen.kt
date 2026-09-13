@@ -84,6 +84,7 @@ import il.kmi.app.training.TrainingCatalog
 import il.kmi.app.privacy.TraineeDisplayNameMapper
 import il.kmi.shared.localization.AppLanguage
 import il.kmi.shared.localization.AppLanguageManager
+import il.yuval.ui.theme.kmiSectionHeaderBackground
 
 //========================================================================
 
@@ -473,9 +474,7 @@ fun AttendanceScreen(
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(54.dp)
-                    .background(
-                        brush = kmiSectionHeaderBrush()
-                    )
+                    .kmiSectionHeaderBackground()
             ) {
 
                 // =====================================================
@@ -752,7 +751,7 @@ fun AttendanceScreen(
                         Box(
                             modifier = Modifier
                                 .weight(1f)
-                                .heightIn(min = 48.dp)
+                                .heightIn(min = 56.dp)
                                 .semantics {
                                     contentDescription =
                                         trainingArrowDescription

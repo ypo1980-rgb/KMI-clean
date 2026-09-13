@@ -113,7 +113,7 @@ import il.kmi.shared.domain.content.ExerciseTitlesEn
 import il.yuval.ui.theme.kmiGraniteActionBrush
 import il.yuval.ui.theme.kmiGraniteActionHighlightColor
 import il.yuval.ui.theme.kmiScreenBackgroundBrush
-import il.yuval.ui.theme.kmiSectionHeaderBrush
+import il.yuval.ui.theme.kmiSectionHeaderBackground
 import il.yuval.ui.theme.kmiSectionHeaderContentColor
 import kotlinx.coroutines.delay
 import org.json.JSONArray
@@ -2133,10 +2133,7 @@ fun HomeScreen(
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .background(
-                            brush =
-                                kmiSectionHeaderBrush()
-                        )
+                        .kmiSectionHeaderBackground()
                         .padding(vertical = 4.dp)
                 ) {
                     TrainingsWeekHeader(
@@ -2146,35 +2143,6 @@ fun HomeScreen(
                             .padding(horizontal = 16.dp)
                     )
                 }
-
-                Spacer(Modifier.height(4.dp))
-
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(4.dp)
-                        .background(
-                            brush =
-                                Brush.verticalGradient(
-                                    colors =
-                                        listOf(
-                                            MaterialTheme
-                                                .colorScheme
-                                                .outlineVariant
-                                                .copy(
-                                                    alpha = 0.86f
-                                                ),
-                                            MaterialTheme
-                                                .colorScheme
-                                                .outlineVariant
-                                                .copy(
-                                                    alpha = 0.38f
-                                                ),
-                                            Color.Transparent
-                                        )
-                                )
-                        )
-                )
 
                 Spacer(Modifier.height(4.dp))
 

@@ -10,6 +10,9 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.FitnessCenter
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -58,7 +61,10 @@ import il.kmi.app.ui.pdf.KmiPdfHeader
 import il.kmi.app.ui.pdf.KmiPdfFooter
 import il.kmi.shared.localization.AppLanguage
 import il.kmi.shared.localization.AppLanguageManager
+import il.yuval.ui.theme.kmiSectionHeaderBackground
 import il.yuval.ui.theme.kmiSectionHeaderBrush
+import il.yuval.ui.theme.kmiGraniteActionBrush
+import il.yuval.ui.theme.kmiScreenBackgroundBrush
 
 //==============================================================================
 
@@ -1490,7 +1496,7 @@ fun ExercisesTabsScreen(
     }
 
     Scaffold(
-        containerColor = MaterialTheme.colorScheme.background,
+        containerColor = Color.Transparent,
         topBar = {
             val contextLang = LocalContext.current
             val langManager = remember { AppLanguageManager(contextLang) }
@@ -1583,8 +1589,10 @@ fun ExercisesTabsScreen(
 
                     ActionButton(
                         text = tr("תרגול", "Practice"),
+                        icon = Icons.Filled.FitnessCenter,
                         modifier = Modifier.weight(1f),
-                        containerColor = MaterialTheme.colorScheme.primary,
+                        brush = kmiGraniteActionBrush(),
+                        contentColor = Color.White,
                         onClick = {
                             onPractice(
                                 belt,
@@ -1595,8 +1603,17 @@ fun ExercisesTabsScreen(
 
                     ActionButton(
                         text = tr("איפוס", "Reset"),
+                        icon = Icons.Filled.Delete,
                         modifier = Modifier.weight(1f),
-                        containerColor = MaterialTheme.colorScheme.error,
+                        brush = Brush.horizontalGradient(
+                            colors = listOf(
+                                MaterialTheme.colorScheme.error,
+                                MaterialTheme.colorScheme.error.copy(
+                                    alpha = 0.78f
+                                )
+                            )
+                        ),
+                        contentColor = Color.White,
                         onClick = {
                             scope.launch {
                                 // איפוס סטטוסים בזיכרון הקומפוז
@@ -1800,6 +1817,9 @@ fun ExercisesTabsScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
+                .background(
+                    brush = kmiScreenBackgroundBrush()
+                )
         ) {
 
             // =========================================================
@@ -1808,9 +1828,7 @@ fun ExercisesTabsScreen(
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .background(
-                        brush = kmiSectionHeaderBrush()
-                    )
+                    .kmiSectionHeaderBackground()
             ) {
                 if (isCoach) {
                     Row(
@@ -2014,8 +2032,11 @@ fun ExercisesTabsScreen(
                 modifier = Modifier
                     .weight(1f)
                     .fillMaxWidth()
-                    .padding(horizontal = 16.dp),
-                verticalArrangement = Arrangement.spacedBy(0.dp)
+                    .padding(
+                        horizontal = 16.dp,
+                        vertical = 4.dp
+                    ),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
                 itemsIndexed(
                     items = filtered,
@@ -2054,227 +2075,326 @@ fun ExercisesTabsScreen(
                         coachStatuses[item]
                             .orEmpty()
 
-                    CompositionLocalProvider(
-                        LocalLayoutDirection provides LayoutDirection.Ltr
+                    Surface(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .graphicsLayer {
+                                scaleX = scale
+                                scaleY = scale
+                            }
+                            .clickable {
+                                pressed = true
+                                explainFromSearch = item
+
+                                scope.launch {
+                                    kotlinx.coroutines.delay(120)
+                                    pressed = false
+                                }
+                            },
+                        shape = RoundedCornerShape(24.dp),
+                        color = MaterialTheme.colorScheme.surface,
+                        tonalElevation = 0.dp,
+                        shadowElevation = 2.dp,
+                        border = BorderStroke(
+                            width = 1.dp,
+                            color =
+                                when {
+                                    itemIsUnknown ->
+                                        MaterialTheme.colorScheme.error
+                                            .copy(alpha = 0.22f)
+
+                                    isFav ->
+                                        MaterialTheme.colorScheme.primary
+                                            .copy(alpha = 0.24f)
+
+                                    else ->
+                                        MaterialTheme.colorScheme.outlineVariant
+                                            .copy(alpha = 0.72f)
+                                }
+                        )
                     ) {
-                        Row(
+                        Box(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .graphicsLayer {
-                                    scaleX = scale
-                                    scaleY = scale
-                                }
-                                .clickable {
-                                    pressed = true
-                                    explainFromSearch = item
-
-                                    scope.launch {
-                                        kotlinx.coroutines.delay(120)
-                                        pressed = false
-                                    }
-                                }
+                                .background(
+                                    brush =
+                                        Brush.verticalGradient(
+                                            colors = listOf(
+                                                MaterialTheme.colorScheme.surface,
+                                                MaterialTheme.colorScheme.surfaceVariant
+                                                    .copy(alpha = 0.38f),
+                                                MaterialTheme.colorScheme.surface
+                                            )
+                                        )
+                                )
                                 .padding(
-                                    start = 4.dp,
-                                    end = 4.dp,
-                                    top = 9.dp,
-                                    bottom = 9.dp
-                                ),
-                            verticalAlignment = Alignment.CenterVertically
+                                    horizontal = 14.dp,
+                                    vertical = 12.dp
+                                )
                         ) {
-                            ExerciseRowActionsMenu(
-                                isEnglish = isEnglish,
-                                isCoach = isCoach,
-                                isFav = isFav,
-                                hasNote = itemHasNote,
-                                isUnknown = itemIsUnknown,
-                                coachStatuses = itemCoachStatuses,
-                                onInfo = {
-                                    pressed = true
-                                    explainFromSearch = item
-
-                                    scope.launch {
-                                        kotlinx.coroutines.delay(120)
-                                        pressed = false
-                                    }
-                                },
-                                onToggleFavorite = {
-                                    toggleFavorite(item)
-                                },
-                                onEditNote = {
-                                    noteEditorFor = item
-                                    noteDraft = loadNote(item)
-                                },
-                                onToggleUnknown = {
-                                    setUnknown(
-                                        item,
-                                        item !in unknownItems
-                                    )
-                                },
-                                onCoachStatusChange = { newStatus ->
-                                    updateCoachStatus(
-                                        raw = item,
-                                        status = newStatus
-                                    )
-                                }
-                            )
-
-                            Spacer(Modifier.width(10.dp))
-
                             CompositionLocalProvider(
-                                LocalLayoutDirection provides if (isEnglish) {
-                                    LayoutDirection.Ltr
-                                } else {
-                                    LayoutDirection.Rtl
-                                }
+                                LocalLayoutDirection provides
+                                        LayoutDirection.Ltr
                             ) {
-                                Column(
-                                    modifier = Modifier.weight(1f),
-                                    horizontalAlignment = if (isEnglish) {
-                                        Alignment.Start
-                                    } else {
-                                        Alignment.End
-                                    }
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    verticalAlignment = Alignment.CenterVertically
                                 ) {
-                                    Text(
-                                        text = tr(
-                                            "תרגיל ${index + 1}",
-                                            "Exercise ${index + 1}"
-                                        ),
-                                        modifier = Modifier.fillMaxWidth(),
-                                        style = KmiTypography.caption.copy(
-                                            fontWeight = FontWeight.ExtraBold
-                                        ),
-                                        color = when {
-                                            itemIsUnknown ->
-                                                MaterialTheme.colorScheme.error
+                                    ExerciseRowActionsMenu(
+                                        isEnglish = isEnglish,
+                                        isCoach = isCoach,
+                                        isFav = isFav,
+                                        hasNote = itemHasNote,
+                                        isUnknown = itemIsUnknown,
+                                        coachStatuses = itemCoachStatuses,
+                                        onInfo = {
+                                            pressed = true
+                                            explainFromSearch = item
 
-                                            isFav ->
-                                                MaterialTheme.colorScheme.primary
-
-                                            else ->
-                                                MaterialTheme.colorScheme.primary
+                                            scope.launch {
+                                                kotlinx.coroutines.delay(120)
+                                                pressed = false
+                                            }
                                         },
-                                        textAlign =
-                                            if (isEnglish) {
-                                                TextAlign.Left
-                                            } else {
-                                                TextAlign.Right
-                                            },
-                                        maxLines = 1,
-                                        overflow = TextOverflow.Ellipsis
+                                        onToggleFavorite = {
+                                            toggleFavorite(item)
+                                        },
+                                        onEditNote = {
+                                            noteEditorFor = item
+                                            noteDraft = loadNote(item)
+                                        },
+                                        onToggleUnknown = {
+                                            setUnknown(
+                                                item,
+                                                item !in unknownItems
+                                            )
+                                        },
+                                        onCoachStatusChange = { newStatus ->
+                                            updateCoachStatus(
+                                                raw = item,
+                                                status = newStatus
+                                            )
+                                        }
                                     )
 
-                                    Spacer(Modifier.height(3.dp))
+                                    Spacer(Modifier.width(12.dp))
 
-                                    Text(
-                                        text = displayName,
-                                        modifier = Modifier.fillMaxWidth(),
-                                        textAlign =
-                                            if (isEnglish) {
-                                                TextAlign.Left
-                                            } else {
-                                                TextAlign.Right
-                                            },
-                                        color =
-                                            MaterialTheme.colorScheme.onSurface,
-                                        style = KmiTypography.body.copy(
-                                            fontWeight = FontWeight.Bold
-                                        ),
-                                        maxLines = 3,
-                                        overflow = TextOverflow.Ellipsis
-                                    )
-
-                                    if (itemHasNote || isFav || itemIsUnknown) {
-                                        Spacer(Modifier.height(3.dp))
-
-                                        Row(
-                                            modifier = Modifier.fillMaxWidth(),
-                                            horizontalArrangement = if (isEnglish) {
-                                                Arrangement.Start
-                                            } else {
-                                                Arrangement.End
-                                            },
-                                            verticalAlignment = Alignment.CenterVertically
+                                    CompositionLocalProvider(
+                                        LocalLayoutDirection provides
+                                                if (isEnglish) {
+                                                    LayoutDirection.Ltr
+                                                } else {
+                                                    LayoutDirection.Rtl
+                                                }
+                                    ) {
+                                        Column(
+                                            modifier = Modifier.weight(1f),
+                                            horizontalAlignment =
+                                                if (isEnglish) {
+                                                    Alignment.Start
+                                                } else {
+                                                    Alignment.End
+                                                }
                                         ) {
-                                            if (itemIsUnknown) {
-                                                Text(
-                                                    text = tr(
-                                                        "לא יודע",
-                                                        "Unknown"
-                                                    ),
-                                                    color = MaterialTheme.colorScheme.error,
-                                                    style =
-                                                        KmiTypography.caption.copy(
+                                            Text(
+                                                text = displayName,
+                                                modifier =
+                                                    Modifier.fillMaxWidth(),
+                                                textAlign =
+                                                    if (isEnglish) {
+                                                        TextAlign.Left
+                                                    } else {
+                                                        TextAlign.Right
+                                                    },
+                                                color =
+                                                    MaterialTheme
+                                                        .colorScheme
+                                                        .onSurface,
+                                                style =
+                                                    KmiTypography
+                                                        .cardTitle
+                                                        .copy(
                                                             fontWeight =
                                                                 FontWeight.Bold
-                                                        )
-                                                )
-                                            }
+                                                        ),
+                                                maxLines = 3,
+                                                overflow =
+                                                    TextOverflow.Ellipsis
+                                            )
 
                                             if (
-                                                itemIsUnknown &&
-                                                (isFav || itemHasNote)
+                                                itemHasNote ||
+                                                isFav ||
+                                                itemIsUnknown
                                             ) {
                                                 Spacer(
-                                                    Modifier.width(7.dp)
+                                                    Modifier.height(9.dp)
                                                 )
-                                            }
 
-                                            if (isFav) {
-                                                Text(
-                                                    text = tr(
-                                                        "★ מועדף",
-                                                        "★ Favorite"
-                                                    ),
-                                                    color =
-                                                        MaterialTheme.colorScheme.primary,
-                                                    style =
-                                                        KmiTypography.caption.copy(
-                                                            fontWeight =
-                                                                FontWeight.Bold
+                                                Row(
+                                                    modifier =
+                                                        Modifier.fillMaxWidth(),
+                                                    horizontalArrangement =
+                                                        if (isEnglish) {
+                                                            Arrangement.Start
+                                                        } else {
+                                                            Arrangement.End
+                                                        },
+                                                    verticalAlignment =
+                                                        Alignment.CenterVertically
+                                                ) {
+                                                    if (itemIsUnknown) {
+                                                        Surface(
+                                                            shape =
+                                                                RoundedCornerShape(
+                                                                    999.dp
+                                                                ),
+                                                            color =
+                                                                MaterialTheme
+                                                                    .colorScheme
+                                                                    .errorContainer,
+                                                            tonalElevation = 0.dp,
+                                                            shadowElevation = 0.dp
+                                                        ) {
+                                                            Text(
+                                                                text =
+                                                                    tr(
+                                                                        "●  לא יודע",
+                                                                        "●  Unknown"
+                                                                    ),
+                                                                modifier =
+                                                                    Modifier.padding(
+                                                                        horizontal =
+                                                                            10.dp,
+                                                                        vertical =
+                                                                            4.dp
+                                                                    ),
+                                                                color =
+                                                                    MaterialTheme
+                                                                        .colorScheme
+                                                                        .error,
+                                                                style =
+                                                                    KmiTypography
+                                                                        .caption
+                                                                        .copy(
+                                                                            fontWeight =
+                                                                                FontWeight.Bold
+                                                                        )
+                                                            )
+                                                        }
+                                                    }
+
+                                                    if (
+                                                        itemIsUnknown &&
+                                                        (isFav ||
+                                                                itemHasNote)
+                                                    ) {
+                                                        Spacer(
+                                                            Modifier.width(
+                                                                6.dp
+                                                            )
                                                         )
-                                                )
-                                            }
+                                                    }
 
-                                            if (isFav && itemHasNote) {
-                                                Spacer(
-                                                    Modifier.width(7.dp)
-                                                )
-                                            }
+                                                    if (isFav) {
+                                                        Surface(
+                                                            shape =
+                                                                RoundedCornerShape(
+                                                                    999.dp
+                                                                ),
+                                                            color =
+                                                                MaterialTheme
+                                                                    .colorScheme
+                                                                    .primaryContainer,
+                                                            tonalElevation = 0.dp,
+                                                            shadowElevation = 0.dp
+                                                        ) {
+                                                            Text(
+                                                                text =
+                                                                    tr(
+                                                                        "★  מועדף",
+                                                                        "★  Favorite"
+                                                                    ),
+                                                                modifier =
+                                                                    Modifier.padding(
+                                                                        horizontal =
+                                                                            10.dp,
+                                                                        vertical =
+                                                                            4.dp
+                                                                    ),
+                                                                color =
+                                                                    MaterialTheme
+                                                                        .colorScheme
+                                                                        .primary,
+                                                                style =
+                                                                    KmiTypography
+                                                                        .caption
+                                                                        .copy(
+                                                                            fontWeight =
+                                                                                FontWeight.Bold
+                                                                        )
+                                                            )
+                                                        }
+                                                    }
 
-                                            if (itemHasNote) {
-                                                Text(
-                                                    text = tr(
-                                                        "הערה שמורה",
-                                                        "Saved note"
-                                                    ),
-                                                    color =
-                                                        MaterialTheme.colorScheme.primary,
-                                                    style =
-                                                        KmiTypography.caption.copy(
-                                                            fontWeight =
-                                                                FontWeight.Bold
+                                                    if (
+                                                        isFav &&
+                                                        itemHasNote
+                                                    ) {
+                                                        Spacer(
+                                                            Modifier.width(
+                                                                6.dp
+                                                            )
                                                         )
-                                                )
+                                                    }
+
+                                                    if (itemHasNote) {
+                                                        Surface(
+                                                            shape =
+                                                                RoundedCornerShape(
+                                                                    999.dp
+                                                                ),
+                                                            color =
+                                                                MaterialTheme
+                                                                    .colorScheme
+                                                                    .secondaryContainer,
+                                                            tonalElevation = 0.dp,
+                                                            shadowElevation = 0.dp
+                                                        ) {
+                                                            Text(
+                                                                text =
+                                                                    tr(
+                                                                        "הערה שמורה",
+                                                                        "Saved note"
+                                                                    ),
+                                                                modifier =
+                                                                    Modifier.padding(
+                                                                        horizontal =
+                                                                            10.dp,
+                                                                        vertical =
+                                                                            4.dp
+                                                                    ),
+                                                                color =
+                                                                    MaterialTheme
+                                                                        .colorScheme
+                                                                        .onSecondaryContainer,
+                                                                style =
+                                                                    KmiTypography
+                                                                        .caption
+                                                                        .copy(
+                                                                            fontWeight =
+                                                                                FontWeight.Bold
+                                                                        )
+                                                            )
+                                                        }
+                                                    }
+                                                }
                                             }
                                         }
                                     }
                                 }
                             }
                         }
-                    }
-
-                    if (index < filtered.lastIndex) {
-                        HorizontalDivider(
-                            modifier = Modifier.padding(
-                                start = 48.dp,
-                                end = 4.dp
-                            ),
-                            thickness = 1.dp,
-                            color =
-                                MaterialTheme.colorScheme.outlineVariant
-                                    .copy(alpha = 0.72f)
-                        )
                     }
                 }
             }
@@ -2718,8 +2838,10 @@ private fun ExerciseRowActionsMenu(
 @Composable
 fun ActionButton(
     text: String,
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
     modifier: Modifier = Modifier,
-    containerColor: Color = MaterialTheme.colorScheme.primary,
+    brush: Brush,
+    contentColor: Color,
     onClick: () -> Unit
 ) {
     var pressed by remember {
@@ -2727,53 +2849,79 @@ fun ActionButton(
     }
 
     val scale by animateFloatAsState(
-        targetValue = if (pressed) {
-            0.95f
-        } else {
-            1f
-        },
+        targetValue =
+            if (pressed) {
+                0.96f
+            } else {
+                1f
+            },
+        animationSpec = tween(120),
         label = "btnScale"
     )
 
     val scope = rememberCoroutineScope()
 
-    val contentOnContainer =
-        if (containerColor.luminance() < 0.5f) {
-            Color.White
-        } else {
-            Color.Black
-        }
-
-    Button(
+    Surface(
         onClick = {
             pressed = true
             onClick()
 
             scope.launch {
-                kotlinx.coroutines.delay(150)
+                kotlinx.coroutines.delay(140)
                 pressed = false
             }
         },
-        shape = RoundedCornerShape(28.dp),
         modifier = modifier
             .scale(scale)
-            .heightIn(min = 56.dp)
-            .defaultMinSize(minWidth = 90.dp),
-        colors = ButtonDefaults.buttonColors(
-            containerColor = containerColor,
-            contentColor = contentOnContainer
+            .heightIn(min = 60.dp),
+        shape = RoundedCornerShape(30.dp),
+        color = Color.Transparent,
+        contentColor = contentColor,
+        tonalElevation = 0.dp,
+        shadowElevation = 6.dp,
+        border = BorderStroke(
+            width = 1.dp,
+            color = contentColor.copy(alpha = 0.20f)
         )
     ) {
-        Text(
-            text = text,
-            style = KmiTypography.action.copy(
-                fontWeight = FontWeight.Bold
-            ),
-            color = contentOnContainer,
-            textAlign = TextAlign.Center,
-            maxLines = 2,
-            overflow = TextOverflow.Ellipsis
-        )
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(
+                    brush = brush,
+                    shape = RoundedCornerShape(30.dp)
+                )
+                .padding(
+                    horizontal = 18.dp,
+                    vertical = 12.dp
+                ),
+            contentAlignment = Alignment.Center
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.Center
+            ) {
+                Icon(
+                    imageVector = icon,
+                    contentDescription = null,
+                    tint = contentColor,
+                    modifier = Modifier.size(24.dp)
+                )
+
+                Spacer(Modifier.width(10.dp))
+
+                Text(
+                    text = text,
+                    style = KmiTypography.action.copy(
+                        fontWeight = FontWeight.Black
+                    ),
+                    color = contentColor,
+                    textAlign = TextAlign.Center,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+        }
     }
 }
 

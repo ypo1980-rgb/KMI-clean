@@ -72,6 +72,7 @@ import il.yuval.ui.theme.kmiScreenBackgroundBrush
 import il.yuval.ui.theme.kmiSectionHeaderBrush
 import il.kmi.shared.domain.content.ExerciseIdentityRegistry
 import il.kmi.shared.questions.model.util.ExerciseTitleFormatter
+import il.yuval.ui.theme.kmiSectionHeaderBackground
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import il.kmi.shared.domain.ContentRepo as SharedContentRepo
@@ -637,9 +638,7 @@ fun ProgressScreen(
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(54.dp)
-                        .background(
-                            brush = kmiSectionHeaderBrush()
-                        ),
+                        .kmiSectionHeaderBackground(),
                     contentAlignment = Alignment.Center
                 ) {
                     Text(

@@ -71,6 +71,7 @@ import il.kmi.app.KmiCalendarSync
 import il.kmi.app.hasCalendarPermission
 import il.kmi.app.reminders.TrainingReminderScheduler
 import il.kmi.app.training.TrainingAlarmReceiver
+import il.yuval.ui.theme.kmiSectionHeaderBackground
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.util.Locale
@@ -1741,9 +1742,7 @@ private fun ProfileIdentityHeader(
         modifier = Modifier
             .fillMaxWidth()
             .height(68.dp)
-            .background(
-                brush = kmiSectionHeaderBrush()
-            )
+            .kmiSectionHeaderBackground()
     ) {
         if (isEnglish) {
             Row(

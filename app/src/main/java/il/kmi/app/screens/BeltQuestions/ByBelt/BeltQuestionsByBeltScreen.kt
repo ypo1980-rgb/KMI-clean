@@ -102,6 +102,7 @@ import il.kmi.app.ui.pdf.KmiPdfDirection
 import il.kmi.app.ui.pdf.KmiPdfHeader
 import il.kmi.app.ui.pdf.KmiPdfFooter
 import il.yuval.ui.theme.kmiScreenBackgroundBrush
+import il.yuval.ui.theme.kmiSectionHeaderBackground
 import il.yuval.ui.theme.kmiSectionHeaderBrush
 import java.io.File
 import java.io.FileOutputStream
@@ -1742,10 +1743,8 @@ private fun BeltQuestionsModeSwitcher(
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .heightIn(min = 48.dp)
-                .background(
-                    brush = kmiSectionHeaderBrush()
-                )
+                .heightIn(min = 56.dp)
+                .kmiSectionHeaderBackground()
         ) {
             Box(
                 modifier = Modifier

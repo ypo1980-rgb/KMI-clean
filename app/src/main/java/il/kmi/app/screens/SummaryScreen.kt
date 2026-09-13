@@ -68,6 +68,7 @@ import il.kmi.app.domain.ExerciseExplanationResolver
 import il.kmi.app.progress.CoachGroupProgressSummary
 import il.kmi.app.progress.UserProgressComparison
 import il.kmi.app.progress.UserProgressRepository
+import il.yuval.ui.theme.kmiSectionHeaderBackground
 
 /* ------------------------------ MarkState (3 states) ------------------------------ */
 
@@ -2449,9 +2450,7 @@ fun SummaryScreen(
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(54.dp)
-                    .background(
-                        brush = kmiSectionHeaderBrush()
-                    ),
+                    .kmiSectionHeaderBackground(),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 SummaryToggleButton(

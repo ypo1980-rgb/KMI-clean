@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
@@ -99,6 +100,8 @@ import il.kmi.app.ui.pdf.KmiPdfDirection
 import il.kmi.app.ui.pdf.KmiPdfHeader
 import il.kmi.app.ui.pdf.KmiPdfFooter
 import il.yuval.ui.theme.kmiScreenBackgroundBrush
+import il.yuval.ui.theme.kmiSectionHeaderBackground
+import il.yuval.ui.theme.kmiSectionHeaderContentColor
 import java.io.File
 import java.io.FileOutputStream
 import java.util.Locale
@@ -1373,17 +1376,49 @@ fun MembershipPaymentScreen(
                         Modifier
                             .fillMaxSize()
                             .padding(innerPadding)
-                            .verticalScroll(rememberScrollState())
-                            .imePadding()
-                            .navigationBarsPadding()
-                            .padding(
-                                horizontal = 14.dp,
-                                vertical = 10.dp
-                            ),
-                    verticalArrangement =
-                        Arrangement.spacedBy(8.dp)
                 ) {
-                    if (serverPrefillLoadFailed) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(56.dp)
+                            .kmiSectionHeaderBackground(),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text =
+                                if (isEnglish) {
+                                    "Association membership\nSecure registration before payment"
+                                } else {
+                                    "חברות בעמותה\nרישום מאובטח לתשלום לפני מעבר לסליקה"
+                                },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 16.dp),
+                            style = KmiTypography.secondary.copy(
+                                fontWeight = FontWeight.Black
+                            ),
+                            color = kmiSectionHeaderContentColor(),
+                            textAlign = TextAlign.Center,
+                            maxLines = 2,
+                            overflow = TextOverflow.Clip
+                        )
+                    }
+
+                    Column(
+                        modifier =
+                            Modifier
+                                .weight(1f)
+                                .verticalScroll(rememberScrollState())
+                                .imePadding()
+                                .navigationBarsPadding()
+                                .padding(
+                                    horizontal = 14.dp,
+                                    vertical = 10.dp
+                                ),
+                        verticalArrangement =
+                            Arrangement.spacedBy(8.dp)
+                    ) {
+                        if (serverPrefillLoadFailed) {
                         Card(
                             shape = RoundedCornerShape(18.dp),
                             colors =
@@ -2178,7 +2213,8 @@ fun MembershipPaymentScreen(
                     MaterialTheme.colorScheme.surface
             )
         }
-    } // סוף KmiLanguageDirection
+     }
+    }
 }
 
 @Composable
@@ -2186,16 +2222,28 @@ private fun ProductHeroCard(
     isEnglish: Boolean,
     amountText: String
 ) {
-    val textAlign = TextAlign.Start
-    val horizontalAlignment = if (isEnglish) Alignment.Start else Alignment.End
+    val textAlign =
+        if (isEnglish) {
+            TextAlign.Start
+        } else {
+            TextAlign.End
+        }
 
-    val compactAmount = amountText
-        .replace(".00", "")
-        .replace("150 ₪", "₪150")
+    val horizontalAlignment =
+        if (isEnglish) {
+            Alignment.Start
+        } else {
+            Alignment.End
+        }
+
+    val compactAmount =
+        amountText
+            .replace(".00", "")
+            .replace("150 ₪", "₪150")
 
     Card(
         modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(22.dp),
+        shape = RoundedCornerShape(24.dp),
         colors =
             CardDefaults.cardColors(
                 containerColor =
@@ -2203,7 +2251,15 @@ private fun ProductHeroCard(
             ),
         elevation =
             CardDefaults.cardElevation(
-                defaultElevation = 0.dp
+                defaultElevation = 0.dp,
+                pressedElevation = 0.dp
+            ),
+        border =
+            androidx.compose.foundation.BorderStroke(
+                width = 1.dp,
+                color =
+                    MaterialTheme.colorScheme.outlineVariant
+                        .copy(alpha = 0.85f)
             )
     ) {
         Column(
@@ -2211,43 +2267,64 @@ private fun ProductHeroCard(
                 Modifier
                     .fillMaxWidth()
                     .padding(
-                        horizontal = 12.dp,
-                        vertical = 10.dp
+                        horizontal = 16.dp,
+                        vertical = 16.dp
                     ),
             verticalArrangement =
-                Arrangement.spacedBy(6.dp),
+                Arrangement.spacedBy(14.dp),
             horizontalAlignment = horizontalAlignment
         ) {
-            Box(
-                modifier = Modifier.fillMaxWidth()
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement =
+                    Arrangement.spacedBy(12.dp)
             ) {
-                Surface(
-                    modifier = Modifier.align(Alignment.Center),
-                    shape = RoundedCornerShape(18.dp),
-                    color = Color(0xFF8B5CF6)
+                Column(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement =
+                        Arrangement.spacedBy(4.dp),
+                    horizontalAlignment = horizontalAlignment
                 ) {
                     Text(
-                        text = compactAmount,
-                        style = KmiTypography.sectionTitle,
-                        fontWeight = FontWeight.Bold,
-                        color = Color.White,
-                        modifier = Modifier.padding(
-                            horizontal = 22.dp,
-                            vertical = 10.dp
-                        ),
-                        maxLines = 1
+                        text =
+                            if (isEnglish) {
+                                "Amount to pay"
+                            } else {
+                                "סכום לתשלום"
+                            },
+                        style = KmiTypography.secondary,
+                        color =
+                            MaterialTheme.colorScheme.onSurfaceVariant,
+                        textAlign = textAlign,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+
+                    Text(
+                        text =
+                            if (isEnglish) {
+                                "Association membership fee"
+                            } else {
+                                "דמי חבר לעמותה"
+                            },
+                        style = KmiTypography.cardTitle,
+                        fontWeight = FontWeight.ExtraBold,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        textAlign = textAlign,
+                        modifier = Modifier.fillMaxWidth(),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
                     )
                 }
 
                 Surface(
-                    modifier = Modifier.align(Alignment.CenterStart),
                     shape = RoundedCornerShape(18.dp),
                     color = MaterialTheme.colorScheme.surfaceVariant
                 ) {
                     Box(
                         modifier = Modifier
-                            .size(46.dp)
-                            .padding(11.dp),
+                            .size(52.dp)
+                            .padding(12.dp),
                         contentAlignment = Alignment.Center
                     ) {
                         Icon(
@@ -2259,29 +2336,58 @@ private fun ProductHeroCard(
                 }
             }
 
-            Text(
-                text = if (isEnglish) "Association Membership" else "חברות בעמותה",
-                style = KmiTypography.cardTitle,
-                color = MaterialTheme.colorScheme.onSurface,
+            Surface(
                 modifier = Modifier.fillMaxWidth(),
-                textAlign = textAlign,
-                maxLines = 1,
-                overflow = TextOverflow.Clip
-            )
+                shape = RoundedCornerShape(22.dp),
+                color = MaterialTheme.colorScheme.primary
+            ) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(
+                            horizontal = 16.dp,
+                            vertical = 16.dp
+                        ),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = compactAmount,
+                        style = KmiTypography.screenTitle,
+                        fontWeight = FontWeight.Black,
+                        color = MaterialTheme.colorScheme.onPrimary,
+                        textAlign = TextAlign.Center,
+                        maxLines = 1
+                    )
+                }
+            }
 
-            Text(
-                text = if (isEnglish) {
-                    "Secure payment registration before continuing"
-                } else {
-                    "רישום מאובטח לתשלום לפני מעבר לסליקה"
-                },
-                style = KmiTypography.body,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            Surface(
                 modifier = Modifier.fillMaxWidth(),
-                textAlign = textAlign,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis
-            )
+                shape = RoundedCornerShape(16.dp),
+                color =
+                    MaterialTheme.colorScheme.primary.copy(
+                        alpha = 0.08f
+                    )
+            ) {
+                Text(
+                    text =
+                        if (isEnglish) {
+                            "Secure one-time registration before payment"
+                        } else {
+                            "רישום מאובטח חד-פעמי לפני מעבר לתשלום"
+                        },
+                    style = KmiTypography.secondary,
+                    color =
+                        MaterialTheme.colorScheme.onSurfaceVariant,
+                    textAlign = textAlign,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(
+                            horizontal = 12.dp,
+                            vertical = 10.dp
+                        )
+                )
+            }
         }
     }
 }

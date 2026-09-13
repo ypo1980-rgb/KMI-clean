@@ -35,6 +35,7 @@ import il.yuval.ui.theme.kmiScreenBackgroundBrush
 import il.yuval.ui.theme.kmiSectionHeaderBrush
 import il.yuval.ui.theme.kmiSectionHeaderContentColor
 import il.kmi.shared.localization.AppLanguageManager
+import il.yuval.ui.theme.kmiSectionHeaderBackground
 import kotlinx.coroutines.delay
 import java.util.Locale
 import kotlin.time.Duration.Companion.milliseconds
@@ -444,9 +445,7 @@ fun ExamScreen(
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .background(
-                        brush = kmiSectionHeaderBrush()
-                    )
+                    .kmiSectionHeaderBackground()
                     .padding(
                         horizontal = 16.dp,
                         vertical = 7.dp

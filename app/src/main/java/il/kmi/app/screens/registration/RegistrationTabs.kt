@@ -12,7 +12,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import il.yuval.ui.theme.kmiSectionHeaderBrush
+import il.yuval.ui.theme.kmiSectionHeaderBackground
 
 /**
  * קומפוננטה של הטאבים למעלה במסך ההרשמה.
@@ -38,10 +38,8 @@ fun RegistrationTabs(
     Box(
         modifier = modifier
             .fillMaxWidth()
-            .height(54.dp)
-            .background(
-                brush = kmiSectionHeaderBrush()
-            )
+            .height(56.dp)
+            .kmiSectionHeaderBackground()
     ) {
 
         /*

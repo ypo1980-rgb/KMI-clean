@@ -73,6 +73,7 @@ import il.kmi.app.privacy.TraineeDisplayNameMapper
 import il.kmi.app.screens.registration.CoachBranchAssignmentsCodec
 import il.kmi.app.ui.KmiPremiumDropdown
 import il.kmi.app.ui.KmiTypography
+import il.yuval.ui.theme.kmiSectionHeaderBackground
 import il.yuval.ui.theme.kmiSectionHeaderBrush
 
 //======================================================================
@@ -2384,9 +2385,7 @@ fun CoachBroadcastScreen(
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(54.dp)
-                        .background(
-                            brush = kmiSectionHeaderBrush()
-                        ),
+                        .kmiSectionHeaderBackground(),
                     contentAlignment = Alignment.Center
                 ) {
                     Text(

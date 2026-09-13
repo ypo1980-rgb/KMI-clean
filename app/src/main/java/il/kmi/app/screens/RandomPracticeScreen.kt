@@ -61,6 +61,7 @@ import il.kmi.app.ui.KmiTypography
 import il.kmi.shared.domain.content.ExerciseTitlesEn
 import il.kmi.shared.domain.content.ExerciseIdentityRegistry
 import il.yuval.ui.theme.kmiScreenBackgroundBrush
+import il.yuval.ui.theme.kmiSectionHeaderBackground
 import il.yuval.ui.theme.kmiSectionHeaderBrush
 import il.yuval.ui.theme.kmiSectionHeaderContentColor
 
@@ -1549,9 +1550,7 @@ fun RandomPracticeScreen(
                     .heightIn(min = 72.dp)
                     .then(
                         if (selectedSubjectFilter == null) {
-                            Modifier.background(
-                                brush = kmiSectionHeaderBrush()
-                            )
+                            Modifier.kmiSectionHeaderBackground()
                         } else {
                             Modifier.padding(top = 56.dp)
                         }
@@ -3043,9 +3042,7 @@ private fun PracticeSubjectHeader(
     Box(
         modifier = modifier
             .heightIn(min = 52.dp)
-            .background(
-                brush = kmiSectionHeaderBrush()
-            )
+            .kmiSectionHeaderBackground()
             .padding(
                 horizontal = 16.dp,
                 vertical = 4.dp

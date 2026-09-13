@@ -86,6 +86,7 @@ import il.kmi.app.ui.pdf.KmiPdfDirection
 import il.kmi.app.ui.pdf.KmiPdfHeader
 import il.kmi.app.ui.pdf.KmiPdfFooter
 import il.yuval.ui.theme.kmiScreenBackgroundBrush
+import il.yuval.ui.theme.kmiSectionHeaderBackground
 import il.yuval.ui.theme.kmiSectionHeaderBrush
 
 
@@ -892,9 +893,7 @@ fun PaymentsReportScreen(
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .background(
-                                brush = kmiSectionHeaderBrush()
-                            )
+                            .kmiSectionHeaderBackground()
                             .padding(vertical = 4.dp),
                         contentAlignment = Alignment.Center
                     ) {

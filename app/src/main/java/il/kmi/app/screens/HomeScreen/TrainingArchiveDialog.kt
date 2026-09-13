@@ -22,6 +22,8 @@ import il.kmi.app.ui.KmiTypography
 import il.kmi.app.ui.loading.KmiLoadingRings
 import il.kmi.app.ui.scaledIconSize
 import il.yuval.ui.theme.kmiScreenBackgroundBrush
+import il.yuval.ui.theme.kmiSectionHeaderBackground
+import il.yuval.ui.theme.kmiSectionHeaderContentColor
 import il.kmi.shared.localization.AppLanguage
 import il.kmi.shared.localization.AppLanguageManager
 import androidx.compose.foundation.layout.fillMaxSize
@@ -67,7 +69,7 @@ import il.kmi.app.training.TrainingOverride
 import il.kmi.app.training.TrainingOverrideRepository
 import il.kmi.app.training.TrainingStatusEngine
 import il.kmi.app.ui.calendar.KmiCalendarMarkers
-import il.kmi.app.ui.calendar.KmiCalendarPickerDialog
+import il.kmi.app.ui.calendar.KmiCalendarMonth
 import il.kmi.app.ui.pdf.KmiPdfDirection
 import il.kmi.app.ui.pdf.KmiPdfFooter
 import il.kmi.app.ui.pdf.KmiPdfHeader
@@ -529,111 +531,243 @@ fun TrainingArchiveScreen(
                 layoutDirection
     ) {
         Box(
+            modifier =
+                Modifier
+                    .fillMaxSize()
+                    .background(
+                        brush =
+                            kmiScreenBackgroundBrush()
+                    )
+        ) {
+            Scaffold(
                 modifier =
-                    Modifier
-                        .fillMaxSize()
-                        .background(
-                            brush =
-                                kmiScreenBackgroundBrush()
-                        )
-            ) {
-                Scaffold(
-                    modifier =
-                        Modifier.fillMaxSize(),
-                    containerColor =
-                        Color.Transparent,
-                    contentWindowInsets =
-                        androidx.compose.foundation.layout
-                            .WindowInsets(0),
-                    topBar = {
-                        val languageManager =
-                            remember(context) {
-                                AppLanguageManager(
-                                    context
-                                )
-                            }
+                    Modifier.fillMaxSize(),
+                containerColor =
+                    Color.Transparent,
+                contentWindowInsets =
+                    androidx.compose.foundation.layout
+                        .WindowInsets(0),
+                topBar = {
+                    val languageManager =
+                        remember(context) {
+                            AppLanguageManager(
+                                context
+                            )
+                        }
 
-                        KmiTopBar(
-                            title =
-                                if (isEnglish) {
-                                    "Training Archive"
-                                } else {
-                                    "ארכיון אימונים"
-                                },
-                            currentLang =
-                                if (isEnglish) {
-                                    "en"
-                                } else {
-                                    "he"
-                                },
-                            onHome = onHome,
-                            onSettings = onSettings,
-                            onOpenDrawer =
-                                onOpenDrawer,
-                            onPickSearchResult =
-                                onOpenExercise,
-                            onOpenAi = onOpenAi,
-                            modePillIsCoach = null,
-                            showMenu = true,
-                            showFontQuick = true,
-                            showRoleStatus = true,
-                            showSettings = true,
-                            showBottomActions = true,
-                            showModePill = true,
-                            showRoleBadge = true,
-                            showTopHome = true,
-                            showTopSearch = true,
-                            showTopShare = true,
-                            onShare = {
-                                shareTrainingArchivePdf(
-                                    context = context,
-                                    items =
-                                        filteredItems.map { item ->
-                                            item.toPdfItem(
-                                                isEnglish = isEnglish,
-                                                locale = locale
-                                            )
-                                        },
-                                    fromDate = fromDate,
-                                    toDate = toDate,
-                                    isEnglish = isEnglish
-                                )
-                            },
-                            useCloseIcon = false,
-                            onBack = onBack,
-                            onToggleLanguage = {
-                                val newLanguage =
-                                    if (
-                                        languageManager
-                                            .getCurrentLanguage() ==
-                                        AppLanguage.HEBREW
-                                    ) {
-                                        AppLanguage.ENGLISH
+                    KmiTopBar(
+                        title =
+                            when {
+                                showFromDatePicker ->
+                                    if (isEnglish) {
+                                        "Select start date"
                                     } else {
-                                        AppLanguage.HEBREW
+                                        "בחירת תאריך התחלה"
                                     }
 
-                                languageManager
-                                    .setLanguage(
-                                        newLanguage
-                                    )
+                                showToDatePicker ->
+                                    if (isEnglish) {
+                                        "Select end date"
+                                    } else {
+                                        "בחירת תאריך סיום"
+                                    }
 
-                                (context as? Activity)
-                                    ?.recreate()
-                            }
-                        )
-                    }
-                ) { topBarPadding ->
-                    Column(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .padding(
-                                top =
-                                    topBarPadding
-                                        .calculateTopPadding() + 30.dp
+                                else ->
+                                    if (isEnglish) {
+                                        "Training Archive"
+                                    } else {
+                                        "ארכיון אימונים"
+                                    }
+                            },
+                        currentLang =
+                            if (isEnglish) {
+                                "en"
+                            } else {
+                                "he"
+                            },
+                        onHome = onHome,
+                        onSettings = onSettings,
+                        onOpenDrawer =
+                            onOpenDrawer,
+                        onPickSearchResult =
+                            onOpenExercise,
+                        onOpenAi = onOpenAi,
+                        modePillIsCoach = null,
+                        showMenu = true,
+                        showFontQuick = true,
+                        showRoleStatus = true,
+                        showSettings = true,
+                        showBottomActions = true,
+                        showModePill = true,
+                        showRoleBadge = true,
+                        showTopHome = true,
+                        showTopSearch = true,
+                        showTopShare = true,
+                        onShare = {
+                            shareTrainingArchivePdf(
+                                context = context,
+                                items =
+                                    filteredItems.map { item ->
+                                        item.toPdfItem(
+                                            isEnglish = isEnglish,
+                                            locale = locale
+                                        )
+                                    },
+                                fromDate = fromDate,
+                                toDate = toDate,
+                                isEnglish = isEnglish
                             )
-                            .navigationBarsPadding()
+                        },
+                        useCloseIcon = false,
+                        onBack = {
+                            when {
+                                showFromDatePicker ->
+                                    showFromDatePicker = false
+
+                                showToDatePicker ->
+                                    showToDatePicker = false
+
+                                else ->
+                                    onBack()
+                            }
+                        },
+                        onToggleLanguage = {
+                            val newLanguage =
+                                if (
+                                    languageManager
+                                        .getCurrentLanguage() ==
+                                    AppLanguage.HEBREW
+                                ) {
+                                    AppLanguage.ENGLISH
+                                } else {
+                                    AppLanguage.HEBREW
+                                }
+
+                            languageManager
+                                .setLanguage(
+                                    newLanguage
+                                )
+
+                            (context as? Activity)
+                                ?.recreate()
+                        }
+                    )
+                }
+            ) { topBarPadding ->
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(
+                            top =
+                                topBarPadding
+                                    .calculateTopPadding()
+                        )
+                        .navigationBarsPadding()
+                ) {
+
+                    if (
+                        showFromDatePicker ||
+                        showToDatePicker
                     ) {
+                        val calendarSelectedDate =
+                            if (showFromDatePicker) {
+                                today.withDayOfMonth(1)
+                            } else {
+                                toDate
+                            }
+
+                        var visibleCalendarMonth by remember(
+                            calendarSelectedDate
+                        ) {
+                            mutableStateOf(
+                                java.time.YearMonth.from(
+                                    calendarSelectedDate
+                                )
+                            )
+                        }
+
+                        KmiCalendarMonth(
+                            visibleMonth =
+                                visibleCalendarMonth,
+                            selectedDate =
+                                calendarSelectedDate,
+                            isEnglish = isEnglish,
+                            onVisibleMonthChange = {
+                                visibleCalendarMonth = it
+                            },
+                            onDateSelected = { selectedDate ->
+
+                                if (showFromDatePicker) {
+                                    fromDate =
+                                        selectedDate
+
+                                    if (
+                                        selectedDate.isAfter(
+                                            toDate
+                                        )
+                                    ) {
+                                        toDate =
+                                            selectedDate
+                                    }
+
+                                    showFromDatePicker =
+                                        false
+                                } else {
+                                    toDate =
+                                        selectedDate
+
+                                    if (
+                                        selectedDate.isBefore(
+                                            fromDate
+                                        )
+                                    ) {
+                                        fromDate =
+                                            selectedDate
+                                    }
+
+                                    showToDatePicker =
+                                        false
+                                }
+                            },
+                            modifier = Modifier
+                                .fillMaxWidth(),
+                            markers = calendarMarkers
+                        )
+                    } else {
+
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(56.dp)
+                                .kmiSectionHeaderBackground(),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text =
+                                    if (isEnglish) {
+                                        "Training history and date range"
+                                    } else {
+                                        "היסטוריית אימונים וטווח תאריכים"
+                                    },
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 16.dp),
+                                style =
+                                    KmiTypography.secondary.copy(
+                                        fontWeight = FontWeight.Black
+                                    ),
+                                color =
+                                    kmiSectionHeaderContentColor(),
+                                textAlign = TextAlign.Center,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
+
+                        Spacer(
+                            Modifier.height(10.dp)
+                        )
+
                         ArchiveFilterPanel(
                             fromDate = fromDate,
                             toDate = toDate,
@@ -647,8 +781,7 @@ fun TrainingArchiveScreen(
                                 cancelledCount,
                             selectedStatusFilter =
                                 statusFilter,
-                            onStatusFilterSelected = {
-                                    selectedFilter ->
+                            onStatusFilterSelected = { selectedFilter ->
 
                                 statusFilter =
                                     if (
@@ -668,8 +801,7 @@ fun TrainingArchiveScreen(
                                 showToDatePicker =
                                     true
                             },
-                            onQuickRangeSelected = {
-                                    days ->
+                            onQuickRangeSelected = { days ->
 
                                 fromDate =
                                     today.minusDays(
@@ -767,58 +899,7 @@ fun TrainingArchiveScreen(
                         }
                     }
                 }
-        }
-
-        if (showFromDatePicker) {
-            KmiCalendarPickerDialog(
-                title =
-                    if (isEnglish) {
-                        "Select start date"
-                    } else {
-                        "בחירת תאריך התחלה"
-                    },
-                selectedDate = fromDate,
-                isEnglish = isEnglish,
-                markers = calendarMarkers,
-                onDismiss = {
-                    showFromDatePicker = false
-                },
-                onDateSelected = { selectedDate ->
-                    fromDate = selectedDate
-
-                    if (selectedDate.isAfter(toDate)) {
-                        toDate = selectedDate
-                    }
-
-                    showFromDatePicker = false
-                }
-            )
-        }
-
-        if (showToDatePicker) {
-            KmiCalendarPickerDialog(
-                title =
-                    if (isEnglish) {
-                        "Select end date"
-                    } else {
-                        "בחירת תאריך סיום"
-                    },
-                selectedDate = toDate,
-                isEnglish = isEnglish,
-                markers = calendarMarkers,
-                onDismiss = {
-                    showToDatePicker = false
-                },
-                onDateSelected = { selectedDate ->
-                    toDate = selectedDate
-
-                    if (selectedDate.isBefore(fromDate)) {
-                        fromDate = selectedDate
-                    }
-
-                    showToDatePicker = false
-                }
-            )
+            }
         }
     }
 }
