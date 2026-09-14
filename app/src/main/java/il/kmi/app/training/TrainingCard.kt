@@ -57,7 +57,12 @@ private fun onlyTime(s: String): String {
 
 @OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
 @Composable
-fun TrainingCardCompact(training: TrainingData) {
+fun TrainingCardCompact(
+    training: TrainingData,
+    expectedComing: Int = 0,
+    expectedNotComing: Int = 0,
+    expectedNoResponse: Int = 0
+) {
     val context = LocalContext.current
 
     // יום + תאריך
@@ -167,6 +172,55 @@ fun TrainingCardCompact(training: TrainingData) {
                         )
                     }
                 }
+            }
+
+            Spacer(Modifier.height(10.dp))
+
+            HorizontalDivider(
+                modifier = Modifier.fillMaxWidth(),
+                thickness = 1.dp,
+                color = MaterialTheme.colorScheme.outline.copy(
+                    alpha = 0.18f
+                )
+            )
+
+            Spacer(Modifier.height(8.dp))
+
+            Text(
+                text = "צפי הגעה",
+                style = MaterialTheme.typography.labelMedium,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+
+            Spacer(Modifier.height(6.dp))
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+
+                Text(
+                    text = "✓ $expectedComing מגיעים",
+                    style = MaterialTheme.typography.bodySmall,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.primary
+                )
+
+                Text(
+                    text = "✕ $expectedNotComing לא מגיעים",
+                    style = MaterialTheme.typography.bodySmall,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.error
+                )
+
+                Text(
+                    text = "? $expectedNoResponse טרם סימנו",
+                    style = MaterialTheme.typography.bodySmall,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
             }
         }
     }

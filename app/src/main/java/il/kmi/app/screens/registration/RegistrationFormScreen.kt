@@ -12,27 +12,17 @@ import android.widget.Toast
 import android.util.Log
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.shape.CircleShape
 import androidx.core.content.edit
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.layout.*
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Home
-import androidx.compose.material.icons.filled.Info
-import androidx.compose.material.icons.filled.Menu
-import androidx.compose.material.icons.filled.Search
-import androidx.compose.material.icons.filled.Settings
-import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.listSaver
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.text.font.FontWeight
@@ -43,6 +33,7 @@ import androidx.compose.ui.unit.dp
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.FirebaseAuthUserCollisionException
 import com.google.firebase.firestore.FirebaseFirestore
+import il.kmi.app.auth.GoogleAuthManager
 import com.google.firebase.firestore.SetOptions
 import il.kmi.app.training.TrainingCatalog
 import il.kmi.app.database.KmiDatabaseProvider
@@ -51,10 +42,8 @@ import il.kmi.app.FcmTokenManager
 import il.kmi.app.KmiCalendarSync
 import il.kmi.app.hasCalendarPermission
 import il.kmi.app.training.TrainingAlarmReceiver
-import il.kmi.app.ui.KmiIconSize
 import il.kmi.app.ui.KmiTypography
 import il.yuval.ui.theme.kmiSectionHeaderBackground
-import il.yuval.ui.theme.kmiSectionHeaderBrush
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -89,205 +78,6 @@ private fun maskedPhoneForLog(phone: String): String {
     val digits = phone.filter { it.isDigit() }
     if (digits.isBlank()) return "empty"
     return "len=${digits.length}, last4=${digits.takeLast(4)}"
-}
-
-@Composable
-private fun RegistrationFormLockedTopBar(
-    title: String,
-    isEnglish: Boolean,
-    onLockedAction: (String) -> Unit
-) {
-    Surface(
-        modifier = Modifier.fillMaxWidth(),
-        color = MaterialTheme.colorScheme.surface,
-        shadowElevation = 0.dp,
-        tonalElevation = 0.dp
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(142.dp), // 56 top + 86 bottom — כמו KmiTopBar
-            horizontalAlignment = Alignment.CenterHorizontally
-        ) {
-            CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(56.dp)
-                        .padding(horizontal = 8.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    // איזון מול כפתור התפריט כדי שהכותרת תישאר במרכז
-                    Spacer(Modifier.width(38.dp))
-
-                    Text(
-                        text = title,
-                        modifier = Modifier
-                            .weight(1f)
-                            .padding(horizontal = 8.dp),
-                        textAlign = TextAlign.Center,
-                        maxLines = 2,
-                        overflow = TextOverflow.Ellipsis,
-                        style = KmiTypography.screenTitle.copy(
-                            fontWeight = FontWeight.ExtraBold
-                        ),
-                        color = MaterialTheme.colorScheme.onSurface
-                    )
-
-                    Box(
-                        modifier = Modifier
-                            .size(KmiIconSize.medium)
-                            .clip(RoundedCornerShape(8.dp))
-                            .background(
-                                MaterialTheme.colorScheme.primaryContainer
-                                    .copy(alpha = 0.72f)
-                            )
-                            .clickable {
-                                onLockedAction(
-                                    if (isEnglish) {
-                                        "Menu"
-                                    } else {
-                                        "התפריט"
-                                    }
-                                )
-                            },
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(
-                            imageVector = Icons.Filled.Menu,
-                            contentDescription =
-                                if (isEnglish) {
-                                    "Menu"
-                                } else {
-                                    "תפריט"
-                                },
-                            tint =
-                                MaterialTheme.colorScheme.onPrimaryContainer,
-                            modifier = Modifier.size(
-                                KmiIconSize.small
-                            )
-                        )
-                    }
-                }
-            }
-
-            Spacer(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(1.dp)
-            )
-
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(85.dp)
-                    .padding(horizontal = 6.dp),
-                horizontalArrangement = Arrangement.SpaceEvenly,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                RegistrationFormLockedTopAction(
-                    label = if (isEnglish) "Search" else "חיפוש",
-                    icon = Icons.Filled.Search,
-                    iconTint = Color(0xFF12B886),
-                    circleColor = Color(0xFFD6F5EA),
-                    onClick = {
-                        onLockedAction(if (isEnglish) "Search" else "אייקון החיפוש")
-                    }
-                )
-
-                RegistrationFormLockedTopAction(
-                    label = if (isEnglish) "Home" else "בית",
-                    icon = Icons.Filled.Home,
-                    iconTint = Color(0xFF2F6FE4),
-                    circleColor = Color(0xFFD8E5FF),
-                    onClick = {
-                        onLockedAction(if (isEnglish) "Home" else "אייקון הבית")
-                    }
-                )
-
-                RegistrationFormLockedTopAction(
-                    label = if (isEnglish) "Settings" else "הגדרות",
-                    icon = Icons.Filled.Settings,
-                    iconTint = Color(0xFFFF9800),
-                    circleColor = Color(0xFFFFEAC2),
-                    onClick = {
-                        onLockedAction(if (isEnglish) "Settings" else "אייקון ההגדרות")
-                    }
-                )
-
-                RegistrationFormLockedTopAction(
-                    label = if (isEnglish) "Assistant" else "עוזר",
-                    icon = Icons.Filled.Info,
-                    iconTint = Color(0xFF7C4DFF),
-                    circleColor = Color(0xFFE5D8FF),
-                    onClick = {
-                        onLockedAction(if (isEnglish) "Assistant" else "אייקון העוזר")
-                    }
-                )
-
-                RegistrationFormLockedTopAction(
-                    label = if (isEnglish) "Share" else "שתף",
-                    icon = Icons.Filled.Share,
-                    iconTint = Color(0xFFE83E8C),
-                    circleColor = Color(0xFFFFD7EA),
-                    onClick = {
-                        onLockedAction(if (isEnglish) "Share" else "אייקון השיתוף")
-                    }
-                )
-            }
-        }
-    }
-}
-
-@Composable
-private fun RegistrationFormLockedTopAction(
-    label: String,
-    icon: ImageVector,
-    iconTint: Color,
-    circleColor: Color,
-    onClick: () -> Unit
-) {
-    Column(
-        horizontalAlignment = Alignment.CenterHorizontally,
-        modifier = Modifier.width(64.dp)
-    ) {
-        Surface(
-            shape = CircleShape,
-            color = circleColor,
-            modifier = Modifier.size(
-                KmiIconSize.large
-            ),
-            shadowElevation = 0.dp,
-            tonalElevation = 0.dp
-        ) {
-            IconButton(
-                onClick = onClick,
-                modifier = Modifier.fillMaxSize()
-            ) {
-                Icon(
-                    imageVector = icon,
-                    contentDescription = label,
-                    tint = iconTint,
-                    modifier = Modifier.size(
-                        KmiIconSize.medium
-                    )
-                )
-            }
-        }
-
-        Spacer(Modifier.height(5.dp))
-
-        Text(
-            text = label,
-            style = KmiTypography.caption.copy(
-                fontWeight = FontWeight.ExtraBold
-            ),
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            textAlign = TextAlign.Center,
-            maxLines = 2,
-            overflow = TextOverflow.Ellipsis
-        )
-    }
 }
 
 @Composable
@@ -1671,6 +1461,8 @@ fun RegistrationFormScreen(
 
             val firestoreData = hashMapOf(
                 "uid" to finalUid,
+                "role" to roleFinal,
+                "user_role" to roleFinal,
                 "fullName" to fullName,
                 "phone" to phoneFinal,
                 "phoneNumber" to phoneFinal,
@@ -1887,17 +1679,39 @@ fun RegistrationFormScreen(
                     }
                 }
                 .addOnFailureListener { error ->
+                    val durationMs =
+                        System.currentTimeMillis() - saveStartedAt
+
                     Log.e(
                         TAG_REG,
-                        "stage=firestore_persist_failure durationMs=${
-                            System.currentTimeMillis() - saveStartedAt
-                        }, finalUid=$finalUid, errorClass=${error.javaClass.name}, errorMessage=${error.message.orEmpty()}, ${regAuthStateForLog()}",
+                        "stage=firestore_persist_failure durationMs=$durationMs, " +
+                                "finalUid=$finalUid, " +
+                                "errorClass=${error.javaClass.name}, " +
+                                "errorMessage=${error.message.orEmpty()}, " +
+                                regAuthStateForLog(),
                         error
+                    )
+
+                    GoogleAuthManager.logUiStage(
+                        context = ctx,
+                        stage = "registration_firestore_persist_failure",
+                        message =
+                            "durationMs=$durationMs, " +
+                                    "role=$roleFinal, " +
+                                    "isGoogleAuth=$isGoogleAuth, " +
+                                    "startAtProfile=$startAtProfile, " +
+                                    "branchCount=${branchesListFinalForPrefs.size}, " +
+                                    "groupCount=${groupsListFinalForPrefs.size}",
+                        error = error
                     )
 
                     Toast.makeText(
                         ctx,
-                        if (isEnglish) "Saving registration failed" else "שמירת הרישום נכשלה",
+                        if (isEnglish) {
+                            "Saving registration failed. Please try again."
+                        } else {
+                            "שמירת הרישום נכשלה. נסה שוב."
+                        },
                         Toast.LENGTH_LONG
                     ).show()
                 }
@@ -2011,40 +1825,45 @@ fun RegistrationFormScreen(
     // ====== UI ======
     Scaffold(
         topBar = {
-            if (startAtProfile) {
-                // ✅ עריכת פרופיל מתוך האפליקציה:
-                // המשתמש כבר מזוהה, לכן האייקונים נשארים פעילים כרגיל.
-                il.kmi.app.ui.KmiTopBar(
-                    title = if (isEnglish) "Edit Profile" else "עריכת פרופיל",
-                    showRoleStatus = false,
-                    onOpenDrawer = onOpenDrawer,
-                    onHome = {
-                        onOpenHome()
+            il.kmi.app.ui.KmiTopBar(
+                title =
+                    if (startAtProfile) {
+                        if (isEnglish) {
+                            "Edit Profile"
+                        } else {
+                            "עריכת פרופיל"
+                        }
+                    } else {
+                        if (isEnglish) {
+                            "Registration Form"
+                        } else {
+                            "טופס רישום"
+                        }
                     },
-                    lockSearch = true,
-                    lockHome = false,
-                    showTopHome = false,
-                    showBottomActions = true
-                )
-            } else {
-                // ✅ רישום ראשוני:
-                // לפני הזדהות מלאה — האייקונים צבעוניים אבל חסומים.
-                RegistrationFormLockedTopBar(
-                    title = if (isEnglish) "Registration Form" else "טופס רישום",
-                    isEnglish = isEnglish,
-                    onLockedAction = { actionName ->
-                        Toast.makeText(
-                            ctx,
-                            if (isEnglish) {
-                                "$actionName will be available after sign in or registration"
-                            } else {
-                                "$actionName יהיה זמין לאחר כניסה / רישום"
-                            },
-                            Toast.LENGTH_SHORT
-                        ).show()
-                    }
-                )
-            }
+
+                // ✅ סרגל צד גלובלי
+                showMenu = true,
+                onOpenDrawer = onOpenDrawer,
+
+                // ✅ מצב מתאמן / מאמן הגלובלי
+                showRoleStatus = true,
+                showRoleBadge = true,
+                showModePill = true,
+
+                // ✅ סרגל האייקונים הגלובלי המוסתר
+                showBottomActions = true,
+
+                // אין אייקוני בית/חיפוש בתוך הכותרת העליונה
+                showTopHome = false,
+                showTopSearch = false,
+
+                onHome = {
+                    onOpenHome()
+                },
+
+                lockHome = false,
+                lockSearch = false
+            )
         },
         containerColor = Color.Transparent,
         contentWindowInsets = WindowInsets(0)

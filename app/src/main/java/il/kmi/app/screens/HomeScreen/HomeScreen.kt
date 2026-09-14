@@ -27,7 +27,6 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Star
-import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Email
@@ -53,6 +52,9 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import il.kmi.app.R
+import il.kmi.app.attendance.data.AttendanceRepository
+import il.kmi.app.attendance.data.AttendanceStatus
+import il.kmi.app.attendance.data.TrainingAttendanceForecast
 import il.kmi.app.training.TrainingData
 import il.kmi.app.training.TrainingStatusEngine
 import il.kmi.app.training.TrainingOverride
@@ -116,6 +118,8 @@ import il.yuval.ui.theme.kmiScreenBackgroundBrush
 import il.yuval.ui.theme.kmiSectionHeaderBackground
 import il.yuval.ui.theme.kmiSectionHeaderContentColor
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
+import java.time.Instant
 import org.json.JSONArray
 import java.text.SimpleDateFormat
 import java.time.DayOfWeek
@@ -134,6 +138,7 @@ import il.yuval.ui.theme.kmiSuccessColor
 import il.yuval.ui.theme.kmiSuccessContainerColor
 import il.yuval.ui.theme.kmiWarningColor
 import il.yuval.ui.theme.kmiWarningContainerColor
+import java.time.ZoneId
 import kotlin.time.Duration.Companion.seconds
 
 //=================================================================================
@@ -2974,6 +2979,53 @@ fun HomeScreen(
                             }
                     }
 
+                /*
+ * סנכרון מופעי האימונים הקרובים ל-Firestore.
+ *
+ * מתבצע רק בצד המאמן.
+ * המתאמן אינו יוצר ואינו מעדכן trainingOccurrences.
+ *
+ * occurrenceKey + activeOverride כבר חושבו למעלה,
+ * ולכן אין כאן חישוב כפול.
+ */
+                LaunchedEffect(
+                    isCoach,
+                    currentUid,
+                    upcoming
+                ) {
+                    if (!isCoach) {
+                        return@LaunchedEffect
+                    }
+
+                    val uid =
+                        currentUid
+                            ?.trim()
+                            .orEmpty()
+
+                    if (uid.isBlank()) {
+                        return@LaunchedEffect
+                    }
+
+                    upcoming.forEach { item ->
+                        TrainingOverrideRepository
+                            .syncTrainingOccurrence(
+                                training = item.training,
+                                branch = item.branch,
+                                group = item.group,
+                                activeOverride = item.activeOverride,
+                                onResult = { _, _ ->
+                                    /*
+                                     * כשל בסנכרון occurrence לא מפיל
+                                     * את מסך הבית.
+                                     *
+                                     * לאחר שנאשר את ה-Rules אפשר
+                                     * להוסיף כאן לוג אבחון אם נרצה.
+                                     */
+                                }
+                            )
+                    }
+                }
+
                 LaunchedEffect(upcoming, isEnglish) {
                     val locale = if (isEnglish) {
                         Locale.ENGLISH
@@ -3069,6 +3121,10 @@ fun HomeScreen(
                             TrainingCardCompact(
                                 training = item.training,
                                 group = item.displayGroup,
+                                branch = item.branch,
+                                attendanceGroup = item.group,
+                                occurrenceKey = item.occurrenceKey,
+                                authUid = currentUid.orEmpty(),
                                 isCoach = isCoach,
                                 isEnglish = isEnglish,
                                 status = item.status,
@@ -5108,6 +5164,10 @@ private fun findExplanationForHit(
 private fun TrainingCardCompact(
     training: TrainingData,
     group: String,
+    branch: String,
+    attendanceGroup: String,
+    occurrenceKey: String,
+    authUid: String,
     isCoach: Boolean,
     isEnglish: Boolean,
     status: TrainingStatusEngine.Status,
@@ -5118,6 +5178,37 @@ private fun TrainingCardCompact(
     val ctx = LocalContext.current
     val haptic = rememberHapticsGlobal()
     val clickSound = rememberClickSound()
+
+    val attendanceRepository =
+        remember(ctx) {
+            AttendanceRepository.get(
+                ctx.applicationContext as android.app.Application
+            )
+        }
+
+    val attendanceScope =
+        rememberCoroutineScope()
+
+    var traineeAttendanceChoice by remember(
+        occurrenceKey,
+        authUid
+    ) {
+        mutableStateOf("")
+    }
+
+    var resolvedAttendanceMemberId by remember(
+        occurrenceKey,
+        authUid
+    ) {
+        mutableStateOf<Long?>(null)
+    }
+
+    var attendanceSaving by remember(
+        occurrenceKey,
+        authUid
+    ) {
+        mutableStateOf(false)
+    }
 
     var showNavPicker by rememberSaveable(
         training.cal.timeInMillis
@@ -5220,6 +5311,168 @@ private fun TrainingCardCompact(
         activeOverride?.isCancelled == true ||
                 status.state ==
                 TrainingStatusEngine.State.CANCELLED_BY_HOLIDAY
+
+    val trainingDate =
+        remember(effectiveStartMillis) {
+            Instant
+                .ofEpochMilli(
+                    effectiveStartMillis
+                )
+                .atZone(
+                    ZoneId.of(
+                        "Asia/Jerusalem"
+                    )
+                )
+                .toLocalDate()
+        }
+
+    val attendanceForecastFlow =
+        remember(
+            isCoach,
+            branch,
+            attendanceGroup,
+            trainingDate
+        ) {
+            if (
+                isCoach &&
+                branch.isNotBlank() &&
+                attendanceGroup.isNotBlank()
+            ) {
+                attendanceRepository
+                    .attendanceForecastForDay(
+                        branch = branch,
+                        groupKey = attendanceGroup,
+                        date = trainingDate
+                    )
+            } else {
+                null
+            }
+        }
+
+    val attendanceForecast =
+        if (attendanceForecastFlow != null) {
+            attendanceForecastFlow.collectAsState(
+                initial =
+                    TrainingAttendanceForecast()
+            ).value
+        } else {
+            TrainingAttendanceForecast()
+        }
+
+    /*
+     * מרגע תחילת האימון המתאמן אינו יכול
+     * לשנות יותר את הבחירה שלו.
+     */
+    val attendanceLocked =
+        nowMillis >= effectiveStartMillis
+
+    /*
+     * טוענים מ-Firestore את הבחירה שכבר
+     * נשמרה למתאמן באימון הזה.
+     */
+    LaunchedEffect(
+        occurrenceKey,
+        authUid,
+        branch,
+        attendanceGroup
+    ) {
+        if (
+            isCoach ||
+            authUid.isBlank() ||
+            branch.isBlank() ||
+            attendanceGroup.isBlank()
+        ) {
+            resolvedAttendanceMemberId = null
+            traineeAttendanceChoice = ""
+            return@LaunchedEffect
+        }
+
+        try {
+            val memberId =
+                attendanceRepository
+                    .findMemberIdByAuthUid(
+                        branch = branch,
+                        groupKey = attendanceGroup,
+                        authUid = authUid
+                    )
+
+            resolvedAttendanceMemberId =
+                memberId
+
+            val savedStatus =
+                attendanceRepository
+                    .getTraineeOwnAttendance(
+                        branch = branch,
+                        groupKey = attendanceGroup,
+                        date = trainingDate,
+                        authUid = authUid
+                    )
+
+            traineeAttendanceChoice =
+                when (savedStatus) {
+                    AttendanceStatus.PRESENT ->
+                        "coming"
+
+                    AttendanceStatus.ABSENT ->
+                        "not_coming"
+
+                    else ->
+                        ""
+                }
+        } catch (_: Throwable) {
+            resolvedAttendanceMemberId = null
+        }
+    }
+
+    val canEditTraineeAttendance =
+        !attendanceLocked &&
+                !attendanceSaving &&
+                resolvedAttendanceMemberId != null &&
+                authUid.isNotBlank()
+
+    fun saveTraineeAttendance(
+        statusToSave: AttendanceStatus,
+        choiceToShow: String
+    ) {
+        if (!canEditTraineeAttendance) {
+            return
+        }
+
+        val memberId =
+            resolvedAttendanceMemberId
+                ?: return
+
+        attendanceSaving = true
+
+        attendanceScope.launch {
+            try {
+                attendanceRepository
+                    .markTraineeOwnAttendance(
+                        branch = branch,
+                        groupKey = attendanceGroup,
+                        date = trainingDate,
+                        memberId = memberId,
+                        authUid = authUid,
+                        status = statusToSave,
+                        trainingStartMillis =
+                            effectiveStartMillis,
+                        occurrenceKey =
+                            occurrenceKey
+                    )
+
+                traineeAttendanceChoice =
+                    choiceToShow
+
+            } catch (_: Throwable) {
+                /*
+                 * בכשל שמירה לא משנים את הבחירה
+                 * שמוצגת למשתמש.
+                 */
+            } finally {
+                attendanceSaving = false
+            }
+        }
+    }
 
     val millisUntilTraining =
         effectiveStartMillis - nowMillis
@@ -5675,13 +5928,6 @@ private fun TrainingCardCompact(
 
             Spacer(Modifier.height(4.dp))
 
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement =
-                    Arrangement.spacedBy(8.dp),
-                verticalAlignment =
-                    Alignment.CenterVertically
-            ) {
                 NavigationChip(
                     address =
                         TrainingCatalog.addressDisplayName(
@@ -5689,27 +5935,347 @@ private fun TrainingCardCompact(
                             isEnglish
                         ),
                     isEnglish = isEnglish,
-                    modifier = Modifier.weight(1f)
+                    modifier = Modifier.fillMaxWidth()
                 )
 
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement =
-                        Arrangement.spacedBy(8.dp),
-                    verticalAlignment =
-                        Alignment.CenterVertically
+                if (
+                    isCoach &&
+                    !isTrainingCancelled
                 ) {
-                    NavigationChip(
-                        address =
-                            TrainingCatalog.addressDisplayName(
-                                training.address,
-                                isEnglish
-                            ),
-                        isEnglish = isEnglish,
-                        modifier = Modifier.weight(1f)
+                    Spacer(Modifier.height(8.dp))
+
+                    HorizontalDivider(
+                        modifier = Modifier.fillMaxWidth(),
+                        thickness = 1.dp,
+                        color =
+                            MaterialTheme
+                                .colorScheme
+                                .outline
+                                .copy(alpha = 0.18f)
                     )
+
+                    Spacer(Modifier.height(6.dp))
+
+                    HorizontalDivider(
+                        modifier = Modifier.fillMaxWidth(),
+                        thickness = 1.dp,
+                        color =
+                            MaterialTheme
+                                .colorScheme
+                                .outline
+                                .copy(alpha = 0.16f)
+                    )
+
+                    Spacer(Modifier.height(5.dp))
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement =
+                            Arrangement.spacedBy(6.dp),
+                        verticalAlignment =
+                            Alignment.CenterVertically
+                    ) {
+                        AttendanceForecastPremiumCard(
+                            value = attendanceForecast.comingCount,
+                            title =
+                                if (isEnglish) {
+                                    "Coming"
+                                } else {
+                                    "מגיעים"
+                                },
+                            containerColor =
+                                kmiSuccessContainerColor()
+                                    .copy(alpha = 0.96f),
+                            contentColor =
+                                kmiOnSuccessContainerColor(),
+                            borderColor =
+                                kmiSuccessColor(),
+                            modifier = Modifier.weight(1f)
+                        )
+
+                        AttendanceForecastPremiumCard(
+                            value = attendanceForecast.notComingCount,
+                            title =
+                                if (isEnglish) {
+                                    "Not coming"
+                                } else {
+                                    "לא מגיעים"
+                                },
+                            containerColor =
+                                MaterialTheme
+                                    .colorScheme
+                                    .errorContainer
+                                    .copy(alpha = 0.96f),
+                            contentColor =
+                                MaterialTheme
+                                    .colorScheme
+                                    .onErrorContainer,
+                            borderColor =
+                                MaterialTheme
+                                    .colorScheme
+                                    .error,
+                            modifier = Modifier.weight(1f)
+                        )
+
+                        AttendanceForecastPremiumCard(
+                            value = attendanceForecast.noResponseCount,
+                            title =
+                                if (isEnglish) {
+                                    "Pending"
+                                } else {
+                                    "טרם סימנו"
+                                },
+                            containerColor =
+                                MaterialTheme
+                                    .colorScheme
+                                    .surfaceVariant
+                                    .copy(alpha = 0.82f),
+                            contentColor =
+                                MaterialTheme
+                                    .colorScheme
+                                    .onSurfaceVariant,
+                            borderColor =
+                                MaterialTheme
+                                    .colorScheme
+                                    .outline
+                                    .copy(alpha = 0.55f),
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
                 }
-            }
+
+                if (
+                    !isCoach &&
+                    !isTrainingCancelled
+                ) {
+                    Spacer(Modifier.height(8.dp))
+
+                    HorizontalDivider(
+                        modifier = Modifier.fillMaxWidth(),
+                        thickness = 1.dp,
+                        color =
+                            MaterialTheme
+                                .colorScheme
+                                .outline
+                                .copy(alpha = 0.18f)
+                    )
+
+                    Spacer(Modifier.height(8.dp))
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement =
+                            Arrangement.spacedBy(8.dp),
+                        verticalAlignment =
+                            Alignment.CenterVertically
+                    ) {
+                        val comingSelected =
+                            traineeAttendanceChoice == "coming"
+
+                        val notComingSelected =
+                            traineeAttendanceChoice == "not_coming"
+
+                        // =========================
+                        // לא מגיע
+                        // =========================
+                        Surface(
+                            modifier = Modifier
+                                .weight(1f)
+                                .heightIn(min = 44.dp)
+                                .clickable(
+                                    enabled =
+                                        canEditTraineeAttendance
+                                ) {
+                                    clickSound()
+                                    haptic(true)
+
+                                    saveTraineeAttendance(
+                                        statusToSave =
+                                            AttendanceStatus.ABSENT,
+                                        choiceToShow =
+                                            "not_coming"
+                                    )
+                                },
+                            shape = RoundedCornerShape(16.dp),
+                            color =
+                                if (notComingSelected) {
+                                    MaterialTheme
+                                        .colorScheme
+                                        .error
+                                } else {
+                                    MaterialTheme
+                                        .colorScheme
+                                        .surfaceVariant
+                                },
+                            border = BorderStroke(
+                                width = 1.dp,
+                                color =
+                                    if (notComingSelected) {
+                                        MaterialTheme
+                                            .colorScheme
+                                            .error
+                                    } else {
+                                        MaterialTheme
+                                            .colorScheme
+                                            .outline
+                                            .copy(alpha = 0.28f)
+                                    }
+                            ),
+                            tonalElevation = 0.dp,
+                            shadowElevation =
+                                if (notComingSelected) {
+                                    2.dp
+                                } else {
+                                    0.dp
+                                }
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(
+                                        horizontal = 12.dp,
+                                        vertical = 10.dp
+                                    ),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(
+                                    text =
+                                        if (isEnglish) {
+                                            if (notComingSelected) {
+                                                "✕ Not coming"
+                                            } else {
+                                                "Not coming"
+                                            }
+                                        } else {
+                                            if (notComingSelected) {
+                                                "✕ לא מגיע"
+                                            } else {
+                                                "לא מגיע"
+                                            }
+                                        },
+                                    style =
+                                        KmiTypography.secondary.copy(
+                                            fontWeight = FontWeight.Bold
+                                        ),
+                                    color =
+                                        if (notComingSelected) {
+                                            MaterialTheme
+                                                .colorScheme
+                                                .onError
+                                        } else {
+                                            MaterialTheme
+                                                .colorScheme
+                                                .onSurfaceVariant
+                                        },
+                                    textAlign = TextAlign.Center,
+                                    maxLines = 1
+                                )
+                            }
+                        }
+
+                        // =========================
+                        // מגיע
+                        // =========================
+                        Surface(
+                            modifier = Modifier
+                                .weight(1f)
+                                .heightIn(min = 44.dp)
+                                .clickable(
+                                    enabled =
+                                        canEditTraineeAttendance
+                                ) {
+                                    clickSound()
+                                    haptic(true)
+
+                                    saveTraineeAttendance(
+                                        statusToSave =
+                                            AttendanceStatus.PRESENT,
+                                        choiceToShow =
+                                            "coming"
+                                    )
+                                },
+                            shape = RoundedCornerShape(16.dp),
+
+                            // ירוק כהה וברור יותר מהכרטיס עצמו
+                            color =
+                                if (comingSelected) {
+                                    kmiSuccessColor()
+                                } else {
+                                    MaterialTheme
+                                        .colorScheme
+                                        .surfaceVariant
+                                },
+
+                            border = BorderStroke(
+                                width = 1.dp,
+                                color =
+                                    if (comingSelected) {
+                                        kmiSuccessColor()
+                                    } else {
+                                        MaterialTheme
+                                            .colorScheme
+                                            .outline
+                                            .copy(alpha = 0.28f)
+                                    }
+                            ),
+
+                            tonalElevation = 0.dp,
+
+                            shadowElevation =
+                                if (comingSelected) {
+                                    3.dp
+                                } else {
+                                    0.dp
+                                }
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(
+                                        horizontal = 12.dp,
+                                        vertical = 10.dp
+                                    ),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(
+                                    text =
+                                        if (isEnglish) {
+                                            if (comingSelected) {
+                                                "Coming ✓"
+                                            } else {
+                                                "Coming"
+                                            }
+                                        } else {
+                                            if (comingSelected) {
+                                                "מגיע ✓"
+                                            } else {
+                                                "מגיע"
+                                            }
+                                        },
+                                    style =
+                                        KmiTypography.secondary.copy(
+                                            fontWeight = FontWeight.Bold
+                                        ),
+
+                                    // בירוק שנבחר המלל לבן
+                                    color =
+                                        if (comingSelected) {
+                                            MaterialTheme
+                                                .colorScheme
+                                                .onPrimary
+                                        } else {
+                                            MaterialTheme
+                                                .colorScheme
+                                                .onSurfaceVariant
+                                        },
+
+                                    textAlign = TextAlign.Center,
+                                    maxLines = 1
+                                )
+                            }
+                        }
+                    }
+                }
 
                 Spacer(Modifier.weight(1f))
             }
@@ -5785,6 +6351,68 @@ private fun TrainingCardCompact(
         }
     }
 }
+
+@Composable
+private fun AttendanceForecastPremiumCard(
+    value: Int,
+    title: String,
+    containerColor: Color,
+    contentColor: Color,
+    borderColor: Color,
+    modifier: Modifier = Modifier
+) {
+    Surface(
+        modifier =
+            modifier.heightIn(min = 64.dp),
+        shape = RoundedCornerShape(16.dp),
+        color = containerColor,
+        border = BorderStroke(
+            width = 1.dp,
+            color = borderColor
+        ),
+        tonalElevation = 0.dp,
+        shadowElevation = 0.dp
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(
+                    horizontal = 6.dp,
+                    vertical = 6.dp
+                ),
+            horizontalAlignment =
+                Alignment.CenterHorizontally,
+            verticalArrangement =
+                Arrangement.Center
+        ) {
+
+            Text(
+                text = value.toString(),
+                style =
+                    KmiTypography.secondary.copy(
+                        fontWeight = FontWeight.Black
+                    ),
+                color = contentColor,
+                textAlign = TextAlign.Center,
+                maxLines = 1
+            )
+
+            Spacer(Modifier.height(1.dp))
+
+            Text(
+                text = title,
+                style =
+                    KmiTypography.caption.copy(
+                        fontWeight = FontWeight.Bold
+                    ),
+                color = contentColor.copy(alpha = 0.95f),
+                textAlign = TextAlign.Center,
+                maxLines = 1
+            )
+        }
+    }
+}
+
 // ===============================
 // ✅ ניווט: כפתור אחד + דיאלוג בחירה יפה
 // ===============================

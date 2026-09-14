@@ -1235,44 +1235,74 @@ class AttendanceViewModel(app: Application) : AndroidViewModel(app) {
             val stepTrainee  = stepNotCoach.filter { it.isTraineeDoc() }
             val stepGroup    = stepTrainee.filter { it.hasGroupMatch() }
 
-            val names = stepGroup
-                .asSequence()
-                .mapNotNull { it.userNameOrNull() }
-                .map { it.norm() }
-                .filter { it.isNotBlank() }
-                .distinctBy { it.lowercase() }
-                .toList()
+            data class BootstrapTrainee(
+                val uid: String,
+                val displayName: String,
+                val phone: String?
+            )
 
-            val existingNameKeys = uiState.value.members
-                .asSequence()
-                .map { it.attendanceUniqueKey() }
-                .toSet()
+            val trainees =
+                stepGroup
+                    .asSequence()
+                    .mapNotNull { doc ->
+                        val displayName =
+                            doc.userNameOrNull()
+                                ?.norm()
+                                ?.takeIf {
+                                    it.isNotBlank()
+                                }
+                                ?: return@mapNotNull null
 
-            val toAdd = names
-                .asSequence()
-                .map { it.trim() }
-                .filter { it.isNotBlank() }
-                .filter { name ->
-                    val nameKey = name.nameKey()
-                    val uniqueKey = if (nameKey.isNotBlank()) {
-                        "name:${nameKey.substringBefore(" ")}"
-                    } else {
-                        ""
+                        val phone =
+                            (
+                                    doc.getString("phone")
+                                        ?: doc.getString("phoneNumber")
+                                        ?: doc.getString("phone_number")
+                                        ?: doc.getString("mobile")
+                                    )
+                                ?.trim()
+                                ?.takeIf {
+                                    it.isNotBlank()
+                                }
+
+                        BootstrapTrainee(
+                            uid = doc.id,
+                            displayName = displayName,
+                            phone = phone
+                        )
                     }
+                    .distinctBy { trainee ->
+                        trainee.uid
+                    }
+                    .toList()
 
-                    uniqueKey.isNotBlank() && uniqueKey !in existingNameKeys
-                }
-                .toList()
+            /*
+   * מסנכרנים את כל המתאמנים שנמצאו ב-users.
+   *
+   * AttendanceRepository.addMember כבר:
+   * 1. מחפש קודם לפי authUid.
+   * 2. נופל חזרה לחיפוש לפי השם למשתמשים ישנים.
+   * 3. משדרג member קיים עם authUid ו-phone.
+   * 4. אינו יוצר כפילות אם המתאמן כבר קיים.
+   */
+            val traineesToSync =
+                trainees
+                    .filter { trainee ->
+                        trainee.uid.isNotBlank() &&
+                                trainee.displayName.isNotBlank()
+                    }
 
             val repoBranch = _branch.value.ifBlank { b0 }.trim()
             val repoGroup = _groupKey.value.ifBlank { g0 }.trim()
 
-            toAdd.forEach { n ->
+            traineesToSync.forEach { trainee ->
                 runCatching {
                     repo.addMember(
                         branch = repoBranch,
                         groupKey = repoGroup,
-                        displayName = n
+                        displayName = trainee.displayName,
+                        authUid = trainee.uid,
+                        phone = trainee.phone
                     )
                 }
             }

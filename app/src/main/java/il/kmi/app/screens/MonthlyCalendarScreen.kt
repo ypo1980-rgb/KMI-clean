@@ -50,6 +50,7 @@ import il.kmi.app.ui.calendar.KmiCalendarMonthHeader
 import il.kmi.app.ui.pdf.KmiPdfDirection
 import il.kmi.app.ui.pdf.KmiPdfFooter
 import il.kmi.app.ui.pdf.KmiPdfHeader
+import il.kmi.app.ui.training.TrainingSummaryViewModel
 import il.kmi.shared.prefs.KmiPrefs
 import java.io.File
 import java.io.FileOutputStream
@@ -90,6 +91,7 @@ fun MonthlyCalendarScreen(
     kmiPrefs: KmiPrefs,
     onBack: () -> Unit,
     onHome: () -> Unit,
+    summaryVm: TrainingSummaryViewModel? = null,
     mode: MonthlyCalendarMode = MonthlyCalendarMode.VIEW_ONLY,
     onDateClick: (
         date: LocalDate,
@@ -137,8 +139,52 @@ fun MonthlyCalendarScreen(
     ) {
 
         val today = remember { LocalDate.now() }
-        var ym by rememberSaveable { mutableStateOf(YearMonth.from(today)) }
-        var selectedDate by rememberSaveable { mutableStateOf<LocalDate?>(today) }
+        var ym by rememberSaveable {
+            mutableStateOf(YearMonth.from(today))
+        }
+        var selectedDate by rememberSaveable {
+            mutableStateOf<LocalDate?>(today)
+        }
+
+        var firestoreSummaryDates by remember(
+            ym,
+            summaryVm
+        ) {
+            mutableStateOf(emptySet<LocalDate>())
+        }
+
+        LaunchedEffect(
+            ym,
+            summaryVm
+        ) {
+            val activeSummaryVm =
+                summaryVm ?: run {
+                    firestoreSummaryDates = emptySet()
+                    return@LaunchedEffect
+                }
+
+            activeSummaryVm.loadSummaryDaysForMonth(
+                year = ym.year,
+                month1to12 = ym.monthValue
+            )
+
+            activeSummaryVm.state.collect { summaryState ->
+                firestoreSummaryDates =
+                    summaryState
+                        .summaryDaysInCalendarMonth
+                        .mapNotNull { rawDate ->
+                            runCatching {
+                                LocalDate.parse(
+                                    rawDate.trim().take(10)
+                                )
+                            }.getOrNull()
+                        }
+                        .filter { date ->
+                            YearMonth.from(date) == ym
+                        }
+                        .toSet()
+            }
+        }
 
         var trainingChoiceDate by remember {
             mutableStateOf<LocalDate?>(null)
@@ -281,19 +327,48 @@ fun MonthlyCalendarScreen(
         }
 
         // ✅ ימים שיש להם כבר סיכום שמור
-        val summaryDatesThisMonth: Set<LocalDate> = remember(ym, summaryVersion, summarySp, ctx) {
-            val legacyUserSp = ctx.getSharedPreferences("kmi_user", Context.MODE_PRIVATE)
+        val summaryDatesThisMonth: Set<LocalDate> = remember(
+            ym,
+            summaryVersion,
+            summarySp,
+            ctx,
+            firestoreSummaryDates
+        ) {
+            val legacyUserSp =
+                ctx.getSharedPreferences(
+                    "kmi_user",
+                    Context.MODE_PRIVATE
+                )
 
-            val allMarks =
-                summarySp.getStringSet("training_summary_days", emptySet()).orEmpty() +
-                        legacyUserSp.getStringSet("training_summary_days", emptySet()).orEmpty()
+            val allLocalMarks =
+                summarySp
+                    .getStringSet(
+                        "training_summary_days",
+                        emptySet()
+                    )
+                    .orEmpty() +
+                        legacyUserSp
+                            .getStringSet(
+                                "training_summary_days",
+                                emptySet()
+                            )
+                            .orEmpty()
 
-            allMarks
-                .mapNotNull { raw ->
-                    runCatching { LocalDate.parse(raw.trim().take(10)) }.getOrNull()
-                }
-                .filter { YearMonth.from(it) == ym }
-                .toSet()
+            val localDates =
+                allLocalMarks
+                    .mapNotNull { raw ->
+                        runCatching {
+                            LocalDate.parse(
+                                raw.trim().take(10)
+                            )
+                        }.getOrNull()
+                    }
+                    .filter { date ->
+                        YearMonth.from(date) == ym
+                    }
+                    .toSet()
+
+            localDates + firestoreSummaryDates
         }
 
 // אימונים מאוחדים לחודש — קודם branches.json, ואם אין נתונים אז fallback ל־TrainingCatalog

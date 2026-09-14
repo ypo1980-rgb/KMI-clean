@@ -500,60 +500,61 @@ fun KmiCalendarMonth(
                                                 }
                                             }
 
-                                            /*
-                                             * סיכום אימון:
-                                             * אייקון מסמך נפרד מהנקודות של
-                                             * אימון / חג.
-                                             */
-                                            if (hasSummary) {
-                                                Surface(
-                                                    modifier =
-                                                        Modifier
-                                                            .align(
-                                                                Alignment.TopEnd
-                                                            )
-                                                            .padding(
-                                                                top = 1.dp,
-                                                                end = 1.dp
-                                                            )
-                                                            .size(14.dp),
-                                                    shape = RoundedCornerShape(4.dp),
-                                                    color =
-                                                        if (isSelected) {
-                                                            selectedDayTextColor
-                                                                .copy(alpha = 0.96f)
+                                        }
+                                    }
+
+                                    /*
+                                     * סיכום אימון:
+                                     * האייקון מצויר מחוץ לעיגול התאריך,
+                                     * כדי שצורת ה־Surface לא תחתוך אותו.
+                                     */
+                                    if (hasSummary) {
+                                        Surface(
+                                            modifier = Modifier
+                                                .align(
+                                                    Alignment.TopEnd
+                                                )
+                                                .padding(
+                                                    top = 1.dp,
+                                                    end = 2.dp
+                                                )
+                                                .size(14.dp),
+                                            shape =
+                                                RoundedCornerShape(4.dp),
+                                            color =
+                                                if (isSelected) {
+                                                    selectedDayTextColor
+                                                        .copy(alpha = 0.96f)
+                                                } else {
+                                                    colorScheme.primary
+                                                },
+                                            tonalElevation = 0.dp,
+                                            shadowElevation = 0.dp
+                                        ) {
+                                            Box(
+                                                modifier =
+                                                    Modifier.fillMaxSize(),
+                                                contentAlignment =
+                                                    Alignment.Center
+                                            ) {
+                                                Icon(
+                                                    imageVector =
+                                                        Icons.Filled.Description,
+                                                    contentDescription =
+                                                        if (isEnglish) {
+                                                            "Training summary"
                                                         } else {
-                                                            colorScheme.primary
+                                                            "סיכום אימון"
                                                         },
-                                                    tonalElevation = 0.dp,
-                                                    shadowElevation = 0.dp
-                                                ) {
-                                                    Box(
-                                                        modifier =
-                                                            Modifier.fillMaxSize(),
-                                                        contentAlignment =
-                                                            Alignment.Center
-                                                    ) {
-                                                        Icon(
-                                                            imageVector =
-                                                                Icons.Filled.Description,
-                                                            contentDescription =
-                                                                if (isEnglish) {
-                                                                    "Training summary"
-                                                                } else {
-                                                                    "סיכום אימון"
-                                                                },
-                                                            tint =
-                                                                if (isSelected) {
-                                                                    selectedDayColor
-                                                                } else {
-                                                                    colorScheme.onPrimary
-                                                                },
-                                                            modifier =
-                                                                Modifier.size(9.dp)
-                                                        )
-                                                    }
-                                                }
+                                                    tint =
+                                                        if (isSelected) {
+                                                            selectedDayColor
+                                                        } else {
+                                                            colorScheme.onPrimary
+                                                        },
+                                                    modifier =
+                                                        Modifier.size(9.dp)
+                                                )
                                             }
                                         }
                                     }

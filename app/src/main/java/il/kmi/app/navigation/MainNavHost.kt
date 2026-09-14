@@ -1898,6 +1898,7 @@ fun MainNavHost(
 
                 il.kmi.app.screens.MonthlyCalendarScreen(
                     kmiPrefs = kmiPrefs,
+                    summaryVm = trainingSummaryVm,
 
                     /*
                      * לוח רגיל:

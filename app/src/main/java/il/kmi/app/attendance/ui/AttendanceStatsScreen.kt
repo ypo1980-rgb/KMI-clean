@@ -55,6 +55,7 @@ import androidx.compose.ui.text.style.TextDirection
 import androidx.compose.ui.text.TextStyle
 import il.kmi.app.localization.rememberIsEnglish
 import il.kmi.app.ui.KmiTypography
+import il.yuval.ui.theme.kmiSectionHeaderBackground
 import java.time.YearMonth
 
 /**
@@ -634,258 +635,291 @@ fun AttendanceStatsScreen(
         contentWindowInsets = WindowInsets(0)
     ) { padding ->
 
-        Box(
+        Column(
             modifier = Modifier
                 .fillMaxSize()
                 .background(
                     backgroundBrush
                 )
+                .padding(padding)
         ) {
-            if (isAttendanceLoading) {
-                KmiLoadingRings(
-                    modifier = Modifier
-                        .align(Alignment.Center)
-                        .padding(padding),
-                    text =
-                        if (isEnglish) {
-                            "Loading attendance data…"
-                        } else {
-                            "טוען נתוני נוכחות…"
-                        }
-                )
-            } else {
-                Column(
-                    modifier = Modifier
-                        .padding(padding)
-                        .fillMaxSize()
-                        .verticalScroll(
-                            rememberScrollState()
-                        )
-                        .navigationBarsPadding()
-                        .padding(
-                            start = 16.dp,
-                            end = 16.dp,
-                            top = 12.dp,
-                            bottom = 20.dp
-                        ),
-                    verticalArrangement =
-                        Arrangement.spacedBy(18.dp)
-                ) {
 
-                    // ───── Hero Card – סיכום עליון ─────
-                HeroAttendanceHeader(
-                    name = name,
-                    branch = branch,
-                    groupKey = groupKey,
-                    today = today,
-                    monthlyPercent = monthlyPercent,
-                    yearlyPercent = yearlyPercent,
-                    isEnglish = isEnglish
-                )
-
-                // ───── כרטיסי אחוזים (חודש / שנה) ─────
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    AttendanceMetricCard(
-                        title = tr("נוכחות חודשית", "Monthly attendance"),
-                        percent = monthlyPercent,
-                        gradient = Brush.verticalGradient(
-                            listOf(Color(0xFF8B5CF6), Color(0xFFEC4899))
-                        ),
-                        isEnglish = isEnglish,
-                        modifier = Modifier.weight(1f)
-                    )
-                    AttendanceMetricCard(
-                        title = tr("נוכחות שנתית", "Yearly attendance"),
-                        percent = yearlyPercent,
-                        gradient = Brush.verticalGradient(
-                            listOf(Color(0xFF22C55E), Color(0xFF14B8A6))
-                        ),
-                        isEnglish = isEnglish,
-                        modifier = Modifier.weight(1f)
-                    )
-                }
-
-                if (!hasRealAttendanceData) {
-                    EmptyMemberAttendanceStatsCard(
-                        branch = branch,
-                        groupKey = groupKey,
-                        memberName = name,
-                        isEnglish = isEnglish
-                    )
-                }
-
-                // ───── גרף נוכחות חודשי בשנה האחרונה ─────
-                if (monthlyAttendance.isNotEmpty()) {
-                    MonthlyAttendanceChart(
-                        points = monthlyAttendance,
-                        isEnglish = isEnglish
-                    )
-                }
-
-                // ───── 5 אימונים אחרונים (דינמי לפי רשומות נוכחות) ─────
-                Surface(
-                    color = MaterialTheme.colorScheme.surface.copy(
-                        alpha = 0.96f
+            // כותרת משנה גלובלית — קבועה ואינה נגללת
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(56.dp)
+                    .kmiSectionHeaderBackground(),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = tr(
+                        "נתוני המתאמן",
+                        "Trainee statistics"
                     ),
-                    shape = RoundedCornerShape(24.dp),
-                    modifier = Modifier.fillMaxWidth(),
-                    tonalElevation = 0.dp,
-                    shadowElevation = 0.dp,
-                    border = BorderStroke(
-                        width = 1.dp,
-                        color = MaterialTheme.colorScheme.outlineVariant.copy(
-                            alpha = 0.55f
-                        )
-                    )
-                ) {
-                    Column(
-                        modifier = Modifier.padding(18.dp),
-                        verticalArrangement = Arrangement.spacedBy(10.dp)
-                    ) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            Icon(
-                                imageVector =
-                                    Icons.Default.CalendarToday,
-                                contentDescription = null,
-                                tint = Color(0xFFF97316),
-                                modifier = Modifier.size(
-                                    KmiIconSize.medium
-                                )
-                            )
+                    style = KmiTypography.sectionTitle.copy(
+                        fontWeight = FontWeight.ExtraBold
+                    ),
+                    color = Color.White,
+                    textAlign = TextAlign.Center,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp)
+                )
+            }
 
-                            Text(
-                                text =
-                                    if (isEnglish) {
-                                        "5 recent trainings"
-                                    } else {
-                                        "5 אימונים אחרונים"
-                                    },
-                                style = KmiTypography.sectionTitle,
-                                fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.onSurface
-                            )
-                        }
-
-                        lastSessions.forEach { row ->
-                            val wasPresent =
-                                (
-                                        row.contains("· הגיע") ||
-                                                row.contains(
-                                                    "· Present",
-                                                    ignoreCase = true
-                                                )
-                                        ) &&
-                                        !row.contains("לא הגיע") &&
-                                        !row.contains(
-                                            "Absent",
-                                            ignoreCase = true
-                                        )
-
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(8.dp)
-                            ) {
-                                Box(
-                                    modifier = Modifier
-                                        .size(12.dp)
-                                        .clip(CircleShape)
-                                        .background(
-                                            if (wasPresent) Color(0xFF22C55E)
-                                            else Color(0xFFEF4444)
-                                        )
-                                )
-                                Text(
-                                    text = row,
-                                    color = MaterialTheme.colorScheme.onSurface,
-                                    style = KmiTypography.body,
-                                    modifier = Modifier.weight(1f)
-                                )
-                            }
-                        }
-                        if (lastSessions.isEmpty()) {
-                            Text(
-                                text =
-                                    if (isEnglish) {
-                                        "No attendance data is available yet."
-                                    } else {
-                                        "אין נתוני נוכחות מוצגים עדיין."
-                                    },
-                                style = KmiTypography.caption,
-                                color =
-                                    MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-                    }
-                }
-
-                    /*
-                     * דו"חות הנוכחות מכילים סיכום של כל הקבוצה,
-                     * ולכן אינם מוצגים כאשר נבחר מתאמן בודד.
-                     */
-                    if (
-                        memberId == null &&
-                        reports.isNotEmpty()
-                    ) {
-                    Surface(
-                        color = MaterialTheme.colorScheme.surface.copy(
-                            alpha = 0.96f
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxWidth()
+            ) {
+                if (isAttendanceLoading) {
+                    KmiLoadingRings(
+                        modifier = Modifier.align(
+                            Alignment.Center
                         ),
-                        shape = RoundedCornerShape(24.dp),
-                        modifier = Modifier.fillMaxWidth(),
-                        tonalElevation = 0.dp,
-                        shadowElevation = 0.dp,
-                        border = BorderStroke(
-                            width = 1.dp,
-                            color =
-                                MaterialTheme.colorScheme.outlineVariant.copy(
+                        text =
+                            if (isEnglish) {
+                                "Loading attendance data…"
+                            } else {
+                                "טוען נתוני נוכחות…"
+                            }
+                    )
+                } else {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .verticalScroll(
+                                rememberScrollState()
+                            )
+                            .navigationBarsPadding()
+                            .padding(
+                                start = 16.dp,
+                                end = 16.dp,
+                                top = 12.dp,
+                                bottom = 20.dp
+                            ),
+                        verticalArrangement =
+                            Arrangement.spacedBy(18.dp)
+                    ) {
+
+                        // ───── Hero Card – סיכום עליון ─────
+                        HeroAttendanceHeader(
+                            name = name,
+                            branch = branch,
+                            groupKey = groupKey,
+                            today = today,
+                            monthlyPercent = monthlyPercent,
+                            yearlyPercent = yearlyPercent,
+                            isEnglish = isEnglish
+                        )
+
+                        // ───── כרטיסי אחוזים (חודש / שנה) ─────
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
+                            AttendanceMetricCard(
+                                title = tr("נוכחות חודשית", "Monthly attendance"),
+                                percent = monthlyPercent,
+                                gradient = Brush.verticalGradient(
+                                    listOf(Color(0xFF8B5CF6), Color(0xFFEC4899))
+                                ),
+                                isEnglish = isEnglish,
+                                modifier = Modifier.weight(1f)
+                            )
+                            AttendanceMetricCard(
+                                title = tr("נוכחות שנתית", "Yearly attendance"),
+                                percent = yearlyPercent,
+                                gradient = Brush.verticalGradient(
+                                    listOf(Color(0xFF22C55E), Color(0xFF14B8A6))
+                                ),
+                                isEnglish = isEnglish,
+                                modifier = Modifier.weight(1f)
+                            )
+                        }
+
+                        if (!hasRealAttendanceData) {
+                            EmptyMemberAttendanceStatsCard(
+                                branch = branch,
+                                groupKey = groupKey,
+                                memberName = name,
+                                isEnglish = isEnglish
+                            )
+                        }
+
+                        // ───── גרף נוכחות חודשי בשנה האחרונה ─────
+                        if (monthlyAttendance.isNotEmpty()) {
+                            MonthlyAttendanceChart(
+                                points = monthlyAttendance,
+                                isEnglish = isEnglish
+                            )
+                        }
+
+                        // ───── 5 אימונים אחרונים (דינמי לפי רשומות נוכחות) ─────
+                        Surface(
+                            color = MaterialTheme.colorScheme.surface.copy(
+                                alpha = 0.96f
+                            ),
+                            shape = RoundedCornerShape(24.dp),
+                            modifier = Modifier.fillMaxWidth(),
+                            tonalElevation = 0.dp,
+                            shadowElevation = 0.dp,
+                            border = BorderStroke(
+                                width = 1.dp,
+                                color = MaterialTheme.colorScheme.outlineVariant.copy(
                                     alpha = 0.55f
                                 )
-                        )
-                    ) {
-                        Column(
-                            modifier = Modifier.padding(18.dp),
-                            verticalArrangement = Arrangement.spacedBy(12.dp)
-                        ) {
-                            Text(
-                                text =
-                                    if (isEnglish) {
-                                        "Recent attendance reports"
-                                    } else {
-                                        "דו״חות נוכחות אחרונים"
-                                    },
-                                style = KmiTypography.sectionTitle,
-                                fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.onSurface
                             )
-
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .horizontalScroll(
-                                        rememberScrollState()
-                                    ),
-                                horizontalArrangement =
-                                    Arrangement.spacedBy(12.dp)
+                        ) {
+                            Column(
+                                modifier = Modifier.padding(18.dp),
+                                verticalArrangement = Arrangement.spacedBy(10.dp)
                             ) {
-                                reports.forEach { report ->
-                                    AttendanceReportChip(
-                                        report = report,
-                                        isEnglish = isEnglish
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    Icon(
+                                        imageVector =
+                                            Icons.Default.CalendarToday,
+                                        contentDescription = null,
+                                        tint = Color(0xFFF97316),
+                                        modifier = Modifier.size(
+                                            KmiIconSize.medium
+                                        )
+                                    )
+
+                                    Text(
+                                        text =
+                                            if (isEnglish) {
+                                                "5 recent trainings"
+                                            } else {
+                                                "5 אימונים אחרונים"
+                                            },
+                                        style = KmiTypography.sectionTitle,
+                                        fontWeight = FontWeight.Bold,
+                                        color = MaterialTheme.colorScheme.onSurface
+                                    )
+                                }
+
+                                lastSessions.forEach { row ->
+                                    val wasPresent =
+                                        (
+                                                row.contains("· הגיע") ||
+                                                        row.contains(
+                                                            "· Present",
+                                                            ignoreCase = true
+                                                        )
+                                                ) &&
+                                                !row.contains("לא הגיע") &&
+                                                !row.contains(
+                                                    "Absent",
+                                                    ignoreCase = true
+                                                )
+
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                    ) {
+                                        Box(
+                                            modifier = Modifier
+                                                .size(12.dp)
+                                                .clip(CircleShape)
+                                                .background(
+                                                    if (wasPresent) Color(0xFF22C55E)
+                                                    else Color(0xFFEF4444)
+                                                )
+                                        )
+                                        Text(
+                                            text = row,
+                                            color = MaterialTheme.colorScheme.onSurface,
+                                            style = KmiTypography.body,
+                                            modifier = Modifier.weight(1f)
+                                        )
+                                    }
+                                }
+                                if (lastSessions.isEmpty()) {
+                                    Text(
+                                        text =
+                                            if (isEnglish) {
+                                                "No attendance data is available yet."
+                                            } else {
+                                                "אין נתוני נוכחות מוצגים עדיין."
+                                            },
+                                        style = KmiTypography.caption,
+                                        color =
+                                            MaterialTheme.colorScheme.onSurfaceVariant
                                     )
                                 }
                             }
                         }
-                    }
-                }
 
-                    Spacer(Modifier.height(28.dp))
+                        /*
+                         * דו"חות הנוכחות מכילים סיכום של כל הקבוצה,
+                         * ולכן אינם מוצגים כאשר נבחר מתאמן בודד.
+                         */
+                        if (
+                            memberId == null &&
+                            reports.isNotEmpty()
+                        ) {
+                            Surface(
+                                color = MaterialTheme.colorScheme.surface.copy(
+                                    alpha = 0.96f
+                                ),
+                                shape = RoundedCornerShape(24.dp),
+                                modifier = Modifier.fillMaxWidth(),
+                                tonalElevation = 0.dp,
+                                shadowElevation = 0.dp,
+                                border = BorderStroke(
+                                    width = 1.dp,
+                                    color =
+                                        MaterialTheme.colorScheme.outlineVariant.copy(
+                                            alpha = 0.55f
+                                        )
+                                )
+                            ) {
+                                Column(
+                                    modifier = Modifier.padding(18.dp),
+                                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                                ) {
+                                    Text(
+                                        text =
+                                            if (isEnglish) {
+                                                "Recent attendance reports"
+                                            } else {
+                                                "דו״חות נוכחות אחרונים"
+                                            },
+                                        style = KmiTypography.sectionTitle,
+                                        fontWeight = FontWeight.Bold,
+                                        color = MaterialTheme.colorScheme.onSurface
+                                    )
+
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .horizontalScroll(
+                                                rememberScrollState()
+                                            ),
+                                        horizontalArrangement =
+                                            Arrangement.spacedBy(12.dp)
+                                    ) {
+                                        reports.forEach { report ->
+                                            AttendanceReportChip(
+                                                report = report,
+                                                isEnglish = isEnglish
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        Spacer(Modifier.height(28.dp))
+                    }
                 }
             }
         }
@@ -2327,9 +2361,8 @@ private fun createAttendanceStatsPdf(
             )
         )
 
-    summaryItems.forEachIndexed {
-            index,
-            item ->
+    summaryItems.forEachIndexed { index,
+                                  item ->
 
         val left =
             margin +
@@ -2439,9 +2472,8 @@ private fun createAttendanceStatsPdf(
     } else {
         data.monthlyPoints
             .takeLast(6)
-            .forEachIndexed {
-                    index,
-                    point ->
+            .forEachIndexed { index,
+                              point ->
 
                 val rowTop =
                     rowY - 17f
@@ -2527,9 +2559,8 @@ private fun createAttendanceStatsPdf(
     } else {
         data.recentSessions
             .take(5)
-            .forEachIndexed {
-                    index,
-                    session ->
+            .forEachIndexed { index,
+                              session ->
 
                 if (
                     rowY + 12f <=

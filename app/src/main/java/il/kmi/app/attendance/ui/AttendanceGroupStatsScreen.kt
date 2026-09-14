@@ -218,7 +218,7 @@ fun AttendanceGroupStatsScreen(
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(54.dp)
+                    .height(56.dp)
                     .kmiSectionHeaderBackground()
             ) {
 

@@ -7,6 +7,8 @@ import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.ListenerRegistration
 import java.security.MessageDigest
+import java.time.Instant
+import java.time.ZoneId
 import java.util.Locale
 
 /**
@@ -153,11 +155,17 @@ object TrainingOverrideRepository {
     private const val COLLECTION_NAME =
         "trainingOverrides"
 
+    private const val OCCURRENCES_COLLECTION_NAME =
+        "trainingOccurrences"
+
     private const val NOTIFICATION_STATUS_PENDING =
         "pending"
 
     private const val SOURCE_ANDROID =
         "android_training_override"
+
+    private const val OCCURRENCE_SOURCE_ANDROID =
+        "android_training_occurrence"
 
     private val auth: FirebaseAuth
         get() =
@@ -236,6 +244,215 @@ object TrainingOverrideRepository {
                 byte.toInt() and 0xFF
             )
         }
+    }
+
+    /**
+     * מסנכרן מופע אימון רגיל ל-Firestore.
+     *
+     * הכתיבה מיועדת למאמן / אדמין בלבד לפי Rules.
+     *
+     * occurrenceKey נשאר תמיד לפי זמן האימון המקורי,
+     * גם אם בהמשך שעת האימון משתנה.
+     */
+    fun syncTrainingOccurrence(
+        training: TrainingData,
+        branch: String,
+        group: String,
+        activeOverride: TrainingOverride? = null,
+        onResult: (
+            success: Boolean,
+            error: Throwable?
+        ) -> Unit = { _, _ -> }
+    ) {
+        val currentUser =
+            auth.currentUser
+
+        val currentUid =
+            currentUser
+                ?.uid
+                ?.trim()
+                .orEmpty()
+
+        if (currentUid.isBlank()) {
+            onResult(
+                false,
+                IllegalStateException(
+                    "No signed-in user"
+                )
+            )
+            return
+        }
+
+        val cleanBranch =
+            branch.trim()
+
+        val cleanGroup =
+            group.trim()
+
+        if (
+            cleanBranch.isBlank() ||
+            cleanGroup.isBlank()
+        ) {
+            onResult(
+                false,
+                IllegalArgumentException(
+                    "Missing training branch/group"
+                )
+            )
+            return
+        }
+
+        val originalStartMillis =
+            training.startMillis
+
+        val originalEndMillis =
+            training.endMillis
+                ?.takeIf {
+                    it > originalStartMillis
+                }
+                ?: originalStartMillis +
+                DEFAULT_TRAINING_DURATION_MILLIS
+
+        val sessionDate =
+            Instant
+                .ofEpochMilli(
+                    originalStartMillis
+                )
+                .atZone(
+                    ZoneId.of(
+                        "Asia/Jerusalem"
+                    )
+                )
+                .toLocalDate()
+                .toString()
+
+        val occurrenceKey =
+            buildOccurrenceKey(
+                branch = cleanBranch,
+                group = cleanGroup,
+                place =
+                    training.place.orEmpty(),
+                address =
+                    training.address.orEmpty(),
+                coachName =
+                    training.coach.orEmpty(),
+                originalStartMillis =
+                    originalStartMillis,
+                originalEndMillis =
+                    originalEndMillis
+            )
+
+        val occurrenceId =
+            documentIdForOccurrenceKey(
+                occurrenceKey
+            )
+
+        /*
+         * משתמשים ב-override רק אם הוא באמת
+         * שייך לאותו occurrenceKey והוא פעיל.
+         */
+        val relevantOverride =
+            activeOverride
+                ?.takeIf {
+                    it.isActive &&
+                            it.occurrenceKey ==
+                            occurrenceKey
+                }
+
+        val isCancelled =
+            relevantOverride
+                ?.isCancelled == true
+
+        val effectiveStartMillis =
+            relevantOverride
+                ?.effectiveStartMillis
+                ?: originalStartMillis
+
+        val effectiveEndMillis =
+            relevantOverride
+                ?.effectiveEndMillis
+                ?: originalEndMillis
+
+        val data =
+            hashMapOf<String, Any>(
+                "occurrenceId" to
+                        occurrenceId,
+
+                "occurrenceKey" to
+                        occurrenceKey,
+
+                "branch" to
+                        cleanBranch,
+
+                "group" to
+                        cleanGroup,
+
+                "place" to
+                        training.place
+                            .orEmpty()
+                            .trim(),
+
+                "address" to
+                        training.address
+                            .orEmpty()
+                            .trim(),
+
+                "coachName" to
+                        training.coach
+                            .orEmpty()
+                            .trim(),
+
+                "originalStartMillis" to
+                        originalStartMillis,
+
+                "originalEndMillis" to
+                        originalEndMillis,
+
+                "sessionDate" to
+                        sessionDate,
+
+                "effectiveStartMillis" to
+                        effectiveStartMillis,
+
+                "effectiveEndMillis" to
+                        effectiveEndMillis,
+
+                "isCancelled" to
+                        isCancelled,
+
+                "updatedByUid" to
+                        currentUid,
+
+                "source" to
+                        OCCURRENCE_SOURCE_ANDROID,
+
+                "updatedAt" to
+                        FieldValue.serverTimestamp()
+            )
+
+        firestore
+            .collection(
+                OCCURRENCES_COLLECTION_NAME
+            )
+            .document(
+                occurrenceId
+            )
+            .set(
+                data,
+                com.google.firebase.firestore.SetOptions.merge()
+            )
+            .addOnSuccessListener {
+                onResult(
+                    true,
+                    null
+                )
+            }
+            .addOnFailureListener { error ->
+                onResult(
+                    false,
+                    error
+                )
+            }
     }
 
     /**
