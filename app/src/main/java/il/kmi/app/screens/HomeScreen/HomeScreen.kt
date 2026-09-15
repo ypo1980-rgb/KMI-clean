@@ -32,7 +32,6 @@ import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Email
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
@@ -54,7 +53,6 @@ import androidx.compose.ui.unit.dp
 import il.kmi.app.R
 import il.kmi.app.attendance.data.AttendanceRepository
 import il.kmi.app.attendance.data.AttendanceStatus
-import il.kmi.app.attendance.data.TrainingAttendanceForecast
 import il.kmi.app.training.TrainingData
 import il.kmi.app.training.TrainingStatusEngine
 import il.kmi.app.training.TrainingOverride
@@ -68,13 +66,11 @@ import il.kmi.app.ui.rememberHapticsGlobal
 import il.kmi.app.ui.rememberClickSound
 import il.kmi.app.ui.assistant.ui.AiAssistantDialog
 import com.google.firebase.auth.FirebaseAuth
-import com.google.firebase.firestore.FirebaseFirestore
 import il.kmi.shared.questions.model.util.ExerciseTitleFormatter
 import il.kmi.app.ui.dialogs.ExerciseExplanationDialog
 import il.kmi.app.ui.dialogs.ExerciseNoteEditorDialog
 import il.kmi.app.domain.color
 import androidx.compose.material.icons.filled.DateRange
-import androidx.compose.material.icons.filled.EditNote
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
@@ -96,14 +92,12 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.graphics.vector.ImageVector
-import com.google.firebase.firestore.DocumentSnapshot
 import il.kmi.shared.localization.AppLanguage
 import il.kmi.shared.localization.AppLanguageManager
 import il.kmi.app.database.KmiDatabaseProvider
 import il.kmi.app.domain.ExerciseExplanationResolver
 import il.kmi.app.privacy.DemoPrivacy
 import il.kmi.app.training.TrainingCatalog
-import il.kmi.app.screens.registration.CoachBranchAssignmentsCodec
 import il.kmi.app.ui.KmiIconSize
 import il.kmi.app.ui.KmiTopBar
 import il.kmi.app.ui.KmiTypography
@@ -120,7 +114,6 @@ import il.yuval.ui.theme.kmiSectionHeaderContentColor
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.time.Instant
-import org.json.JSONArray
 import java.text.SimpleDateFormat
 import java.time.DayOfWeek
 import java.time.Duration
@@ -131,7 +124,6 @@ import java.util.Locale
 import java.util.TimeZone
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.window.Dialog
-import androidx.compose.ui.zIndex
 import il.yuval.ui.theme.kmiOnSuccessContainerColor
 import il.yuval.ui.theme.kmiOnWarningContainerColor
 import il.yuval.ui.theme.kmiSuccessColor
@@ -143,24 +135,16 @@ import kotlin.time.Duration.Companion.seconds
 
 //=================================================================================
 
-private enum class HomeNoticeType {
+internal enum class HomeNoticeType {
     COACH_MESSAGE,
     TRAINING_TIME_CHANGED,
     TRAINING_CANCELLED,
 }
 
-private data class HomeNotice(
+internal data class HomeNotice(
     val id: String,
     val type: HomeNoticeType,
     val title: String,
-    val text: String,
-    val coachName: String,
-    val sentAt: Date?,
-    val branch: String,
-    val group: String
-)
-
-private data class CoachHomeMessage(
     val text: String,
     val coachName: String,
     val sentAt: Date?,
@@ -174,7 +158,7 @@ private data class CoachHomeMessage(
  * הנתון האמיתי נשמר ללא שינוי ב־Firestore,
  * ב־SharedPreferences ובמודלים הפנימיים.
  */
-private fun homeCoachDisplayName(
+internal fun homeCoachDisplayName(
     realName: String?,
     isEnglish: Boolean
 ): String {
@@ -803,9 +787,18 @@ fun HomeScreen(
                 }
             }
 
-            var recentCoachMessages by remember {
-                mutableStateOf<List<CoachHomeMessage>>(emptyList())
-            }
+            val coachMessagesState =
+                rememberHomeCoachMessagesState(
+                    currentUid = currentUid,
+                    userSp = userSp,
+                    settingsSp = settingsSp
+                )
+
+            val recentCoachMessages =
+                coachMessagesState.recentMessages
+
+            val showCoachMessagesDialog =
+                coachMessagesState.showDialog
 
             var recentTrainingNotices by remember {
                 mutableStateOf<List<HomeNotice>>(emptyList())
@@ -854,1128 +847,26 @@ fun HomeScreen(
                         .take(5)
                 }
 
-            var showCoachMessagesDialog by rememberSaveable {
-                mutableStateOf(false)
-            }
-
-            var openCoachMessagesFromPush by remember {
-                mutableStateOf(settingsSp.getBoolean("coach_broadcast_open_dialog", false))
-            }
-
-            var pushBroadcastId by remember {
-                mutableStateOf(settingsSp.getString("coach_broadcast_push_id", "").orEmpty())
-            }
-
-            LaunchedEffect(pushBroadcastId) {
-                val cleanPushId = pushBroadcastId.trim()
-                if (cleanPushId.isBlank()) return@LaunchedEffect
-
-                val db = FirebaseFirestore.getInstance()
-
-                fun messageFromDoc(
-                    doc: DocumentSnapshot
-                ): CoachHomeMessage? {
-                    val text = (
-                            doc.getString("text")
-                                ?: doc.getString("message")
-                                ?: doc.getString("body")
-                                ?: doc.getString("content")
-                            )
-                        ?.trim()
-                        .orEmpty()
-
-                    if (text.isBlank()) return null
-
-                    fun firstString(vararg keys: String): String {
-                        keys.forEach { key ->
-                            val clean = doc.getString(key)?.trim().orEmpty()
-                            if (clean.isNotBlank()) return clean
-                        }
-                        return ""
-                    }
-
-                    return CoachHomeMessage(
-                        text = text,
-                        coachName = firstString(
-                            "coachName",
-                            "coach_name",
-                            "senderName",
-                            "fromName"
-                        ).ifBlank { "המאמן" },
-                        sentAt = doc.getTimestamp("createdAt")?.toDate()
-                            ?: doc.getTimestamp("sentAt")?.toDate()
-                            ?: doc.getTimestamp("timestamp")?.toDate(),
-                        branch = firstString(
-                            "branch",
-                            "branchName",
-                            "branch_name",
-                            "targetBranch",
-                            "selectedBranch"
-                        ),
-                        group = firstString(
-                            "group",
-                            "groupKey",
-                            "group_key",
-                            "targetGroup",
-                            "selectedGroup"
-                        )
-                    )
-                }
-
-                fun openMessage(message: CoachHomeMessage) {
-                    recentCoachMessages = (
-                            listOf(message) + recentCoachMessages
-                            )
-                        .distinctBy {
-                            "${it.sentAt?.time ?: 0L}|${it.coachName}|${it.text.take(40)}"
-                        }
-                        .take(5)
-
-                    showCoachMessagesDialog = true
-
-                    settingsSp.edit {
-                        putBoolean("coach_broadcast_open_dialog", false)
-                        putBoolean("coach_broadcast_open_from_push", false)
-                        remove("coach_broadcast_push_id")
-                        remove("coach_broadcast_push_received_at")
-                    }
-
-                    pushBroadcastId = ""
-                    openCoachMessagesFromPush = false
-                }
-
-                db.collection("coachBroadcasts")
-                    .document(cleanPushId)
-                    .get()
-                    .addOnSuccessListener { doc ->
-                        val directMessage = if (doc.exists()) messageFromDoc(doc) else null
-
-                        if (directMessage != null) {
-                            openMessage(directMessage)
-                        } else {
-                            db.collection("coachBroadcasts")
-                                .whereEqualTo("broadcastId", cleanPushId)
-                                .limit(1)
-                                .get()
-                                .addOnSuccessListener { snap ->
-                                    val message = snap.documents
-                                        .firstOrNull()
-                                        ?.let { messageFromDoc(it) }
-
-                                    if (message != null) {
-                                        openMessage(message)
-                                    } else {
-                                        db.collection("coachBroadcasts")
-                                            .whereEqualTo("broadcast_id", cleanPushId)
-                                            .limit(1)
-                                            .get()
-                                            .addOnSuccessListener { snap2 ->
-                                                snap2.documents
-                                                    .firstOrNull()
-                                                    ?.let { messageFromDoc(it) }
-                                                    ?.let { openMessage(it) }
-                                            }
-                                    }
-                                }
-                        }
-                    }
-            }
-
-            DisposableEffect(settingsSp) {
-                val listener = SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
-                    if (
-                        key == "coach_broadcast_open_dialog" ||
-                        key == "coach_broadcast_open_from_push" ||
-                        key == "coach_broadcast_push_id"
-                    ) {
-                        openCoachMessagesFromPush =
-                            settingsSp.getBoolean("coach_broadcast_open_dialog", false)
-
-                        pushBroadcastId =
-                            settingsSp.getString("coach_broadcast_push_id", "").orEmpty()
-                    }
-                }
-
-                settingsSp.registerOnSharedPreferenceChangeListener(listener)
-
-                onDispose {
-                    settingsSp.unregisterOnSharedPreferenceChangeListener(listener)
-                }
-            }
-
             Column(
                 modifier =
                     Modifier.fillMaxSize(),
                 horizontalAlignment =
                     Alignment.CenterHorizontally
             ) {
-                // === KMI_MULTI_GROUPS (FIX) ===
-                var groupsRefreshTick by remember { mutableIntStateOf(0) }
-
-                var coachFromPrefs by remember(userSp) {
-                    mutableStateOf(userSp.getString("coach_name", "") ?: "")
-                }
-
-                DisposableEffect(userSp) {
-                    val l = SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
-                        when (key) {
-                            "groups_json",
-                            "selected_groups",
-                            "groups",
-                            "age_groups",
-                            "age_group",
-                            "group" -> {
-                                groupsRefreshTick++
-                            }
-
-                            "coach_name" -> coachFromPrefs =
-                                userSp.getString("coach_name", "") ?: ""
-                        }
-                    }
-                    userSp.registerOnSharedPreferenceChangeListener(l)
-                    onDispose { userSp.unregisterOnSharedPreferenceChangeListener(l) }
-                }
-
-                // === KMI_MULTI_GROUPS (FIX) ===
-
-                LaunchedEffect(openCoachMessagesFromPush, recentCoachMessages.size) {
-                    if (openCoachMessagesFromPush && recentCoachMessages.isNotEmpty()) {
-                        showCoachMessagesDialog = true
-
-                        settingsSp.edit {
-                            putBoolean("coach_broadcast_open_dialog", false)
-                            putBoolean("coach_broadcast_open_from_push", false)
-                            remove("coach_broadcast_push_id")
-                            remove("coach_broadcast_push_received_at")
-                        }
-
-                        openCoachMessagesFromPush = false
-                    }
-                }
-
-                // =========================
-                // ⭐ הודעות מהמאמן – Firestore
-                // מציגים הודעה אחרונה בכרטיס + 5 הודעות אחרונות בדיאלוג
-                // =========================
-                DisposableEffect(currentUid, userSp, pushBroadcastId) {
-                    val uid = currentUid.orEmpty().trim()
-
-                    val currentEmail = FirebaseAuth.getInstance()
-                        .currentUser
-                        ?.email
-                        ?.trim()
-                        .orEmpty()
-
-                    fun normalizePhone(raw: String): String =
-                        raw.filter { it.isDigit() }
-
-                    fun normalizeText(raw: String): String =
-                        raw.trim()
-                            .replace('־', '-')
-                            .replace('–', '-')
-                            .replace('—', '-')
-                            .replace(Regex("\\s+"), " ")
-                            .lowercase(Locale("he", "IL"))
-
-                    fun prefsAsList(vararg keys: String): List<String> {
-                        val out = mutableListOf<String>()
-
-                        keys.forEach { key ->
-                            when (val value = userSp.all[key]) {
-                                is String -> {
-                                    value
-                                        .removePrefix("[")
-                                        .removeSuffix("]")
-                                        .split(',', ';', '|', '\n')
-                                        .map { it.trim().trim('"') }
-                                        .filter { it.isNotBlank() }
-                                        .forEach { out += it }
-                                }
-
-                                is Set<*> -> {
-                                    value
-                                        .mapNotNull { it?.toString()?.trim() }
-                                        .filter { it.isNotBlank() }
-                                        .forEach { out += it }
-                                }
-
-                                is List<*> -> {
-                                    value
-                                        .mapNotNull { it?.toString()?.trim() }
-                                        .filter { it.isNotBlank() }
-                                        .forEach { out += it }
-                                }
-                            }
-                        }
-
-                        return out.distinct()
-                    }
-
-                    val currentPhones = prefsAsList(
-                        "phone",
-                        "phoneNumber",
-                        "phone_number",
-                        "user_phone",
-                        "mobile"
-                    )
-                        .map { normalizePhone(it) }
-                        .filter { it.isNotBlank() }
-                        .distinct()
-
-                    val currentNames = prefsAsList(
-                        "fullName",
-                        "full_name",
-                        "name",
-                        "displayName",
-                        "user_name"
+                val coachAssignmentsState =
+                    rememberHomeCoachAssignmentsState(
+                        currentUid = currentUid,
+                        userSp = userSp
                     )
 
-                    val currentBranches = prefsAsList(
-                        "active_branch",
-                        "activeBranch",
-                        "branch",
-                        "branches",
-                        "branches_json",
-                        "selected_branches",
-                        "branch2",
-                        "branch3"
-                    )
-                        .map { normalizeText(it) }
-                        .filter { it.isNotBlank() }
-                        .distinct()
+                val coachFromPrefs =
+                    coachAssignmentsState.coachName
 
-                    val currentGroups = prefsAsList(
-                        "active_group",
-                        "group",
-                        "groups",
-                        "groups_json",
-                        "selected_groups",
-                        "age_group",
-                        "age_groups"
-                    )
-                        .map {
-                            normalizeText(
-                                TrainingCatalog
-                                    .normalizeGroupName(it)
-                                    .ifBlank { it }
-                            )
-                        }
-                        .filter { it.isNotBlank() }
-                        .distinct()
+                val branchGroupPairsEffective =
+                    coachAssignmentsState.branchGroupPairs
 
-                    fun stringListFromDoc(
-                        doc: DocumentSnapshot,
-                        vararg keys: String
-                    ): List<String> {
-                        val out = mutableListOf<String>()
-
-                        keys.forEach { key ->
-                            when (val value = doc.get(key)) {
-                                is String -> {
-                                    value
-                                        .removePrefix("[")
-                                        .removeSuffix("]")
-                                        .split(',', ';', '|', '\n')
-                                        .map { it.trim().trim('"') }
-                                        .filter { it.isNotBlank() }
-                                        .forEach { out += it }
-                                }
-
-                                is List<*> -> {
-                                    value
-                                        .mapNotNull { it?.toString()?.trim() }
-                                        .filter { it.isNotBlank() }
-                                        .forEach { out += it }
-                                }
-
-                                is Set<*> -> {
-                                    value
-                                        .mapNotNull { it?.toString()?.trim() }
-                                        .filter { it.isNotBlank() }
-                                        .forEach { out += it }
-                                }
-                            }
-                        }
-
-                        return out.distinct()
-                    }
-
-                    fun mapListFromDoc(
-                        doc: DocumentSnapshot,
-                        vararg keys: String
-                    ): List<Map<String, String>> {
-                        val out = mutableListOf<Map<String, String>>()
-
-                        keys.forEach { key ->
-                            val value = doc.get(key)
-
-                            if (value is List<*>) {
-                                value.forEach { item ->
-                                    val map = item as? Map<*, *> ?: return@forEach
-
-                                    val cleanMap = map.mapNotNull { entry ->
-                                        val k = entry.key?.toString()?.trim().orEmpty()
-                                        val v = entry.value?.toString()?.trim().orEmpty()
-
-                                        if (k.isBlank() || v.isBlank()) {
-                                            null
-                                        } else {
-                                            k to v
-                                        }
-                                    }.toMap()
-
-                                    if (cleanMap.isNotEmpty()) {
-                                        out += cleanMap
-                                    }
-                                }
-                            }
-                        }
-
-                        return out
-                    }
-
-                    fun firstStringFromDoc(
-                        doc: DocumentSnapshot,
-                        vararg keys: String
-                    ): String {
-                        keys.forEach { key ->
-                            when (val value = doc.get(key)) {
-                                is String -> {
-                                    val clean = value.trim()
-                                    if (clean.isNotBlank()) return clean
-                                }
-
-                                is List<*> -> {
-                                    val clean = value
-                                        .mapNotNull { it?.toString()?.trim() }
-                                        .firstOrNull { it.isNotBlank() }
-
-                                    if (!clean.isNullOrBlank()) return clean
-                                }
-
-                                is Set<*> -> {
-                                    val clean = value
-                                        .mapNotNull { it?.toString()?.trim() }
-                                        .firstOrNull { it.isNotBlank() }
-
-                                    if (!clean.isNullOrBlank()) return clean
-                                }
-                            }
-                        }
-
-                        return ""
-                    }
-
-                    fun docTargetsCurrentUser(
-                        doc: DocumentSnapshot
-                    ): Boolean {
-                        if (
-                            uid.isBlank() &&
-                            currentEmail.isBlank() &&
-                            currentPhones.isEmpty() &&
-                            currentNames.isEmpty() &&
-                            currentBranches.isEmpty() &&
-                            currentGroups.isEmpty()
-                        ) {
-                            return false
-                        }
-
-                        val authorUid = (
-                                doc.getString("authorUid")
-                                    ?: doc.getString("coachUid")
-                                    ?: doc.getString("senderUid")
-                                    ?: ""
-                                ).trim()
-
-                        // ✅ המאמן ששלח את ההודעה יראה אותה גם במסך הבית שלו
-                        if (uid.isNotBlank() && authorUid == uid) {
-                            return true
-                        }
-
-                        val uidTargets = stringListFromDoc(
-                            doc,
-                            "targetUids",
-                            "targetUid",
-                            "recipientUids",
-                            "recipientUid",
-                            "uids",
-                            "userIds",
-                            "userId",
-                            "targetIds",
-                            "targetId",
-                            "participantIds",
-                            "participantId",
-                            "selectedUids",
-                            "selectedUid",
-                            "traineeUids",
-                            "traineeUid",
-                            "traineeIds",
-                            "traineeId",
-                            "studentUids",
-                            "studentUid",
-                            "studentIds",
-                            "studentId"
-                        )
-
-                        if (uid.isNotBlank() && uidTargets.any { it.trim() == uid }) {
-                            return true
-                        }
-
-                        val recipientMaps = mapListFromDoc(
-                            doc,
-                            "targetRecipients",
-                            "recipients",
-                            "selectedRecipients"
-                        )
-
-                        if (recipientMaps.isNotEmpty()) {
-                            val mapUids = recipientMaps
-                                .flatMap { recipient ->
-                                    listOf(
-                                        recipient["uid"],
-                                        recipient["userId"],
-                                        recipient["user_id"],
-                                        recipient["id"],
-                                        recipient["traineeUid"],
-                                        recipient["trainee_uid"],
-                                        recipient["studentUid"],
-                                        recipient["student_uid"]
-                                    )
-                                }
-                                .mapNotNull { it?.trim()?.takeIf { value -> value.isNotBlank() } }
-
-                            if (uid.isNotBlank() && mapUids.any { it == uid }) {
-                                return true
-                            }
-                            val mapEmails = recipientMaps
-                                .mapNotNull { it["email"]?.trim()?.takeIf { value -> value.isNotBlank() } }
-
-                            if (
-                                currentEmail.isNotBlank() &&
-                                mapEmails.any { it.equals(currentEmail, ignoreCase = true) }
-                            ) {
-                                return true
-                            }
-
-                            val mapPhones = recipientMaps
-                                .flatMap { recipient ->
-                                    listOf(
-                                        recipient["phone"],
-                                        recipient["phoneNumber"],
-                                        recipient["phone_number"],
-                                        recipient["mobile"],
-                                        recipient["userPhone"],
-                                        recipient["user_phone"]
-                                    )
-                                }
-                                .mapNotNull { it?.trim()?.takeIf { value -> value.isNotBlank() } }
-                                .map { normalizePhone(it) }
-                                .filter { it.isNotBlank() }
-
-                            if (
-                                currentPhones.isNotEmpty() &&
-                                mapPhones.any { target ->
-                                    currentPhones.any { current -> current == target }
-                                }
-                            ) {
-                                return true
-                            }
-
-                            val mapNames = recipientMaps
-                                .flatMap { recipient ->
-                                    listOf(
-                                        recipient["name"],
-                                        recipient["fullName"],
-                                        recipient["full_name"],
-                                        recipient["displayName"],
-                                        recipient["display_name"],
-                                        recipient["userName"],
-                                        recipient["user_name"]
-                                    )
-                                }
-                                .mapNotNull { it?.trim()?.takeIf { value -> value.isNotBlank() } }
-
-                            if (
-                                currentNames.isNotEmpty() &&
-                                mapNames.any { target ->
-                                    currentNames.any { current ->
-                                        current.trim().equals(target.trim(), ignoreCase = true)
-                                    }
-                                }
-                            ) {
-                                return true
-                            }
-                        }
-
-                        val emailTargets = stringListFromDoc(
-                            doc,
-                            "targetEmails",
-                            "targetEmail",
-                            "recipientEmails",
-                            "recipientEmail",
-                            "emails",
-                            "selectedEmails"
-                        )
-
-                        if (
-                            currentEmail.isNotBlank() &&
-                            emailTargets.any { it.equals(currentEmail, ignoreCase = true) }
-                        ) {
-                            return true
-                        }
-
-                        val phoneTargets = stringListFromDoc(
-                            doc,
-                            "targetPhones",
-                            "targetPhone",
-                            "recipientPhones",
-                            "recipientPhone",
-                            "phones",
-                            "selectedPhones"
-                        ).map { normalizePhone(it) }
-
-                        if (
-                            currentPhones.isNotEmpty() &&
-                            phoneTargets.any { target ->
-                                currentPhones.any { current -> current == target }
-                            }
-                        ) {
-                            return true
-                        }
-
-                        val nameTargets = stringListFromDoc(
-                            doc,
-                            "targetNames",
-                            "targetName",
-                            "recipientNames",
-                            "recipientName",
-                            "names",
-                            "selectedNames"
-                        )
-
-                        if (
-                            currentNames.isNotEmpty() &&
-                            nameTargets.any { target ->
-                                currentNames.any { current ->
-                                    current.trim().equals(target.trim(), ignoreCase = true)
-                                }
-                            }
-                        ) {
-                            return true
-                        }
-
-                        val docBranches = stringListFromDoc(
-                            doc,
-                            "branch",
-                            "branches",
-                            "branchName",
-                            "branch_name",
-                            "targetBranch",
-                            "targetBranches",
-                            "selectedBranch",
-                            "selectedBranches"
-                        ).map { normalizeText(it) }
-
-                        val docGroups = stringListFromDoc(
-                            doc,
-                            "group",
-                            "groups",
-                            "groupKey",
-                            "group_key",
-                            "targetGroup",
-                            "targetGroups",
-                            "selectedGroup",
-                            "selectedGroups"
-                        ).map {
-                            normalizeText(
-                                TrainingCatalog
-                                    .normalizeGroupName(it)
-                                    .ifBlank { it }
-                            )
-                        }
-
-                        val branchMatches =
-                            docBranches.isNotEmpty() &&
-                                    currentBranches.any { current ->
-                                        docBranches.any { target ->
-                                            target == current
-                                        }
-                                    }
-
-                        val groupMatches =
-                            docGroups.isNotEmpty() &&
-                                    currentGroups.any { current ->
-                                        docGroups.any { target ->
-                                            target == current
-                                        }
-                                    }
-
-                        /*
-                         * הודעות חדשות עשויות להכיל גם סניף וגם קבוצה,
-                         * אבל הודעות ישנות עשויות להכיל רק אחד מהם.
-                         *
-                         * אם קיימים שניהם – דורשים התאמה של שניהם.
-                         * אם קיים רק אחד – מספיקה ההתאמה שלו.
-                         */
-                        return when {
-                            docBranches.isNotEmpty() &&
-                                    docGroups.isNotEmpty() -> {
-                                branchMatches && groupMatches
-                            }
-
-                            docBranches.isNotEmpty() -> {
-                                branchMatches
-                            }
-
-                            docGroups.isNotEmpty() -> {
-                                groupMatches
-                            }
-
-                            else -> {
-                                false
-                            }
-                        }
-                    }
-
-                    if (
-                        uid.isBlank() &&
-                        currentEmail.isBlank() &&
-                        currentPhones.isEmpty() &&
-                        currentNames.isEmpty() &&
-                        currentBranches.isEmpty() &&
-                        currentGroups.isEmpty()
-                    ) {
-                        recentCoachMessages = emptyList()
-                        onDispose { }
-                    } else {
-                        val db =
-                            FirebaseFirestore.getInstance()
-
-                        val broadcastsCollection =
-                            db.collection("coachBroadcasts")
-
-                        /*
-                         * מאחדים תוצאות משתי שאילתות מאובטחות:
-                         *
-                         * 1. הודעות שהמשתמש נמצא ב-targetUids שלהן.
-                         * 2. הודעות שהמשתמש הנוכחי הוא המאמן ששלח אותן.
-                         *
-                         * אותו מסמך עשוי להופיע בשתי השאילתות ולכן
-                         * האיחוד מתבצע לפי מזהה המסמך.
-                         */
-                        val recipientDocuments =
-                            mutableMapOf<String, DocumentSnapshot>()
-
-                        val authoredDocuments =
-                            mutableMapOf<String, DocumentSnapshot>()
-
-                        fun publishRecentMessages() {
-                            val mergedDocuments =
-                                buildMap {
-                                    putAll(recipientDocuments)
-                                    putAll(authoredDocuments)
-                                }
-                                    .values
-                                    .toList()
-
-                            recentCoachMessages =
-                                mergedDocuments
-                                    .asSequence()
-                                    .filter { doc ->
-                                        val docBroadcastId = (
-                                                doc.getString("broadcastId")
-                                                    ?: doc.getString("broadcast_id")
-                                                    ?: doc.id
-                                                ).trim()
-
-                                        docTargetsCurrentUser(doc) ||
-                                                (
-                                                        pushBroadcastId.isNotBlank() &&
-                                                                docBroadcastId ==
-                                                                pushBroadcastId
-                                                        )
-                                    }
-                                    .mapNotNull { doc ->
-                                        val text = (
-                                                doc.getString("text")
-                                                    ?: doc.getString("message")
-                                                    ?: doc.getString("body")
-                                                    ?: doc.getString("content")
-                                                )
-                                            ?.trim()
-                                            .orEmpty()
-
-                                        if (text.isBlank()) {
-                                            null
-                                        } else {
-                                            val sentAt =
-                                                doc.getTimestamp("createdAt")
-                                                    ?.toDate()
-                                                    ?: doc.getTimestamp("sentAt")
-                                                        ?.toDate()
-                                                    ?: doc.getTimestamp("timestamp")
-                                                        ?.toDate()
-                                                    ?: doc.getLong("createdAtMillis")
-                                                        ?.takeIf { it > 0L }
-                                                        ?.let { Date(it) }
-                                                    ?: doc.getLong("sentAtMillis")
-                                                        ?.takeIf { it > 0L }
-                                                        ?.let { Date(it) }
-
-                                            CoachHomeMessage(
-                                                text = text,
-                                                coachName = (
-                                                        doc.getString("coachName")
-                                                            ?: doc.getString("coach_name")
-                                                            ?: doc.getString("senderName")
-                                                            ?: doc.getString("fromName")
-                                                            ?: "המאמן"
-                                                        ).trim(),
-                                                sentAt = sentAt,
-                                                branch = firstStringFromDoc(
-                                                    doc,
-                                                    "branch",
-                                                    "branchName",
-                                                    "branch_name",
-                                                    "targetBranch",
-                                                    "selectedBranch"
-                                                ),
-                                                group = firstStringFromDoc(
-                                                    doc,
-                                                    "group",
-                                                    "groups",
-                                                    "groupKey",
-                                                    "group_key",
-                                                    "targetGroup",
-                                                    "targetGroups",
-                                                    "selectedGroup",
-                                                    "selectedGroups"
-                                                )
-                                            )
-                                        }
-                                    }
-                                    .distinctBy { message ->
-                                        listOf(
-                                            message.sentAt?.time ?: 0L,
-                                            message.coachName.trim(),
-                                            message.text.trim(),
-                                            message.branch.trim(),
-                                            message.group.trim()
-                                        ).joinToString("|")
-                                    }
-                                    .sortedByDescending { message ->
-                                        message.sentAt?.time ?: 0L
-                                    }
-                                    .take(5)
-                                    .toList()
-                        }
-
-                        val recipientRegistration =
-                            broadcastsCollection
-                                .whereArrayContains(
-                                    "targetUids",
-                                    uid
-                                )
-                                .limit(50)
-                                .addSnapshotListener { snapshot, error ->
-                                    if (error != null) {
-                                        return@addSnapshotListener
-                                    }
-
-                                    recipientDocuments.clear()
-
-                                    snapshot
-                                        ?.documents
-                                        .orEmpty()
-                                        .forEach { document ->
-                                            recipientDocuments[document.id] =
-                                                document
-                                        }
-
-                                    publishRecentMessages()
-                                }
-
-                        val authoredRegistration =
-                            broadcastsCollection
-                                .whereEqualTo(
-                                    "authorUid",
-                                    uid
-                                )
-                                .limit(50)
-                                .addSnapshotListener { snapshot, error ->
-                                    if (error != null) {
-                                        return@addSnapshotListener
-                                    }
-
-                                    authoredDocuments.clear()
-
-                                    snapshot
-                                        ?.documents
-                                        .orEmpty()
-                                        .forEach { document ->
-                                            authoredDocuments[document.id] =
-                                                document
-                                        }
-
-                                    publishRecentMessages()
-                                }
-
-                        onDispose {
-                            recipientRegistration.remove()
-                            authoredRegistration.remove()
-                        }
-                    }
-                }
-
-                var branchesRefreshTick by remember { mutableIntStateOf(0) }
-
-                // ✅ שכבת ביטחון:
-                // אם ה־SharedPreferences המקומי לא מכיל את כל הסניפים/קבוצות,
-                // נטען את הפרופיל מ־Firestore ונעדכן את kmi_user.
-                LaunchedEffect(currentUid) {
-                    val uidForProfile =
-                        currentUid
-                            ?.trim()
-                            ?.takeIf { it.isNotBlank() }
-                            ?: return@LaunchedEffect
-
-                    FirebaseFirestore.getInstance()
-                        .collection("users")
-                        .document(uidForProfile)
-                        .get()
-                        .addOnSuccessListener { doc ->
-
-                            fun listFromFirestoreListOrCsv(
-                                listKey: String,
-                                csvKey: String,
-                                fallbackKey: String
-                            ): List<String> {
-                                val fromList = (doc.get(listKey) as? List<*>)
-                                    ?.mapNotNull { it?.toString()?.trim() }
-                                    ?.filter { it.isNotBlank() }
-                                    ?.distinct()
-                                    .orEmpty()
-
-                                if (fromList.isNotEmpty()) return fromList
-
-                                val csv = doc.getString(csvKey)
-                                    ?.takeIf { it.isNotBlank() }
-                                    ?: doc.getString(fallbackKey)
-                                    ?: ""
-
-                                return csv
-                                    .split(',', ';', '|', '\n')
-                                    .map { it.trim() }
-                                    .filter { it.isNotBlank() }
-                                    .distinct()
-                            }
-
-                            val remoteBranches = listFromFirestoreListOrCsv(
-                                listKey = "branches",
-                                csvKey = "branchesCsv",
-                                fallbackKey = "branch"
-                            )
-
-                            val remoteGroups = listFromFirestoreListOrCsv(
-                                listKey = "groups",
-                                csvKey = "groupsCsv",
-                                fallbackKey = "primaryGroup"
-                            )
-
-                            val remoteActiveBranch =
-                                doc.getString("activeBranch")
-                                    ?.takeIf { it.isNotBlank() && it in remoteBranches }
-                                    ?: remoteBranches.firstOrNull()
-                                    ?: ""
-
-                            val remoteActiveGroup =
-                                doc.getString("activeGroup")
-                                    ?.takeIf { it.isNotBlank() && it in remoteGroups }
-                                    ?: remoteGroups.firstOrNull()
-                                    ?: ""
-
-                            val branchesCsv = remoteBranches.joinToString(", ")
-                            val groupsCsv = remoteGroups.joinToString(", ")
-                            val branchesJson = JSONArray(remoteBranches).toString()
-                            val groupsJson = JSONArray(remoteGroups).toString()
-
-                            if (remoteBranches.isNotEmpty() || remoteGroups.isNotEmpty()) {
-                                userSp.edit {
-                                    // ✅ ניקוי טיפוסים ישנים שאולי נשמרו כ־StringSet
-                                    remove("branches")
-                                    remove("selected_branches")
-                                    remove("groups")
-                                    remove("selected_groups")
-
-                                    // ✅ סניפים
-                                    putString("branch", branchesCsv)
-                                    putString("branches", branchesCsv)
-                                    putString("branches_json", branchesJson)
-                                    putString("selected_branches", branchesCsv)
-                                    putString("active_branch", remoteActiveBranch)
-
-                                    // ✅ קבוצות
-                                    putString("age_groups", groupsCsv)
-                                    putString("groups", groupsCsv)
-                                    putString("groups_json", groupsJson)
-                                    putString("selected_groups", groupsCsv)
-                                    putString("age_group", remoteGroups.firstOrNull().orEmpty())
-                                    putString("group", remoteGroups.firstOrNull().orEmpty())
-                                    putString("active_group", remoteActiveGroup)
-                                }
-
-                                branchesRefreshTick++
-                                groupsRefreshTick++
-                            }
-                        }
-                        .addOnFailureListener {
-                        }
-                }
-
-                DisposableEffect(userSp) {
-                    val listener = SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
-                        if (
-                            key == "branches_json" ||
-                            key == "selected_branches" ||
-                            key == "branches" ||
-                            key == "branch" ||
-                            key == "branch2" ||
-                            key == "branch3" ||
-                            key == "branch_type"
-                        ) {
-                            branchesRefreshTick++
-                        }
-                    }
-
-                    userSp.registerOnSharedPreferenceChangeListener(listener)
-
-                    onDispose {
-                        userSp.unregisterOnSharedPreferenceChangeListener(listener)
-                    }
-                }
-
-                val branchTypeHome = remember(userSp, branchesRefreshTick) {
-                    userSp.getString("branch_type", "israel") ?: "israel"
-                }
-
-                val isAbroadBranch = branchTypeHome == "abroad"
-
-                /*
-                 * המבנה החדש שבו כל סניף מחזיק רק
-                                 * את הקבוצות ששויכו אליו ברישום.
-                                 */
-                val homeBranchAssignments =
-                    remember(
-                        userSp,
-                        branchesRefreshTick,
-                        groupsRefreshTick
-                    ) {
-                        CoachBranchAssignmentsCodec
-                            .decode(
-                                userSp.getString(
-                                    "coach_branch_assignments_json",
-                                    ""
-                                )
-                            )
-                    }
-
-                /*
-                 * זוגות מדויקים של סניף וקבוצה.
-                 *
-                 * רק משתמשים ישנים, שעדיין לא נשמר אצלם
-                 * המבנה החדש, משתמשים ברשימות הישנות.
-                 */
-                val branchGroupPairsEffective:
-                        List<Pair<String, String>> =
-                    remember(
-                        homeBranchAssignments,
-                        ctx
-                    ) {
-                        homeBranchAssignments
-                            .flatMap { assignment ->
-                                assignment.groups.map {
-                                        groupName ->
-
-                                    assignment.branch.trim() to
-                                            groupName.trim()
-                                }
-                            }
-                            .filter {
-                                    (branchName, groupName) ->
-
-                                branchName.isNotBlank() &&
-                                        groupName.isNotBlank()
-                            }
-                            .filter {
-                                    (branchName, groupName) ->
-
-                                val dbGroups =
-                                    KmiDatabaseProvider
-                                        .branchByName(
-                                            ctx,
-                                            branchName
-                                        )
-                                        ?.trainingDays
-                                        ?.map { day ->
-                                            TrainingCatalog
-                                                .normalizeGroupName(
-                                                    day.groupHe
-                                                )
-                                                .ifBlank {
-                                                    day.groupHe.trim()
-                                                }
-                                        }
-                                        ?.filter { group ->
-                                            group.isNotBlank()
-                                        }
-                                        ?.distinct()
-                                        .orEmpty()
-
-                                val catalogGroups =
-                                    TrainingCatalog
-                                        .groupsForBranch(
-                                            branch = branchName,
-                                            isEnglish = false
-                                        )
-                                        .map { group ->
-                                            TrainingCatalog
-                                                .normalizeGroupName(
-                                                    group
-                                                )
-                                                .ifBlank {
-                                                    group.trim()
-                                                }
-                                        }
-                                        .filter { group ->
-                                            group.isNotBlank()
-                                        }
-                                        .distinct()
-
-                                val validGroups =
-                                    if (dbGroups.isNotEmpty()) {
-                                        dbGroups
-                                    } else {
-                                        catalogGroups
-                                    }
-
-                                val wantedGroup =
-                                    TrainingCatalog
-                                        .normalizeGroupName(
-                                            groupName
-                                        )
-                                        .ifBlank {
-                                            groupName.trim()
-                                        }
-
-                                validGroups.any { validGroup ->
-                                    validGroup.equals(
-                                        wantedGroup,
-                                        ignoreCase = true
-                                    )
-                                }
-                            }
-                            .distinct()
-                    }
+                val isAbroadBranch =
+                    coachAssignmentsState.isAbroadBranch
 
                 // ✅ name להצגה + פרמטרים לניווט אימונים חופשיים (נעדכן state כדי שה-FAB יוכל להשתמש גם מחוץ ל-Column)
                 val freeName = remember(userSp) {
@@ -2979,52 +1870,19 @@ fun HomeScreen(
                             }
                     }
 
-                /*
- * סנכרון מופעי האימונים הקרובים ל-Firestore.
- *
- * מתבצע רק בצד המאמן.
- * המתאמן אינו יוצר ואינו מעדכן trainingOccurrences.
- *
- * occurrenceKey + activeOverride כבר חושבו למעלה,
- * ולכן אין כאן חישוב כפול.
- */
-                LaunchedEffect(
-                    isCoach,
-                    currentUid,
-                    upcoming
-                ) {
-                    if (!isCoach) {
-                        return@LaunchedEffect
-                    }
-
-                    val uid =
-                        currentUid
-                            ?.trim()
-                            .orEmpty()
-
-                    if (uid.isBlank()) {
-                        return@LaunchedEffect
-                    }
-
-                    upcoming.forEach { item ->
-                        TrainingOverrideRepository
-                            .syncTrainingOccurrence(
+                SyncHomeCoachTrainingOccurrences(
+                    isCoach = isCoach,
+                    currentUid = currentUid,
+                    items =
+                        upcoming.map { item ->
+                            HomeCoachOccurrenceItem(
                                 training = item.training,
                                 branch = item.branch,
                                 group = item.group,
-                                activeOverride = item.activeOverride,
-                                onResult = { _, _ ->
-                                    /*
-                                     * כשל בסנכרון occurrence לא מפיל
-                                     * את מסך הבית.
-                                     *
-                                     * לאחר שנאשר את ה-Rules אפשר
-                                     * להוסיף כאן לוג אבחון אם נרצה.
-                                     */
-                                }
+                                activeOverride = item.activeOverride
                             )
-                    }
-                }
+                        }
+                )
 
                 LaunchedEffect(upcoming, isEnglish) {
                     val locale = if (isEnglish) {
@@ -3132,95 +1990,23 @@ fun HomeScreen(
                                 activeOverride =
                                     item.activeOverride,
                                 onManageTraining = {
-                                    val timeFormatter =
-                                        SimpleDateFormat(
-                                            "HH:mm",
-                                            Locale.getDefault()
-                                        )
-
-                                    val dateFormatter =
-                                        SimpleDateFormat(
-                                            "dd/MM/yyyy",
-                                            Locale.getDefault()
-                                        )
-
-                                    val displayedStartTime =
-                                        if (
-                                            item.activeOverride
-                                                ?.hasChangedTime == true
-                                        ) {
-                                            timeFormatter.format(
-                                                Date(
-                                                    item.activeOverride
-                                                        .effectiveStartMillis
-                                                )
-                                            )
-                                        } else {
-                                            item.training.start
-                                        }
-
-                                    val displayedEndTime =
-                                        if (
-                                            item.activeOverride
-                                                ?.hasChangedTime == true
-                                        ) {
-                                            timeFormatter.format(
-                                                Date(
-                                                    item.activeOverride
-                                                        .effectiveEndMillis
-                                                )
-                                            )
-                                        } else {
-                                            item.training.end
-                                        }
-
-                                    val changedByName =
-                                        coachFromPrefs
-                                            .trim()
-                                            .ifBlank {
-                                                freeNameUi.trim()
-                                            }
-                                            .ifBlank {
-                                                FirebaseAuth
-                                                    .getInstance()
-                                                    .currentUser
-                                                    ?.displayName
-                                                    ?.trim()
-                                                    .orEmpty()
-                                            }
-                                            .ifBlank {
-                                                if (isEnglish) {
-                                                    "Coach"
-                                                } else {
-                                                    "מאמן"
-                                                }
-                                            }
-
-                                    TrainingManagementNavigationStore.open(
-                                        TrainingManagementRequest(
-                                            uiData =
-                                                TrainingManagementUiData(
-                                                    occurrenceKey =
-                                                        item.occurrenceKey,
-                                                    place =
-                                                        item.training.place,
-                                                    branch = item.branch,
-                                                    group = item.group,
-                                                    dateText =
-                                                        dateFormatter.format(
-                                                            item.training
-                                                                .cal.time
-                                                        ),
-                                                    startTime =
-                                                        displayedStartTime,
-                                                    endTime =
-                                                        displayedEndTime
-                                                ),
-                                            training = item.training,
-                                            branch = item.branch,
-                                            group = item.group,
-                                            changedByName = changedByName
-                                        )
+                                    openHomeCoachTrainingManagement(
+                                        training =
+                                            item.training,
+                                        occurrenceKey =
+                                            item.occurrenceKey,
+                                        branch =
+                                            item.branch,
+                                        group =
+                                            item.group,
+                                        activeOverride =
+                                            item.activeOverride,
+                                        coachName =
+                                            coachFromPrefs,
+                                        fallbackName =
+                                            freeNameUi,
+                                        isEnglish =
+                                            isEnglish
                                     )
 
                                     onOpenTrainingManagement()
@@ -3261,302 +2047,27 @@ fun HomeScreen(
                         Spacer(Modifier.height(6.dp))
                     }
 
-                    // ===== כרטיס הודעות מהמאמן – הודעה אחרונה + דיאלוג הודעות אחרונות =====
-                    item {
-                        val latestNotice =
-                            homeNotices.firstOrNull()
-
-                        val msg =
-                            latestNotice
-                                ?.text
-                                ?.trim()
-
-                        val extraCount =
-                            (homeNotices.size - 1)
-                                .coerceAtLeast(0)
-
-                        Surface(
-                            onClick = {
-                                /*
-                                 * פותחים תמיד את חלון ההודעות.
-                                 * אם טרם התקבלו הודעות, החלון יציג
-                                 * הודעה מתאימה במקום להתעלם מהלחיצה.
-                                 */
-                                clickSound()
-                                haptic(true)
-                                showCoachMessagesDialog = true
-                            },
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = 16.dp),
-                            shape = RoundedCornerShape(20.dp),
-                            color = MaterialTheme.colorScheme.surface.copy(
-                                alpha = 0.96f
-                            ),
-                            tonalElevation = 0.dp,
-                            shadowElevation = 0.dp,
-                            border = BorderStroke(
-                                width = 1.dp,
-                                color = MaterialTheme.colorScheme.primary.copy(
-                                    alpha = 0.45f
-                                )
-                            )
-                        ) {
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(horizontal = 14.dp, vertical = 12.dp),
-                                horizontalArrangement = Arrangement.spacedBy(10.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Surface(
-                                    shape = CircleShape,
-                                    color = MaterialTheme.colorScheme.primary.copy(
-                                        alpha = 0.14f
-                                    ),
-                                    border = BorderStroke(
-                                        width = 1.dp,
-                                        color = MaterialTheme.colorScheme.primary.copy(
-                                            alpha = 0.35f
-                                        )
-                                    ),
-                                    modifier =
-                                        Modifier.size(
-                                            scaledIconSize(38.dp)
-                                        )
-                                ) {
-                                    Icon(
-                                        imageVector =
-                                            Icons.Default.Person,
-                                        contentDescription = null,
-                                        tint =
-                                            MaterialTheme
-                                                .colorScheme
-                                                .primary,
-                                        modifier =
-                                            Modifier.padding(
-                                                scaledIconSize(8.dp)
-                                            )
-                                    )
-                                }
-
-                                Column(modifier = Modifier.weight(1f)) {
-                                    Row(
-                                        modifier = Modifier.fillMaxWidth(),
-                                        verticalAlignment = Alignment.CenterVertically
-                                    ) {
-                                        Text(
-                                            text =
-                                                if (isEnglish) {
-                                                    "Messages & Events"
-                                                } else {
-                                                    "הודעות ואירועים"
-                                                },
-                                            style = KmiTypography.cardTitle,
-                                            color = MaterialTheme.colorScheme.onSurface,
-                                            maxLines = 1,
-                                            overflow = TextOverflow.Ellipsis,
-                                            modifier = Modifier.weight(1f)
-                                        )
-
-                                        if (homeNotices.isNotEmpty()) {
-                                            Surface(
-                                                onClick = {
-                                                    showCoachMessagesDialog = true
-                                                },
-                                                shape = CircleShape,
-                                                color = MaterialTheme.colorScheme.primary.copy(
-                                                    alpha = 0.14f
-                                                ),
-                                                border = BorderStroke(
-                                                    width = 1.dp,
-                                                    color = MaterialTheme.colorScheme.primary.copy(
-                                                        alpha = 0.40f
-                                                    )
-                                                ),
-                                                modifier =
-                                                    Modifier.size(
-                                                        scaledIconSize(32.dp)
-                                                    )
-                                            ) {
-                                                Box(
-                                                    contentAlignment =
-                                                        Alignment.Center
-                                                ) {
-                                                    Icon(
-                                                        imageVector =
-                                                            Icons.Filled.Email,
-                                                        contentDescription =
-                                                            if (isEnglish) {
-                                                                "Messages and events"
-                                                            } else {
-                                                                "הודעות ואירועים"
-                                                            },
-                                                        tint =
-                                                            MaterialTheme
-                                                                .colorScheme
-                                                                .primary,
-                                                        modifier =
-                                                            Modifier.size(
-                                                                scaledIconSize(
-                                                                    17.dp
-                                                                )
-                                                            )
-                                                    )
-                                                }
-                                            }
-                                        }
-                                    }
-
-                                    Spacer(Modifier.height(4.dp))
-
-                                    if (msg.isNullOrEmpty()) {
-                                        Text(
-                                            text = if (isEnglish) {
-                                                "No new messages right now"
-                                            } else {
-                                                "אין הודעות חדשות כרגע"
-                                            },
-                                            style = KmiTypography.body,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                                        )
-                                    } else {
-                                        Text(
-                                            text = msg,
-                                            style = KmiTypography.body,
-                                            color = MaterialTheme.colorScheme.onSurface,
-                                            maxLines = 2,
-                                            overflow = TextOverflow.Ellipsis
-                                        )
-
-                                        val branchGroupLine = buildString {
-                                            val b =
-                                                latestNotice.branch
-                                                    .trim()
-
-                                            val g =
-                                                latestNotice.group
-                                                    .trim()
-
-                                            if (b.isNotBlank()) {
-                                                append(
-                                                    if (isEnglish) {
-                                                        "Branch: "
-                                                    } else {
-                                                        "סניף: "
-                                                    }
-                                                )
-                                                append(b)
-                                            }
-
-                                            if (g.isNotBlank()) {
-                                                if (isNotBlank()) {
-                                                    append(" · ")
-                                                }
-
-                                                append(
-                                                    if (isEnglish) {
-                                                        "Group: "
-                                                    } else {
-                                                        "קבוצה: "
-                                                    }
-                                                )
-                                                append(g)
-                                            }
-                                        }
-
-                                        if (branchGroupLine.isNotBlank()) {
-                                            Spacer(Modifier.height(4.dp))
-                                            Text(
-                                                text = branchGroupLine,
-                                                style = KmiTypography.secondary,
-                                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                                maxLines = 2,
-                                                overflow = TextOverflow.Ellipsis
-                                            )
-                                        }
-                                    }
-
-                                    Spacer(Modifier.height(6.dp))
-
-                                    val timeText = latestNotice?.sentAt?.let {
-                                        SimpleDateFormat(
-                                            "dd/MM/yyyy · HH:mm",
-                                            Locale("he", "IL")
-                                        ).format(it)
-                                    }.orEmpty()
-
-                                    val openRecentText =
-                                        if (extraCount > 0) {
-                                            if (isEnglish) {
-                                                "Open recent updates · +$extraCount more"
-                                            } else {
-                                                "פתח הודעות ואירועים אחרונים"
-                                            }
-                                        } else {
-                                            if (isEnglish) {
-                                                "Open recent updates"
-                                            } else {
-                                                "פתח הודעות ואירועים אחרונים"
-                                            }
-                                        }
-
-                                    if (timeText.isNotBlank() || recentCoachMessages.isNotEmpty()) {
-                                        Column(
-                                            modifier = Modifier.fillMaxWidth()
-                                        ) {
-                                            if (timeText.isNotBlank()) {
-                                                Text(
-                                                    text = timeText,
-                                                    style = KmiTypography.caption,
-                                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                                    textAlign =
-                                                        if (isEnglish) {
-                                                            TextAlign.Left
-                                                        } else {
-                                                            TextAlign.Right
-                                                        },
-                                                    maxLines = 1,
-                                                    overflow = TextOverflow.Ellipsis,
-                                                    modifier = Modifier.fillMaxWidth()
-                                                )
-                                            }
-
-                                            if (recentCoachMessages.isNotEmpty()) {
-                                                Spacer(Modifier.height(3.dp))
-
-                                                Text(
-                                                    text = openRecentText,
-                                                    style = KmiTypography.caption.copy(
-                                                        fontWeight = FontWeight.Bold
-                                                    ),
-                                                    color = MaterialTheme.colorScheme.primary,
-                                                    textAlign =
-                                                        if (isEnglish) {
-                                                            TextAlign.Right
-                                                        } else {
-                                                            TextAlign.Left
-                                                        },
-                                                    maxLines = 1,
-                                                    overflow = TextOverflow.Ellipsis,
-                                                    modifier = Modifier
-                                                        .fillMaxWidth()
-                                                        .clickable {
-                                                            showCoachMessagesDialog = true
-                                                        }
-                                                )
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        }
+            // ===== כרטיס הודעות ואירועים =====
+            item {
+                HomeCoachNoticesCard(
+                    homeNotices =
+                        homeNotices,
+                    hasRecentCoachMessages =
+                        recentCoachMessages
+                            .isNotEmpty(),
+                    isEnglish =
+                        isEnglish,
+                    onOpen = {
+                        coachMessagesState
+                            .openDialog()
                     }
-                }
+                )
+            }
+        }
 
-                Spacer(Modifier.height(1.dp))
+            Spacer(Modifier.height(1.dp))
 
-                val bubbleTransition = rememberInfiniteTransition(
+            val bubbleTransition = rememberInfiniteTransition(
                     label = "homeBottomButtonBubbleTransition"
                 )
 
@@ -3833,7 +2344,7 @@ fun HomeScreen(
 
                 AlertDialog(
                     onDismissRequest = {
-                        showCoachMessagesDialog = false
+                        coachMessagesState.dismissDialog()
                     },
                     modifier = Modifier
                         .fillMaxWidth()
@@ -4311,7 +2822,7 @@ fun HomeScreen(
                             onClick = {
                                 clickSound()
                                 haptic(true)
-                                showCoachMessagesDialog = false
+                                coachMessagesState.dismissDialog()
                             },
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -5326,38 +3837,13 @@ private fun TrainingCardCompact(
                 .toLocalDate()
         }
 
-    val attendanceForecastFlow =
-        remember(
-            isCoach,
-            branch,
-            attendanceGroup,
-            trainingDate
-        ) {
-            if (
-                isCoach &&
-                branch.isNotBlank() &&
-                attendanceGroup.isNotBlank()
-            ) {
-                attendanceRepository
-                    .attendanceForecastForDay(
-                        branch = branch,
-                        groupKey = attendanceGroup,
-                        date = trainingDate
-                    )
-            } else {
-                null
-            }
-        }
-
     val attendanceForecast =
-        if (attendanceForecastFlow != null) {
-            attendanceForecastFlow.collectAsState(
-                initial =
-                    TrainingAttendanceForecast()
-            ).value
-        } else {
-            TrainingAttendanceForecast()
-        }
+        rememberHomeCoachAttendanceForecast(
+            isCoach = isCoach,
+            branch = branch,
+            group = attendanceGroup,
+            trainingDate = trainingDate
+        )
 
     /*
      * מרגע תחילת האימון המתאמן אינו יכול
@@ -5429,6 +3915,58 @@ private fun TrainingCardCompact(
                 !attendanceSaving &&
                 resolvedAttendanceMemberId != null &&
                 authUid.isNotBlank()
+
+    LaunchedEffect(
+        occurrenceKey,
+        authUid,
+        resolvedAttendanceMemberId,
+        attendanceLocked,
+        attendanceSaving,
+        traineeAttendanceChoice,
+        effectiveStartMillis,
+        trainingDate
+    ) {
+        android.util.Log.d(
+            "KMI_ATTENDANCE_HOME",
+            buildString {
+                append("occurrenceKey=")
+                append(occurrenceKey)
+
+                append(" | branch=")
+                append(branch)
+
+                append(" | group=")
+                append(attendanceGroup)
+
+                append(" | date=")
+                append(trainingDate)
+
+                append(" | start=")
+                append(effectiveStartMillis)
+
+                append(" | now=")
+                append(nowMillis)
+
+                append(" | locked=")
+                append(attendanceLocked)
+
+                append(" | memberId=")
+                append(resolvedAttendanceMemberId)
+
+                append(" | saving=")
+                append(attendanceSaving)
+
+                append(" | authUidBlank=")
+                append(authUid.isBlank())
+
+                append(" | choice=")
+                append(traineeAttendanceChoice)
+
+                append(" | canEdit=")
+                append(canEditTraineeAttendance)
+            }
+        )
+    }
 
     fun saveTraineeAttendance(
         statusToSave: AttendanceStatus,
@@ -5942,111 +4480,18 @@ private fun TrainingCardCompact(
                     isCoach &&
                     !isTrainingCancelled
                 ) {
-                    Spacer(Modifier.height(8.dp))
-
-                    HorizontalDivider(
-                        modifier = Modifier.fillMaxWidth(),
-                        thickness = 1.dp,
-                        color =
-                            MaterialTheme
-                                .colorScheme
-                                .outline
-                                .copy(alpha = 0.18f)
+                    HomeCoachAttendanceForecastContent(
+                        attendanceForecast =
+                            attendanceForecast,
+                        isEnglish =
+                            isEnglish
                     )
-
-                    Spacer(Modifier.height(6.dp))
-
-                    HorizontalDivider(
-                        modifier = Modifier.fillMaxWidth(),
-                        thickness = 1.dp,
-                        color =
-                            MaterialTheme
-                                .colorScheme
-                                .outline
-                                .copy(alpha = 0.16f)
-                    )
-
-                    Spacer(Modifier.height(5.dp))
-
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement =
-                            Arrangement.spacedBy(6.dp),
-                        verticalAlignment =
-                            Alignment.CenterVertically
-                    ) {
-                        AttendanceForecastPremiumCard(
-                            value = attendanceForecast.comingCount,
-                            title =
-                                if (isEnglish) {
-                                    "Coming"
-                                } else {
-                                    "מגיעים"
-                                },
-                            containerColor =
-                                kmiSuccessContainerColor()
-                                    .copy(alpha = 0.96f),
-                            contentColor =
-                                kmiOnSuccessContainerColor(),
-                            borderColor =
-                                kmiSuccessColor(),
-                            modifier = Modifier.weight(1f)
-                        )
-
-                        AttendanceForecastPremiumCard(
-                            value = attendanceForecast.notComingCount,
-                            title =
-                                if (isEnglish) {
-                                    "Not coming"
-                                } else {
-                                    "לא מגיעים"
-                                },
-                            containerColor =
-                                MaterialTheme
-                                    .colorScheme
-                                    .errorContainer
-                                    .copy(alpha = 0.96f),
-                            contentColor =
-                                MaterialTheme
-                                    .colorScheme
-                                    .onErrorContainer,
-                            borderColor =
-                                MaterialTheme
-                                    .colorScheme
-                                    .error,
-                            modifier = Modifier.weight(1f)
-                        )
-
-                        AttendanceForecastPremiumCard(
-                            value = attendanceForecast.noResponseCount,
-                            title =
-                                if (isEnglish) {
-                                    "Pending"
-                                } else {
-                                    "טרם סימנו"
-                                },
-                            containerColor =
-                                MaterialTheme
-                                    .colorScheme
-                                    .surfaceVariant
-                                    .copy(alpha = 0.82f),
-                            contentColor =
-                                MaterialTheme
-                                    .colorScheme
-                                    .onSurfaceVariant,
-                            borderColor =
-                                MaterialTheme
-                                    .colorScheme
-                                    .outline
-                                    .copy(alpha = 0.55f),
-                            modifier = Modifier.weight(1f)
-                        )
-                    }
                 }
 
                 if (
                     !isCoach &&
-                    !isTrainingCancelled
+                    !isTrainingCancelled &&
+                    resolvedAttendanceMemberId != null
                 ) {
                     Spacer(Modifier.height(8.dp))
 
@@ -6282,132 +4727,11 @@ private fun TrainingCardCompact(
         }
 
         if (isCoach) {
-            /*
-             * האייקון ממוקם בפינה השמאלית הפיזית
-             * גם בעברית וגם באנגלית.
-             *
-             * ההזזה גורמת לכך שחלק מהעיגול נמצא
-             * בתוך הכרטיס וחלקו מחוץ לכרטיס.
-             */
-            val editButtonAlignment =
-                if (isEnglish) {
-                    Alignment.TopStart
-                } else {
-                    Alignment.TopEnd
-                }
-
-            Surface(
-                modifier = Modifier
-                    .align(editButtonAlignment)
-                    .absoluteOffset(
-                        x = (-10).dp,
-                        y = (-10).dp
-                    )
-                    .size(
-                        scaledIconSize(46.dp)
-                    )
-                    .zIndex(3f),
-                shape = CircleShape,
-                color =
-                    MaterialTheme.colorScheme
-                        .primaryContainer,
-                border = BorderStroke(
-                    width = 1.dp,
-                    color =
-                        MaterialTheme.colorScheme.primary
-                            .copy(alpha = 0.55f)
-                ),
-                tonalElevation = 0.dp,
-                shadowElevation = 0.dp
-            ) {
-                IconButton(
-                    onClick = {
-                        clickSound()
-                        haptic(true)
-                        onManageTraining()
-                    },
-                    modifier = Modifier.fillMaxSize()
-                ) {
-                    Icon(
-                        imageVector =
-                            Icons.Filled.EditNote,
-                        contentDescription =
-                            if (isEnglish) {
-                                "Change or cancel training"
-                            } else {
-                                "שינוי או ביטול אימון"
-                            },
-                        tint =
-                            MaterialTheme
-                                .colorScheme
-                                .primary,
-                        modifier =
-                            Modifier.size(
-                                scaledIconSize(23.dp)
-                            )
-                    )
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun AttendanceForecastPremiumCard(
-    value: Int,
-    title: String,
-    containerColor: Color,
-    contentColor: Color,
-    borderColor: Color,
-    modifier: Modifier = Modifier
-) {
-    Surface(
-        modifier =
-            modifier.heightIn(min = 64.dp),
-        shape = RoundedCornerShape(16.dp),
-        color = containerColor,
-        border = BorderStroke(
-            width = 1.dp,
-            color = borderColor
-        ),
-        tonalElevation = 0.dp,
-        shadowElevation = 0.dp
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(
-                    horizontal = 6.dp,
-                    vertical = 6.dp
-                ),
-            horizontalAlignment =
-                Alignment.CenterHorizontally,
-            verticalArrangement =
-                Arrangement.Center
-        ) {
-
-            Text(
-                text = value.toString(),
-                style =
-                    KmiTypography.secondary.copy(
-                        fontWeight = FontWeight.Black
-                    ),
-                color = contentColor,
-                textAlign = TextAlign.Center,
-                maxLines = 1
-            )
-
-            Spacer(Modifier.height(1.dp))
-
-            Text(
-                text = title,
-                style =
-                    KmiTypography.caption.copy(
-                        fontWeight = FontWeight.Bold
-                    ),
-                color = contentColor.copy(alpha = 0.95f),
-                textAlign = TextAlign.Center,
-                maxLines = 1
+            HomeCoachTrainingEditButton(
+                isEnglish =
+                    isEnglish,
+                onManageTraining =
+                    onManageTraining
             )
         }
     }

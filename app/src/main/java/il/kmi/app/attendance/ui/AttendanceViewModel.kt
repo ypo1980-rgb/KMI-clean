@@ -1036,42 +1036,6 @@ class AttendanceViewModel(app: Application) : AndroidViewModel(app) {
                 return joined.ifBlank { null }
             }
 
-            fun DocumentSnapshot.isCoachDoc(): Boolean {
-                val isCoachFlag = (get("isCoach") as? Boolean) == true
-                if (isCoachFlag) return true
-
-                val role = (getString("role") ?: getString("userType") ?: getString("type"))
-                    ?.trim()
-                    ?.lowercase()
-                    .orEmpty()
-
-                if ("coach" in role || "trainer" in role || "instructor" in role || "admin" in role) return true
-                if ("מאמן" in role) return true
-                return false
-            }
-
-            fun DocumentSnapshot.isTraineeDoc(): Boolean {
-                val role = (getString("role") ?: getString("userType") ?: getString("type"))
-                    ?.trim()
-                    ?.lowercase()
-                    .orEmpty()
-
-                // אם אין role – נניח מתאמן
-                if (role.isBlank()) return true
-
-                // מתאמן מפורש
-                if ("trainee" in role) return true
-                if ("מתאמן" in role) return true
-
-                // אם זה נראה כמו מאמן/אדמין – לא מתאמן
-                if ("coach" in role || "trainer" in role || "instructor" in role) return false
-                if ("admin" in role || "manager" in role) return false
-                if ("מאמן" in role) return false
-
-                // אחרת – עדיף לא להפיל (רוב הסיכויים שזה משתמש רגיל)
-                return true
-            }
-
             fun DocumentSnapshot.hasGroupMatch(): Boolean {
                 if (groupCandidates.firstOrNull().isNullOrBlank()) return true
 
@@ -1113,28 +1077,129 @@ class AttendanceViewModel(app: Application) : AndroidViewModel(app) {
                         .distinct()
                 }
 
-                val gList = (get("groups") as? List<*>)
-                    ?.mapNotNull { it?.toString()?.trim() }
-                    ?.flatMap { expandGroupAliases(it) }
-                    .orEmpty()
+                val gList =
+                    when (val rawGroups = get("groups")) {
+                        is List<*> ->
+                            rawGroups
+                                .mapNotNull {
+                                    it?.toString()?.trim()
+                                }
+                                .flatMap {
+                                    expandGroupAliases(it)
+                                }
 
-                val primary = getString("primaryGroup")?.trim()
-                val groupKeyField = getString("groupKey")?.trim()
+                        is String ->
+                            splitTokens(rawGroups)
+                                .flatMap {
+                                    expandGroupAliases(it)
+                                }
 
-                val groupField = getString("group")?.trim()
-                val groupName = getString("groupName")?.trim()
-                val groupsCsv = getString("groupsCsv")?.trim()
-                val groupCsv = getString("groupCsv")?.trim()
+                        else ->
+                            emptyList()
+                    }
 
-                val tokenBag = buildList {
-                    addAll(gList)
-                    addAll(splitTokens(primary).flatMap { expandGroupAliases(it) })
-                    addAll(splitTokens(groupKeyField).flatMap { expandGroupAliases(it) })
-                    addAll(splitTokens(groupField).flatMap { expandGroupAliases(it) })
-                    addAll(splitTokens(groupName).flatMap { expandGroupAliases(it) })
-                    addAll(splitTokens(groupsCsv).flatMap { expandGroupAliases(it) })
-                    addAll(splitTokens(groupCsv).flatMap { expandGroupAliases(it) })
-                }.filter { it.isNotBlank() }.distinct()
+                val primary =
+                    getString("primaryGroup")
+                        ?.trim()
+
+                val activeGroup =
+                    (
+                            getString("activeGroup")
+                                ?: getString("active_group")
+                            )
+                        ?.trim()
+
+                val ageGroup =
+                    (
+                            getString("age_group")
+                                ?: getString("ageGroup")
+                            )
+                        ?.trim()
+
+                val groupKeyField =
+                    getString("groupKey")
+                        ?.trim()
+
+                val groupField =
+                    getString("group")
+                        ?.trim()
+
+                val groupName =
+                    getString("groupName")
+                        ?.trim()
+
+                val groupsCsv =
+                    getString("groupsCsv")
+                        ?.trim()
+
+                val groupCsv =
+                    getString("groupCsv")
+                        ?.trim()
+
+                val tokenBag =
+                    buildList {
+                        addAll(gList)
+
+                        addAll(
+                            splitTokens(primary)
+                                .flatMap {
+                                    expandGroupAliases(it)
+                                }
+                        )
+
+                        addAll(
+                            splitTokens(activeGroup)
+                                .flatMap {
+                                    expandGroupAliases(it)
+                                }
+                        )
+
+                        addAll(
+                            splitTokens(ageGroup)
+                                .flatMap {
+                                    expandGroupAliases(it)
+                                }
+                        )
+
+                        addAll(
+                            splitTokens(groupKeyField)
+                                .flatMap {
+                                    expandGroupAliases(it)
+                                }
+                        )
+
+                        addAll(
+                            splitTokens(groupField)
+                                .flatMap {
+                                    expandGroupAliases(it)
+                                }
+                        )
+
+                        addAll(
+                            splitTokens(groupName)
+                                .flatMap {
+                                    expandGroupAliases(it)
+                                }
+                        )
+
+                        addAll(
+                            splitTokens(groupsCsv)
+                                .flatMap {
+                                    expandGroupAliases(it)
+                                }
+                        )
+
+                        addAll(
+                            splitTokens(groupCsv)
+                                .flatMap {
+                                    expandGroupAliases(it)
+                                }
+                        )
+                    }
+                        .filter {
+                            it.isNotBlank()
+                        }
+                        .distinct()
 
                 if (tokenBag.isEmpty()) return true
 
@@ -1153,15 +1218,86 @@ class AttendanceViewModel(app: Application) : AndroidViewModel(app) {
                 }
             }
 
-            suspend fun fetchUsersFor(branchValue: String): List<DocumentSnapshot> {
-                val col = Firebase.firestore.collection("users")
-                val out = mutableListOf<DocumentSnapshot>()
+            suspend fun fetchUsersFor(
+                branchValue: String
+            ): List<DocumentSnapshot> {
 
-                runCatching { out.addAll(col.whereArrayContains("branches", branchValue).get().await().documents) }
-                runCatching { out.addAll(col.whereEqualTo("branchesCsv", branchValue).get().await().documents) }
-                runCatching { out.addAll(col.whereEqualTo("branch", branchValue).get().await().documents) }
+                val col =
+                    Firebase.firestore
+                        .collection("users")
+
+                val out =
+                    mutableListOf<DocumentSnapshot>()
+
+                runCatching {
+                    out.addAll(
+                        col
+                            .whereArrayContains(
+                                "branches",
+                                branchValue
+                            )
+                            .get()
+                            .await()
+                            .documents
+                    )
+                }
+
+                runCatching {
+                    out.addAll(
+                        col
+                            .whereEqualTo(
+                                "branch",
+                                branchValue
+                            )
+                            .get()
+                            .await()
+                            .documents
+                    )
+                }
+
+                runCatching {
+                    out.addAll(
+                        col
+                            .whereEqualTo(
+                                "activeBranch",
+                                branchValue
+                            )
+                            .get()
+                            .await()
+                            .documents
+                    )
+                }
+
+                runCatching {
+                    out.addAll(
+                        col
+                            .whereEqualTo(
+                                "active_branch",
+                                branchValue
+                            )
+                            .get()
+                            .await()
+                            .documents
+                    )
+                }
+
+                runCatching {
+                    out.addAll(
+                        col
+                            .whereEqualTo(
+                                "branchesCsv",
+                                branchValue
+                            )
+                            .get()
+                            .await()
+                            .documents
+                    )
+                }
 
                 return out
+                    .distinctBy {
+                        it.id
+                    }
             }
 
             fun splitTokensNorm(raw: String?): List<String> {
@@ -1177,14 +1313,60 @@ class AttendanceViewModel(app: Application) : AndroidViewModel(app) {
             }
 
             fun DocumentSnapshot.branchesListNorm(): List<String> =
-                (get("branches") as? List<*>)?.mapNotNull { it?.toString() }?.map { it.norm() } ?: emptyList()
+                when (val rawBranches = get("branches")) {
+                    is List<*> ->
+                        rawBranches
+                            .mapNotNull {
+                                it?.toString()
+                            }
+                            .flatMap {
+                                splitTokensNorm(it)
+                            }
+
+                    is String ->
+                        splitTokensNorm(rawBranches)
+
+                    else ->
+                        emptyList()
+                }
 
             fun DocumentSnapshot.branchTokensNorm(): List<String> {
-                val out = mutableListOf<String>()
-                out.addAll(branchesListNorm())
-                out.addAll(splitTokensNorm(getString("branchesCsv")))
-                out.addAll(splitTokensNorm(getString("branch")))
-                return out.filter { it.isNotBlank() }.distinct()
+                val out =
+                    mutableListOf<String>()
+
+                out.addAll(
+                    branchesListNorm()
+                )
+
+                out.addAll(
+                    splitTokensNorm(
+                        getString("branchesCsv")
+                    )
+                )
+
+                out.addAll(
+                    splitTokensNorm(
+                        getString("branch")
+                    )
+                )
+
+                out.addAll(
+                    splitTokensNorm(
+                        getString("activeBranch")
+                    )
+                )
+
+                out.addAll(
+                    splitTokensNorm(
+                        getString("active_branch")
+                    )
+                )
+
+                return out
+                    .filter {
+                        it.isNotBlank()
+                    }
+                    .distinct()
             }
 
             fun matchesBranch(tokens: List<String>, candSet: Set<String>): Boolean {
@@ -1197,43 +1379,107 @@ class AttendanceViewModel(app: Application) : AndroidViewModel(app) {
                 }
             }
 
-            var docs = branchCandidates
-                .flatMap { cand -> fetchUsersFor(cand) }
-                .distinctBy { it.id }
+            val directDocs =
+                branchCandidates
+                    .flatMap { candidate ->
+                        fetchUsersFor(candidate)
+                    }
+                    .distinctBy {
+                        it.id
+                    }
 
-            if (docs.isEmpty()) {
-                val col = Firebase.firestore.collection("users")
-                val all = mutableListOf<DocumentSnapshot>()
+            val col =
+                Firebase.firestore
+                    .collection("users")
 
-                var last: DocumentSnapshot? = null
-                while (true) {
-                    var q = col
-                        .orderBy(FieldPath.documentId())
+            val allUsers =
+                mutableListOf<DocumentSnapshot>()
+
+            var last:
+                    DocumentSnapshot? =
+                null
+
+            while (true) {
+
+                var query =
+                    col
+                        .orderBy(
+                            FieldPath.documentId()
+                        )
                         .limit(1000)
 
-                    if (last != null) q = q.startAfter(last!!)
-
-                    val snap = q.get().await()
-                    val page = snap.documents
-                    if (page.isEmpty()) break
-
-                    all.addAll(page)
-                    last = page.last()
-
-                    if (all.size >= 5000) break
+                if (last != null) {
+                    query =
+                        query.startAfter(
+                            last!!
+                        )
                 }
 
-                val candNorm = branchCandidates.map { it.norm() }.toSet()
+                val snapshot =
+                    query
+                        .get()
+                        .await()
 
-                docs = all.filter { d ->
-                    if (d.isCoachDoc()) return@filter false
-                    matchesBranch(d.branchTokensNorm(), candNorm)
-                }.distinctBy { it.id }
+                val page =
+                    snapshot.documents
+
+                if (page.isEmpty()) {
+                    break
+                }
+
+                allUsers.addAll(page)
+
+                last =
+                    page.last()
+
+                if (allUsers.size >= 5000) {
+                    break
+                }
             }
 
-            val stepNotCoach = docs.filter { !it.isCoachDoc() }
-            val stepTrainee  = stepNotCoach.filter { it.isTraineeDoc() }
-            val stepGroup    = stepTrainee.filter { it.hasGroupMatch() }
+            val branchCandidateSet =
+                branchCandidates
+                    .map {
+                        it.norm()
+                    }
+                    .toSet()
+
+            val matchedFromFullScan =
+                allUsers
+                    .filter { document ->
+
+                        matchesBranch(
+                            tokens =
+                                document.branchTokensNorm(),
+                            candSet =
+                                branchCandidateSet
+                        )
+                    }
+
+            var docs =
+                (
+                        directDocs +
+                                matchedFromFullScan
+                        )
+                    .distinctBy {
+                        it.id
+                    }
+
+            /*
+   * חברות בקבוצת האימון היא מקור האמת לנוכחות.
+   *
+   * גם משתמש שתפקידו coach / trainer יכול להיות
+   * מתאמן בקבוצה אחרת או באותה קבוצה.
+   *
+   * לכן לא מסננים לפי role.
+   * הסינון נעשה לפי:
+   * 1. סניף
+   * 2. קבוצה
+   */
+            val stepGroup =
+                docs.filter { document ->
+                    document.hasGroupMatch()
+                }
 
             data class BootstrapTrainee(
                 val uid: String,

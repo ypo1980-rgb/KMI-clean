@@ -809,7 +809,11 @@ fun TrainingSummaryScreen(
                                                     name =
                                                         exercise.name,
                                                     highlight =
-                                                        exercise.highlight
+                                                        exercise.highlight,
+                                                    belt =
+                                                        exerciseBeltFromId(
+                                                            exercise.exerciseId
+                                                        )
                                                 )
                                             }
                                 ),
@@ -3408,7 +3412,8 @@ private fun SelectedExerciseEditor(
 
 private data class TrainingSummaryPdfExercise(
     val name: String,
-    val highlight: String
+    val highlight: String,
+    val belt: Belt?
 )
 
 private data class TrainingSummaryPdfData(
@@ -3621,9 +3626,44 @@ private fun createTrainingSummaryPdf(
             }
     }
 
+    fun formattedPdfDate(
+        dateIso: String
+    ): String {
+        val cleanDate =
+            dateIso.trim()
+
+        if (cleanDate.isBlank()) {
+            return ""
+        }
+
+        return runCatching {
+            LocalDate
+                .parse(cleanDate)
+                .format(
+                    DateTimeFormatter.ofPattern(
+                        if (isEnglish) {
+                            "MM/dd/yyyy"
+                        } else {
+                            "dd/MM/yyyy"
+                        },
+                        if (isEnglish) {
+                            Locale.US
+                        } else {
+                            Locale("he", "IL")
+                        }
+                    )
+                )
+        }.getOrDefault(cleanDate)
+    }
+
+    val formattedDate =
+        formattedPdfDate(
+            data.dateIso
+        )
+
     val headerSubtitle =
         listOf(
-            data.dateIso.trim(),
+            formattedDate,
             data.branchName.trim(),
             data.groupName.trim()
         )
@@ -3866,7 +3906,7 @@ private fun createTrainingSummaryPdf(
             ),
         value =
             cleanText(
-                data.dateIso,
+                formattedDate,
                 tr(
                     "לא נבחר תאריך",
                     "No date selected"
@@ -3942,11 +3982,124 @@ private fun createTrainingSummaryPdf(
     } else {
         data.exercises
             .forEachIndexed { index, exercise ->
-                ensureSpace(48f)
+                ensureSpace(52f)
+
+                val beltLabel =
+                    when (exercise.belt) {
+                        Belt.WHITE ->
+                            tr(
+                                "חגורה לבנה",
+                                "White belt"
+                            )
+
+                        Belt.YELLOW ->
+                            tr(
+                                "חגורה צהובה",
+                                "Yellow belt"
+                            )
+
+                        Belt.ORANGE ->
+                            tr(
+                                "חגורה כתומה",
+                                "Orange belt"
+                            )
+
+                        Belt.GREEN ->
+                            tr(
+                                "חגורה ירוקה",
+                                "Green belt"
+                            )
+
+                        Belt.BLUE ->
+                            tr(
+                                "חגורה כחולה",
+                                "Blue belt"
+                            )
+
+                        Belt.BROWN ->
+                            tr(
+                                "חגורה חומה",
+                                "Brown belt"
+                            )
+
+                        Belt.BLACK ->
+                            tr(
+                                "חגורה שחורה",
+                                "Black belt"
+                            )
+
+                        null ->
+                            tr(
+                                "ללא חגורה",
+                                "No belt"
+                            )
+                    }
+
+                val beltColor =
+                    when (exercise.belt) {
+                        Belt.WHITE ->
+                            android.graphics.Color.rgb(
+                                120,
+                                128,
+                                140
+                            )
+
+                        Belt.YELLOW ->
+                            android.graphics.Color.rgb(
+                                202,
+                                154,
+                                0
+                            )
+
+                        Belt.ORANGE ->
+                            android.graphics.Color.rgb(
+                                234,
+                                88,
+                                12
+                            )
+
+                        Belt.GREEN ->
+                            android.graphics.Color.rgb(
+                                22,
+                                138,
+                                65
+                            )
+
+                        Belt.BLUE ->
+                            android.graphics.Color.rgb(
+                                37,
+                                99,
+                                235
+                            )
+
+                        Belt.BROWN ->
+                            android.graphics.Color.rgb(
+                                139,
+                                90,
+                                43
+                            )
+
+                        Belt.BLACK ->
+                            android.graphics.Color.rgb(
+                                17,
+                                24,
+                                39
+                            )
+
+                        null ->
+                            textColor
+                    }
+
+                val exercisePaint =
+                    textPaint(
+                        size = 13f,
+                        color = beltColor,
+                        bold = true
+                    )
 
                 drawTextLines(
                     text =
-                        "${index + 1}. ${
+                        "${index + 1}. $beltLabel · ${
                             cleanText(
                                 exercise.name,
                                 tr(
@@ -3955,7 +4108,7 @@ private fun createTrainingSummaryPdf(
                                 )
                             )
                         }",
-                    paint = emphasizedPaint,
+                    paint = exercisePaint,
                     bottomSpacing = 2f
                 )
 

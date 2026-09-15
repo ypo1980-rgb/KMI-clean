@@ -239,34 +239,53 @@ fun AttendanceScreen(
     }
 
     // ===== טעינה אוטומטית של מתאמנים מה־users לפי סניף + קבוצה =====
-    var bootstrapKey by rememberSaveable { mutableStateOf<String?>(null) }
+    var bootstrapKey by rememberSaveable {
+        mutableStateOf<String?>(null)
+    }
 
-    LaunchedEffect(state.date, effectiveBranchRaw, effectiveGroupRaw) {
+    LaunchedEffect(
+        effectiveBranchRaw,
+        effectiveGroupRaw
+    ) {
 
-        fun String.norm(): String = trim()
-            .replace('־', '-')
-            .replace('–', '-')
-            .replace('—', '-')
-            .replace(Regex("\\s+"), " ")
+        fun String.norm(): String =
+            trim()
+                .replace('־', '-')
+                .replace('–', '-')
+                .replace('—', '-')
+                .replace(Regex("\\s+"), " ")
 
-        val branchBase = effectiveBranchRaw.norm()
-        val groupBase = effectiveGroupRaw.norm()
+        val branchBase =
+            effectiveBranchRaw.norm()
 
-        if (branchBase.isBlank()) return@LaunchedEffect
+        val groupBase =
+            effectiveGroupRaw.norm()
 
-        val key = "${state.date}|$branchBase|$groupBase"
-        if (bootstrapKey == key) return@LaunchedEffect
-
-        val hasRealServerMembers = state.members.any {
-            !it.displayName.isDemoOrPlaceholderTrainee()
-        }
-
-        if (hasRealServerMembers) {
-            bootstrapKey = key
+        if (
+            branchBase.isBlank() ||
+            groupBase.isBlank()
+        ) {
             return@LaunchedEffect
         }
 
-        vm.bootstrapMembersFromUsers(branchBase = branchBase, groupBase = groupBase)
+        /*
+         * הסנכרון חייב לרוץ גם כאשר כבר קיימים
+         * חלק מהמתאמנים ב-attendanceGroups.
+         *
+         * bootstrapMembersFromUsers אחראי להשלים
+         * את החסרים בלי למחוק את הקיימים.
+         */
+        val key =
+            "$branchBase|$groupBase"
+
+        if (bootstrapKey == key) {
+            return@LaunchedEffect
+        }
+
+        vm.bootstrapMembersFromUsers(
+            branchBase = branchBase,
+            groupBase = groupBase
+        )
 
         bootstrapKey = key
     }
@@ -751,7 +770,7 @@ fun AttendanceScreen(
                         Box(
                             modifier = Modifier
                                 .weight(1f)
-                                .heightIn(min = 56.dp)
+                                .heightIn(min = 38.dp)
                                 .semantics {
                                     contentDescription =
                                         trainingArrowDescription
@@ -763,7 +782,10 @@ fun AttendanceScreen(
                                     isTrainingSelectionExpanded =
                                         !isTrainingSelectionExpanded
                                 }
-                                .padding(vertical = 8.dp),
+                                .padding(
+                                    top = 2.dp,
+                                    bottom = 0.dp
+                                ),
                             contentAlignment = Alignment.Center
                         ) {
                             Canvas(
@@ -815,7 +837,7 @@ fun AttendanceScreen(
                     }
                 }
 
-                Spacer(Modifier.height(6.dp))
+                Spacer(Modifier.height(1.dp))
 
 // =========================================================
 // מגירת בחירת אימון + סיכום נוכחות
@@ -941,23 +963,79 @@ fun AttendanceScreen(
 
                     if (!isReportSaved) {
                         item {
-                            Text(
-                                text = tr(
-                                    "סימון נוכחות למתאמנים",
-                                    "Mark trainee attendance"
-                                ),
-                                style = KmiTypography.sectionTitle.copy(
-                                    fontWeight = FontWeight.ExtraBold
-                                ),
-                                color =
-                                    if (isDarkMode) {
-                                        MaterialTheme.colorScheme.onBackground
-                                    } else {
-                                        Color(0xFF1E2A3D)
-                                    },
+                            Column(
                                 modifier = Modifier.fillMaxWidth(),
-                                textAlign = screenTextAlign
-                            )
+                                horizontalAlignment =
+                                    if (isEnglish) {
+                                        Alignment.Start
+                                    } else {
+                                        Alignment.End
+                                    }
+                            ) {
+                                Text(
+                                    text = tr(
+                                        "סימון נוכחות למתאמנים",
+                                        "Mark trainee attendance"
+                                    ),
+                                    style =
+                                        KmiTypography.sectionTitle.copy(
+                                            fontWeight = FontWeight.ExtraBold
+                                        ),
+                                    color =
+                                        if (isDarkMode) {
+                                            MaterialTheme.colorScheme.onBackground
+                                        } else {
+                                            Color(0xFF1E2A3D)
+                                        },
+                                    modifier = Modifier.fillMaxWidth(),
+                                    textAlign = screenTextAlign
+                                )
+
+                                Spacer(
+                                    Modifier.height(2.dp)
+                                )
+
+                                Text(
+                                    text =
+                                        if (isEnglish) {
+                                            "Branch: $effectiveBranchRaw"
+                                        } else {
+                                            "סניף: $effectiveBranchRaw"
+                                        },
+                                    style =
+                                        KmiTypography.caption.copy(
+                                            fontWeight = FontWeight.Bold
+                                        ),
+                                    color =
+                                        MaterialTheme
+                                            .colorScheme
+                                            .onSurfaceVariant,
+                                    modifier = Modifier.fillMaxWidth(),
+                                    textAlign = screenTextAlign,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+
+                                if (effectiveGroupRaw.isNotBlank()) {
+                                    Text(
+                                        text =
+                                            if (isEnglish) {
+                                                "Group: $effectiveGroupRaw"
+                                            } else {
+                                                "קבוצה: $effectiveGroupRaw"
+                                            },
+                                        style = KmiTypography.caption,
+                                        color =
+                                            MaterialTheme
+                                                .colorScheme
+                                                .onSurfaceVariant,
+                                        modifier = Modifier.fillMaxWidth(),
+                                        textAlign = screenTextAlign,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+                                }
+                            }
                         }
 
                         if (!hasRealMembers) {
