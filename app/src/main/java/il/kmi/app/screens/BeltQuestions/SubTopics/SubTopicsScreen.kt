@@ -11,8 +11,6 @@ import android.graphics.pdf.PdfDocument
 import android.net.Uri
 import android.util.Log
 import android.widget.Toast
-import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -22,7 +20,6 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.ui.graphics.Brush
@@ -42,14 +39,11 @@ import il.kmi.app.domain.AppSubTopicRegistry
 import il.kmi.app.domain.ContentRepo
 import il.kmi.shared.domain.content.HardSectionsCatalog
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.Close
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.border
 import il.kmi.shared.questions.model.util.ExerciseTitleFormatter
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.luminance
 import il.kmi.app.ui.ext.color
 import il.kmi.app.ui.ext.lightColor
@@ -72,6 +66,10 @@ import il.kmi.app.favorites.FavoritesStore
 import il.kmi.app.screens.BeltQuestions.Materials.CoachMaterialProgress
 import il.kmi.app.screens.BeltQuestions.Materials.CoachMaterialStatus
 import il.kmi.app.screens.BeltQuestions.Materials.CoachMaterialStatusSelector
+import il.kmi.app.screens.BeltQuestions.Materials.ItemFloatingActions
+import il.kmi.app.screens.BeltQuestions.Materials.MaterialsExerciseStatusCard
+import il.kmi.app.screens.BeltQuestions.Materials.TraineeMaterialStatus
+import il.kmi.app.screens.BeltQuestions.Materials.TraineeMaterialStatusSelector
 import il.kmi.app.ui.FloatingQuickMenu
 import il.kmi.app.ui.KmiIconSize
 import il.kmi.app.ui.KmiTopBar
@@ -81,11 +79,13 @@ import il.kmi.app.subscription.KmiAccess
 import il.yuval.ui.theme.kmiScreenBackgroundBrush
 import il.kmi.app.ui.dialogs.ExerciseExplanationDialog
 import il.kmi.app.ui.dialogs.ExerciseNoteEditorDialog
+import kotlinx.coroutines.launch
 import java.io.File
 import java.io.FileOutputStream
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import kotlinx.coroutines.yield
 
 //===========================================================================
 
@@ -3442,32 +3442,72 @@ private fun HardBeltGroupsStickyContent(
         belt: Belt,
         rawItem: String,
         statusId: String,
-        value: Boolean?
+        value: Boolean?,
+        partiallyKnown: Boolean = false
     ) {
-        statusKeysFor(belt, rawItem).forEach { key ->
-            val masteredKey = "mastered_${belt.id}_${key}"
-            val unknownKey = "unknown_${belt.id}_${key}"
+        statusKeysFor(
+            belt,
+            rawItem
+        ).forEach { key ->
+            val masteredKey =
+                "mastered_${belt.id}_${key}"
+
+            val unknownKey =
+                "unknown_${belt.id}_${key}"
+
+            val partiallyKnownKey =
+                "partially_known_${belt.id}_${key}"
 
             val masteredSet =
-                (prefs.getStringSet(masteredKey, emptySet<String>()) ?: emptySet()).toMutableSet()
+                (
+                        prefs.getStringSet(
+                            masteredKey,
+                            emptySet<String>()
+                        ) ?: emptySet()
+                        )
+                    .toMutableSet()
 
             val unknownSet =
-                (prefs.getStringSet(unknownKey, emptySet<String>()) ?: emptySet()).toMutableSet()
+                (
+                        prefs.getStringSet(
+                            unknownKey,
+                            emptySet<String>()
+                        ) ?: emptySet()
+                        )
+                    .toMutableSet()
 
-            when (value) {
-                true -> {
+            val partiallyKnownSet =
+                (
+                        prefs.getStringSet(
+                            partiallyKnownKey,
+                            emptySet<String>()
+                        ) ?: emptySet()
+                        )
+                    .toMutableSet()
+
+            when {
+                partiallyKnown -> {
+                    masteredSet.remove(statusId)
+                    unknownSet.add(statusId)
+                    partiallyKnownSet.add(statusId)
+                }
+
+                value == true -> {
                     masteredSet.add(statusId)
                     unknownSet.remove(statusId)
+                    partiallyKnownSet.remove(statusId)
                 }
 
-                false -> {
+                value == false -> {
                     unknownSet.add(statusId)
                     masteredSet.remove(statusId)
+                    partiallyKnownSet.remove(statusId)
                 }
 
-                null -> {
+                else -> {
                     masteredSet.remove(statusId)
                     unknownSet.remove(statusId)
+                    partiallyKnownSet.remove(statusId)
                 }
             }
 
@@ -3480,14 +3520,106 @@ private fun HardBeltGroupsStickyContent(
                     unknownKey,
                     unknownSet
                 )
+                putStringSet(
+                    partiallyKnownKey,
+                    partiallyKnownSet
+                )
             }
         }
     }
 
-    val marksVersion by vm.marksVersion.collectAsState()
-    val itemStates = remember(topicKey, groups) {
-        mutableStateMapOf<String, Boolean?>()
+    /*
+     * תאריך העדכון האחרון של סימון המתאמן.
+     * כאשר הסימון מתאפס, גם התאריך נמחק.
+     */
+    val traineeUpdatedAtStates =
+        remember(
+            topicKey,
+            groups
+        ) {
+            mutableStateMapOf<String, Long>()
+        }
+
+    fun traineeUpdatedAtKey(
+        belt: Belt,
+        statusId: String
+    ): String {
+        return buildString {
+            append("trainee_material_updated_at_")
+            append(belt.id)
+            append("_")
+            append(topicKey)
+            append("_")
+            append(statusId)
+        }
     }
+
+    fun loadTraineeUpdatedAt(
+        belt: Belt,
+        statusId: String
+    ): Long {
+        return prefs.getLong(
+            traineeUpdatedAtKey(
+                belt = belt,
+                statusId = statusId
+            ),
+            0L
+        )
+    }
+
+    fun saveTraineeUpdatedAt(
+        belt: Belt,
+        statusId: String,
+        value: Boolean?
+    ) {
+        val key =
+            traineeUpdatedAtKey(
+                belt = belt,
+                statusId = statusId
+            )
+
+        if (value == null) {
+            traineeUpdatedAtStates.remove(
+                statusId
+            )
+
+            prefs.edit {
+                remove(key)
+            }
+        } else {
+            val updatedAt =
+                System.currentTimeMillis()
+
+            traineeUpdatedAtStates[statusId] =
+                updatedAt
+
+            prefs.edit {
+                putLong(
+                    key,
+                    updatedAt
+                )
+            }
+        }
+    }
+
+    val itemStates =
+        remember(
+            topicKey,
+            groups
+        ) {
+            mutableStateMapOf<String, Boolean?>()
+        }
+
+    val partiallyKnownStates =
+        remember(
+            topicKey,
+            groups
+        ) {
+            mutableStateMapOf<String, Boolean>()
+        }
+
+    val statusSaveScope =
+        rememberCoroutineScope()
 
     var refreshKey by remember { mutableIntStateOf(0) }
     var noteEditorFor by rememberSaveable { mutableStateOf<String?>(null) }
@@ -3548,7 +3680,10 @@ private fun HardBeltGroupsStickyContent(
         }
     }
 
-    LaunchedEffect(flatRows, marksVersion, topicKey) {
+    LaunchedEffect(
+        flatRows,
+        topicKey
+    ) {
         flatRows.forEach { row ->
             val statusId = statusIdFor(row.belt, row.rawItem)
 
@@ -3611,7 +3746,47 @@ private fun HardBeltGroupsStickyContent(
                 }
             }
 
-            itemStates[statusId] = valueFromVm
+            val isPartiallyKnown =
+                statusKeysFor(
+                    row.belt,
+                    row.rawItem
+                ).any { key ->
+                    val partiallyKnownKey =
+                        "partially_known_${row.belt.id}_${key}"
+
+                    val partiallyKnownSet =
+                        prefs.getStringSet(
+                            partiallyKnownKey,
+                            emptySet<String>()
+                        ) ?: emptySet()
+
+                    statusId in partiallyKnownSet
+                }
+
+            partiallyKnownStates[statusId] =
+                isPartiallyKnown
+
+            itemStates[statusId] =
+                if (isPartiallyKnown) {
+                    false
+                } else {
+                    valueFromVm
+                }
+
+            val savedUpdatedAt =
+                loadTraineeUpdatedAt(
+                    belt = row.belt,
+                    statusId = statusId
+                )
+
+            if (savedUpdatedAt > 0L) {
+                traineeUpdatedAtStates[statusId] =
+                    savedUpdatedAt
+            } else {
+                traineeUpdatedAtStates.remove(
+                    statusId
+                )
+            }
         }
     }
 
@@ -3630,34 +3805,6 @@ private fun HardBeltGroupsStickyContent(
 
     LaunchedEffect(pdfExercisesSnapshot) {
         onPdfExercisesChanged(pdfExercisesSnapshot)
-    }
-
-    fun toggleStatus(row: HardStickyExerciseRow) {
-        val statusId = statusIdFor(row.belt, row.rawItem)
-
-        val nextValue = when (itemStates[statusId]) {
-            null -> true
-            true -> false
-            false -> null
-        }
-
-        itemStates[statusId] = nextValue
-
-        statusKeysFor(row.belt, row.rawItem).forEach { key ->
-            vm.setItemStatusNullable(
-                belt = row.belt,
-                topic = key,
-                item = statusId,
-                value = nextValue
-            )
-        }
-
-        setLocalStatus(
-            belt = row.belt,
-            rawItem = row.rawItem,
-            statusId = statusId,
-            value = nextValue
-        )
     }
 
     val listState = rememberLazyListState()
@@ -3781,9 +3928,17 @@ private fun HardBeltGroupsStickyContent(
         itemStates[statusIdFor(row.belt, row.rawItem)] == true
     }
 
-    val currentUnknownCount = currentRows.count { row ->
-        itemStates[statusIdFor(row.belt, row.rawItem)] == false
-    }
+    val currentUnknownCount =
+        currentRows.count { row ->
+            val statusId =
+                statusIdFor(
+                    row.belt,
+                    row.rawItem
+                )
+
+            itemStates[statusId] == false &&
+                    partiallyKnownStates[statusId] != true
+        }
 
     val currentUnmarkedCount = currentRows.count { row ->
         itemStates[statusIdFor(row.belt, row.rawItem)] == null
@@ -3899,13 +4054,53 @@ private fun HardBeltGroupsStickyContent(
                     )
                 }
 
+                val traineeStatus =
+                    when {
+                        partiallyKnownStates[statusId] == true ->
+                            TraineeMaterialStatus.PARTIALLY_KNOWN
+
+                        mastered == true ->
+                            TraineeMaterialStatus.KNOWN
+
+                        mastered == false ->
+                            TraineeMaterialStatus.UNKNOWN
+
+                        else ->
+                            null
+                    }
+
+                val traineeUpdatedAt =
+                    traineeUpdatedAtStates[statusId]
+                        ?: loadTraineeUpdatedAt(
+                            belt = row.belt,
+                            statusId = statusId
+                        )
+
+                val traineeDateText =
+                    if (
+                        traineeStatus != null &&
+                        traineeUpdatedAt > 0L
+                    ) {
+                        SimpleDateFormat(
+                            "dd/MM/yy",
+                            Locale.getDefault()
+                        ).format(
+                            Date(traineeUpdatedAt)
+                        )
+                    } else {
+                        ""
+                    }
+
                 HardExerciseLegacyRow(
-                    exerciseNumber = row.indexInBelt + 1,
                     belt = row.belt,
                     itemName = row.rawItem,
                     displayName = row.displayItem,
-                    mastered = mastered,
-                    isCoach = isCoach,
+                    traineeStatus =
+                        traineeStatus,
+                    traineeDateText =
+                        traineeDateText,
+                    isCoach =
+                        isCoach,
                     coachProgress =
                         coachProgressStates[
                             coachMapKey(
@@ -3920,12 +4115,68 @@ private fun HardBeltGroupsStickyContent(
                             status = selectedStatus
                         )
                     },
-                    isDarkMode = isDarkMode,
                     excluded = excludedSet.contains(statusId),
                     isFav = favSet.contains(statusId),
                     hasNote = noteText.isNotBlank(),
-                    onStatusClick = {
-                        toggleStatus(row)
+                    onTraineeStatusSelect = { selectedStatus ->
+                        val isPartiallyKnown =
+                            selectedStatus ==
+                                    TraineeMaterialStatus
+                                        .PARTIALLY_KNOWN
+
+                        val nextValue: Boolean? =
+                            when (selectedStatus) {
+                                TraineeMaterialStatus.KNOWN ->
+                                    true
+
+                                TraineeMaterialStatus.PARTIALLY_KNOWN,
+                                TraineeMaterialStatus.UNKNOWN ->
+                                    false
+
+                                null ->
+                                    null
+                            }
+
+                        partiallyKnownStates[statusId] =
+                            isPartiallyKnown
+
+                        itemStates[statusId] =
+                            nextValue
+
+                        saveTraineeUpdatedAt(
+                            belt = row.belt,
+                            statusId = statusId,
+                            value = nextValue
+                        )
+
+                        statusSaveScope.launch {
+                            /*
+                             * מאפשר ל־Compose לצייר מיד
+                             * את הסימון והתאריך שנבחרו.
+                             */
+                            yield()
+
+                            statusKeysFor(
+                                row.belt,
+                                row.rawItem
+                            ).forEach { key ->
+                                vm.setItemStatusNullable(
+                                    belt = row.belt,
+                                    topic = key,
+                                    item = statusId,
+                                    value = nextValue
+                                )
+                            }
+
+                            setLocalStatus(
+                                belt = row.belt,
+                                rawItem = row.rawItem,
+                                statusId = statusId,
+                                value = nextValue,
+                                partiallyKnown =
+                                    isPartiallyKnown
+                            )
+                        }
                     },
                     onInfoClick = {
                         onOpenExercise(row.rawItem, row.belt)
@@ -4408,27 +4659,28 @@ private fun ExerciseNameStatusIndicators(
 
 @Composable
 private fun HardExerciseLegacyRow(
-    exerciseNumber: Int,
     belt: Belt,
     itemName: String,
     displayName: String = itemName,
-    mastered: Boolean?,
+    traineeStatus: TraineeMaterialStatus?,
+    traineeDateText: String,
     isCoach: Boolean = false,
     coachProgress: CoachMaterialProgress =
-    CoachMaterialProgress(),
+        CoachMaterialProgress(),
     onCoachStatusSelect:
-    (CoachMaterialStatus) -> Unit = {},
-    isDarkMode: Boolean = false,
+        (CoachMaterialStatus) -> Unit = {},
     excluded: Boolean,
     isFav: Boolean,
     hasNote: Boolean,
-    onStatusClick: () -> Unit,
+    onTraineeStatusSelect:
+        (TraineeMaterialStatus?) -> Unit,
     onInfoClick: () -> Unit,
     onToggleExclude: () -> Unit,
     onToggleFavorite: () -> Unit,
     onEditNote: () -> Unit
 ) {
-    val context = LocalContext.current
+    val context =
+        LocalContext.current
 
     val langManager =
         remember(context) {
@@ -4439,47 +4691,38 @@ private fun HardExerciseLegacyRow(
         langManager.getCurrentLanguage() ==
                 AppLanguage.ENGLISH
 
-    val rowBackgroundColor =
-        MaterialTheme.colorScheme.surface
-
     val rowTextColor =
         if (excluded) {
-            MaterialTheme.colorScheme
+            MaterialTheme
+                .colorScheme
                 .onSurfaceVariant
                 .copy(alpha = 0.55f)
         } else {
-            MaterialTheme.colorScheme.onSurface
+            MaterialTheme
+                .colorScheme
+                .onSurface
         }
 
-    val exerciseNumberBackground =
-        if (isDarkMode) {
-            MaterialTheme.colorScheme.surfaceVariant
-        } else {
-            belt.color.copy(alpha = 0.14f)
-        }
-
-    val exerciseNumberTextColor =
-        MaterialTheme.colorScheme.onSurface
-
-    if (isCoach) {
-        CompositionLocalProvider(
-            LocalLayoutDirection provides
-                    if (isEnglish) {
-                        LayoutDirection.Ltr
-                    } else {
-                        LayoutDirection.Rtl
-                    }
-        ) {
-            Column(
-                modifier = Modifier
+    CompositionLocalProvider(
+        LocalLayoutDirection provides
+                if (isEnglish) {
+                    LayoutDirection.Ltr
+                } else {
+                    LayoutDirection.Rtl
+                }
+    ) {
+        Column(
+            modifier =
+                Modifier
                     .fillMaxWidth()
                     .padding(
                         horizontal = 16.dp,
                         vertical = 2.dp
                     )
-            ) {
-                Row(
-                    modifier = Modifier
+        ) {
+            Row(
+                modifier =
+                    Modifier
                         .fillMaxWidth()
                         .clickable {
                             onInfoClick()
@@ -4490,43 +4733,47 @@ private fun HardExerciseLegacyRow(
                             top = 2.dp,
                             bottom = 4.dp
                         ),
-                    verticalAlignment =
-                        Alignment.CenterVertically
-                ) {
-                    Text(
-                        text =
-                            if (isEnglish) {
-                                displayName.trim()
-                            } else {
-                                "\u200F${displayName.trim()}\u200F"
-                            },
-                        style =
-                            KmiTypography.cardTitle.copy(
+                verticalAlignment =
+                    Alignment.CenterVertically
+            ) {
+                Text(
+                    text =
+                        if (isEnglish) {
+                            displayName.trim()
+                        } else {
+                            "\u200F${displayName.trim()}\u200F"
+                        },
+                    style =
+                        KmiTypography
+                            .cardTitle
+                            .copy(
                                 fontWeight =
                                     FontWeight.ExtraBold
                             ),
-                        color =
-                            rowTextColor,
-                        textAlign =
-                            if (isEnglish) {
-                                TextAlign.Left
-                            } else {
-                                TextAlign.Right
-                            },
-                        maxLines = 3,
-                        overflow =
-                            TextOverflow.Ellipsis,
-                        modifier =
-                            Modifier.weight(1f)
-                    )
+                    color =
+                        rowTextColor,
+                    textAlign =
+                        if (isEnglish) {
+                            TextAlign.Left
+                        } else {
+                            TextAlign.Right
+                        },
+                    maxLines =
+                        3,
+                    overflow =
+                        TextOverflow.Ellipsis,
+                    modifier =
+                        Modifier.weight(1f)
+                )
 
-                    ExerciseNameStatusIndicators(
-                        isFav = isFav,
-                        hasNote = hasNote,
-                        isEnglish = isEnglish
-                    )
-                }
+                ExerciseNameStatusIndicators(
+                    isFav = isFav,
+                    hasNote = hasNote,
+                    isEnglish = isEnglish
+                )
+            }
 
+            if (isCoach) {
                 CoachMaterialStatusSelector(
                     progress =
                         coachProgress,
@@ -4551,203 +4798,44 @@ private fun HardExerciseLegacyRow(
                     onSelect =
                         onCoachStatusSelect
                 )
-            }
-        }
-    } else {
-        Surface(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clip(
-                    RoundedCornerShape(16.dp)
-                ),
-            color = rowBackgroundColor,
-            tonalElevation = 0.dp,
-            shadowElevation = 0.dp,
-            border = BorderStroke(
-                width = 1.dp,
-                color =
-                    if (isDarkMode) {
-                        belt.color.copy(alpha = 0.55f)
-                    } else {
-                        MaterialTheme.colorScheme
-                            .outlineVariant
+            } else {
+                MaterialsExerciseStatusCard(
+                    isEnglish =
+                        isEnglish,
+                    modifier =
+                        Modifier.fillMaxWidth(),
+                    info = {
+                        ItemFloatingActions(
+                            isEnglish =
+                                isEnglish,
+                            excluded =
+                                excluded,
+                            isFav =
+                                isFav,
+                            hasNote =
+                                hasNote,
+                            onToggleExclude =
+                                onToggleExclude,
+                            onInfo =
+                                onInfoClick,
+                            onToggleFavorite =
+                                onToggleFavorite,
+                            onEditNote =
+                                onEditNote
+                        )
                     }
-            )
-        ) {
-            /*
-             * מצב מתאמן נשאר עם כפתור יודע/לא יודע,
-             * שם התרגיל ופס צבע החגורה.
-             */
-            CompositionLocalProvider(
-                LocalLayoutDirection provides
-                        LayoutDirection.Ltr
-            ) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .heightIn(min = 50.dp)
-                        .padding(
-                            start = 8.dp,
-                            top = 5.dp,
-                            end = 0.dp,
-                            bottom = 5.dp
-                        ),
-                    verticalAlignment =
-                        Alignment.CenterVertically
                 ) {
-                    HardMasterToggle(
-                        mastered = mastered,
-                        onClick = onStatusClick
-                    )
-
-                    Spacer(Modifier.width(8.dp))
-
-                    CompositionLocalProvider(
-                        LocalLayoutDirection provides
-                                if (isEnglish) {
-                                    LayoutDirection.Ltr
-                                } else {
-                                    LayoutDirection.Rtl
-                                }
-                    ) {
-                        Column(
-                            modifier = Modifier
-                                .weight(1f)
-                                .clickable {
-                                    onInfoClick()
-                                }
-                                .padding(
-                                    start = 2.dp,
-                                    end = 4.dp
-                                ),
-                            horizontalAlignment =
-                                if (isEnglish) {
-                                    Alignment.Start
-                                } else {
-                                    Alignment.End
-                                }
-                        ) {
-                            Row(
-                                modifier =
-                                    Modifier.fillMaxWidth(),
-                                verticalAlignment =
-                                    Alignment.CenterVertically
-                            ) {
-                                HardLegacyMetaBadge(
-                                    text =
-                                        if (isEnglish) {
-                                            "No. $exerciseNumber"
-                                        } else {
-                                            "מס׳ $exerciseNumber"
-                                        },
-                                    containerColor =
-                                        exerciseNumberBackground,
-                                    contentColor =
-                                        exerciseNumberTextColor
-                                )
-
-                                Spacer(Modifier.width(3.dp))
-
-                                SubTopicItemFloatingActions(
-                                    isEnglish = isEnglish,
-                                    excluded = excluded,
-                                    isFav = isFav,
-                                    hasNote = hasNote,
-                                    onInfo = onInfoClick,
-                                    onToggleFavorite =
-                                        onToggleFavorite,
-                                    onToggleExclude =
-                                        onToggleExclude,
-                                    onEditNote =
-                                        onEditNote
-                                )
-
-                                if (excluded) {
-                                    Spacer(
-                                        Modifier.width(5.dp)
-                                    )
-
-                                    HardLegacyMetaBadge(
-                                        text =
-                                            if (isEnglish) {
-                                                "Excluded"
-                                            } else {
-                                                "מוחרג"
-                                            },
-                                        containerColor =
-                                            MaterialTheme
-                                                .colorScheme
-                                                .surfaceVariant,
-                                        contentColor =
-                                            MaterialTheme
-                                                .colorScheme
-                                                .onSurfaceVariant
-                                    )
-                                }
-
-                                Spacer(
-                                    Modifier.weight(1f)
-                                )
-                            }
-
-                            Spacer(
-                                Modifier.height(2.dp)
-                            )
-
-                            Row(
-                                modifier =
-                                    Modifier.fillMaxWidth(),
-                                verticalAlignment =
-                                    Alignment.CenterVertically
-                            ) {
-                                Text(
-                                    text =
-                                        if (isEnglish) {
-                                            displayName.trim()
-                                        } else {
-                                            "\u200F${displayName.trim()}\u200F"
-                                        },
-                                    style =
-                                        KmiTypography.caption.copy(
-                                            fontWeight =
-                                                FontWeight.ExtraBold
-                                        ),
-                                    color = rowTextColor,
-                                    textAlign =
-                                        if (isEnglish) {
-                                            TextAlign.Left
-                                        } else {
-                                            TextAlign.Right
-                                        },
-                                    modifier =
-                                        Modifier.weight(1f),
-                                    maxLines = 3,
-                                    overflow =
-                                        TextOverflow.Ellipsis
-                                )
-
-                                ExerciseNameStatusIndicators(
-                                    isFav = isFav,
-                                    hasNote = hasNote,
-                                    isEnglish = isEnglish
-                                )
-                            }
-                        }
-                    }
-
-                    Spacer(Modifier.width(4.dp))
-
-                    Box(
-                        modifier = Modifier
-                            .width(3.dp)
-                            .height(34.dp)
-                            .clip(
-                                RoundedCornerShape(
-                                    topStart = 8.dp,
-                                    bottomStart = 8.dp
-                                )
-                            )
-                            .background(belt.color)
+                    TraineeMaterialStatusSelector(
+                        selectedStatus =
+                            traineeStatus,
+                        dateText =
+                            traineeDateText,
+                        isEnglish =
+                            isEnglish,
+                        showSymbols =
+                            false,
+                        onSelect =
+                            onTraineeStatusSelect
                     )
                 }
             }
@@ -4755,286 +4843,6 @@ private fun HardExerciseLegacyRow(
     }
 }
 
-@Composable
-private fun SubTopicItemFloatingActions(
-    isEnglish: Boolean,
-    excluded: Boolean,
-    isFav: Boolean,
-    hasNote: Boolean,
-    onInfo: () -> Unit,
-    onToggleFavorite: () -> Unit,
-    onToggleExclude: () -> Unit,
-    onEditNote: () -> Unit
-) {
-    val context = LocalContext.current
-    var expanded by remember { mutableStateOf(false) }
-
-    val infoScale by animateFloatAsState(
-        targetValue = if (expanded) 1.08f else 1f,
-        animationSpec = tween(180),
-        label = "subTopicInfoScale"
-    )
-
-    val infoRotation by animateFloatAsState(
-        targetValue = if (expanded) 12f else 0f,
-        animationSpec = tween(180),
-        label = "subTopicInfoRotation"
-    )
-
-    Box {
-        Surface(
-            onClick = {
-                expanded = true
-            },
-            shape = CircleShape,
-            color =
-                MaterialTheme.colorScheme
-                    .secondaryContainer,
-            shadowElevation = 0.dp,
-            tonalElevation = 0.dp,
-            border = BorderStroke(
-                width = 1.dp,
-                color =
-                    MaterialTheme.colorScheme
-                        .outlineVariant
-            ),
-            modifier = Modifier
-                .size(KmiIconSize.medium)
-                .graphicsLayer {
-                    scaleX = infoScale
-                    scaleY = infoScale
-                }
-        ) {
-            Box(
-                modifier = Modifier.fillMaxSize(),
-                contentAlignment = Alignment.Center
-            ) {
-                Text(
-                    text = "i",
-                    color =
-                        MaterialTheme.colorScheme
-                            .onSecondaryContainer,
-                    style =
-                        KmiTypography.body.copy(
-                            fontWeight =
-                                FontWeight.ExtraBold
-                        ),
-                    modifier = Modifier.graphicsLayer {
-                        rotationZ = infoRotation
-                    }
-                )
-            }
-        }
-
-        CompositionLocalProvider(
-            LocalLayoutDirection provides
-                    if (isEnglish) {
-                        LayoutDirection.Ltr
-                    } else {
-                        LayoutDirection.Rtl
-                    }
-        ) {
-            DropdownMenu(
-                expanded = expanded,
-                onDismissRequest = {
-                    expanded = false
-                },
-                shape = RoundedCornerShape(18.dp),
-                containerColor =
-                    MaterialTheme.colorScheme.surface,
-                tonalElevation = 0.dp,
-                shadowElevation = 0.dp,
-                border = BorderStroke(
-                    width = 1.dp,
-                    color =
-                        MaterialTheme.colorScheme.outlineVariant
-                ),
-                modifier = Modifier.background(
-                    color =
-                        MaterialTheme.colorScheme.surface,
-                    shape =
-                        RoundedCornerShape(18.dp)
-                )
-            ) {
-                DropdownMenuItem(
-                    text = {
-                        Text(
-                            text = if (isEnglish) "Info" else "מידע",
-                            style = KmiTypography.body,
-                            textAlign = if (isEnglish) TextAlign.Left else TextAlign.Right,
-                            modifier = Modifier.fillMaxWidth()
-                        )
-                    },
-                    onClick = {
-                        expanded = false
-                        onInfo()
-                    }
-                )
-
-                DropdownMenuItem(
-                    text = {
-                        Text(
-                            text = when {
-                                isEnglish && isFav -> "Remove from favorites"
-                                isEnglish -> "Add to favorites"
-                                isFav -> "הסר ממועדפים"
-                                else -> "הוסף למועדפים"
-                            },
-                            style = KmiTypography.body,
-                            textAlign = if (isEnglish) TextAlign.Left else TextAlign.Right,
-                            modifier = Modifier.fillMaxWidth()
-                        )
-                    },
-                    onClick = {
-                        expanded = false
-                        onToggleFavorite()
-
-                        Toast
-                            .makeText(
-                                context,
-                                when {
-                                    isEnglish && isFav -> "Removed from favorites."
-                                    isEnglish -> "Added to favorites."
-                                    isFav -> "הוסר מהמועדפים."
-                                    else -> "נוסף למועדפים."
-                                },
-                                Toast.LENGTH_SHORT
-                            )
-                            .show()
-                    }
-                )
-
-                DropdownMenuItem(
-                    text = {
-                        Text(
-                            text = when {
-                                isEnglish && excluded -> "Cancel exclusion"
-                                isEnglish -> "Exclude from practice"
-                                excluded -> "בטל החרגה"
-                                else -> "החרג מהתרגול"
-                            },
-                            style = KmiTypography.body,
-                            textAlign = if (isEnglish) TextAlign.Left else TextAlign.Right,
-                            modifier = Modifier.fillMaxWidth()
-                        )
-                    },
-                    onClick = {
-                        expanded = false
-                        onToggleExclude()
-
-                        Toast
-                            .makeText(
-                                context,
-                                when {
-                                    isEnglish && excluded -> "Exclusion canceled."
-                                    isEnglish -> "Exercise excluded from practice."
-                                    excluded -> "בוטלה ההחרגה."
-                                    else -> "התרגיל הוחרג מהתרגול."
-                                },
-                                Toast.LENGTH_SHORT
-                            )
-                            .show()
-                    }
-                )
-
-                DropdownMenuItem(
-                    text = {
-                        Text(
-                            text = when {
-                                isEnglish && hasNote -> "Edit / delete note"
-                                isEnglish -> "Add exercise note"
-                                hasNote -> "ערוך / מחק הערה"
-                                else -> "הוסף הערה לתרגיל"
-                            },
-                            style = KmiTypography.body,
-                            textAlign = if (isEnglish) TextAlign.Left else TextAlign.Right,
-                            modifier = Modifier.fillMaxWidth()
-                        )
-                    },
-                    onClick = {
-                        expanded = false
-                        onEditNote()
-                    }
-                )
-            }
-        }
-    }
-}
-
-@Composable
-private fun HardMasterToggle(
-    mastered: Boolean?,
-    onClick: () -> Unit
-) {
-    val bg =
-        when (mastered) {
-            true -> Color(0xFF2E7D32)
-            false -> Color(0xFFC62828)
-            null ->
-                MaterialTheme.colorScheme.surfaceVariant
-        }
-
-    val border =
-        when (mastered) {
-            true -> Color(0xFF1B5E20)
-            false -> Color(0xFF8E1B1B)
-            null ->
-                MaterialTheme.colorScheme.outline
-        }
-
-    Surface(
-        modifier = Modifier
-            .size(KmiIconSize.medium)
-            .clickable(
-                onClick = onClick
-            ),
-        shape = CircleShape,
-        color = bg,
-        border = BorderStroke(
-            width = 1.dp,
-            color = border
-        ),
-        tonalElevation = 0.dp,
-        shadowElevation = 0.dp
-    ) {
-        Box(
-            modifier = Modifier.fillMaxSize(),
-            contentAlignment = Alignment.Center
-        ) {
-            when (mastered) {
-                true -> {
-                    Icon(
-                        imageVector = Icons.Filled.Check,
-                        contentDescription = "יודע",
-                        tint = Color.White,
-                        modifier =
-                            Modifier.size(
-                                KmiIconSize.small
-                            )
-                    )
-                }
-
-                false -> {
-                    Icon(
-                        imageVector = Icons.Filled.Close,
-                        contentDescription = "לא יודע",
-                        tint = Color.White,
-                        modifier =
-                            Modifier.size(
-                                KmiIconSize.small
-                            )
-                    )
-                }
-
-                null -> {
-                    Spacer(
-                        modifier = Modifier.size(1.dp)
-                    )
-                }
-            }
-        }
-    }
-}
 
 /* ---------------------- ✅ NEW: שורת תרגיל עם אייקון הסבר ---------------------- */
 @Composable

@@ -69,6 +69,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.platform.LocalContext
@@ -85,6 +86,10 @@ import il.kmi.app.ui.ext.lightColor
 import il.kmi.app.screens.BeltQuestions.Materials.CoachMaterialProgress
 import il.kmi.app.screens.BeltQuestions.Materials.CoachMaterialStatus
 import il.kmi.app.screens.BeltQuestions.Materials.CoachMaterialStatusSelector
+import il.kmi.app.screens.BeltQuestions.Materials.ItemFloatingActions
+import il.kmi.app.screens.BeltQuestions.Materials.MaterialsExerciseStatusCard
+import il.kmi.app.screens.BeltQuestions.Materials.TraineeMaterialStatus
+import il.kmi.app.screens.BeltQuestions.Materials.TraineeMaterialStatusSelector
 import il.kmi.app.favorites.FavoritesStore
 import il.kmi.app.ui.KmiTopBar
 import il.kmi.app.ui.KmiTypography
@@ -99,6 +104,8 @@ import il.kmi.shared.domain.content.ExerciseTitlesEn
 import il.kmi.shared.domain.content.HardSectionsResolver
 import il.kmi.shared.localization.AppLanguage
 import il.kmi.shared.localization.LocalizationRuntime
+import il.yuval.ui.theme.kmiSectionHeaderBrush
+import il.yuval.ui.theme.kmiSectionHeaderContentColor
 
 
 //=========================================================================
@@ -2163,82 +2170,145 @@ private fun HardTopStatChip(
     contentColor: Color = Color.White,
     modifier: Modifier = Modifier
 ) {
-    Surface(
-        modifier = modifier
-            .height(60.dp),
-        shape = RoundedCornerShape(14.dp),
-        color = containerColor,
-        shadowElevation = 1.dp,
-        border = BorderStroke(
-            1.dp,
-            contentColor.copy(alpha = 0.18f)
-        )
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(
-                    horizontal = 6.dp,
-                    vertical = 6.dp
-                ),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.Center
-        ) {
-            Text(
-                text = value,
-                style = KmiTypography.action.copy(
-                    fontWeight = FontWeight.ExtraBold
-                ),
-                color = contentColor,
-                maxLines = 1,
-                textAlign = TextAlign.Center
-            )
+    val colors =
+        MaterialTheme.colorScheme
 
-            Spacer(
-                modifier = Modifier.height(2.dp)
-            )
+    val isDark =
+        colors.surface.luminance() < 0.5f
 
-            Text(
-                text = label,
-                style = KmiTypography.caption.copy(
-                    fontWeight = FontWeight.ExtraBold
-                ),
-                color = contentColor.copy(alpha = 0.96f),
-                maxLines = 2,
-                textAlign = TextAlign.Center
+    val gradientTop =
+        if (isDark) {
+            colors.surface.copy(
+                alpha = 0.98f
+            )
+        } else {
+            containerColor.copy(
+                alpha = 0.58f
             )
         }
-    }
-}
 
-@Composable
-private fun HardExerciseMetaBadge(
-    text: String,
-    containerColor: Color,
-    contentColor: Color
-) {
+    val gradientBottom =
+        if (isDark) {
+            containerColor.copy(
+                alpha = 0.18f
+            )
+        } else {
+            containerColor.copy(
+                alpha = 0.92f
+            )
+        }
+
     Surface(
-        shape = RoundedCornerShape(10.dp),
-        color = containerColor,
-        border = BorderStroke(
+        modifier =
+            modifier.height(58.dp),
+        shape =
+            RoundedCornerShape(10.dp),
+        color =
+            colors.surface,
+        tonalElevation =
+            0.dp,
+        shadowElevation =
             1.dp,
-            contentColor.copy(alpha = 0.14f)
-        ),
-        shadowElevation = 0.dp
+        border =
+            BorderStroke(
+                width = 1.dp,
+                color =
+                    contentColor.copy(
+                        alpha =
+                            if (isDark) {
+                                0.55f
+                            } else {
+                                0.24f
+                            }
+                    )
+            )
     ) {
-        Text(
-            text = text,
-            style = KmiTypography.caption.copy(
-                fontWeight = FontWeight.ExtraBold
-            ),
-            color = contentColor,
-            modifier = Modifier.padding(
-                horizontal = 7.dp,
-                vertical = 2.dp
-            ),
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis
-        )
+        Column(
+            modifier =
+                Modifier
+                    .fillMaxSize()
+                    .background(
+                        Brush.verticalGradient(
+                            colors =
+                                listOf(
+                                    gradientTop,
+                                    gradientBottom
+                                )
+                        )
+                    ),
+            horizontalAlignment =
+                Alignment.CenterHorizontally
+        ) {
+            Box(
+                modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .height(3.dp)
+                        .background(
+                            contentColor
+                        )
+            )
+
+            Column(
+                modifier =
+                    Modifier
+                        .fillMaxSize()
+                        .padding(
+                            horizontal = 3.dp,
+                            vertical = 3.dp
+                        ),
+                horizontalAlignment =
+                    Alignment.CenterHorizontally,
+                verticalArrangement =
+                    Arrangement.Center
+            ) {
+                Spacer(
+                    Modifier.height(2.dp)
+                )
+
+                Text(
+                    text =
+                        value,
+                    style =
+                        KmiTypography
+                            .action
+                            .copy(
+                                fontWeight =
+                                    FontWeight.ExtraBold
+                            ),
+                    color =
+                        colors.onSurface,
+                    textAlign =
+                        TextAlign.Center,
+                    maxLines =
+                        1
+                )
+
+                Text(
+                    text =
+                        label,
+                    style =
+                        KmiTypography
+                            .caption
+                            .copy(
+                                fontWeight =
+                                    FontWeight.Bold
+                            ),
+                    color =
+                        if (isDark) {
+                            colors.onSurface
+                        } else {
+                            contentColor
+                        },
+                    textAlign =
+                        TextAlign.Center,
+                    maxLines =
+                        1,
+                    overflow =
+                        TextOverflow.Ellipsis
+                )
+            }
+        }
     }
 }
 
@@ -2261,6 +2331,11 @@ private fun BeltGroupsContent(
     val hardItemStates =
         remember(title) {
             mutableStateMapOf<String, Boolean?>()
+        }
+
+    val hardPartiallyKnownStates =
+        remember(title) {
+            mutableStateMapOf<String, Boolean>()
         }
 
     val coachProgressStates =
@@ -2447,40 +2522,87 @@ private fun BeltGroupsContent(
         belt: Belt,
         topic: String,
         statusId: String,
-        value: Boolean?
+        value: Boolean?,
+        partiallyKnown: Boolean = false
     ) {
         hardStatusKeysFor(
             topic = topic
         ).forEach { key ->
-            val masteredKey = "mastered_${belt.id}_${key}"
-            val unknownKey = "unknown_${belt.id}_${key}"
+            val masteredKey =
+                "mastered_${belt.id}_${key}"
+
+            val unknownKey =
+                "unknown_${belt.id}_${key}"
+
+            val partiallyKnownKey =
+                "partially_known_${belt.id}_${key}"
 
             val masteredSet =
-                (prefs.getStringSet(masteredKey, emptySet<String>()) ?: emptySet()).toMutableSet()
+                (
+                        prefs.getStringSet(
+                            masteredKey,
+                            emptySet<String>()
+                        ) ?: emptySet()
+                        )
+                    .toMutableSet()
 
             val unknownSet =
-                (prefs.getStringSet(unknownKey, emptySet<String>()) ?: emptySet()).toMutableSet()
+                (
+                        prefs.getStringSet(
+                            unknownKey,
+                            emptySet<String>()
+                        ) ?: emptySet()
+                        )
+                    .toMutableSet()
 
-            when (value) {
-                true -> {
+            val partiallyKnownSet =
+                (
+                        prefs.getStringSet(
+                            partiallyKnownKey,
+                            emptySet<String>()
+                        ) ?: emptySet()
+                        )
+                    .toMutableSet()
+
+            when {
+                partiallyKnown -> {
+                    masteredSet.remove(statusId)
+                    unknownSet.add(statusId)
+                    partiallyKnownSet.add(statusId)
+                }
+
+                value == true -> {
                     masteredSet.add(statusId)
                     unknownSet.remove(statusId)
+                    partiallyKnownSet.remove(statusId)
                 }
 
-                false -> {
+                value == false -> {
                     unknownSet.add(statusId)
                     masteredSet.remove(statusId)
+                    partiallyKnownSet.remove(statusId)
                 }
 
-                null -> {
+                else -> {
                     masteredSet.remove(statusId)
                     unknownSet.remove(statusId)
+                    partiallyKnownSet.remove(statusId)
                 }
             }
 
             prefs.edit {
-                putStringSet(masteredKey, masteredSet)
-                putStringSet(unknownKey, unknownSet)
+                putStringSet(
+                    masteredKey,
+                    masteredSet
+                )
+                putStringSet(
+                    unknownKey,
+                    unknownSet
+                )
+                putStringSet(
+                    partiallyKnownKey,
+                    partiallyKnownSet
+                )
             }
         }
     }
@@ -2586,8 +2708,32 @@ private fun BeltGroupsContent(
                     }
                 }
 
+                val isPartiallyKnown =
+                    hardStatusKeysFor(title)
+                        .any { key ->
+                            val partiallyKnownKey =
+                                "partially_known_${group.belt.id}_$key"
+
+                            val partiallyKnownSet =
+                                prefs.getStringSet(
+                                    partiallyKnownKey,
+                                    emptySet<String>()
+                                ) ?: emptySet()
+
+                            statusId in partiallyKnownSet
+                        }
+
+                hardPartiallyKnownStates[statusId] =
+                    isPartiallyKnown
+
                 hardItemStates[statusId] =
-                    valueFromVm
+                    when {
+                        isPartiallyKnown ->
+                            false
+
+                        else ->
+                            valueFromVm
+                    }
 
                 if (isCoach) {
                     coachProgressStates[statusId] =
@@ -2677,13 +2823,15 @@ private fun BeltGroupsContent(
 
     val currentGroupUnknownCount =
         currentStickyItems.count { rawItem ->
-            hardItemStates[
+            val statusId =
                 hardStatusIdFor(
                     currentStickyBelt,
                     title,
                     rawItem
                 )
-            ] == false
+
+            hardItemStates[statusId] == false &&
+                    hardPartiallyKnownStates[statusId] != true
         }
 
     val currentGroupFavoriteCount =
@@ -2854,7 +3002,6 @@ private fun BeltGroupsContent(
 
                     is HardBeltListRow.Exercise -> {
                         val belt = row.belt
-                        val rowIndex = row.index
                         val rawItem = row.rawItem
 
                         val statusId = hardStatusIdFor(
@@ -2882,7 +3029,6 @@ private fun BeltGroupsContent(
                         val isFavorite = favoriteId in favoriteIds
 
                         HardExerciseRowCard(
-                            exerciseNumber = rowIndex + 1,
                             belt = belt,
                             item = displayItem,
                             mastered = mastered,
@@ -3113,38 +3259,71 @@ private fun HardBeltStickyHeader(
         modifier = modifier.fillMaxWidth()
     ) {
         Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .background(
-                    color =
-                        if (isDarkMode) {
-                            MaterialTheme.colorScheme.surface
-                        } else {
-                            belt.lightColor
-                        }
-                )
-                .border(
-                    width = 1.dp,
-                    color = beltContentColor.copy(alpha = 0.72f)
-                )
-                .padding(vertical = 4.dp),
-            contentAlignment = Alignment.Center
+            modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .background(
+                        brush =
+                            kmiSectionHeaderBrush()
+                    )
+                    .padding(
+                        horizontal = 16.dp,
+                        vertical = 6.dp
+                    ),
+            contentAlignment =
+                Alignment.Center
         ) {
             CompositionLocalProvider(
-                LocalLayoutDirection provides LayoutDirection.Ltr
+                LocalLayoutDirection provides
+                        if (isEnglish) {
+                            LayoutDirection.Ltr
+                        } else {
+                            LayoutDirection.Rtl
+                        }
             ) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .heightIn(min = 52.dp)
-                        .padding(
-                            start = 16.dp,
-                            end = 16.dp,
-                            top = 8.dp,
-                            bottom = 2.dp
-                        ),
-                    verticalAlignment = Alignment.CenterVertically
+                Column(
+                    modifier =
+                        Modifier
+                            .fillMaxWidth()
+                            .heightIn(min = 50.dp),
+                    horizontalAlignment =
+                        Alignment.CenterHorizontally,
+                    verticalArrangement =
+                        Arrangement.Center
                 ) {
+                    Text(
+                        text =
+                            beltTitle(
+                                belt = belt,
+                                isEnglish = isEnglish
+                            ),
+                        modifier =
+                            Modifier.fillMaxWidth(),
+                        style =
+                            KmiTypography
+                                .sectionTitle
+                                .copy(
+                                    fontWeight =
+                                        FontWeight.Black
+                                ),
+                        color =
+                            if (belt == Belt.WHITE) {
+                                kmiSectionHeaderContentColor()
+                            } else {
+                                belt.color
+                            },
+                        textAlign =
+                            TextAlign.Center,
+                        maxLines =
+                            1,
+                        overflow =
+                            TextOverflow.Ellipsis
+                    )
+
+                    Spacer(
+                        Modifier.height(1.dp)
+                    )
+
                     Text(
                         text =
                             if (isEnglish) {
@@ -3156,31 +3335,24 @@ private fun HardBeltStickyHeader(
                             } else {
                                 "\u200E$count\u200E תרגילים"
                             },
+                        modifier =
+                            Modifier.fillMaxWidth(),
                         style =
-                            KmiTypography.caption.copy(
-                                fontWeight = FontWeight.Bold
-                            ),
-                        color = beltContentColor,
-                        textAlign = TextAlign.Start,
-                        modifier = Modifier.weight(1f),
-                        maxLines = 1
-                    )
-
-                    Text(
-                        text =
-                            beltTitle(
-                                belt = belt,
-                                isEnglish = isEnglish
-                            ),
-                        style =
-                            KmiTypography.screenTitle.copy(
-                                fontWeight = FontWeight.ExtraBold
-                            ),
-                        color = beltContentColor,
-                        textAlign = TextAlign.End,
-                        modifier = Modifier.weight(1f),
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
+                            KmiTypography
+                                .caption
+                                .copy(
+                                    fontWeight =
+                                        FontWeight.Bold
+                                ),
+                        color =
+                            kmiSectionHeaderContentColor()
+                                .copy(alpha = 0.92f),
+                        textAlign =
+                            TextAlign.Center,
+                        maxLines =
+                            1,
+                        overflow =
+                            TextOverflow.Ellipsis
                     )
                 }
             }
@@ -3325,7 +3497,6 @@ private fun HardBeltStickyHeader(
 
 @Composable
 private fun HardExerciseRowCard(
-    exerciseNumber: Int,
     belt: Belt,
     item: String,
     mastered: Boolean?,
@@ -3525,26 +3696,6 @@ private fun HardExerciseRowCard(
                             modifier = Modifier.fillMaxWidth(),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            HardExerciseMetaBadge(
-                                text =
-                                    if (isEnglish) {
-                                        "No. $exerciseNumber"
-                                    } else {
-                                        "מס׳ $exerciseNumber"
-                                    },
-                                containerColor =
-                                    if (isDarkMode) {
-                                        MaterialTheme.colorScheme.surfaceVariant
-                                    } else {
-                                        belt.color.copy(alpha = 0.14f)
-                                    },
-                                contentColor =
-                                    MaterialTheme.colorScheme.onSurface
-                            )
-
-                            Spacer(
-                                modifier = Modifier.width(3.dp)
-                            )
 
                             IconButton(
                                 onClick = onInfoClick,

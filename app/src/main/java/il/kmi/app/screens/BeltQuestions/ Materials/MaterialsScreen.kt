@@ -1507,7 +1507,7 @@ fun MaterialsScreen(
         delay(120.milliseconds)
 
         val nextStates: Map<String, Boolean?> =
-            withContext(Dispatchers.Default) {
+            withContext(Dispatchers.IO) {
                 buildMap {
                     itemList.forEachIndexed { index, item ->
                         val statusId = statusIdFor(index, item)
@@ -3757,12 +3757,17 @@ fun MaterialsScreen(
                                                                 }
                                                             )
                                                         } else {
+                                                            /*
+     * התאריכים נטענים מראש יחד עם
+     * מצבי התרגילים ב-LaunchedEffect.
+     *
+     * אין לקרוא מ-SharedPreferences
+     * כאשר שורה נכנסת למסך בגלילה.
+     */
                                                             val traineeUpdatedAt =
                                                                 traineeUpdatedAtStates[
                                                                     statusId
-                                                                ] ?: loadTraineeUpdatedAt(
-                                                                    statusId
-                                                                )
+                                                                ] ?: 0L
 
                                                             val traineeDateText =
                                                                 if (
@@ -3823,6 +3828,7 @@ fun MaterialsScreen(
                                                                     ),
                                                                     dateText = traineeDateText,
                                                                     isEnglish = isEnglish,
+                                                                    showSymbols = false,
                                                                     onSelect = { selectedStatus: TraineeMaterialStatus? ->
 
                                                                         val newVal:
@@ -5140,7 +5146,7 @@ private fun MaterialsTopStatusCard(
 }
 
 @Composable
-private fun MaterialsExerciseStatusCard(
+internal fun MaterialsExerciseStatusCard(
     isEnglish: Boolean,
     modifier: Modifier = Modifier,
     compact: Boolean = false,
@@ -5355,10 +5361,11 @@ private fun MaterialsExerciseStatusOption(
 }
 
 @Composable
-private fun TraineeMaterialStatusSelector(
+internal fun TraineeMaterialStatusSelector(
     selectedStatus: TraineeMaterialStatus?,
     dateText: String,
     isEnglish: Boolean,
+    showSymbols: Boolean = true,
     onSelect: (TraineeMaterialStatus?) -> Unit
 ) {
     Row(
@@ -5393,7 +5400,16 @@ private fun TraineeMaterialStatusSelector(
                     TraineeMaterialStatus.UNKNOWN -> Color(0xFFC64F55)
                 },
                 modifier = Modifier.weight(1f),
-                onClick = { onSelect(if (selected) null else status) }
+                showSymbol = showSymbols,
+                onClick = {
+                    onSelect(
+                        if (selected) {
+                            null
+                        } else {
+                            status
+                        }
+                    )
+                }
             )
         }
     }
@@ -5561,7 +5577,7 @@ private fun CompactDropdownAction(
 }
 
 @Composable
-private fun ItemFloatingActions(
+internal fun ItemFloatingActions(
     isEnglish: Boolean,
     excluded: Boolean,
     isFav: Boolean,

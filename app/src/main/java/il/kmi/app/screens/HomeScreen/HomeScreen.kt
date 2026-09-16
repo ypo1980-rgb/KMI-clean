@@ -4001,11 +4001,26 @@ private fun TrainingCardCompact(
                 traineeAttendanceChoice =
                     choiceToShow
 
-            } catch (_: Throwable) {
-                /*
-                 * בכשל שמירה לא משנים את הבחירה
-                 * שמוצגת למשתמש.
-                 */
+            } catch (error: Throwable) {
+                android.util.Log.e(
+                    "KMI_ATTENDANCE_SAVE",
+                    buildString {
+                        append("Failed to save trainee attendance")
+                        append(" | branch=")
+                        append(branch)
+                        append(" | group=")
+                        append(attendanceGroup)
+                        append(" | date=")
+                        append(trainingDate)
+                        append(" | memberId=")
+                        append(memberId)
+                        append(" | occurrenceKey=")
+                        append(occurrenceKey)
+                        append(" | status=")
+                        append(statusToSave)
+                    },
+                    error
+                )
             } finally {
                 attendanceSaving = false
             }
@@ -4586,17 +4601,9 @@ private fun TrainingCardCompact(
                                 Text(
                                     text =
                                         if (isEnglish) {
-                                            if (notComingSelected) {
-                                                "✕ Not coming"
-                                            } else {
-                                                "Not coming"
-                                            }
+                                            "Not coming"
                                         } else {
-                                            if (notComingSelected) {
-                                                "✕ לא מגיע"
-                                            } else {
-                                                "לא מגיע"
-                                            }
+                                            "לא מגיע"
                                         },
                                     style =
                                         KmiTypography.secondary.copy(
@@ -4685,17 +4692,9 @@ private fun TrainingCardCompact(
                                 Text(
                                     text =
                                         if (isEnglish) {
-                                            if (comingSelected) {
-                                                "Coming ✓"
-                                            } else {
-                                                "Coming"
-                                            }
+                                            "Coming"
                                         } else {
-                                            if (comingSelected) {
-                                                "מגיע ✓"
-                                            } else {
-                                                "מגיע"
-                                            }
+                                            "מגיע"
                                         },
                                     style =
                                         KmiTypography.secondary.copy(
