@@ -55,7 +55,8 @@ import java.util.Locale
 data class KmiCalendarMarkers(
     val trainingDates: Set<LocalDate> = emptySet(),
     val holidayDates: Set<LocalDate> = emptySet(),
-    val summaryDates: Set<LocalDate> = emptySet()
+    val summaryDates: Set<LocalDate> = emptySet(),
+    val cancelledTrainingDates: Set<LocalDate> = emptySet()
 )
 
 @Composable
@@ -63,7 +64,9 @@ fun KmiCalendarMonthHeader(
     visibleMonth: YearMonth,
     isEnglish: Boolean,
     onVisibleMonthChange: (YearMonth) -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    maxVisibleMonth: YearMonth =
+        YearMonth.from(LocalDate.now())
 ) {
     val monthLocale = remember(isEnglish) {
         if (isEnglish) {
@@ -115,12 +118,11 @@ fun KmiCalendarMonthHeader(
                                 visibleMonth.plusMonths(1)
                             }
 
-                        val currentMonth =
-                            YearMonth.from(
-                                LocalDate.now()
+                        if (
+                            !targetMonth.isAfter(
+                                maxVisibleMonth
                             )
-
-                        if (!targetMonth.isAfter(currentMonth)) {
+                        ) {
                             onVisibleMonthChange(
                                 targetMonth
                             )
@@ -173,12 +175,11 @@ fun KmiCalendarMonthHeader(
                                 visibleMonth.minusMonths(1)
                             }
 
-                        val currentMonth =
-                            YearMonth.from(
-                                LocalDate.now()
+                        if (
+                            !targetMonth.isAfter(
+                                maxVisibleMonth
                             )
-
-                        if (!targetMonth.isAfter(currentMonth)) {
+                        ) {
                             onVisibleMonthChange(
                                 targetMonth
                             )
@@ -220,7 +221,12 @@ fun KmiCalendarMonth(
     onDateSelected: (LocalDate) -> Unit,
     modifier: Modifier = Modifier,
     markers: KmiCalendarMarkers = KmiCalendarMarkers(),
-    showMonthHeader: Boolean = true
+    showMonthHeader: Boolean = true,
+    minSelectableDate: LocalDate? = null,
+    maxSelectableDate: LocalDate = LocalDate.now(),
+    showSummaryMarkers: Boolean = true,
+    showSummaryLegend: Boolean = true,
+    showCancelledTrainingLegend: Boolean = false
 ) {
     val colorScheme =
         MaterialTheme.colorScheme
@@ -310,7 +316,11 @@ fun KmiCalendarMonth(
             KmiCalendarMonthHeader(
                 visibleMonth = visibleMonth,
                 isEnglish = isEnglish,
-                onVisibleMonthChange = onVisibleMonthChange
+                onVisibleMonthChange = onVisibleMonthChange,
+                maxVisibleMonth =
+                    YearMonth.from(
+                        maxSelectableDate
+                    )
             )
         }
 
@@ -386,9 +396,19 @@ fun KmiCalendarMonth(
                                 cellDate != null &&
                                         cellDate == today
 
-                            val isFuture =
+                            val isDateDisabled =
                                 cellDate != null &&
-                                        cellDate.isAfter(today)
+                                        (
+                                                cellDate.isAfter(
+                                                    maxSelectableDate
+                                                ) ||
+                                                        (
+                                                                minSelectableDate != null &&
+                                                                        cellDate.isBefore(
+                                                                            minSelectableDate
+                                                                        )
+                                                                )
+                                                )
 
                             val hasTraining =
                                 cellDate != null &&
@@ -398,8 +418,14 @@ fun KmiCalendarMonth(
                                 cellDate != null &&
                                         cellDate in markers.holidayDates
 
-                            val hasSummary =
+                            val hasCancelledTraining =
                                 cellDate != null &&
+                                        cellDate in
+                                        markers.cancelledTrainingDates
+
+                            val hasSummary =
+                                showSummaryMarkers &&
+                                        cellDate != null &&
                                         cellDate in markers.summaryDates
 
                             Box(
@@ -416,7 +442,8 @@ fun KmiCalendarMonth(
                                         modifier = Modifier
                                             .size(34.dp)
                                             .clickable(
-                                                enabled = !isFuture
+                                                enabled =
+                                                    !isDateDisabled
                                             ) {
                                                 onDateSelected(cellDate)
                                             },
@@ -450,10 +477,13 @@ fun KmiCalendarMonth(
                                                 text = day.toString(),
                                                 color =
                                                     when {
-                                                        isFuture ->
+                                                        isDateDisabled ->
                                                             colorScheme.onSurfaceVariant.copy(
                                                                 alpha = 0.38f
                                                             )
+
+                                                        hasCancelledTraining ->
+                                                            colorScheme.error
 
                                                         isSelected ->
                                                             selectedDayTextColor
@@ -504,57 +534,94 @@ fun KmiCalendarMonth(
                                     }
 
                                     /*
-                                     * סיכום אימון:
-                                     * האייקון מצויר מחוץ לעיגול התאריך,
-                                     * כדי שצורת ה־Surface לא תחתוך אותו.
-                                     */
-                                    if (hasSummary) {
-                                        Surface(
-                                            modifier = Modifier
-                                                .align(
-                                                    Alignment.TopEnd
-                                                )
-                                                .padding(
-                                                    top = 1.dp,
-                                                    end = 2.dp
-                                                )
-                                                .size(14.dp),
-                                            shape =
-                                                RoundedCornerShape(4.dp),
-                                            color =
-                                                if (isSelected) {
-                                                    selectedDayTextColor
-                                                        .copy(alpha = 0.96f)
-                                                } else {
-                                                    colorScheme.primary
-                                                },
-                                            tonalElevation = 0.dp,
-                                            shadowElevation = 0.dp
-                                        ) {
-                                            Box(
-                                                modifier =
-                                                    Modifier.fillMaxSize(),
-                                                contentAlignment =
-                                                    Alignment.Center
+            * במצב נוכחות, סימון ביטול אימון
+            * מחליף את אייקון סיכום האימון.
+            */
+                                    when {
+                                        hasCancelledTraining -> {
+                                            Surface(
+                                                modifier = Modifier
+                                                    .align(Alignment.TopEnd)
+                                                    .padding(
+                                                        top = 1.dp,
+                                                        end = 2.dp
+                                                    )
+                                                    .size(14.dp),
+                                                shape = CircleShape,
+                                                color =
+                                                    colorScheme.error,
+                                                tonalElevation = 0.dp,
+                                                shadowElevation = 0.dp
                                             ) {
-                                                Icon(
-                                                    imageVector =
-                                                        Icons.Filled.Description,
-                                                    contentDescription =
-                                                        if (isEnglish) {
-                                                            "Training summary"
-                                                        } else {
-                                                            "סיכום אימון"
-                                                        },
-                                                    tint =
-                                                        if (isSelected) {
-                                                            selectedDayColor
-                                                        } else {
-                                                            colorScheme.onPrimary
-                                                        },
+                                                Box(
                                                     modifier =
-                                                        Modifier.size(9.dp)
-                                                )
+                                                        Modifier.fillMaxSize(),
+                                                    contentAlignment =
+                                                        Alignment.Center
+                                                ) {
+                                                    Text(
+                                                        text = "×",
+                                                        color =
+                                                            colorScheme.onError,
+                                                        style =
+                                                            KmiTypography.caption.copy(
+                                                                fontWeight =
+                                                                    FontWeight.Black
+                                                            ),
+                                                        textAlign =
+                                                            TextAlign.Center,
+                                                        maxLines = 1
+                                                    )
+                                                }
+                                            }
+                                        }
+
+                                        hasSummary -> {
+                                            Surface(
+                                                modifier = Modifier
+                                                    .align(Alignment.TopEnd)
+                                                    .padding(
+                                                        top = 1.dp,
+                                                        end = 2.dp
+                                                    )
+                                                    .size(14.dp),
+                                                shape =
+                                                    RoundedCornerShape(4.dp),
+                                                color =
+                                                    if (isSelected) {
+                                                        selectedDayTextColor
+                                                            .copy(alpha = 0.96f)
+                                                    } else {
+                                                        colorScheme.primary
+                                                    },
+                                                tonalElevation = 0.dp,
+                                                shadowElevation = 0.dp
+                                            ) {
+                                                Box(
+                                                    modifier =
+                                                        Modifier.fillMaxSize(),
+                                                    contentAlignment =
+                                                        Alignment.Center
+                                                ) {
+                                                    Icon(
+                                                        imageVector =
+                                                            Icons.Filled.Description,
+                                                        contentDescription =
+                                                            if (isEnglish) {
+                                                                "Training summary"
+                                                            } else {
+                                                                "סיכום אימון"
+                                                            },
+                                                        tint =
+                                                            if (isSelected) {
+                                                                selectedDayColor
+                                                            } else {
+                                                                colorScheme.onPrimary
+                                                            },
+                                                        modifier =
+                                                            Modifier.size(9.dp)
+                                                    )
+                                                }
                                             }
                                         }
                                     }
@@ -571,7 +638,10 @@ fun KmiCalendarMonth(
         )
 
         KmiCalendarLegend(
-            isEnglish = isEnglish
+            isEnglish = isEnglish,
+            showSummary = showSummaryLegend,
+            showCancelledTraining =
+                showCancelledTrainingLegend
         )
     }
 }
@@ -918,6 +988,8 @@ private fun CalendarDialogActions(
 @Composable
 private fun KmiCalendarLegend(
     isEnglish: Boolean,
+    showSummary: Boolean = true,
+    showCancelledTraining: Boolean = false,
     modifier: Modifier = Modifier
 ) {
     val colorScheme =
@@ -988,19 +1060,65 @@ private fun KmiCalendarLegend(
                     textColor
             )
 
-            /*
-             * סיכום אימון
-             */
-            CalendarLegendSummaryItem(
-                text =
-                    if (isEnglish) {
-                        "Summary"
-                    } else {
-                        "סיכום אימון"
-                    },
-                textColor =
-                    textColor
-            )
+            if (showCancelledTraining) {
+                Row(
+                    verticalAlignment =
+                        Alignment.CenterVertically,
+                    horizontalArrangement =
+                        Arrangement.spacedBy(5.dp)
+                ) {
+                    Surface(
+                        modifier = Modifier.size(14.dp),
+                        shape = CircleShape,
+                        color = colorScheme.error,
+                        tonalElevation = 0.dp,
+                        shadowElevation = 0.dp
+                    ) {
+                        Box(
+                            modifier = Modifier.fillMaxSize(),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = "×",
+                                color = colorScheme.onError,
+                                style =
+                                    KmiTypography.caption.copy(
+                                        fontWeight =
+                                            FontWeight.Black
+                                    ),
+                                textAlign = TextAlign.Center,
+                                maxLines = 1
+                            )
+                        }
+                    }
+
+                    Text(
+                        text =
+                            if (isEnglish) {
+                                "Cancelled"
+                            } else {
+                                "אימון מבוטל"
+                            },
+                        color = textColor,
+                        style =
+                            KmiTypography.caption.copy(
+                                fontWeight =
+                                    FontWeight.SemiBold
+                            ),
+                        maxLines = 1
+                    )
+                }
+            } else if (showSummary) {
+                CalendarLegendSummaryItem(
+                    text =
+                        if (isEnglish) {
+                            "Summary"
+                        } else {
+                            "סיכום אימון"
+                        },
+                    textColor = textColor
+                )
+            }
         }
     }
 }

@@ -91,8 +91,8 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import il.kmi.app.ui.KmiTopBar
-import il.kmi.app.ui.calendar.KmiCalendarPickerDialog
 import il.kmi.shared.localization.AppLanguage
+import il.yuval.ui.theme.kmiScreenBackgroundBrush
 import il.kmi.shared.localization.AppLanguageManager
 import il.kmi.shared.free_sessions.data.FreeSessionsRepository
 import il.kmi.shared.free_sessions.data.freeSessionsRepository
@@ -106,6 +106,7 @@ import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.time.Instant
+import java.time.LocalDate
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.util.Locale
@@ -131,10 +132,11 @@ import il.kmi.app.R
 import il.kmi.app.screens.registration.CoachBranchAssignmentsCodec
 import il.kmi.app.privacy.TraineeDisplayNameMapper
 import il.kmi.app.ui.KmiTypography
+import il.kmi.app.ui.pdf.KmiPdfFooter
+import il.kmi.app.ui.pdf.KmiPdfHeader
 import android.graphics.Paint
 import android.graphics.Typeface
 import android.graphics.pdf.PdfDocument
-import android.graphics.Path
 import android.net.Uri
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.core.content.FileProvider
@@ -560,6 +562,9 @@ fun FreeSessionsScreen(
     groupKey: String,
     currentUid: String,
     currentName: String,
+    selectedCalendarDateIso: String = "",
+    onOpenCalendar: () -> Unit = {},
+    onCalendarDateConsumed: () -> Unit = {},
     onBack: () -> Unit = {}
 ) {
     val scope = rememberCoroutineScope()
@@ -1717,7 +1722,7 @@ fun FreeSessionsScreen(
     }
 
 // ===== Create dialog =====
-    var showCreate by remember { mutableStateOf(false) }
+    var showCreate by rememberSaveable { mutableStateOf(false) }
     var title by remember { mutableStateOf("") }
     var locationQuery by remember { mutableStateOf("") }
     var selectedPlace by remember { mutableStateOf<FreeSessionPlaceSuggestion?>(null) }
@@ -1779,15 +1784,7 @@ fun FreeSessionsScreen(
             Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .background(
-                        Brush.verticalGradient(
-                            listOf(
-                                KmiFreeBgTop,
-                                KmiFreeBgMid,
-                                KmiFreeBgBottom
-                            )
-                        )
-                    )
+                    .background(kmiScreenBackgroundBrush())
             ) {
                 Column(
                     modifier = Modifier
@@ -2149,6 +2146,9 @@ fun FreeSessionsScreen(
                                 PremiumDateTimeCard(
                                     startsAt = startsAt,
                                     isEnglish = isEnglish,
+                                    selectedCalendarDateIso = selectedCalendarDateIso,
+                                    onOpenCalendar = onOpenCalendar,
+                                    onCalendarDateConsumed = onCalendarDateConsumed,
                                     onPick = { startsAt = it }
                                 )
 
@@ -2387,14 +2387,10 @@ private fun createFreeSessionsPdf(
     val pageWidth = 595
     val pageHeight = 842
     val margin = 32f
-    val bottomLimit = 785f
 
-    val navy =
-        android.graphics.Color.rgb(
-            2,
-            43,
-            74
-        )
+    val contentBottom =
+        pageHeight -
+                KmiPdfFooter.CONTENT_BOTTOM_PADDING
 
     val lightBlue =
         android.graphics.Color.rgb(
@@ -2547,81 +2543,29 @@ private fun createFreeSessionsPdf(
             color = textMuted
         )
 
-    fun drawLogo(
-        cx: Float,
-        cy: Float,
-        radius: Float
-    ) {
-        val outer =
-            Paint(
-                Paint.ANTI_ALIAS_FLAG
-            ).apply {
-                color = navy
-            }
-
-        val inner =
-            Paint(
-                Paint.ANTI_ALIAS_FLAG
-            ).apply {
-                color = white
-            }
-
-        val logoText =
-            textPaint(
-                size = radius * 0.62f,
-                color = navy,
-                bold = true,
-                align = Paint.Align.CENTER
-            )
-
-        canvas.drawCircle(
-            cx,
-            cy,
-            radius,
-            outer
+    fun drawHeader() {
+        KmiPdfHeader.draw(
+            context = context,
+            canvas = canvas,
+            pageWidth = pageWidth,
+            isEnglish = isEnglish,
+            titleHebrew = "אימונים חופשיים",
+            titleEnglish = "Free Sessions",
+            subtitleHebrew = "רשימת האימונים החופשיים הפעילים",
+            subtitleEnglish = "Active free sessions"
         )
 
-        canvas.drawCircle(
-            cx,
-            cy,
-            radius - 4f,
-            inner
-        )
-
-        canvas.drawText(
-            "KAMI",
-            cx,
-            cy + radius * 0.22f,
-            logoText
-        )
+        y = KmiPdfHeader.CONTENT_TOP
     }
 
     fun drawFooter() {
-        canvas.drawLine(
-            margin,
-            pageHeight - 42f,
-            pageWidth - margin,
-            pageHeight - 42f,
-            Paint(
-                Paint.ANTI_ALIAS_FLAG
-            ).apply {
-                color = borderBlue
-                strokeWidth = 1f
-            }
-        )
-
-        canvas.drawText(
-            tr(
-                "עמוד $pageNumber · KAMI",
-                "Page $pageNumber · KAMI"
-            ),
-            pageWidth / 2f,
-            pageHeight - 22f,
-            textPaint(
-                size = 8.5f,
-                color = textMuted,
-                align = Paint.Align.CENTER
-            )
+        KmiPdfFooter.draw(
+            canvas = canvas,
+            pageWidth = pageWidth,
+            pageHeight = pageHeight,
+            pageNumber = pageNumber,
+            totalPages = null,
+            isEnglish = isEnglish
         )
     }
 
@@ -2647,159 +2591,7 @@ private fun createFreeSessionsPdf(
 
         canvas = page.canvas
 
-        canvas.drawColor(white)
-
-        val diagonal =
-            Paint(
-                Paint.ANTI_ALIAS_FLAG
-            ).apply {
-                color = navy
-            }
-
-        val accent1 =
-            Paint(
-                Paint.ANTI_ALIAS_FLAG
-            ).apply {
-                color =
-                    android.graphics.Color.rgb(
-                        36,
-                        103,
-                        158
-                    )
-            }
-
-        val accent2 =
-            Paint(
-                Paint.ANTI_ALIAS_FLAG
-            ).apply {
-                color =
-                    android.graphics.Color.rgb(
-                        128,
-                        183,
-                        220
-                    )
-            }
-
-        canvas.drawPath(
-            Path().apply {
-                moveTo(
-                    pageWidth.toFloat(),
-                    0f
-                )
-
-                lineTo(
-                    pageWidth.toFloat(),
-                    122f
-                )
-
-                lineTo(
-                    178f,
-                    122f
-                )
-
-                lineTo(
-                    238f,
-                    0f
-                )
-
-                close()
-            },
-            diagonal
-        )
-
-        canvas.drawPath(
-            Path().apply {
-                moveTo(
-                    208f,
-                    122f
-                )
-
-                lineTo(
-                    224f,
-                    122f
-                )
-
-                lineTo(
-                    284f,
-                    0f
-                )
-
-                lineTo(
-                    268f,
-                    0f
-                )
-
-                close()
-            },
-            accent1
-        )
-
-        canvas.drawPath(
-            Path().apply {
-                moveTo(
-                    230f,
-                    122f
-                )
-
-                lineTo(
-                    238f,
-                    122f
-                )
-
-                lineTo(
-                    298f,
-                    0f
-                )
-
-                lineTo(
-                    290f,
-                    0f
-                )
-
-                close()
-            },
-            accent2
-        )
-
-        drawLogo(
-            cx = 78f,
-            cy = 58f,
-            radius = 42f
-        )
-
-        val headerX =
-            pageWidth - 34f
-
-        canvas.drawText(
-            tr(
-                "אימונים חופשיים",
-                "Free Sessions"
-            ),
-            headerX,
-            52f,
-            textPaint(
-                size = 25f,
-                color = white,
-                bold = true,
-                align = Paint.Align.RIGHT
-            )
-        )
-
-        canvas.drawText(
-            tr(
-                "רשימת האימונים החופשיים הפעילים",
-                "Active free sessions"
-            ),
-            headerX,
-            78f,
-            textPaint(
-                size = 10.5f,
-                color = white,
-                align = Paint.Align.RIGHT
-            )
-        )
-
-        y = 150f
+        drawHeader()
     }
 
     fun ensureSpace(
@@ -2807,7 +2599,7 @@ private fun createFreeSessionsPdf(
     ) {
         if (
             y + requiredHeight >
-            bottomLimit
+            contentBottom
         ) {
             startPage()
         }
@@ -4145,6 +3937,9 @@ private fun WazePlaceSuggestionRow(
 private fun PremiumDateTimeCard(
     startsAt: Long,
     isEnglish: Boolean,
+    selectedCalendarDateIso: String,
+    onOpenCalendar: () -> Unit,
+    onCalendarDateConsumed: () -> Unit,
     onPick: (Long) -> Unit
 ) {
     fun tr(he: String, en: String): String = if (isEnglish) en else he
@@ -4225,6 +4020,9 @@ private fun PremiumDateTimeCard(
             TimeQuickPicker(
                 startsAt = startsAt,
                 isEnglish = isEnglish,
+                selectedCalendarDateIso = selectedCalendarDateIso,
+                onOpenCalendar = onOpenCalendar,
+                onCalendarDateConsumed = onCalendarDateConsumed,
                 onPick = onPick
             )
         }
@@ -5275,46 +5073,6 @@ private fun ParticipantRow(
     }
 }
 
-@Composable
-private fun PremiumFreeSessionDatePickerDialog(
-    selectedMillis: Long,
-    isEnglish: Boolean,
-    onDismiss: () -> Unit,
-    onDateSelected: (Long) -> Unit
-) {
-    val zone = ZoneId.systemDefault()
-
-    val selectedDate = remember(
-        selectedMillis,
-        zone
-    ) {
-        Instant
-            .ofEpochMilli(selectedMillis)
-            .atZone(zone)
-            .toLocalDate()
-    }
-
-    KmiCalendarPickerDialog(
-        title = if (isEnglish) {
-            "Choose session date"
-        } else {
-            "בחר תאריך לאימון"
-        },
-        selectedDate = selectedDate,
-        isEnglish = isEnglish,
-        onDismiss = onDismiss,
-        onDateSelected = { date ->
-            val selectedDateMillis =
-                date
-                    .atStartOfDay(zone)
-                    .toInstant()
-                    .toEpochMilli()
-
-            onDateSelected(selectedDateMillis)
-        }
-    )
-}
-
 @OptIn(
     ExperimentalMaterial3Api::class,
     ExperimentalFoundationApi::class
@@ -5323,13 +5081,37 @@ private fun PremiumFreeSessionDatePickerDialog(
 private fun TimeQuickPicker(
     startsAt: Long,
     isEnglish: Boolean,
+    selectedCalendarDateIso: String,
+    onOpenCalendar: () -> Unit,
+    onCalendarDateConsumed: () -> Unit,
     onPick: (Long) -> Unit
 ) {
     fun tr(he: String, en: String): String = if (isEnglish) en else he
-    var showDatePicker by remember { mutableStateOf(false) }
     var showTimePicker by remember { mutableStateOf(false) }
 
     var customDateMillis by remember { mutableStateOf<Long?>(null) }
+
+    LaunchedEffect(selectedCalendarDateIso) {
+        if (selectedCalendarDateIso.isBlank()) {
+            return@LaunchedEffect
+        }
+
+        val selectedDateMillis =
+            runCatching {
+                LocalDate
+                    .parse(selectedCalendarDateIso)
+                    .atStartOfDay(ZoneId.systemDefault())
+                    .toInstant()
+                    .toEpochMilli()
+            }.getOrNull()
+
+        if (selectedDateMillis != null) {
+            customDateMillis = selectedDateMillis
+            showTimePicker = true
+        }
+
+        onCalendarDateConsumed()
+    }
     var customHour by remember {
         mutableIntStateOf(19)
     }
@@ -5355,7 +5137,7 @@ private fun TimeQuickPicker(
                 customDateMillis = startsAt
             }
 
-            showDatePicker = true
+            onOpenCalendar()
         },
         modifier =
             Modifier.fillMaxWidth(),
@@ -5380,21 +5162,6 @@ private fun TimeQuickPicker(
                 textAlign = TextAlign.Center
             )
         }
-    }
-
-    if (showDatePicker) {
-        PremiumFreeSessionDatePickerDialog(
-            selectedMillis = customDateMillis ?: startsAt,
-            isEnglish = isEnglish,
-            onDismiss = {
-                showDatePicker = false
-            },
-            onDateSelected = { selectedMillis ->
-                customDateMillis = selectedMillis
-                showDatePicker = false
-                showTimePicker = true
-            }
-        )
     }
 
     if (showTimePicker) {

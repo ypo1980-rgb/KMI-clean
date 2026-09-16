@@ -83,7 +83,8 @@ private data class CalendarTrainingItem(
 enum class MonthlyCalendarMode {
     VIEW_ONLY,
     SUMMARY_DATE_PICKER,
-    ATTENDANCE_DATE_PICKER
+    ATTENDANCE_DATE_PICKER,
+    FREE_SESSION_DATE_PICKER
 }
 
 @Composable
@@ -488,11 +489,23 @@ fun MonthlyCalendarScreen(
                         when (mode) {
                             MonthlyCalendarMode.ATTENDANCE_DATE_PICKER ->
                                 tr(
-                                    "בחירת תאריך לנוכחות",
-                                    "Select attendance date"
+                                    "תאריך לנוכחות",
+                                    "Attendance date"
                                 )
 
-                            else ->
+                            MonthlyCalendarMode.FREE_SESSION_DATE_PICKER ->
+                                tr(
+                                    "אימונים חופשיים",
+                                    "Free sessions"
+                                )
+
+                            MonthlyCalendarMode.SUMMARY_DATE_PICKER ->
+                                tr(
+                                    "סיכום אימון",
+                                    "Training summary"
+                                )
+
+                            MonthlyCalendarMode.VIEW_ONLY ->
                                 tr(
                                     "לוח אימונים חודשי",
                                     "Monthly calendar"
@@ -583,12 +596,48 @@ fun MonthlyCalendarScreen(
                     .background(
                         brush = kmiScreenBackgroundBrush()
                     )
-                    .pointerInput(ym) {
+                    .pointerInput(
+                        ym,
+                        mode,
+                        today
+                    ) {
                         val threshold = 48f
+
+                        val maxVisibleMonth =
+                            when (mode) {
+                                MonthlyCalendarMode.ATTENDANCE_DATE_PICKER ->
+                                    YearMonth.from(
+                                        today.plusDays(7)
+                                    )
+
+                                MonthlyCalendarMode.FREE_SESSION_DATE_PICKER ->
+                                    YearMonth.from(
+                                        today.plusMonths(3)
+                                    )
+
+                                else ->
+                                    YearMonth.from(today)
+                            }
+
                         detectHorizontalDragGestures { _, dragAmount ->
-                            when {
-                                dragAmount > threshold -> ym = ym.plusMonths(1)
-                                dragAmount < -threshold -> ym = ym.minusMonths(1)
+                            val targetMonth =
+                                when {
+                                    dragAmount > threshold ->
+                                        ym.plusMonths(1)
+
+                                    dragAmount < -threshold ->
+                                        ym.minusMonths(1)
+
+                                    else ->
+                                        ym
+                                }
+
+                            if (
+                                !targetMonth.isAfter(
+                                    maxVisibleMonth
+                                )
+                            ) {
+                                ym = targetMonth
                             }
                         }
                     }
@@ -604,7 +653,22 @@ fun MonthlyCalendarScreen(
                         isEnglish = isEnglish,
                         onVisibleMonthChange = { newMonth ->
                             ym = newMonth
-                        }
+                        },
+                        maxVisibleMonth =
+                            when (mode) {
+                                MonthlyCalendarMode.ATTENDANCE_DATE_PICKER ->
+                                    YearMonth.from(
+                                        today.plusDays(7)
+                                    )
+
+                                MonthlyCalendarMode.FREE_SESSION_DATE_PICKER ->
+                                    YearMonth.from(
+                                        today.plusMonths(3)
+                                    )
+
+                                else ->
+                                    YearMonth.from(today)
+                            }
                     )
 
                     AnimatedContent(
@@ -674,7 +738,8 @@ fun MonthlyCalendarScreen(
                                 mode,
                                 trainingsCountByDate,
                                 holidaysByDate,
-                                summaryDatesThisMonth
+                                summaryDatesThisMonth,
+                                cancelledTrainingDates
                             ) {
                                 KmiCalendarMarkers(
                                     trainingDates =
@@ -690,11 +755,23 @@ fun MonthlyCalendarScreen(
                                     summaryDates =
                                         if (
                                             mode ==
-                                            MonthlyCalendarMode.ATTENDANCE_DATE_PICKER
+                                            MonthlyCalendarMode.ATTENDANCE_DATE_PICKER ||
+                                            mode ==
+                                            MonthlyCalendarMode.FREE_SESSION_DATE_PICKER
                                         ) {
                                             emptySet()
                                         } else {
                                             summaryDatesThisMonth
+                                        },
+
+                                    cancelledTrainingDates =
+                                        if (
+                                            mode ==
+                                            MonthlyCalendarMode.ATTENDANCE_DATE_PICKER
+                                        ) {
+                                            cancelledTrainingDates
+                                        } else {
+                                            emptySet()
                                         }
                                 )
                             }
@@ -728,6 +805,18 @@ fun MonthlyCalendarScreen(
                                             }
 
                                             MonthlyCalendarMode.ATTENDANCE_DATE_PICKER -> {
+                                                trainingChoiceDate = null
+                                                trainingChoices = emptyList()
+
+                                                onDateClick(
+                                                    date,
+                                                    "",
+                                                    "",
+                                                    ""
+                                                )
+                                            }
+
+                                            MonthlyCalendarMode.FREE_SESSION_DATE_PICKER -> {
                                                 trainingChoiceDate = null
                                                 trainingChoices = emptyList()
 
@@ -780,7 +869,50 @@ fun MonthlyCalendarScreen(
                                         }
                                     },
                                     markers = calendarMarkers,
-                                    showMonthHeader = false
+                                    showMonthHeader = false,
+
+                                    minSelectableDate =
+                                        if (
+                                            mode ==
+                                            MonthlyCalendarMode.FREE_SESSION_DATE_PICKER
+                                        ) {
+                                            today
+                                        } else {
+                                            null
+                                        },
+
+                                    maxSelectableDate =
+                                        when (mode) {
+                                            MonthlyCalendarMode.ATTENDANCE_DATE_PICKER ->
+                                                today.plusDays(7)
+
+                                            MonthlyCalendarMode.FREE_SESSION_DATE_PICKER ->
+                                                today.plusMonths(3)
+
+                                            else ->
+                                                today
+                                        },
+
+                                    showSummaryMarkers =
+                                        mode !=
+                                                MonthlyCalendarMode
+                                                    .ATTENDANCE_DATE_PICKER &&
+                                                mode !=
+                                                MonthlyCalendarMode
+                                                    .FREE_SESSION_DATE_PICKER,
+
+                                    showSummaryLegend =
+                                        mode !=
+                                                MonthlyCalendarMode
+                                                    .ATTENDANCE_DATE_PICKER &&
+                                                mode !=
+                                                MonthlyCalendarMode
+                                                    .FREE_SESSION_DATE_PICKER,
+
+                                    showCancelledTrainingLegend =
+                                        mode ==
+                                                MonthlyCalendarMode
+                                                    .ATTENDANCE_DATE_PICKER
                                 )
 
                                 Spacer(Modifier.height(4.dp))
@@ -788,7 +920,9 @@ fun MonthlyCalendarScreen(
                                 // אינדיקציה ל"יום הנבחר"
                                 if (
                                     mode !=
-                                    MonthlyCalendarMode.ATTENDANCE_DATE_PICKER
+                                    MonthlyCalendarMode.ATTENDANCE_DATE_PICKER &&
+                                    mode !=
+                                    MonthlyCalendarMode.FREE_SESSION_DATE_PICKER
                                 ) {
                                     selectedDate?.let { sel ->
                                         val selTrainings = trainingsCountByDate[sel] ?: 0

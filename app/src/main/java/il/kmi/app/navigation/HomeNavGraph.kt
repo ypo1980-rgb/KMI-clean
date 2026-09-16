@@ -36,6 +36,7 @@ import il.kmi.app.screens.PracticeByTopicsSelection
 import il.kmi.app.screens.TrainingArchiveNavigationStore
 import il.kmi.app.screens.TrainingArchiveScreen
 import il.kmi.app.screens.TrainingArchiveSource
+import il.kmi.app.ui.training.TrainingSummaryViewModel
 import il.kmi.app.screens.TrainingManagementNavigationStore
 import il.kmi.app.screens.TrainingManagementRoute
 import il.kmi.app.voicecommands.VoiceCommandsBridge
@@ -98,7 +99,8 @@ fun NavGraphBuilder.homeNavGraph(
     vm: KmiViewModel,
     sp: SharedPreferences,
     kmiPrefs: il.kmi.shared.prefs.KmiPrefs,
-    onOpenDrawer: () -> Unit   // 🔥 חדש
+    summaryVm: TrainingSummaryViewModel? = null,
+    onOpenDrawer: () -> Unit
 ) {
 
     fun isLockedPremiumTopic(raw: String): Boolean {
@@ -388,6 +390,7 @@ fun NavGraphBuilder.homeNavGraph(
         TrainingArchiveScreen(
             baseTrainings = archiveSources,
             isEnglish = archiveIsEnglish,
+            summaryVm = summaryVm,
             onBack = {
                 nav.popBackStack()
             },

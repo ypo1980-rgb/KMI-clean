@@ -3,6 +3,7 @@ package il.kmi.app.navigation
 import android.content.Context
 import android.content.SharedPreferences
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import il.kmi.shared.domain.Belt
 import il.kmi.shared.domain.TopicsEngine
 import il.kmi.app.domain.ContentRepo
@@ -1601,17 +1602,58 @@ fun MainNavHost(
                     navArgument("name") { type = NavType.StringType }
                 )
             ) { backStackEntry ->
-                val branch   = backStackEntry.arguments?.getString("branch").orEmpty()
-                val groupKey = backStackEntry.arguments?.getString("groupKey").orEmpty()
-                val uid      = backStackEntry.arguments?.getString("uid").orEmpty()
-                val name     = backStackEntry.arguments?.getString("name").orEmpty()
+                val branch =
+                    backStackEntry.arguments
+                        ?.getString("branch")
+                        .orEmpty()
+
+                val groupKey =
+                    backStackEntry.arguments
+                        ?.getString("groupKey")
+                        .orEmpty()
+
+                val uid =
+                    backStackEntry.arguments
+                        ?.getString("uid")
+                        .orEmpty()
+
+                val name =
+                    backStackEntry.arguments
+                        ?.getString("name")
+                        .orEmpty()
+
+                val selectedCalendarDateIso =
+                    backStackEntry.savedStateHandle
+                        .getStateFlow(
+                            "free_session_selected_date",
+                            ""
+                        )
+                        .collectAsState()
+                        .value
 
                 FreeSessionsScreen(
                     branch = branch,
                     groupKey = groupKey,
                     currentUid = uid,
                     currentName = name,
-                    onBack = { nav.popBackStack() }
+                    selectedCalendarDateIso = selectedCalendarDateIso,
+                    onOpenCalendar = {
+                        backStackEntry.savedStateHandle[
+                            "monthly_calendar_mode"
+                        ] = "free_session_date_picker"
+
+                        nav.navigate(Route.MonthlyCalendar.route) {
+                            launchSingleTop = true
+                        }
+                    },
+                    onCalendarDateConsumed = {
+                        backStackEntry.savedStateHandle[
+                            "free_session_selected_date"
+                        ] = ""
+                    },
+                    onBack = {
+                        nav.popBackStack()
+                    }
                 )
             }
 
@@ -1820,6 +1862,7 @@ fun MainNavHost(
                 vm = vm,
                 sp = sp,
                 kmiPrefs = kmiPrefs,
+                summaryVm = trainingSummaryVm,
                 onOpenDrawer = onOpenDrawer
             )
 
@@ -1892,6 +1935,9 @@ fun MainNavHost(
                         "attendance_date_picker" ->
                             il.kmi.app.screens.MonthlyCalendarMode.ATTENDANCE_DATE_PICKER
 
+                        "free_session_date_picker" ->
+                            il.kmi.app.screens.MonthlyCalendarMode.FREE_SESSION_DATE_PICKER
+
                         else ->
                             il.kmi.app.screens.MonthlyCalendarMode.VIEW_ONLY
                     }
@@ -1941,6 +1987,22 @@ fun MainNavHost(
                                 ?.savedStateHandle
                                 ?.set(
                                     "attendance_selected_date",
+                                    pickedDate.toString()
+                                )
+
+                            nav.popBackStack()
+
+                            return@MonthlyCalendarScreen
+                        }
+
+                        if (
+                            requestedMode ==
+                            "free_session_date_picker"
+                        ) {
+                            nav.previousBackStackEntry
+                                ?.savedStateHandle
+                                ?.set(
+                                    "free_session_selected_date",
                                     pickedDate.toString()
                                 )
 

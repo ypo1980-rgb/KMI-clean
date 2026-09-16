@@ -49,6 +49,8 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -70,6 +72,7 @@ import il.kmi.app.training.TrainingOverrideRepository
 import il.kmi.app.training.TrainingStatusEngine
 import il.kmi.app.ui.calendar.KmiCalendarMarkers
 import il.kmi.app.ui.calendar.KmiCalendarMonth
+import il.kmi.app.ui.training.TrainingSummaryViewModel
 import il.kmi.app.ui.pdf.KmiPdfDirection
 import il.kmi.app.ui.pdf.KmiPdfFooter
 import il.kmi.app.ui.pdf.KmiPdfHeader
@@ -199,6 +202,7 @@ fun TrainingArchiveScreen(
     isEnglish: Boolean,
     onBack: () -> Unit,
     onHome: () -> Unit,
+    summaryVm: TrainingSummaryViewModel? = null,
     onOpenDrawer: () -> Unit = {},
     onSettings: () -> Unit = {},
     onOpenExercise: (String) -> Unit = {},
@@ -234,6 +238,30 @@ fun TrainingArchiveScreen(
                 .ofEpochMilli(nowMillis)
                 .atZone(archiveIsraelZone)
                 .toLocalDate()
+        }
+
+    val summaryState =
+        summaryVm
+            ?.state
+            ?.collectAsState()
+            ?.value
+
+    val archiveSummaryDates =
+        remember(
+            summaryState
+                ?.summaryDaysInCalendarMonth
+        ) {
+            summaryState
+                ?.summaryDaysInCalendarMonth
+                .orEmpty()
+                .mapNotNull { rawDate ->
+                    runCatching {
+                        LocalDate.parse(
+                            rawDate.trim().take(10)
+                        )
+                    }.getOrNull()
+                }
+                .toSet()
         }
 
     var fromDate by remember {
@@ -503,7 +531,10 @@ fun TrainingArchiveScreen(
         }
 
     val calendarMarkers =
-        remember(allArchiveItems) {
+        remember(
+            allArchiveItems,
+            archiveSummaryDates
+        ) {
             KmiCalendarMarkers(
                 trainingDates =
                     allArchiveItems
@@ -514,6 +545,7 @@ fun TrainingArchiveScreen(
                             item.localDate
                         }
                         .toSet(),
+
                 holidayDates =
                     allArchiveItems
                         .filter { item ->
@@ -522,7 +554,10 @@ fun TrainingArchiveScreen(
                         .map { item ->
                             item.localDate
                         }
-                        .toSet()
+                        .toSet(),
+
+                summaryDates =
+                    archiveSummaryDates
             )
         }
 
@@ -557,27 +592,10 @@ fun TrainingArchiveScreen(
 
                     KmiTopBar(
                         title =
-                            when {
-                                showFromDatePicker ->
-                                    if (isEnglish) {
-                                        "Select start date"
-                                    } else {
-                                        "בחירת תאריך התחלה"
-                                    }
-
-                                showToDatePicker ->
-                                    if (isEnglish) {
-                                        "Select end date"
-                                    } else {
-                                        "בחירת תאריך סיום"
-                                    }
-
-                                else ->
-                                    if (isEnglish) {
-                                        "Training Archive"
-                                    } else {
-                                        "ארכיון אימונים"
-                                    }
+                            if (isEnglish) {
+                                "Training Archive"
+                            } else {
+                                "ארכיון אימונים"
                             },
                         currentLang =
                             if (isEnglish) {
@@ -684,6 +702,19 @@ fun TrainingArchiveScreen(
                                     calendarSelectedDate
                                 )
                             )
+                        }
+
+                        LaunchedEffect(
+                            visibleCalendarMonth,
+                            summaryVm
+                        ) {
+                            summaryVm
+                                ?.loadSummaryDaysForMonth(
+                                    year =
+                                        visibleCalendarMonth.year,
+                                    month1to12 =
+                                        visibleCalendarMonth.monthValue
+                                )
                         }
 
                         KmiCalendarMonth(
