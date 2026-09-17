@@ -358,7 +358,17 @@ fun AttendanceGroupStatsScreen(
                         avgTotal = avgTotal,
                         reports = reports.map { report ->
                             AttendanceStatsPdfReport(
-                                date = report.date.toString(),
+                                date =
+                                    report.date.format(
+                                        DateTimeFormatter.ofPattern(
+                                            "dd.MM.yyyy",
+                                            if (isEnglish) {
+                                                Locale.ENGLISH
+                                            } else {
+                                                Locale("he", "IL")
+                                            }
+                                        )
+                                    ),
                                 total = report.totalMembers,
                                 present = report.presentCount,
                                 absent = report.absentCount,

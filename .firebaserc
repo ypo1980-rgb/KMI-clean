@@ -1,5 +1,13 @@
 {
   "projects": {
     "default": "app-1c22cc8d"
+  },
+  "targets": {},
+  "etags": {
+    "app-1c22cc8d": {
+      "extensionInstances": {
+        "firestore-send-email": "1b65a1fae215dd8d0b50e69b8a4bc2a2f54960244f560860c47afc290389c2e0"
+      }
+    }
   }
 }

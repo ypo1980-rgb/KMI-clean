@@ -14,12 +14,12 @@ import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.scaleIn
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
@@ -33,7 +33,6 @@ import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.HorizontalDivider
@@ -73,9 +72,13 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.core.graphics.createBitmap
+import il.kmi.app.ui.KmiTopBar
 import il.kmi.app.ui.KmiTypography
 import il.kmi.shared.localization.AppLanguage
 import il.kmi.shared.localization.AppLanguageManager
+import il.yuval.ui.theme.kmiScreenBackgroundBrush
+import com.google.firebase.auth.FirebaseAuth
+import il.yuval.ui.theme.kmiSectionHeaderBrush
 
 //======================================================================
 
@@ -111,7 +114,8 @@ private fun whiteToTransparent(src: Bitmap, tolerance: Int = 245): Bitmap {
 @Composable
 private fun PremiumShineButton(
     text: String,
-    onClick: () -> Unit
+    onClick: () -> Unit,
+    isPrimary: Boolean
 ) {
     val shine = rememberInfiniteTransition(label = "shine")
     val shineOffset by shine.animateFloat(
@@ -124,15 +128,49 @@ private fun PremiumShineButton(
         label = "shineOffset"
     )
 
+    val shape = RoundedCornerShape(22.dp)
+
+    val backgroundBrush =
+        if (isPrimary) {
+            Brush.linearGradient(
+                listOf(
+                    Color(0xFF6673E8),
+                    Color(0xFF4B57C8),
+                    Color(0xFF3946A8)
+                )
+            )
+        } else {
+            Brush.linearGradient(
+                listOf(
+                    Color(0xFFFFFFFF),
+                    Color(0xFFF5F7FA)
+                )
+            )
+        }
+
+    val contentColor =
+        if (isPrimary) {
+            Color.White
+        } else {
+            Color(0xFF171717)
+        }
+
+    val innerOverlayColor =
+        if (isPrimary) {
+            Color.White.copy(alpha = 0.07f)
+        } else {
+            Color.White.copy(alpha = 0.14f)
+        }
+
     Button(
         onClick = onClick,
         modifier = Modifier
             .fillMaxWidth()
-            .heightIn(min = 56.dp),
-        shape = RoundedCornerShape(22.dp),
+            .height(58.dp),
+        shape = shape,
         colors = ButtonDefaults.buttonColors(
             containerColor = Color.Transparent,
-            contentColor = Color(0xFF171717)
+            contentColor = contentColor
         ),
         contentPadding = androidx.compose.foundation.layout.PaddingValues(0.dp),
         elevation = ButtonDefaults.buttonElevation(
@@ -142,16 +180,10 @@ private fun PremiumShineButton(
     ) {
         Box(
             modifier = Modifier
-                .fillMaxSize()
-                .clip(RoundedCornerShape(22.dp))
-                .background(
-                    Brush.linearGradient(
-                        listOf(
-                            Color(0xFFFFFFFF),
-                            Color(0xFFF5F7FA)
-                        )
-                    )
-                ),
+                .fillMaxWidth()
+                .height(58.dp)
+                .clip(shape)
+                .background(backgroundBrush),
             contentAlignment = Alignment.Center
         ) {
             Box(
@@ -162,7 +194,7 @@ private fun PremiumShineButton(
                             colors = listOf(
                                 Color.Transparent,
                                 Color.White.copy(alpha = 0.00f),
-                                Color.White.copy(alpha = 0.28f),
+                                Color.White.copy(alpha = if (isPrimary) 0.16f else 0.28f),
                                 Color.White.copy(alpha = 0.00f),
                                 Color.Transparent
                             ),
@@ -177,7 +209,7 @@ private fun PremiumShineButton(
                     .matchParentSize()
                     .padding(1.dp)
                     .clip(RoundedCornerShape(21.dp))
-                    .background(Color.White.copy(alpha = 0.05f))
+                    .background(innerOverlayColor)
             )
 
             Text(
@@ -186,7 +218,7 @@ private fun PremiumShineButton(
                     KmiTypography.action.copy(
                         fontWeight = FontWeight.ExtraBold
                     ),
-                color = Color(0xFF171717),
+                color = contentColor,
                 textAlign = TextAlign.Center,
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis
@@ -199,54 +231,21 @@ private fun PremiumShineButton(
 private fun RegistrationLandingLockedTopBar(
     isEnglish: Boolean
 ) {
-    val colorScheme = MaterialTheme.colorScheme
-    val isDarkMode = colorScheme.background.luminance() < 0.5f
-
-    Surface(
-        modifier = Modifier.fillMaxWidth(),
-        color =
-            if (isDarkMode) {
-                colorScheme.surface
+    KmiTopBar(
+        title =
+            if (isEnglish) {
+                "Sign In / Register"
             } else {
-                Color.White.copy(alpha = 0.96f)
+                "מסך כניסה / רישום"
             },
-        shadowElevation = 0.dp,
-        tonalElevation = 0.dp
-    ) {
-        CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .heightIn(min = 56.dp)
-                    .padding(horizontal = 8.dp, vertical = 6.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Spacer(Modifier.width(38.dp))
-
-                Text(
-                    text = if (isEnglish) "Sign In / Register" else "מסך כניסה / רישום",
-                    modifier = Modifier
-                        .weight(1f)
-                        .padding(horizontal = 8.dp),
-                    textAlign = TextAlign.Center,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis,
-                    style =
-                        KmiTypography.screenTitle.copy(
-                            fontWeight = FontWeight.ExtraBold,
-                            color =
-                                if (isDarkMode) {
-                                    colorScheme.onSurface
-                                } else {
-                                    Color(0xFF111827)
-                                }
-                        )
-                )
-
-                Spacer(Modifier.width(38.dp))
-            }
-        }
-    }
+        showTopHome = false,
+        showTopSearch = false,
+        showTopShare = false,
+        showBottomActions = true,
+        lockHome = true,
+        lockSearch = true,
+        centerTitle = true
+    )
 }
 
 @Suppress("UNUSED_PARAMETER")
@@ -314,7 +313,8 @@ fun RegistrationLandingScreen(
         }
     }
 
-    // דילוג אוטומטי אם כבר מחוברים
+    // דילוג אוטומטי כאשר המשתמש בחר
+// "שמירה לכניסה הבאה" ויש Firebase session תקף.
     LaunchedEffect(
         autoSkipIfLoggedIn,
         sp
@@ -323,26 +323,73 @@ fun RegistrationLandingScreen(
             return@LaunchedEffect
         }
 
-        val logged =
-            sp.getBoolean(
-                "is_logged_in",
-                false
+        val userPrefs =
+            ctx.getSharedPreferences(
+                "kmi_user",
+                Context.MODE_PRIVATE
             )
 
-        val hasUser =
-            !sp.getString(
-                "username",
-                ""
-            ).isNullOrBlank()
+        val rememberMe =
+            sp.getBoolean(
+                "remember_me_login",
+                userPrefs.getBoolean(
+                    "remember_me_login",
+                    false
+                )
+            )
 
-        val hasPass =
-            !sp.getString(
-                "password",
-                ""
-            ).isNullOrBlank()
+        val auth =
+            FirebaseAuth.getInstance()
 
-        if (logged && hasUser && hasPass) {
+        val firebaseUser =
+            auth.currentUser
+
+        val hasValidSession =
+            firebaseUser != null &&
+                    !firebaseUser.isAnonymous
+
+        if (rememberMe && hasValidSession) {
+
+            sp.edit()
+                .putBoolean(
+                    "is_logged_in",
+                    true
+                )
+                .apply()
+
+            userPrefs.edit()
+                .putBoolean(
+                    "is_logged_in",
+                    true
+                )
+                .apply()
+
             onGoHome()
+
+        } else if (!rememberMe) {
+
+            /*
+             * המשתמש לא ביקש לשמור את הכניסה.
+             * Firebase שומר session אוטומטית באנדרואיד,
+             * ולכן מנתקים אותו כאשר חוזרים למסך הכניסה.
+             */
+            if (hasValidSession) {
+                auth.signOut()
+            }
+
+            sp.edit()
+                .putBoolean(
+                    "is_logged_in",
+                    false
+                )
+                .apply()
+
+            userPrefs.edit()
+                .putBoolean(
+                    "is_logged_in",
+                    false
+                )
+                .apply()
         }
     }
 
@@ -358,29 +405,6 @@ fun RegistrationLandingScreen(
             LayoutDirection.Rtl
         }
 
-    val bgBrush =
-        remember(isDarkMode) {
-            Brush.verticalGradient(
-                colors =
-                    if (isDarkMode) {
-                        listOf(
-                            Color(0xFF030B14),
-                            Color(0xFF061827),
-                            Color(0xFF0A2940),
-                            Color(0xFF0B3654),
-                            Color(0xFF041522)
-                        )
-                    } else {
-                        listOf(
-                            Color(0xFFF8FBFF),
-                            Color(0xFFEAF4FF),
-                            Color(0xFFB7DDF7),
-                            Color(0xFF1F78B4),
-                            Color(0xFF062B4A)
-                        )
-                    }
-            )
-        }
 
     CompositionLocalProvider(
         LocalLayoutDirection provides screenLayoutDirection
@@ -400,7 +424,9 @@ fun RegistrationLandingScreen(
             Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .background(bgBrush)
+                    .background(
+                        brush = kmiScreenBackgroundBrush()
+                    )
                     .padding(padding),
                 contentAlignment = Alignment.TopCenter
             ) {
@@ -433,188 +459,194 @@ fun RegistrationLandingScreen(
                             },
                         modifier = Modifier
                             .align(Alignment.TopEnd)
-                            .padding(top = 10.dp, end = 12.dp)
-                            .fillMaxWidth(0.42f)
-                            .height(64.dp)
-                            .rotate(-18f)
-                            .alpha(0.96f),
+                            .padding(
+                                top = 6.dp,
+                                end = 16.dp
+                            )
+                            .fillMaxWidth(0.34f)
+                            .height(54.dp)
+                            .rotate(-14f)
+                            .alpha(0.94f),
                         contentScale = ContentScale.Fit
                     )
                 }
 
                 // תוכן ראשי
                 Column(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .verticalScroll(rememberScrollState())
-                        .imePadding()
-                        .navigationBarsPadding()
-                        .padding(horizontal = 20.dp, vertical = 12.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.spacedBy(18.dp)
+                    modifier = Modifier.fillMaxSize()
                 ) {
-                    Spacer(Modifier.height(44.dp))
-
-                    Box(
-                        modifier = Modifier.fillMaxWidth(),
-                        contentAlignment = Alignment.Center
+                    Surface(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(56.dp),
+                        color = Color.Transparent,
+                        tonalElevation = 0.dp,
+                        shadowElevation = 0.dp
                     ) {
                         Box(
                             modifier = Modifier
-                                .matchParentSize()
+                                .fillMaxSize()
                                 .background(
-                                    brush = Brush.radialGradient(
-                                        colors = listOf(
-                                            Color(0xFF38D39F).copy(alpha = 0.30f),
-                                            Color(0xFF1FAF85).copy(alpha = 0.16f),
-                                            Color.Transparent
-                                        ),
-                                        radius = 420f
-                                    ),
-                                    shape = RoundedCornerShape(30.dp)
-                                )
-                                .alpha(0.95f)
-                        )
-
-                        Column(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalAlignment = Alignment.CenterHorizontally
+                                    brush = kmiSectionHeaderBrush()
+                                ),
+                            contentAlignment = Alignment.Center
                         ) {
-                            AnimatedVisibility(
-                                visible = true,
-                                enter = fadeIn(animationSpec = tween(450)) +
-                                        scaleIn(
-                                            initialScale = 0.92f,
-                                            animationSpec = tween(450)
-                                        )
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 16.dp),
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                verticalArrangement = Arrangement.Center
                             ) {
-                                Surface(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    shape = RoundedCornerShape(30.dp),
-                                    color = Color(0xFF102A44).copy(alpha = 0.72f),
-                                    tonalElevation = 0.dp,
-                                    shadowElevation = 0.dp
-                                ) {
-                                    Column(
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .padding(horizontal = 16.dp, vertical = 16.dp),
-                                        horizontalAlignment = Alignment.CenterHorizontally
-                                    ) {
-                                        Text(
-                                            text = if (isEnglish) "Welcome to K.A.M.I" else "ברוכים הבאים ל־K.A.M.I",
-                                            style =
-                                                KmiTypography.sectionTitle.copy(
-                                                    fontWeight = FontWeight.ExtraBold
-                                                ),
-                                            color = Color.White,
-                                            textAlign = TextAlign.Center,
-                                            maxLines = 2,
-                                            overflow = TextOverflow.Ellipsis
-                                        )
+                                Text(
+                                    text =
+                                        if (isEnglish) {
+                                            "Welcome to K.A.M.I"
+                                        } else {
+                                            "ברוכים הבאים ל־K.A.M.I"
+                                        },
+                                    style =
+                                        KmiTypography.action.copy(
+                                            fontWeight = FontWeight.ExtraBold
+                                        ),
+                                    color = Color.White,
+                                    textAlign = TextAlign.Center,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
 
-                                        Spacer(Modifier.height(6.dp))
-
-                                        Text(
-                                            text = if (isEnglish) "Choose how you want to continue" else "בחרו איך תרצו להמשיך",
-                                            style = KmiTypography.secondary,
-                                            color = Color.White.copy(alpha = 0.78f),
-                                            textAlign = TextAlign.Center,
-                                            maxLines = 2,
-                                            overflow = TextOverflow.Ellipsis
-                                        )
-
-                                        Spacer(Modifier.height(16.dp))
-
-                                        PremiumShineButton(
-                                            text = if (isEnglish) "New User" else "משתמש חדש",
-                                            onClick = {
-                                                playStrongFeedback()
-                                                onNewUserTrainee()
-                                            }
-                                        )
-
-                                        Spacer(Modifier.height(14.dp))
-
-                                        Button(
-                                            onClick = {
-                                                playStrongFeedback()
-
-                                                // תמיד נכנסים למסך התחברות רגיל.
-                                                // מצב מאמן מאושר רק אחרי בדיקת הרשאה מול Firestore.
-                                                onExistingUserTrainee()
-                                            },
-                                            modifier = Modifier
-                                                .fillMaxWidth()
-                                                .heightIn(min = 56.dp),
-                                            shape = RoundedCornerShape(22.dp),
-                                            colors = ButtonDefaults.buttonColors(
-                                                containerColor = Color.Transparent,
-                                                contentColor = Color.White
-                                            ),
-                                            contentPadding = androidx.compose.foundation.layout.PaddingValues(
-                                                0.dp
-                                            ),
-                                            elevation = ButtonDefaults.buttonElevation(
-                                                defaultElevation = 0.dp,
-                                                pressedElevation = 0.dp
-                                            )
-                                        ) {
-                                            Box(
-                                                modifier = Modifier
-                                                    .fillMaxSize()
-                                                    .clip(RoundedCornerShape(22.dp))
-                                                    .background(
-                                                        Brush.linearGradient(
-                                                            listOf(
-                                                                Color(0xFF6673E8),
-                                                                Color(0xFF4B57C8),
-                                                                Color(0xFF3946A8)
-                                                            )
-                                                        )
-                                                    ),
-                                                contentAlignment = Alignment.Center
-                                            ) {
-                                                Box(
-                                                    modifier = Modifier
-                                                        .matchParentSize()
-                                                        .background(
-                                                            Brush.linearGradient(
-                                                                colors = listOf(
-                                                                    Color.White.copy(alpha = 0.16f),
-                                                                    Color.Transparent,
-                                                                    Color.Transparent
-                                                                ),
-                                                                start = Offset(0f, 0f),
-                                                                end = Offset(0f, 220f)
-                                                            )
-                                                        )
-                                                )
-
-                                                Text(
-                                                    text = if (isEnglish) "Existing User" else "משתמש קיים",
-                                                    style =
-                                                        KmiTypography.action.copy(
-                                                            fontWeight = FontWeight.ExtraBold
-                                                        ),
-                                                    color = Color.White,
-                                                    textAlign = TextAlign.Center,
-                                                    maxLines = 2,
-                                                    overflow = TextOverflow.Ellipsis
-                                                )
-                                            }
-                                        }
-                                    }
-                                }
+                                Text(
+                                    text =
+                                        if (isEnglish) {
+                                            "Choose how you want to continue"
+                                        } else {
+                                            "בחרו איך תרצו להמשיך"
+                                        },
+                                    style =
+                                        KmiTypography.caption.copy(
+                                            fontWeight = FontWeight.SemiBold
+                                        ),
+                                    color = Color.White.copy(alpha = 0.92f),
+                                    textAlign = TextAlign.Center,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
                             }
                         }
                     }
 
-                    // תחתית
+                    Column(
+                        modifier = Modifier
+                            .weight(1f)
+                            .fillMaxWidth()
+                            .verticalScroll(rememberScrollState())
+                            .imePadding()
+                            .navigationBarsPadding()
+                            .padding(horizontal = 20.dp, vertical = 12.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(18.dp)
+                    ) {
+                        Spacer(Modifier.height(34.dp))
+
+                        AnimatedVisibility(
+                        visible = true,
+                        modifier = Modifier.fillMaxWidth(),
+                        enter =
+                            fadeIn(
+                                animationSpec = tween(450)
+                            ) +
+                                    scaleIn(
+                                        initialScale = 0.94f,
+                                        animationSpec = tween(450)
+                                    )
+                    ) {
+                        Surface(
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(24.dp),
+                            color =
+                                MaterialTheme
+                                    .colorScheme
+                                    .surfaceVariant
+                                    .copy(alpha = 0.96f),
+                            contentColor =
+                                MaterialTheme
+                                    .colorScheme
+                                    .onSurfaceVariant,
+                            tonalElevation = 0.dp,
+                            shadowElevation = 0.dp,
+                            border =
+                                BorderStroke(
+                                    width = 1.dp,
+                                    color =
+                                        MaterialTheme
+                                            .colorScheme
+                                            .outlineVariant
+                                )
+                        ) {
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(
+                                        horizontal = 16.dp,
+                                        vertical = 18.dp
+                                    ),
+                                horizontalAlignment =
+                                    Alignment.CenterHorizontally
+                            ) {
+                                Spacer(
+                                    Modifier.height(4.dp)
+                                )
+
+                                PremiumShineButton(
+                                    text =
+                                        if (isEnglish) {
+                                            "New User"
+                                        } else {
+                                            "משתמש חדש"
+                                        },
+                                    onClick = {
+                                        playStrongFeedback()
+                                        onNewUserTrainee()
+                                    },
+                                    isPrimary = false
+                                )
+
+                                Spacer(
+                                    Modifier.height(12.dp)
+                                )
+
+                                PremiumShineButton(
+                                    text =
+                                        if (isEnglish) {
+                                            "Existing User"
+                                        } else {
+                                            "משתמש קיים"
+                                        },
+                                    onClick = {
+                                        playStrongFeedback()
+
+                                        // תמיד נכנסים למסך התחברות רגיל.
+                                        // מצב מאמן מאושר רק אחרי בדיקת הרשאה מול Firestore.
+                                        onExistingUserTrainee()
+                                    },
+                                    isPrimary = true
+                                )
+                            }
+                        }
+                    }
+
+                        Spacer(Modifier.height(20.dp))
+                    }
+
                     Column(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(bottom = 8.dp),
+                            .navigationBarsPadding()
+                            .padding(
+                                start = 20.dp,
+                                end = 20.dp,
+                                bottom = 8.dp
+                            ),
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {
                         val kamiBitmap =
@@ -645,9 +677,9 @@ fun RegistrationLandingScreen(
 
                             val logoSize =
                                 if (windowWidthPx <= compactWidthPx) {
-                                    88.dp
+                                    76.dp
                                 } else {
-                                    100.dp
+                                    86.dp
                                 }
 
                             Box(modifier = Modifier.size(logoSize + 10.dp)) {
@@ -685,7 +717,8 @@ fun RegistrationLandingScreen(
                                 )
                             }
 
-                            Spacer(Modifier.height(10.dp))
+                            Spacer(Modifier.height(8.dp))
+
                             HorizontalDivider(
                                 color =
                                     if (isDarkMode) {
@@ -694,7 +727,8 @@ fun RegistrationLandingScreen(
                                         Color(0xFF0B1020).copy(alpha = 0.24f)
                                     }
                             )
-                            Spacer(Modifier.height(10.dp))
+
+                            Spacer(Modifier.height(8.dp))
 
                             Text(
                                 text =

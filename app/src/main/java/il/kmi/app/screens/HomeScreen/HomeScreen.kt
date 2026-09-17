@@ -21,6 +21,11 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.shape.AbsoluteRoundedCornerShape
+import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
@@ -639,6 +644,51 @@ fun HomeScreen(
                         Context.MODE_PRIVATE
                     )
                 }
+
+            val homeQuickMenuPositionKey =
+                "home_quick_menu_bottom_position_dp"
+
+            val homeQuickMenuDensity =
+                LocalDensity.current
+
+            val homeScreenHeightDp =
+                with(homeQuickMenuDensity) {
+                    LocalWindowInfo
+                        .current
+                        .containerSize
+                        .height
+                        .toDp()
+                        .value
+                }
+
+            val minHomeQuickMenuBottomDp =
+                24f
+
+            val openHomeQuickMenuReservedHeightDp =
+                300f
+
+            val homeQuickMenuTopSafetyMarginDp =
+                20f
+
+            val maxHomeQuickMenuBottomDp =
+                (
+                        homeScreenHeightDp -
+                                openHomeQuickMenuReservedHeightDp -
+                                homeQuickMenuTopSafetyMarginDp
+                        )
+                    .coerceAtLeast(140f)
+
+            var homeQuickMenuBottomDp by rememberSaveable {
+                mutableFloatStateOf(
+                    settingsSp.getFloat(
+                        homeQuickMenuPositionKey,
+                        86f
+                    ).coerceIn(
+                        minHomeQuickMenuBottomDp,
+                        maxHomeQuickMenuBottomDp
+                    )
+                )
+            }
 
             val activeHomeBelt =
                 remember(
@@ -2265,11 +2315,10 @@ fun HomeScreen(
             AnimatedVisibility(
                 visible = fabExpanded,
                 modifier = Modifier
-                    .align(Alignment.CenterStart)
+                    .align(Alignment.BottomStart)
                     .wrapContentSize()
-                    .offset(
-                        x = 46.dp,
-                        y = 88.dp
+                    .padding(
+                        bottom = homeQuickMenuBottomDp.dp
                     ),
                 enter =
                     fadeIn(animationSpec = tween(180)) +
@@ -2285,12 +2334,6 @@ fun HomeScreen(
                             )
             ) {
                 HomePremiumQuickMenuPanel(
-                    title =
-                        if (isEnglish) {
-                            "Quick Menu"
-                        } else {
-                            "תפריט מהיר"
-                        },
                     isEnglish = isEnglish,
                     accentColor = homeBeltAccent,
                     items = quickMenuItems,
@@ -2303,15 +2346,60 @@ fun HomeScreen(
             AnimatedVisibility(
                 visible = showFab && !fabExpanded,
                 modifier = Modifier
-                    // ✅ בדיוק כמו במסך החגורות: צד שמאל פיזי של המסך
-                    .align(Alignment.CenterStart)
-                    .offset(y = 88.dp),
+                    .align(Alignment.BottomStart)
+                    .padding(
+                        bottom = homeQuickMenuBottomDp.dp
+                    ),
                 enter = fadeIn() + scaleIn(),
                 exit = fadeOut() + scaleOut()
             ) {
                 ModernHomeQuickFab(
                     isEnglish = isEnglish,
                     accentColor = activeHomeBelt.color,
+                    modifier = Modifier.pointerInput(
+                        minHomeQuickMenuBottomDp,
+                        maxHomeQuickMenuBottomDp,
+                        homeQuickMenuDensity
+                    ) {
+                        detectDragGesturesAfterLongPress(
+                            onDragStart = {
+                                // לחיצה ממושכת בלבד מתחילה גרירה.
+                            },
+                            onDrag = { change, dragAmount ->
+                                change.consume()
+
+                                val dragDp =
+                                    dragAmount.y /
+                                            homeQuickMenuDensity.density
+
+                                homeQuickMenuBottomDp =
+                                    (
+                                            homeQuickMenuBottomDp -
+                                                    dragDp
+                                            )
+                                        .coerceIn(
+                                            minHomeQuickMenuBottomDp,
+                                            maxHomeQuickMenuBottomDp
+                                        )
+                            },
+                            onDragEnd = {
+                                settingsSp.edit {
+                                    putFloat(
+                                        homeQuickMenuPositionKey,
+                                        homeQuickMenuBottomDp
+                                    )
+                                }
+                            },
+                            onDragCancel = {
+                                settingsSp.edit {
+                                    putFloat(
+                                        homeQuickMenuPositionKey,
+                                        homeQuickMenuBottomDp
+                                    )
+                                }
+                            }
+                        )
+                    },
                     onClick = {
                         clickSound()
                         haptic(true)
@@ -3015,12 +3103,22 @@ private fun ModernHomeQuickFab(
             Color.Black
         }
 
-    val tabShape = RoundedCornerShape(
-        topStart = 0.dp,
-        bottomStart = 0.dp,
-        topEnd = 18.dp,
-        bottomEnd = 18.dp
-    )
+    val tabShape =
+        if (isEnglish) {
+            AbsoluteRoundedCornerShape(
+                topLeft = 0.dp,
+                bottomLeft = 0.dp,
+                topRight = 18.dp,
+                bottomRight = 18.dp
+            )
+        } else {
+            AbsoluteRoundedCornerShape(
+                topLeft = 18.dp,
+                bottomLeft = 18.dp,
+                topRight = 0.dp,
+                bottomRight = 0.dp
+            )
+        }
 
     Surface(
         onClick = onClick,
@@ -3036,9 +3134,10 @@ private fun ModernHomeQuickFab(
                     .outlineVariant
                     .copy(alpha = 0.55f)
         ),
-        modifier = modifier
+        modifier = Modifier
             .width(38.dp)
             .height(72.dp)
+            .then(modifier)
     ) {
         Box(
             modifier = Modifier
@@ -3091,136 +3190,249 @@ private fun ModernHomeQuickFab(
 /* ========= עזר: למצוא הסבר אמיתי מתוך Explanations ========= */
 @Composable
 private fun HomePremiumQuickMenuPanel(
-    title: String,
     isEnglish: Boolean,
     accentColor: Color,
     items: List<Triple<String, ImageVector, () -> Unit>>,
     onClose: () -> Unit
 ) {
-    val panelShape = RoundedCornerShape(20.dp)
-
-    val colorScheme =
-        MaterialTheme.colorScheme
-
-    val isDarkMode =
-        colorScheme.background.luminance() < 0.5f
-
-    val panelColor =
-        colorScheme.surface
-
-    val panelSecondaryColor =
-        colorScheme.surfaceVariant
-
-    /*
-     * בחגורה שחורה ובחגורות כהות הטקסט והאייקונים
-     * מוצגים בלבן במצב כהה.
-     */
-    val menuAccent =
-        when {
-            isDarkMode &&
-                    accentColor.luminance() < 0.45f ->
-                Color.White
-
-            accentColor == Belt.GREEN.color ->
-                kmiSuccessColor()
-
-            !isDarkMode &&
-                    accentColor.luminance() > 0.78f ->
-                colorScheme.onSurfaceVariant
-
-            else ->
-                accentColor
+    val railShape =
+        if (isEnglish) {
+            AbsoluteRoundedCornerShape(
+                topLeft = 0.dp,
+                bottomLeft = 0.dp,
+                topRight = 24.dp,
+                bottomRight = 24.dp
+            )
+        } else {
+            AbsoluteRoundedCornerShape(
+                topLeft = 24.dp,
+                bottomLeft = 24.dp,
+                topRight = 0.dp,
+                bottomRight = 0.dp
+            )
         }
 
-    val borderColor =
-        menuAccent.copy(
-            alpha = 0.58f
-        )
-
-    val dividerColor =
-        menuAccent.copy(
-            alpha = 0.32f
-        )
-
     Surface(
-        shape = panelShape,
-        color = panelColor,
+        modifier = Modifier.width(64.dp),
+        shape = railShape,
+        color = Color.Transparent,
         tonalElevation = 0.dp,
-        shadowElevation = 0.dp,
+        shadowElevation = 8.dp,
         border = BorderStroke(
             width = 1.dp,
-            color = borderColor
-        ),
-        modifier = Modifier
-            .widthIn(
-                min = 190.dp,
-                max = 230.dp
+            color = Color.White.copy(
+                alpha = 0.30f
             )
-            .fillMaxWidth()
+        )
     ) {
-        /*
-         * ה־Box מקבל את אותו גובה מינימלי של ה־Surface,
-         * ולכן לא נשארת שכבה לבנה גלויה מאחור.
-         *
-         * הגבול מוגדר רק ב־Surface כדי שלא ייראו
-         * שני קווי מסגרת אחד מעל השני.
-         */
-        Box(
+        Column(
             modifier = Modifier
-                .fillMaxWidth()
-                .clip(panelShape)
                 .background(
                     brush = Brush.verticalGradient(
                         colors = listOf(
-                            panelColor,
-                            panelSecondaryColor.copy(
-                                alpha = 0.90f
-                            ),
-                            menuAccent.copy(
-                                alpha = 0.10f
-                            ),
-                            panelSecondaryColor.copy(
+                            accentColor.copy(
                                 alpha = 0.82f
                             ),
-                            panelColor
+                            Color(0xFF245FC8),
+                            Color(0xFF173F99),
+                            Color(0xFF102E78)
                         )
                     )
                 )
-                .padding(horizontal = 8.dp, vertical = 8.dp)
+                .padding(
+                    horizontal = 5.dp,
+                    vertical = 7.dp
+                ),
+            horizontalAlignment =
+                Alignment.CenterHorizontally
         ) {
-            Column(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalAlignment =
-                    if (isEnglish) {
-                        Alignment.Start
-                    } else {
-                        Alignment.End
+
+            items.forEachIndexed { index, item ->
+
+                val isLocked =
+                    item.first.endsWith(" 🔒")
+
+                val cleanTitle =
+                    item.first.removeSuffix(" 🔒")
+
+                val displayTitle =
+                    when {
+                        !isEnglish &&
+                                cleanTitle ==
+                                "ארכיון אימונים" ->
+                            "ארכיון\nאימונים"
+
+                        !isEnglish &&
+                                cleanTitle ==
+                                "אימונים חופשיים" ->
+                            "אימונים\nחופשיים"
+
+                        isEnglish &&
+                                cleanTitle ==
+                                "Training Archive" ->
+                            "Training\nArchive"
+
+                        isEnglish &&
+                                cleanTitle ==
+                                "Free Trainings" ->
+                            "Free\nTrainings"
+
+                        else ->
+                            cleanTitle
                     }
-            ) {
-                QuickMenuPremiumHeader(
-                    isEnglish = isEnglish,
-                    onClose = onClose,
-                    modifier = Modifier.fillMaxWidth()
-                )
 
-                Spacer(Modifier.height(8.dp))
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable(
+                            onClick = item.third
+                        )
+                        .padding(
+                            vertical = 4.dp
+                        ),
+                    horizontalAlignment =
+                        Alignment.CenterHorizontally
+                ) {
 
-                items.forEachIndexed { index, item ->
-                    HomePremiumQuickMenuRow(
-                        text = item.first,
-                        icon = item.second,
-                        isEnglish = isEnglish,
-                        accentColor = menuAccent,
-                        onClick = item.third
+                    Surface(
+                        modifier =
+                            Modifier.size(34.dp),
+                        shape = CircleShape,
+                        color =
+                            Color.White.copy(
+                                alpha = 0.16f
+                            ),
+                        tonalElevation = 0.dp,
+                        shadowElevation = 0.dp,
+                        border = BorderStroke(
+                            width = 1.dp,
+                            color =
+                                Color.White.copy(
+                                    alpha = 0.58f
+                                )
+                        )
+                    ) {
+                        Box(
+                            contentAlignment =
+                                Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector =
+                                    item.second,
+                                contentDescription =
+                                    null,
+                                tint =
+                                    Color.White,
+                                modifier =
+                                    Modifier.size(
+                                        KmiIconSize.small
+                                    )
+                            )
+                        }
+                    }
+
+                    Spacer(
+                        Modifier.height(2.dp)
                     )
 
-                    if (index != items.lastIndex) {
-                        HorizontalDivider(
-                            modifier = Modifier.padding(horizontal = 8.dp),
-                            thickness = 1.25.dp,
-                            color = dividerColor
+                    Text(
+                        text = displayTitle,
+                        style =
+                            KmiTypography.caption.copy(
+                                fontWeight =
+                                    FontWeight.ExtraBold
+                            ),
+                        color = Color.White,
+                        textAlign =
+                            TextAlign.Center,
+                        maxLines = 2,
+                        overflow =
+                            TextOverflow.Ellipsis
+                    )
+
+                    if (isLocked) {
+                        Spacer(
+                            Modifier.height(1.dp)
+                        )
+
+                        Icon(
+                            imageVector =
+                                Icons.Filled.Lock,
+                            contentDescription =
+                                null,
+                            tint = Color.White,
+                            modifier =
+                                Modifier.size(
+                                    KmiIconSize.tiny
+                                )
                         )
                     }
+                }
+
+                if (index != items.lastIndex) {
+                    HorizontalDivider(
+                        modifier = Modifier
+                            .padding(
+                                horizontal = 5.dp,
+                                vertical = 5.dp
+                            ),
+                        thickness = 0.7.dp,
+                        color =
+                            Color.White.copy(
+                                alpha = 0.26f
+                            )
+                    )
+                }
+            }
+
+            HorizontalDivider(
+                modifier = Modifier
+                    .padding(
+                        horizontal = 5.dp,
+                        vertical = 5.dp
+                    ),
+                thickness = 0.7.dp,
+                color =
+                    Color.White.copy(
+                        alpha = 0.26f
+                    )
+            )
+
+            Surface(
+                onClick = onClose,
+                modifier =
+                    Modifier.size(36.dp),
+                shape = CircleShape,
+                color = Color(0xFF7B31E8),
+                tonalElevation = 0.dp,
+                shadowElevation = 2.dp,
+                border = BorderStroke(
+                    width = 1.dp,
+                    color =
+                        Color.White.copy(
+                            alpha = 0.72f
+                        )
+                )
+            ) {
+                Box(
+                    contentAlignment =
+                        Alignment.Center
+                ) {
+                    Icon(
+                        imageVector =
+                            Icons.Filled.Close,
+                        contentDescription =
+                            if (isEnglish) {
+                                "Close"
+                            } else {
+                                "סגור"
+                            },
+                        tint = Color.White,
+                        modifier =
+                            Modifier.size(
+                                KmiIconSize.small
+                            )
+                    )
                 }
             }
         }

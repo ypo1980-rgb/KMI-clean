@@ -184,6 +184,11 @@ fun KmiTopBar(
     showRoleBadge: Boolean = true,
     lockSearch: Boolean = false,
     lockHome: Boolean = false,
+
+    // מסכי כניסה / רישום:
+    // כל האייקונים נשארים מוצגים אך אינם מבצעים פעולה.
+    lockAllActions: Boolean = false,
+
     showBackNavigation: Boolean = true,
     homeDisabledToast: String? = null,
     showCoachBroadcastFab: Boolean = true,
@@ -918,7 +923,9 @@ fun KmiTopBar(
                                         "תפריט"
                                     },
                                 onClick = {
-                                    openDrawerClick()
+                                    if (!lockAllActions) {
+                                        openDrawerClick()
+                                    }
                                 }
                             )
                         }
@@ -1221,25 +1228,29 @@ fun KmiTopBar(
                 VoiceCommandsAttachedHandle(
                     isEnglish = isEnglish,
                     onClick = {
-                        quickActionsExpanded = false
-                        focusManager.clearFocus(force = true)
+                        if (!lockAllActions) {
+                            quickActionsExpanded = false
+                            focusManager.clearFocus(force = true)
 
-                        if (onOpenVoiceCommands != null) {
-                            onOpenVoiceCommands()
-                        } else {
-                            val opened =
-                                VoiceCommandsBridge.open()
+                            if (onOpenVoiceCommands != null) {
+                                onOpenVoiceCommands()
+                            } else {
+                                val opened =
+                                    VoiceCommandsBridge.open()
 
-                            if (!opened) {
-                                android.widget.Toast.makeText(
-                                    ctx,
-                                    if (isEnglish) {
-                                        "Voice commands are not connected yet"
-                                    } else {
-                                        "הפקודות הקוליות עדיין אינן מחוברות"
-                                    },
-                                    android.widget.Toast.LENGTH_SHORT
-                                ).show()
+                                if (!opened) {
+                                    android.widget.Toast
+                                        .makeText(
+                                            ctx,
+                                            if (isEnglish) {
+                                                "Voice commands are not connected yet"
+                                            } else {
+                                                "הפקודות הקוליות עדיין אינן מחוברות"
+                                            },
+                                            android.widget.Toast.LENGTH_SHORT
+                                        )
+                                        .show()
+                                }
                             }
                         }
                     }
@@ -1332,15 +1343,15 @@ fun KmiTopBar(
                                     background = searchActionColors.background,
                                     enabled = !lockSearch,
                                     onClick = {
-                                        quickActionsExpanded = false
-                                        focusManager.clearFocus(force = true)
+                                        if (!lockAllActions) {
+                                            quickActionsExpanded = false
+                                            focusManager.clearFocus(force = true)
 
-                                        // אם מסך חיצוני רוצה להגיב לחיפוש — נשאיר לו אפשרות.
-                                        onSearch?.invoke()
+                                            onSearch?.invoke()
 
-                                        // החיפוש הגלובאלי האמיתי נפתח כאן.
-                                        globalSearchQuery = ""
-                                        showGlobalSearch = true
+                                            globalSearchQuery = ""
+                                            showGlobalSearch = true
+                                        }
                                     }
                                 )
 
@@ -1365,18 +1376,20 @@ fun KmiTopBar(
                                         },
                                     enabled = onHome != null,
                                     onClick = {
-                                        if (lockHome) {
-                                            android.widget.Toast
-                                                .makeText(
-                                                    ctx,
-                                                    homeDisabledToast ?: "אתה כבר במסך הבית 🙂",
-                                                    android.widget.Toast.LENGTH_SHORT
-                                                )
-                                                .show()
-                                        } else {
-                                            quickActionsExpanded = false
-                                            focusManager.clearFocus(force = true)
-                                            onHome?.invoke()
+                                        if (!lockAllActions) {
+                                            if (lockHome) {
+                                                android.widget.Toast
+                                                    .makeText(
+                                                        ctx,
+                                                        homeDisabledToast ?: "אתה כבר במסך הבית 🙂",
+                                                        android.widget.Toast.LENGTH_SHORT
+                                                    )
+                                                    .show()
+                                            } else {
+                                                quickActionsExpanded = false
+                                                focusManager.clearFocus(force = true)
+                                                onHome?.invoke()
+                                            }
                                         }
                                     }
                                 )
@@ -1392,20 +1405,17 @@ fun KmiTopBar(
                                     background = settingsActionColors.background,
                                     enabled = showSettingsAllowed,
                                     onClick = {
-                                        quickActionsExpanded = false
-                                        focusManager.clearFocus(
-                                            force = true
-                                        )
+                                        if (!lockAllActions) {
+                                            quickActionsExpanded = false
+                                            focusManager.clearFocus(
+                                                force = true
+                                            )
 
-                                        /*
-                                         * מסך שמארח את KmiTopBar יכול
-                                         * לסגור תחילה דיאלוג פעיל ורק
-                                         * לאחר מכן לפתוח את ההגדרות.
-                                         */
-                                        if (onSettings != null) {
-                                            onSettings()
-                                        } else {
-                                            DrawerBridge.openSettings()
+                                            if (onSettings != null) {
+                                                onSettings()
+                                            } else {
+                                                DrawerBridge.openSettings()
+                                            }
                                         }
                                     }
                                 )
@@ -1417,13 +1427,15 @@ fun KmiTopBar(
                                     background = statisticsActionColors.background,
                                     enabled = true,
                                     onClick = {
-                                        quickActionsExpanded = false
-                                        focusManager.clearFocus(force = true)
+                                        if (!lockAllActions) {
+                                            quickActionsExpanded = false
+                                            focusManager.clearFocus(force = true)
 
-                                        if (onOpenProgress != null) {
-                                            onOpenProgress()
-                                        } else {
-                                            DrawerBridge.openProgress()
+                                            if (onOpenProgress != null) {
+                                                onOpenProgress()
+                                            } else {
+                                                DrawerBridge.openProgress()
+                                            }
                                         }
                                     }
                                 )
@@ -1435,7 +1447,7 @@ fun KmiTopBar(
                                     background = assistantActionColors.background,
                                     enabled = !isInsideAssistant,
                                     onClick = {
-                                        if (!isInsideAssistant) {
+                                        if (!lockAllActions && !isInsideAssistant) {
                                             quickActionsExpanded = false
                                             focusManager.clearFocus(
                                                 force = true
@@ -1458,21 +1470,23 @@ fun KmiTopBar(
                                         background = guideActionColors.background,
                                         enabled = true,
                                         onClick = {
-                                            quickActionsExpanded = false
-                                            focusManager.clearFocus(force = true)
+                                            if (!lockAllActions) {
+                                                quickActionsExpanded = false
+                                                focusManager.clearFocus(force = true)
 
-                                            val opened = OnboardingBridge.open()
+                                                val opened = OnboardingBridge.open()
 
-                                            if (!opened) {
-                                                android.widget.Toast.makeText(
-                                                    ctx,
-                                                    if (isEnglish) {
-                                                        "The app guide is not available yet"
-                                                    } else {
-                                                        "מסך ההדרכה עדיין לא מחובר"
-                                                    },
-                                                    android.widget.Toast.LENGTH_SHORT
-                                                ).show()
+                                                if (!opened) {
+                                                    android.widget.Toast.makeText(
+                                                        ctx,
+                                                        if (isEnglish) {
+                                                            "The app guide is not available yet"
+                                                        } else {
+                                                            "מסך ההדרכה עדיין לא מחובר"
+                                                        },
+                                                        android.widget.Toast.LENGTH_SHORT
+                                                    ).show()
+                                                }
                                             }
                                         }
                                     )
@@ -1486,8 +1500,10 @@ fun KmiTopBar(
                                         background = shareActionColors.background,
                                         enabled = true,
                                         onClick = {
-                                            quickActionsExpanded = false
-                                            runKmiShare()
+                                            if (!lockAllActions) {
+                                                quickActionsExpanded = false
+                                                runKmiShare()
+                                            }
                                         }
                                     )
                                 }

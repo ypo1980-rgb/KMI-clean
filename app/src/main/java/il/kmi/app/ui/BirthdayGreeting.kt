@@ -130,26 +130,52 @@ fun BirthdayGate(
     }
 
     /*
-     * הבדיקה מתבצעת בכל יצירה של BirthdayGate.
+     * ברכת יום ההולדת מוצגת רק בחלון מוגדר:
+     * יום אחד לפני יום ההולדת ועד שבעה ימים אחריו.
      *
-     * אם יום ההולדת של השנה כבר עבר, תוצג הברכה
-     * בכניסה הראשונה שלאחריו. לפני יום ההולדת נבדק
-     * יום ההולדת האחרון מהשנה הקודמת.
+     * גם בתוך החלון הברכה מוצגת פעם אחת בלבד
+     * עבור שנת יום ההולדת הנוכחית.
      */
     LaunchedEffect(
         birthDay,
         birthMonth
     ) {
-        val today = LocalDate.now()
+        val today =
+            LocalDate.now()
 
-        val mostRecentBirthday =
-            resolveMostRecentBirthday(
-                today = today,
-                birthDay = birthDay,
-                birthMonth = birthMonth
+        if (
+            birthDay == null ||
+            birthMonth == null
+        ) {
+            showBirthday = false
+            birthdayYearToSave = null
+            return@LaunchedEffect
+        }
+
+        val birthdayThisYear =
+            birthdayDateForYear(
+                year = today.year,
+                month = birthMonth,
+                day = birthDay
             )
 
-        if (mostRecentBirthday == null) {
+        if (birthdayThisYear == null) {
+            showBirthday = false
+            birthdayYearToSave = null
+            return@LaunchedEffect
+        }
+
+        val windowStart =
+            birthdayThisYear.minusDays(1)
+
+        val windowEnd =
+            birthdayThisYear.plusDays(7)
+
+        val isInsideBirthdayWindow =
+            !today.isBefore(windowStart) &&
+                    !today.isAfter(windowEnd)
+
+        if (!isInsideBirthdayWindow) {
             showBirthday = false
             birthdayYearToSave = null
             return@LaunchedEffect
@@ -158,15 +184,14 @@ fun BirthdayGate(
         val lastShownYear =
             readLastBirthdayShownYear(sp)
 
-        if (
-            lastShownYear == null ||
-            lastShownYear <
-            mostRecentBirthday.year
-        ) {
+        if (lastShownYear != birthdayThisYear.year) {
             birthdayYearToSave =
-                mostRecentBirthday.year
+                birthdayThisYear.year
 
             showBirthday = true
+        } else {
+            showBirthday = false
+            birthdayYearToSave = null
         }
     }
 
@@ -648,41 +673,6 @@ private fun BirthdayConfetti(
                 )
             }
         }
-    }
-}
-
-private fun resolveMostRecentBirthday(
-    today: LocalDate,
-    birthDay: Int?,
-    birthMonth: Int?
-): LocalDate? {
-    if (
-        birthDay == null ||
-        birthMonth == null ||
-        birthMonth !in 1..12 ||
-        birthDay !in 1..31
-    ) {
-        return null
-    }
-
-    val birthdayThisYear =
-        birthdayDateForYear(
-            year = today.year,
-            month = birthMonth,
-            day = birthDay
-        )
-            ?: return null
-
-    return if (
-        birthdayThisYear.isAfter(today)
-    ) {
-        birthdayDateForYear(
-            year = today.year - 1,
-            month = birthMonth,
-            day = birthDay
-        )
-    } else {
-        birthdayThisYear
     }
 }
 

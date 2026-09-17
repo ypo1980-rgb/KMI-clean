@@ -58,6 +58,14 @@ private fun buildMaterialsSubRouteByTopic(
                 "הגנות נגד בעיטות"
             }
 
+            clean.contains("מקל") -> {
+                "הגנות נגד מקל"
+            }
+
+            clean.contains("סכין") -> {
+                "הגנות נגד סכין"
+            }
+
             else -> clean
         }
 

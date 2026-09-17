@@ -192,22 +192,6 @@ internal fun HomeCoachAttendanceForecastContent(
     )
 
     Spacer(
-        Modifier.height(6.dp)
-    )
-
-    HorizontalDivider(
-        modifier =
-            Modifier.fillMaxWidth(),
-        thickness =
-            1.dp,
-        color =
-            MaterialTheme
-                .colorScheme
-                .outline
-                .copy(alpha = 0.16f)
-    )
-
-    Spacer(
         Modifier.height(5.dp)
     )
 

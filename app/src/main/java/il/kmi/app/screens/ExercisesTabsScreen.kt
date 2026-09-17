@@ -20,7 +20,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -34,6 +33,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.AbsoluteRoundedCornerShape
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.animation.core.tween
@@ -55,6 +55,7 @@ import il.kmi.app.domain.ContentRepo
 import il.kmi.shared.domain.content.ExerciseIdentityRegistry
 import android.app.Activity
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.material.icons.filled.Close
 import androidx.core.content.edit
 import il.kmi.app.ui.ext.color
 import il.kmi.app.ui.pdf.KmiPdfHeader
@@ -62,8 +63,6 @@ import il.kmi.app.ui.pdf.KmiPdfFooter
 import il.kmi.shared.localization.AppLanguage
 import il.kmi.shared.localization.AppLanguageManager
 import il.yuval.ui.theme.kmiSectionHeaderBackground
-import il.yuval.ui.theme.kmiSectionHeaderBrush
-import il.yuval.ui.theme.kmiGraniteActionBrush
 import il.yuval.ui.theme.kmiScreenBackgroundBrush
 
 //==============================================================================
@@ -1495,7 +1494,108 @@ fun ExercisesTabsScreen(
         }
     }
 
-    Scaffold(
+    val practiceToken =
+        if (isCoach) {
+            when (selectedTab) {
+                1 -> "__COACH_TAUGHT__"
+                2 -> "__COACH_PRACTICE__"
+                3 -> "__COACH_IMPROVEMENT__"
+
+                else -> {
+                    if (topic != "__ALL__") {
+                        topic
+                    } else {
+                        "__ALL__"
+                    }
+                }
+            }
+        } else {
+            when (selectedTab) {
+                1 -> "__UNKNOWN__"
+                2 -> "__FAVS_ALL__"
+
+                else -> {
+                    if (topic != "__ALL__") {
+                        topic
+                    } else {
+                        "__ALL__"
+                    }
+                }
+            }
+        }
+
+    val onPracticeClick: () -> Unit = {
+        onPractice(
+            belt,
+            practiceToken
+        )
+    }
+
+    val onResetClick: () -> Unit = {
+        scope.launch {
+            // איפוס סטטוסים בזיכרון הקומפוז
+            itemList.forEach { item -> itemStates[item] = null }
+
+            // ⭐ איפוס מועדפים גלובלי
+            FavoritesStore.clearAll()
+
+            // ❓ איפוס unknown – נשאר מקומי לפי חגורה/נושא
+            unknowns = mutableSetOf()
+
+            sp.edit {
+                if (topic == "__ALL__") {
+                    // ✅ 1) מחיקת unknown keys מה-SP
+                    sp.all.keys
+                        .filter {
+                            it.startsWith("unknown_${belt.id}_")
+                        }
+                        .forEach { key ->
+                            remove(key)
+                        }
+                } else {
+                    val singleUnknownKey =
+                        "unknown_${belt.id}_$suffix"
+
+                    remove(singleUnknownKey)
+                }
+            }
+
+            // ✅ 2) איפוס אמיתי של הסימונים ב-DataStore
+            if (topic == "__ALL__") {
+                allTopicItems.forEach { ti ->
+                    val canonicalIds = ti.items
+                        .map { raw ->
+                            CanonicalIds.canonicalFor(
+                                belt,
+                                ti.topic,
+                                raw
+                            )
+                        }
+                        .distinct()
+
+                    vm.clearTopicItems(
+                        belt = belt,
+                        topic = ti.topic,
+                        canonicalIds = canonicalIds
+                    )
+                }
+            } else {
+                vm.clearTopic(
+                    belt,
+                    topic
+                )
+            }
+        }
+    }
+
+    var sideActionsExpanded by rememberSaveable {
+        mutableStateOf(false)
+    }
+
+    Box(
+        modifier = Modifier.fillMaxSize()
+    ) {
+        Scaffold(
         containerColor = Color.Transparent,
         topBar = {
             val contextLang = LocalContext.current
@@ -1538,142 +1638,7 @@ fun ExercisesTabsScreen(
             )
         },
 
-        bottomBar = {
-            Surface(
-                color = MaterialTheme.colorScheme.surface,
-                tonalElevation = 0.dp,
-                shadowElevation = 0.dp,
-                border = BorderStroke(
-                    width = 1.dp,
-                    color = MaterialTheme.colorScheme.outline
-                        .copy(alpha = 0.24f)
-                )
-            ) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .navigationBarsPadding()
-                        .padding(16.dp),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {                    // ← קובע את מקור התרגול לפי הטאב: הכל/לא-יודע/מועדפים
-                    val practiceToken =
-                        if (isCoach) {
-                            when (selectedTab) {
-                                1 -> "__COACH_TAUGHT__"
-                                2 -> "__COACH_PRACTICE__"
-                                3 -> "__COACH_IMPROVEMENT__"
-
-                                else -> {
-                                    if (topic != "__ALL__") {
-                                        topic
-                                    } else {
-                                        "__ALL__"
-                                    }
-                                }
-                            }
-                        } else {
-                            when (selectedTab) {
-                                1 -> "__UNKNOWN__"
-                                2 -> "__FAVS_ALL__"
-
-                                else -> {
-                                    if (topic != "__ALL__") {
-                                        topic
-                                    } else {
-                                        "__ALL__"
-                                    }
-                                }
-                            }
-                        }
-
-                    ActionButton(
-                        text = tr("תרגול", "Practice"),
-                        icon = Icons.Filled.FitnessCenter,
-                        modifier = Modifier.weight(1f),
-                        brush = kmiGraniteActionBrush(),
-                        contentColor = Color.White,
-                        onClick = {
-                            onPractice(
-                                belt,
-                                practiceToken
-                            )
-                        }
-                    )
-
-                    ActionButton(
-                        text = tr("איפוס", "Reset"),
-                        icon = Icons.Filled.Delete,
-                        modifier = Modifier.weight(1f),
-                        brush = Brush.horizontalGradient(
-                            colors = listOf(
-                                MaterialTheme.colorScheme.error,
-                                MaterialTheme.colorScheme.error.copy(
-                                    alpha = 0.78f
-                                )
-                            )
-                        ),
-                        contentColor = Color.White,
-                        onClick = {
-                            scope.launch {
-                                // איפוס סטטוסים בזיכרון הקומפוז
-                                itemList.forEach { item -> itemStates[item] = null }
-
-                                // ⭐ איפוס מועדפים גלובלי
-                                FavoritesStore.clearAll()
-
-                                // ❓ איפוס unknown – נשאר מקומי לפי חגורה/נושא
-                                unknowns = mutableSetOf()
-
-                                sp.edit {
-                                    if (topic == "__ALL__") {
-                                        // ✅ 1) מחיקת unknown keys מה-SP
-                                        sp.all.keys
-                                            .filter {
-                                                it.startsWith("unknown_${belt.id}_")
-                                            }
-                                            .forEach { key ->
-                                                remove(key)
-                                            }
-                                    } else {
-                                        val singleUnknownKey =
-                                            "unknown_${belt.id}_$suffix"
-
-                                        remove(singleUnknownKey)
-                                    }
-                                }
-
-                                // ✅ 2) איפוס אמיתי של הסימונים ב-DataStore
-                                if (topic == "__ALL__") {
-                                    allTopicItems.forEach { ti ->
-                                        val canonicalIds = ti.items
-                                            .map { raw ->
-                                                CanonicalIds.canonicalFor(
-                                                    belt,
-                                                    ti.topic,
-                                                    raw
-                                                )
-                                            }
-                                            .distinct()
-
-                                        vm.clearTopicItems(
-                                            belt = belt,
-                                            topic = ti.topic,
-                                            canonicalIds = canonicalIds
-                                        )
-                                    }
-                                } else {
-                                    vm.clearTopic(
-                                        belt,
-                                        topic
-                                    )
-                                }
-                            }
-                        }
-                    )
-                }
-            }
-        }
+            bottomBar = {}
     ) { padding ->
 
         // ===== טאבים על פס הגראניט =====
@@ -1714,38 +1679,21 @@ fun ExercisesTabsScreen(
 
                     Spacer(Modifier.height(4.dp))
 
-                    Surface(
-                        shape = RoundedCornerShape(999.dp),
-                        color = Color.White.copy(
-                            alpha = if (selected) 1f else 0.92f
+                    Text(
+                        text = number.toString(),
+                        style = KmiTypography.action.copy(
+                            fontWeight = FontWeight.Black
                         ),
-                        tonalElevation = 0.dp,
-                        shadowElevation = 0.dp,
-                        border = BorderStroke(
-                            width = 1.dp,
-                            color = Color.White.copy(alpha = 0.48f)
-                        )
-                    ) {
-                        Text(
-                            text = number.toString(),
-                            style = KmiTypography.action.copy(
-                                fontWeight = FontWeight.Black
-                            ),
-                            color = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.padding(
-                                horizontal = 13.dp,
-                                vertical = 1.dp
-                            ),
-                            textAlign = TextAlign.Center
-                        )
-                    }
+                        color = Color.White,
+                        textAlign = TextAlign.Center
+                    )
                 }
 
                 if (selected) {
                     Box(
                         modifier = Modifier
                             .align(Alignment.BottomCenter)
-                            .padding(bottom = 2.dp)
+                            .padding(bottom = 8.dp)
                             .width(30.dp)
                             .height(3.dp)
                             .background(
@@ -2482,23 +2430,284 @@ fun ExercisesTabsScreen(
             )
         }
 
-        noteEditorFor?.let { item ->
-            ExerciseNoteEditorDialog(
-                exerciseTitle = formattedExerciseTitle(item),
-                noteText = noteDraft,
-                isEnglish = isEnglish,
-                accentColor = belt.color,
-                onNoteChange = { noteDraft = it },
-                onDismiss = {
-                    noteEditorFor = null
-                },
-                onSave = {
-                    saveNote(item, noteDraft)
-                    noteEditorFor = null
+            noteEditorFor?.let { item ->
+                ExerciseNoteEditorDialog(
+                    exerciseTitle = formattedExerciseTitle(item),
+                    noteText = noteDraft,
+                    isEnglish = isEnglish,
+                    accentColor = belt.color,
+                    onNoteChange = { noteDraft = it },
+                    onDismiss = {
+                        noteEditorFor = null
+                    },
+                    onSave = {
+                        saveNote(item, noteDraft)
+                        noteEditorFor = null
+                    }
+                )
+            }
+        } // ✅ סוגר את Scaffold { padding -> ... }
+
+        val sideHandleShape =
+            if (isEnglish) {
+                AbsoluteRoundedCornerShape(
+                    topLeft = 0.dp,
+                    bottomLeft = 0.dp,
+                    topRight = 18.dp,
+                    bottomRight = 18.dp
+                )
+            } else {
+                AbsoluteRoundedCornerShape(
+                    topLeft = 18.dp,
+                    bottomLeft = 18.dp,
+                    topRight = 0.dp,
+                    bottomRight = 0.dp
+                )
+            }
+
+        val sideRailShape =
+            if (isEnglish) {
+                AbsoluteRoundedCornerShape(
+                    topLeft = 0.dp,
+                    bottomLeft = 0.dp,
+                    topRight = 24.dp,
+                    bottomRight = 24.dp
+                )
+            } else {
+                AbsoluteRoundedCornerShape(
+                    topLeft = 24.dp,
+                    bottomLeft = 24.dp,
+                    topRight = 0.dp,
+                    bottomRight = 0.dp
+                )
+            }
+
+        if (sideActionsExpanded) {
+            Surface(
+                modifier = Modifier
+                    .align(
+                        if (isEnglish) {
+                            Alignment.CenterStart
+                        } else {
+                            Alignment.CenterEnd
+                        }
+                    )
+                    .padding(top = 12.dp)
+                    .width(64.dp),
+                shape = sideRailShape,
+                color = Color.Transparent,
+                tonalElevation = 0.dp,
+                shadowElevation = 8.dp,
+                border = BorderStroke(
+                    width = 1.dp,
+                    color = Color.White.copy(alpha = 0.30f)
+                )
+            ) {
+                Column(
+                    modifier = Modifier
+                        .background(
+                            brush = Brush.verticalGradient(
+                                colors = listOf(
+                                    belt.color.copy(alpha = 0.82f),
+                                    MaterialTheme.colorScheme.primary,
+                                    MaterialTheme.colorScheme.primary.copy(alpha = 0.86f),
+                                    MaterialTheme.colorScheme.primary.copy(alpha = 0.72f)
+                                )
+                            )
+                        )
+                        .padding(
+                            horizontal = 5.dp,
+                            vertical = 7.dp
+                        ),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable {
+                                sideActionsExpanded = false
+                                onPracticeClick()
+                            }
+                            .padding(vertical = 4.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        Surface(
+                            modifier = Modifier.size(34.dp),
+                            shape = CircleShape,
+                            color = Color.White.copy(alpha = 0.16f),
+                            tonalElevation = 0.dp,
+                            shadowElevation = 0.dp,
+                            border = BorderStroke(
+                                width = 1.dp,
+                                color = Color.White.copy(alpha = 0.58f)
+                            )
+                        ) {
+                            Box(
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Filled.FitnessCenter,
+                                    contentDescription = null,
+                                    tint = Color.White,
+                                    modifier = Modifier.size(KmiIconSize.small)
+                                )
+                            }
+                        }
+
+                        Spacer(Modifier.height(2.dp))
+
+                        Text(
+                            text = tr("תרגול", "Practice"),
+                            style = KmiTypography.caption.copy(
+                                fontWeight = FontWeight.ExtraBold
+                            ),
+                            color = Color.White,
+                            textAlign = TextAlign.Center,
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+
+                    HorizontalDivider(
+                        modifier = Modifier
+                            .padding(
+                                horizontal = 5.dp,
+                                vertical = 5.dp
+                            ),
+                        thickness = 0.7.dp,
+                        color = Color.White.copy(alpha = 0.26f)
+                    )
+
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable {
+                                sideActionsExpanded = false
+                                onResetClick()
+                            }
+                            .padding(vertical = 4.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        Surface(
+                            modifier = Modifier.size(34.dp),
+                            shape = CircleShape,
+                            color = MaterialTheme.colorScheme.error,
+                            tonalElevation = 0.dp,
+                            shadowElevation = 0.dp,
+                            border = BorderStroke(
+                                width = 1.dp,
+                                color = Color.White.copy(alpha = 0.58f)
+                            )
+                        ) {
+                            Box(
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Filled.Delete,
+                                    contentDescription = null,
+                                    tint = Color.White,
+                                    modifier = Modifier.size(KmiIconSize.small)
+                                )
+                            }
+                        }
+
+                        Spacer(Modifier.height(2.dp))
+
+                        Text(
+                            text = tr("איפוס", "Reset"),
+                            style = KmiTypography.caption.copy(
+                                fontWeight = FontWeight.ExtraBold
+                            ),
+                            color = Color.White,
+                            textAlign = TextAlign.Center,
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+
+                    HorizontalDivider(
+                        modifier = Modifier
+                            .padding(
+                                horizontal = 5.dp,
+                                vertical = 5.dp
+                            ),
+                        thickness = 0.7.dp,
+                        color = Color.White.copy(alpha = 0.26f)
+                    )
+
+                    Surface(
+                        onClick = {
+                            sideActionsExpanded = false
+                        },
+                        modifier = Modifier.size(36.dp),
+                        shape = CircleShape,
+                        color = Color(0xFF7B31E8),
+                        tonalElevation = 0.dp,
+                        shadowElevation = 2.dp,
+                        border = BorderStroke(
+                            width = 1.dp,
+                            color = Color.White.copy(alpha = 0.72f)
+                        )
+                    ) {
+                        Box(
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Filled.Close,
+                                contentDescription =
+                                    if (isEnglish) {
+                                        "Close"
+                                    } else {
+                                        "סגור"
+                                    },
+                                tint = Color.White,
+                                modifier = Modifier.size(
+                                    KmiIconSize.small
+                                )
+                            )
+                        }
+                    }
                 }
-            )
+            }
+        } else {
+            Surface(
+                onClick = {
+                    sideActionsExpanded = true
+                },
+                modifier = Modifier
+                    .align(
+                        if (isEnglish) {
+                            Alignment.CenterStart
+                        } else {
+                            Alignment.CenterEnd
+                        }
+                    )
+                    .padding(top = 12.dp)
+                    .width(38.dp)
+                    .height(72.dp),
+                shape = sideHandleShape,
+                color = belt.color.copy(alpha = 0.88f),
+                tonalElevation = 0.dp,
+                shadowElevation = 6.dp,
+                border = BorderStroke(
+                    width = 1.dp,
+                    color = Color.White.copy(alpha = 0.28f)
+                )
+            ) {
+                Box(
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = "☰",
+                        color = Color.White,
+                        style = KmiTypography.action.copy(
+                            fontWeight = FontWeight.Black
+                        )
+                    )
+                }
+            }
         }
-    } // ✅ סוגר את Scaffold { padding -> ... }
+    } // ✅ סוגר את Box
 } // ✅ סוגר את ExercisesTabsScreen(...)
 
 

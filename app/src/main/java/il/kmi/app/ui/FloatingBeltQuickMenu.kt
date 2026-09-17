@@ -8,10 +8,14 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.shape.AbsoluteRoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.FormatListBulleted
-import androidx.compose.material.icons.filled.Mic
-import androidx.compose.material.icons.automirrored.filled.ReceiptLong
+import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalDensity
+import androidx.core.content.edit
 import androidx.compose.material.icons.filled.SportsMma
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.Icon
@@ -63,6 +67,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalWindowInfo
 import il.yuval.ui.theme.kmiSuccessColor
 
 //============================================================================
@@ -268,6 +273,7 @@ private fun SideRailQuickMenuTrigger(
     accentColor: Color,
     expanded: Boolean,
     isEnglish: Boolean,
+    modifier: Modifier = Modifier,
     onClick: () -> Unit
 ) {
     val accentContentColor =
@@ -286,12 +292,22 @@ private fun SideRailQuickMenuTrigger(
         label = "sideRailIconRotation"
     )
 
-    val triggerShape = RoundedCornerShape(
-        topEnd = 18.dp,
-        bottomEnd = 18.dp,
-        topStart = 0.dp,
-        bottomStart = 0.dp
-    )
+    val triggerShape =
+        if (isEnglish) {
+            AbsoluteRoundedCornerShape(
+                topLeft = 0.dp,
+                bottomLeft = 0.dp,
+                topRight = 18.dp,
+                bottomRight = 18.dp
+            )
+        } else {
+            AbsoluteRoundedCornerShape(
+                topLeft = 18.dp,
+                bottomLeft = 18.dp,
+                topRight = 0.dp,
+                bottomRight = 0.dp
+            )
+        }
 
     Surface(
         onClick = onClick,
@@ -308,6 +324,7 @@ private fun SideRailQuickMenuTrigger(
         modifier = Modifier
             .width(38.dp)
             .height(72.dp)
+            .then(modifier)
     ) {
         Box(
             modifier = Modifier
@@ -391,6 +408,69 @@ fun FloatingQuickMenu(
     val langManager = remember(ctx) { AppLanguageManager(ctx) }
     val isEnglish = langManager.getCurrentLanguage() == AppLanguage.ENGLISH
     val accentColor = accentColorOverride ?: belt.color
+
+    /*
+     * מיקום אנכי של ידית התפריט הצדדי.
+     * נשמר בין כניסות למסך.
+     */
+    val sideRailPositionSp = remember(ctx) {
+        ctx.getSharedPreferences(
+            "kmi_settings",
+            Context.MODE_PRIVATE
+        )
+    }
+
+    val sideRailPositionKey =
+        "quick_menu_side_rail_bottom_dp"
+
+    val sideRailDensity =
+        LocalDensity.current
+
+    val sideRailScreenHeightDp =
+        with(sideRailDensity) {
+            LocalWindowInfo
+                .current
+                .containerSize
+                .height
+                .toDp()
+                .value
+        }
+
+    val sideRailMinBottomDp =
+        24f
+
+    /*
+     * בדיוק כמו MaterialsScreen:
+     * משאירים מספיק מקום למעלה כדי שהסרגל
+     * הפתוח לא יגלוש מחוץ למסך.
+     */
+    val sideRailOpenReservedHeightDp =
+        420f
+
+    val sideRailTopSafetyMarginDp =
+        20f
+
+    val sideRailMaxBottomDp =
+        (
+                sideRailScreenHeightDp -
+                        sideRailOpenReservedHeightDp -
+                        sideRailTopSafetyMarginDp
+                )
+            .coerceAtLeast(140f)
+
+    var sideRailBottomDp by remember(ctx) {
+        mutableFloatStateOf(
+            sideRailPositionSp
+                .getFloat(
+                    sideRailPositionKey,
+                    86f
+                )
+                .coerceIn(
+                    sideRailMinBottomDp,
+                    sideRailMaxBottomDp
+                )
+        )
+    }
 
     val userSp = remember(ctx) {
         ctx.getSharedPreferences("kmi_user", Context.MODE_PRIVATE)
@@ -508,11 +588,28 @@ fun FloatingQuickMenu(
     }
 
     Box(
-        modifier = modifier,
+        modifier =
+            if (
+                triggerMode ==
+                QuickMenuTriggerMode.SideRail
+            ) {
+                modifier.fillMaxSize()
+            } else {
+                modifier
+            },
         contentAlignment = when (triggerMode) {
-            QuickMenuTriggerMode.BottomBar -> Alignment.BottomCenter
-            QuickMenuTriggerMode.Fab -> if (isEnglish) Alignment.BottomStart else Alignment.BottomEnd
-            QuickMenuTriggerMode.SideRail -> Alignment.CenterStart
+            QuickMenuTriggerMode.BottomBar ->
+                Alignment.BottomCenter
+
+            QuickMenuTriggerMode.Fab ->
+                if (isEnglish) {
+                    Alignment.BottomStart
+                } else {
+                    Alignment.BottomEnd
+                }
+
+            QuickMenuTriggerMode.SideRail ->
+                Alignment.CenterStart
         }
     ) {
         if (menuVisibilityState.currentState || menuVisibilityState.targetState) {
@@ -542,11 +639,10 @@ fun FloatingQuickMenu(
                     .offset(y = (-6).dp)
 
                 QuickMenuTriggerMode.SideRail -> Modifier
-                    .align(Alignment.TopStart)
+                    .align(Alignment.BottomStart)
                     .wrapContentSize()
-                    .offset(
-                        x = 46.dp,
-                        y = 88.dp
+                    .padding(
+                        bottom = sideRailBottomDp.dp
                     )
             }
         ) {
@@ -576,16 +672,39 @@ fun FloatingQuickMenu(
                 ) {
                     Spacer(Modifier.height(6.dp))
 
-                    PremiumQuickMenuPanel(
-                        title = tr("תפריט מהיר", "Quick Menu"),
-                        accentColor = accentColor,
-                        isEnglish = isEnglish,
-                        menuLocked = isMenuLocked,
-                        items = items,
-                        onItemClick = { action -> closeThen(action) },
-                        onLockedItemClick = onLockedItemClick,
-                        onClose = { onExpandedChange(false) }
-                    )
+                    if (triggerMode == QuickMenuTriggerMode.SideRail) {
+                        SideRailQuickMenuPanel(
+                            accentColor = accentColor,
+                            isEnglish = isEnglish,
+                            menuLocked = isMenuLocked,
+                            items = items,
+                            onItemClick = { action ->
+                                closeThen(action)
+                            },
+                            onLockedItemClick = onLockedItemClick,
+                            onClose = {
+                                onExpandedChange(false)
+                            }
+                        )
+                    } else {
+                        PremiumQuickMenuPanel(
+                            title = tr(
+                                "תפריט מהיר",
+                                "Quick Menu"
+                            ),
+                            accentColor = accentColor,
+                            isEnglish = isEnglish,
+                            menuLocked = isMenuLocked,
+                            items = items,
+                            onItemClick = { action ->
+                                closeThen(action)
+                            },
+                            onLockedItemClick = onLockedItemClick,
+                            onClose = {
+                                onExpandedChange(false)
+                            }
+                        )
+                    }
 
                     Spacer(
                         Modifier.height(
@@ -612,20 +731,21 @@ fun FloatingQuickMenu(
                     Modifier
                         .align(
                             if (isSideRail) {
-                                Alignment.TopStart
+                                Alignment.BottomStart
                             } else if (isEnglish) {
                                 Alignment.BottomEnd
                             } else {
                                 Alignment.BottomStart
                             }
                         )
-                        .offset(
-                            y =
-                                if (isSideRail) {
-                                    88.dp
-                                } else {
-                                    0.dp
-                                }
+                        .then(
+                            if (isSideRail) {
+                                Modifier.padding(
+                                    bottom = sideRailBottomDp.dp
+                                )
+                            } else {
+                                Modifier
+                            }
                         ),
                 contentAlignment = Alignment.Center
             ) {
@@ -634,6 +754,53 @@ fun FloatingQuickMenu(
                         accentColor = accentColor,
                         expanded = expanded,
                         isEnglish = isEnglish,
+                        modifier = Modifier.pointerInput(
+                            sideRailMinBottomDp,
+                            sideRailMaxBottomDp,
+                            sideRailDensity
+                        ) {
+                            detectDragGesturesAfterLongPress(
+                                onDragStart = {
+                                    /*
+                                     * לחיצה ממושכת מתחילה הזזה.
+                                     * לחיצה רגילה ממשיכה לפתוח את התפריט.
+                                     */
+                                },
+                                onDrag = { change, dragAmount ->
+                                    change.consume()
+
+                                    val dragDp =
+                                        dragAmount.y /
+                                                sideRailDensity.density
+
+                                    sideRailBottomDp =
+                                        (
+                                                sideRailBottomDp -
+                                                        dragDp
+                                                )
+                                            .coerceIn(
+                                                sideRailMinBottomDp,
+                                                sideRailMaxBottomDp
+                                            )
+                                },
+                                onDragEnd = {
+                                    sideRailPositionSp.edit {
+                                        putFloat(
+                                            sideRailPositionKey,
+                                            sideRailBottomDp
+                                        )
+                                    }
+                                },
+                                onDragCancel = {
+                                    sideRailPositionSp.edit {
+                                        putFloat(
+                                            sideRailPositionKey,
+                                            sideRailBottomDp
+                                        )
+                                    }
+                                }
+                            )
+                        },
                         onClick = {
                             onExpandedChange(true)
                         }
@@ -649,6 +816,282 @@ fun FloatingQuickMenu(
                     )
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun SideRailQuickMenuPanel(
+    accentColor: Color,
+    isEnglish: Boolean,
+    menuLocked: Boolean,
+    items: List<QuickMenuItemUi>,
+    onItemClick: (() -> Unit) -> Unit,
+    onLockedItemClick: () -> Unit,
+    onClose: () -> Unit
+) {
+    val colors =
+        MaterialTheme.colorScheme
+
+    val railShape =
+        if (isEnglish) {
+            AbsoluteRoundedCornerShape(
+                topLeft = 0.dp,
+                bottomLeft = 0.dp,
+                topRight = 24.dp,
+                bottomRight = 24.dp
+            )
+        } else {
+            AbsoluteRoundedCornerShape(
+                topLeft = 24.dp,
+                bottomLeft = 24.dp,
+                topRight = 0.dp,
+                bottomRight = 0.dp
+            )
+        }
+
+    Surface(
+        modifier =
+            Modifier.width(64.dp),
+        shape = railShape,
+        color = Color.Transparent,
+        tonalElevation = 0.dp,
+        shadowElevation = 8.dp,
+        border = BorderStroke(
+            width = 1.dp,
+            color =
+                Color.White.copy(
+                    alpha = 0.30f
+                )
+        )
+    ) {
+        Column(
+            modifier = Modifier
+                .background(
+                    brush =
+                        Brush.verticalGradient(
+                            colors = listOf(
+                                accentColor.copy(
+                                    alpha = 0.82f
+                                ),
+                                Color(0xFF245FC8),
+                                Color(0xFF173F99),
+                                Color(0xFF102E78)
+                            )
+                        )
+                )
+                .padding(
+                    horizontal = 5.dp,
+                    vertical = 7.dp
+                ),
+            horizontalAlignment =
+                Alignment.CenterHorizontally
+        ) {
+
+            items.forEachIndexed { index, item ->
+
+                val lockedForUi =
+                    menuLocked &&
+                            item.isLocked
+
+                val displayTitle =
+                    when {
+                        !isEnglish &&
+                                item.title ==
+                                "נקודות תורפה" ->
+                            "נקודות\nתורפה"
+
+                        !isEnglish &&
+                                item.title ==
+                                "כל הרשימות" ->
+                            "רשימות"
+
+                        isEnglish &&
+                                item.title ==
+                                "Weak Points" ->
+                            "Weak\nPoints"
+
+                        isEnglish &&
+                                item.title ==
+                                "All Lists" ->
+                            "Lists"
+
+                        else ->
+                            item.title
+                    }
+
+                SideRailQuickMenuAction(
+                    title = displayTitle,
+                    icon = item.icon,
+                    isLocked = lockedForUi,
+                    onClick = {
+                        onItemClick {
+                            if (lockedForUi) {
+                                onLockedItemClick()
+                            } else {
+                                item.action()
+                            }
+                        }
+                    }
+                )
+
+                if (index != items.lastIndex) {
+                    HorizontalDivider(
+                        modifier = Modifier
+                            .padding(
+                                horizontal = 5.dp,
+                                vertical = 5.dp
+                            ),
+                        thickness = 0.7.dp,
+                        color =
+                            Color.White.copy(
+                                alpha = 0.26f
+                            )
+                    )
+                }
+            }
+
+            HorizontalDivider(
+                modifier = Modifier
+                    .padding(
+                        horizontal = 5.dp,
+                        vertical = 5.dp
+                    ),
+                thickness = 0.7.dp,
+                color =
+                    Color.White.copy(
+                        alpha = 0.26f
+                    )
+            )
+
+            Surface(
+                onClick = onClose,
+                modifier =
+                    Modifier.size(36.dp),
+                shape = CircleShape,
+                color = Color(0xFF7B31E8),
+                tonalElevation = 0.dp,
+                shadowElevation = 2.dp,
+                border = BorderStroke(
+                    width = 1.dp,
+                    color =
+                        Color.White.copy(
+                            alpha = 0.72f
+                        )
+                )
+            ) {
+                Box(
+                    contentAlignment =
+                        Alignment.Center
+                ) {
+                    Icon(
+                        imageVector =
+                            Icons.Filled.Close,
+                        contentDescription =
+                            if (isEnglish) {
+                                "Close"
+                            } else {
+                                "סגור"
+                            },
+                        tint = Color.White,
+                        modifier =
+                            Modifier.size(
+                                KmiIconSize.small
+                            )
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun SideRailQuickMenuAction(
+    title: String,
+    icon: ImageVector,
+    isLocked: Boolean,
+    onClick: () -> Unit
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(
+                onClick = onClick
+            )
+            .padding(
+                vertical = 4.dp
+            ),
+        horizontalAlignment =
+            Alignment.CenterHorizontally
+    ) {
+
+        Surface(
+            modifier =
+                Modifier.size(34.dp),
+            shape = CircleShape,
+            color =
+                Color.White.copy(
+                    alpha = 0.16f
+                ),
+            tonalElevation = 0.dp,
+            shadowElevation = 0.dp,
+            border = BorderStroke(
+                width = 1.dp,
+                color =
+                    Color.White.copy(
+                        alpha = 0.58f
+                    )
+            )
+        ) {
+            Box(
+                contentAlignment =
+                    Alignment.Center
+            ) {
+                Icon(
+                    imageVector = icon,
+                    contentDescription = null,
+                    tint = Color.White,
+                    modifier =
+                        Modifier.size(
+                            KmiIconSize.small
+                        )
+                )
+            }
+        }
+
+        Spacer(
+            Modifier.height(2.dp)
+        )
+
+        Text(
+            text = title,
+            style =
+                KmiTypography.caption.copy(
+                    fontWeight =
+                        FontWeight.ExtraBold
+                ),
+            color = Color.White,
+            textAlign = TextAlign.Center,
+            maxLines = 2,
+            overflow =
+                TextOverflow.Ellipsis
+        )
+
+        if (isLocked) {
+            Spacer(
+                Modifier.height(1.dp)
+            )
+
+            Icon(
+                imageVector =
+                    Icons.Filled.Lock,
+                contentDescription = null,
+                tint = Color.White,
+                modifier =
+                    Modifier.size(
+                        KmiIconSize.tiny
+                    )
+            )
         }
     }
 }

@@ -673,13 +673,6 @@ private fun greenDefenseNestedGroups(): List<UiNestedSubTopicGroup> {
             title = "הגנות - סכין",
             leaves = listOf(
                 UiNestedSubTopicLeaf(
-                    title = "הגנות נגד מקל",
-                    items = listOf(
-                        "הגנה נגד מקל - צד חי",
-                        "הגנה נגד מקל - צד מת"
-                    )
-                ),
-                UiNestedSubTopicLeaf(
                     title = "הגנות מאיום סכין",
                     items = listOf(
                         "הגנה מאיום סכין לעורק שמאל",
@@ -713,6 +706,19 @@ private fun greenDefenseNestedGroups(): List<UiNestedSubTopicGroup> {
                         "הגנה נגד דקירה מזרחית מהצד לגב - התוקף בצד שמאל",
                         "הגנה נגד דקירה מזרחית מהצד לגרון - התוקף בצד ימין",
                         "הגנה נגד דקירה מזרחית מהצד לבטן - התוקף בצד ימין"
+                    )
+                )
+            )
+        ),
+
+        UiNestedSubTopicGroup(
+            title = "הגנות נגד מקל",
+            leaves = listOf(
+                UiNestedSubTopicLeaf(
+                    title = "הגנות נגד מקל",
+                    items = listOf(
+                        "הגנה נגד מקל - צד חי",
+                        "הגנה נגד מקל - צד מת"
                     )
                 )
             )

@@ -4,6 +4,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.shape.AbsoluteRoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material3.*
@@ -26,6 +27,8 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.ui.draw.scale
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.runtime.rememberCoroutineScope
@@ -60,13 +63,9 @@ import androidx.core.content.edit
 import java.io.File
 import java.io.FileOutputStream
 import androidx.compose.animation.core.tween
-import androidx.compose.animation.core.LinearEasing
-import androidx.compose.animation.core.RepeatMode
-import androidx.compose.animation.core.animateFloat
-import androidx.compose.animation.core.infiniteRepeatable
-import androidx.compose.animation.core.rememberInfiniteTransition
-import androidx.compose.foundation.border
 import androidx.compose.foundation.relocation.BringIntoViewRequester
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalWindowInfo
 import il.kmi.app.domain.ContentRepo
 import il.kmi.app.ui.color
 import il.kmi.app.ui.KmiIconSize
@@ -361,9 +360,8 @@ fun MaterialsScreen(
     DisposableEffect(rolePrefs) {
         val roleListener =
             SharedPreferences
-                .OnSharedPreferenceChangeListener {
-                        _,
-                        key ->
+                .OnSharedPreferenceChangeListener { _,
+                                                    key ->
 
                     if (
                         key == "active_user_mode" ||
@@ -1629,16 +1627,6 @@ fun MaterialsScreen(
         }
     }
 
-    val currentCanonicalIds = remember(
-        itemList,
-        belt.id,
-        topicUi
-    ) {
-        itemList
-            .map { item -> canonicalFor(item) }
-            .distinct()
-    }
-
     val summaryTotalCount = remember(itemList) {
         itemList.size
     }
@@ -1729,38 +1717,6 @@ fun MaterialsScreen(
             .count { isUnknown ->
                 isUnknown
             }
-    }
-
-    val summaryFavoritesCount = remember(
-        itemList,
-        favorites,
-        materialRootTopic,
-        belt.id,
-        topicKey
-    ) {
-        itemList.count { item ->
-            isFavoriteByAliases(materialRootTopic, item)
-        }
-    }
-
-    val summaryExcludedCount = remember(
-        currentCanonicalIds,
-        excludedItems.toList()
-    ) {
-        currentCanonicalIds.count { id ->
-            excludedItems.contains(id)
-        }
-    }
-
-    val summaryNotesCount = remember(
-        currentCanonicalIds,
-        notesRefreshKey,
-        belt.id,
-        excludedKeySuffix
-    ) {
-        currentCanonicalIds.count { id ->
-            loadNote(id).isNotBlank()
-        }
     }
 
     /*
@@ -2077,17 +2033,9 @@ fun MaterialsScreen(
                                     warningContainer
                             }
 
-                            val symbol = when (status) {
-                                CoachMaterialStatus.NOT_TAUGHT -> "−"
-                                CoachMaterialStatus.TAUGHT -> "✓"
-                                CoachMaterialStatus.PRACTICED -> "↻"
-                                CoachMaterialStatus.NEEDS_REINFORCEMENT -> "!"
-                            }
-
                             MaterialsTopStatusCard(
                                 value = count.toString(),
                                 label = label,
-                                symbol = symbol,
                                 accentColor = accentColor,
                                 containerColor = containerColor,
                                 selected = selected,
@@ -2111,7 +2059,6 @@ fun MaterialsScreen(
                                 } else {
                                     "תרגילים"
                                 },
-                            symbol = "✣",
                             accentColor = Color(0xFF64748B),
                             containerColor = Color(0xFFE7EDF5),
                             modifier = Modifier.weight(1f)
@@ -2125,7 +2072,6 @@ fun MaterialsScreen(
                                 } else {
                                     "יודע"
                                 },
-                            symbol = "✓",
                             accentColor = Color(0xFF16A36A),
                             containerColor = Color(0xFFDFF7E9),
                             modifier = Modifier.weight(1f)
@@ -2139,7 +2085,6 @@ fun MaterialsScreen(
                                 } else {
                                     "חלקית"
                                 },
-                            symbol = "◐",
                             accentColor = Color(0xFFF59E0B),
                             containerColor = Color(0xFFFFF1D6),
                             modifier = Modifier.weight(1f)
@@ -2153,11 +2098,214 @@ fun MaterialsScreen(
                                 } else {
                                     "לא יודע"
                                 },
-                            symbol = "×",
                             accentColor = Color(0xFFEF4444),
                             containerColor = Color(0xFFFFE3E3),
                             modifier = Modifier.weight(1f)
                         )
+                    }
+                }
+            }
+        }
+    }
+
+    /*
+ * תפריט פעולות צד קומפקטי.
+ *
+ * במקום bottomBar קבוע שגוזל גובה,
+ * הפעולות צפות מעל התוכן ונפתחות רק לפי דרישה.
+ */
+    var materialsActionsExpanded by rememberSaveable {
+        mutableStateOf(false)
+    }
+
+    val materialsActionPositionKey =
+        "materials_actions_bottom_position_dp"
+
+    val materialsDensity =
+        LocalDensity.current
+
+    val screenHeightDp =
+        with(materialsDensity) {
+            LocalWindowInfo
+                .current
+                .containerSize
+                .height
+                .toDp()
+                .value
+        }
+
+    val minMaterialsBottomDp =
+        24f
+
+    /*
+     * שומרים מספיק מקום מעל נקודת העיגון
+     * כדי שגם הסרגל במצב פתוח יישאר כולו
+     * בתוך גבולות המסך.
+     */
+    val openActionsRailReservedHeightDp =
+        420f
+
+    val topActionsSafetyMarginDp =
+        20f
+
+    val maxMaterialsBottomDp =
+        (
+                screenHeightDp -
+                        openActionsRailReservedHeightDp -
+                        topActionsSafetyMarginDp
+                )
+            .coerceAtLeast(140f)
+
+    var materialsActionsBottomDp by rememberSaveable {
+        mutableFloatStateOf(
+            sp.getFloat(
+                materialsActionPositionKey,
+                86f
+            ).coerceIn(
+                minMaterialsBottomDp,
+                maxMaterialsBottomDp
+            )
+        )
+    }
+
+    val resetCurrentMaterials: () -> Unit = {
+        val keysToClear =
+            if (
+                subTopicFilter
+                    .isNullOrBlank()
+            ) {
+                listOf(
+                    topicKey,
+                    topicUi,
+                    "כללי"
+                )
+            } else {
+                listOf(topicKey)
+            }
+                .map { key ->
+                    key.trim()
+                }
+                .filter { key ->
+                    key.isNotBlank()
+                }
+                .distinct()
+
+        /*
+         * ניקוי מיידי של המצב שמוצג במסך.
+         */
+        pendingItemStates.clear()
+
+        itemList.forEachIndexed { index, item ->
+
+            val statusId =
+                statusIdFor(
+                    index = index,
+                    item = item
+                )
+
+            val legacyStatusId =
+                legacyStatusIdFor(
+                    index = index,
+                    item = item
+                )
+
+            itemStates[statusId] = null
+            itemStates[legacyStatusId] = null
+        }
+
+        coachProgressStates.clear()
+        excludedItems.clear()
+
+        favorites =
+            mutableSetOf()
+
+        masteredSet =
+            mutableSetOf()
+
+        unknowns =
+            mutableSetOf()
+
+        partiallyKnownSet =
+            mutableSetOf()
+
+        /*
+         * מחיקת כל הנתונים השמורים מקומית.
+         */
+        sp.edit {
+            remove(
+                "excluded_${belt.id}_$excludedKeySuffix"
+            )
+
+            remove(
+                "fav_${belt.id}_$excludedKeySuffix"
+            )
+
+            keysToClear.forEach { key ->
+                remove(
+                    "mastered_${belt.id}_$key"
+                )
+
+                remove(
+                    "unknown_${belt.id}_$key"
+                )
+
+                remove(
+                    "partially_known_${belt.id}_$key"
+                )
+            }
+
+            /*
+             * מחיקת סטטוסי המאמן.
+             */
+            itemList.forEachIndexed { index, item ->
+
+                val statusId =
+                    statusIdFor(
+                        index = index,
+                        item = item
+                    )
+
+                val progressKey =
+                    coachProgressKey(
+                        statusId
+                    )
+
+                remove(
+                    "${progressKey}_status"
+                )
+
+                remove(
+                    "${progressKey}_updated_at"
+                )
+            }
+        }
+
+        /*
+         * מאפשרים ל־Compose לצייר קודם
+         * את מצב האיפוס המקומי.
+         */
+        scope.launch {
+            delay(32.milliseconds)
+
+            withContext(Dispatchers.IO) {
+                keysToClear.forEach { key ->
+                    vm.clearTopic(
+                        belt = belt,
+                        topic = key
+                    )
+                }
+
+                /*
+                 * איפוס של מאמן אינו נתון
+                 * התקדמות אישי של מתאמן.
+                 */
+                if (!effectiveIsCoach) {
+                    runCatching {
+                        UserProgressRepository
+                            .syncCurrentUserBeltProgress(
+                                vm = vm,
+                                belt = belt
+                            )
                     }
                 }
             }
@@ -2412,374 +2560,285 @@ fun MaterialsScreen(
                 }
             }
         },
-        bottomBar = {
-            Surface(
-                color = Color.Transparent,
-                shadowElevation = 0.dp,
-                modifier = Modifier.fillMaxWidth()
+        bottomBar = {},
+
+        floatingActionButtonPosition =
+            if (isEnglish) {
+                FabPosition.End
+            } else {
+                FabPosition.Start
+            },
+
+        floatingActionButton = {
+            Column(
+                modifier = Modifier
+                    .navigationBarsPadding()
+                    .absoluteOffset(
+                        x = 16.dp
+                    )
+                    .padding(
+                        bottom = materialsActionsBottomDp.dp
+                    ),
+                horizontalAlignment =
+                    Alignment.CenterHorizontally
             ) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .background(Color.Transparent)
-                ) {
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .navigationBarsPadding()
-                            .padding(horizontal = 12.dp, vertical = 8.dp),
-                        verticalArrangement = Arrangement.spacedBy(8.dp)
+
+                if (materialsActionsExpanded) {
+                    Surface(
+                        modifier = Modifier.width(62.dp),
+                        shape = AbsoluteRoundedCornerShape(
+                            topLeft = 24.dp,
+                            topRight = 0.dp,
+                            bottomRight = 0.dp,
+                            bottomLeft = 24.dp
+                        ),
+                        color = Color.Transparent,
+                        tonalElevation = 0.dp,
+                        shadowElevation = 8.dp,
+                        border = BorderStroke(
+                            width = 1.dp,
+                            color = Color.White.copy(alpha = 0.30f)
+                        )
                     ) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                            verticalAlignment = Alignment.CenterVertically
+                        Box(
+                            modifier = Modifier
+                                .background(
+                                    brush = Brush.verticalGradient(
+                                        colors = listOf(
+                                            Color(0xFF4D83E6),
+                                            Color(0xFF255FC7),
+                                            Color(0xFF173E94),
+                                            Color(0xFF0C2A74)
+                                        )
+                                    )
+                                )
+                                .padding(
+                                    horizontal = 5.dp,
+                                    vertical = 7.dp
+                                )
                         ) {
-                            AnimatedButton(
-                                text = when {
-                                    isPracticeLocked && isEnglish -> "Train 🔒"
-                                    isPracticeLocked -> "תרגול 🔒"
-                                    isEnglish -> "Practice"
-                                    else -> "תרגול"
-                                },
-                                modifier = Modifier.weight(1f),
-                                containerColor = if (isPracticeLocked) {
-                                    Color(0xFF9A7A22)
-                                } else {
-                                    belt.color.copy(alpha = 0.92f)
-                                },
-                                onClick = {
-                                    if (isPracticeLocked) {
-                                        onOpenSubscription()
-                                    } else {
-                                        onPractice(belt, topicUi)
-                                    }
-                                }
-                            )
-
-                            AnimatedButton(
-                                text =
-                                    if (isEnglish) {
-                                        "Reset"
-                                    } else {
-                                        "איפוס"
-                                    },
-                                modifier = Modifier.weight(1f),
-                                containerColor = Color(0xFFB3261E),
-                                onClick = {
-                                    val keysToClear =
-                                        if (
-                                            subTopicFilter
-                                                .isNullOrBlank()
-                                        ) {
-                                            listOf(
-                                                topicKey,
-                                                topicUi,
-                                                "כללי"
-                                            )
+                            Column(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalAlignment =
+                                    Alignment.CenterHorizontally,
+                                verticalArrangement =
+                                    Arrangement.spacedBy(7.dp)
+                            ) {
+                                MaterialsSideActionButton(
+                                    symbol = "↻",
+                                    label =
+                                        if (isEnglish) {
+                                            "Reset"
                                         } else {
-                                            listOf(topicKey)
-                                        }
-                                            .map { key ->
-                                                key.trim()
-                                            }
-                                            .filter { key ->
-                                                key.isNotBlank()
-                                            }
-                                            .distinct()
-
-                                    /*
-                                     * ניקוי מיידי של המצב שמוצג במסך.
-                                     *
-                                     * הפעולות האלה אינן ממתינות ל־ViewModel,
-                                     * ולכן הכרטיסים והמונים מתאפסים מיד.
-                                     */
-                                    pendingItemStates.clear()
-
-                                    itemList.forEachIndexed { index,
-                                                              item ->
-
-                                        val statusId =
-                                            statusIdFor(
-                                                index = index,
-                                                item = item
-                                            )
-
-                                        val legacyStatusId =
-                                            legacyStatusIdFor(
-                                                index = index,
-                                                item = item
-                                            )
-
-                                        itemStates[statusId] = null
-                                        itemStates[legacyStatusId] = null
+                                            "איפוס"
+                                        },
+                                    containerColor = Color(0xFFD9352A),
+                                    onClick = {
+                                        materialsActionsExpanded = false
+                                        resetCurrentMaterials()
                                     }
+                                )
 
-                                    coachProgressStates.clear()
-                                    excludedItems.clear()
+                                MaterialsSideActionButton(
+                                    symbol =
+                                        if (isPracticeLocked) {
+                                            "🔒"
+                                        } else {
+                                            "▶"
+                                        },
+                                    label =
+                                        if (isEnglish) {
+                                            "Practice"
+                                        } else {
+                                            "תרגול"
+                                        },
+                                    containerColor =
+                                        if (isPracticeLocked) {
+                                            Color(0xFF9A7A22)
+                                        } else {
+                                            Color(0xFF46C365)
+                                        },
+                                    onClick = {
+                                        materialsActionsExpanded = false
 
-                                    favorites =
-                                        mutableSetOf()
-
-                                    masteredSet =
-                                        mutableSetOf()
-
-                                    unknowns =
-                                        mutableSetOf()
-
-                                    partiallyKnownSet =
-                                        mutableSetOf()
-
-                                    /*
-            * מחיקת כל הנתונים השמורים מקומית.
-            */
-                                    sp.edit {
-                                        remove(
-                                            "excluded_${belt.id}_$excludedKeySuffix"
-                                        )
-                                        remove(
-                                            "fav_${belt.id}_$excludedKeySuffix"
-                                        )
-
-                                        keysToClear.forEach { key ->
-                                            remove(
-                                                "mastered_${belt.id}_$key"
-                                            )
-                                            remove(
-                                                "unknown_${belt.id}_$key"
-                                            )
-                                            remove(
-                                                "partially_known_${belt.id}_$key"
+                                        if (isPracticeLocked) {
+                                            onOpenSubscription()
+                                        } else {
+                                            onPractice(
+                                                belt,
+                                                topicUi
                                             )
                                         }
+                                    }
+                                )
+
+                                MaterialsSideActionButton(
+                                    symbol = "▥",
+                                    label =
+                                        if (isEnglish) {
+                                            "Summary"
+                                        } else {
+                                            "סיכום"
+                                        },
+                                    containerColor = Color(0xFF2F9CFF),
+                                    onClick = {
+                                        materialsActionsExpanded = false
+                                        onSummary(
+                                            belt,
+                                            topicUi,
+                                            subTopicFilter
+                                        )
+                                    }
+                                )
+
+                                MaterialsSideActionButton(
+                                    symbol = "×",
+                                    label = "",
+                                    containerColor = Color(0xFF7B31E8),
+                                    onClick = {
+                                        materialsActionsExpanded = false
+                                    },
+                                    showLabel = false
+                                )
+                            }
+                        }
+                    }
+                } else {
+                    Surface(
+                        onClick = {
+                            materialsActionsExpanded = true
+                        },
+                        modifier = Modifier
+                            .width(38.dp)
+                            .height(88.dp)
+                            .pointerInput(
+                                minMaterialsBottomDp,
+                                maxMaterialsBottomDp,
+                                materialsDensity
+                            ) {
+                                detectDragGesturesAfterLongPress(
+                                    onDragStart = {
+                                        /*
+                                         * רק לחיצה ממושכת מתחילה גרירה.
+                                         * לחיצה רגילה עדיין פותחת את התפריט.
+                                         */
+                                    },
+                                    onDrag = { change, dragAmount ->
+                                        change.consume()
 
                                         /*
-                                         * מחיקת סטטוסי המאמן:
-                                         * לא נלמד / נלמד / תורגל /
-                                         * נדרש חיזוק.
+                                         * dragAmount.y:
+                                         * חיובי = המשתמש גורר למטה.
+                                         * שלילי = המשתמש גורר למעלה.
+                                         *
+                                         * bottomDp עובד הפוך:
+                                         * ערך גדול יותר = התפריט גבוה יותר.
                                          */
-                                        itemList.forEachIndexed { index, item ->
-                                            val statusId =
-                                                statusIdFor(
-                                                    index = index,
-                                                    item = item
-                                                )
+                                        val dragDp =
+                                            dragAmount.y /
+                                                    materialsDensity.density
 
-                                            val progressKey =
-                                                coachProgressKey(
-                                                    statusId
+                                        materialsActionsBottomDp =
+                                            (
+                                                    materialsActionsBottomDp -
+                                                            dragDp
+                                                    )
+                                                .coerceIn(
+                                                    minMaterialsBottomDp,
+                                                    maxMaterialsBottomDp
                                                 )
-
-                                            remove(
-                                                "${progressKey}_status"
+                                    },
+                                    onDragEnd = {
+                                        sp.edit {
+                                            putFloat(
+                                                materialsActionPositionKey,
+                                                materialsActionsBottomDp
                                             )
-                                            remove(
-                                                "${progressKey}_updated_at"
+                                        }
+                                    },
+                                    onDragCancel = {
+                                        sp.edit {
+                                            putFloat(
+                                                materialsActionPositionKey,
+                                                materialsActionsBottomDp
                                             )
                                         }
                                     }
-
-                                    /*
-                                     * מאפשרים ל־Compose לצייר קודם את מצב
-   * האיפוס שכבר עודכן במפות המקומיות.
-   *
-   * לאחר מכן מבצעים את הניקוי הכבד
-   * מחוץ ל־Main Thread כדי לא לחסום
-   * את רענון המסך.
-   */
-                                    scope.launch {
-                                        delay(32.milliseconds)
-
-                                        withContext(Dispatchers.IO) {
-                                            keysToClear.forEach { key ->
-                                                vm.clearTopic(
-                                                    belt = belt,
-                                                    topic = key
-                                                )
-                                            }
-
-                                            /*
-                                             * איפוס של מאמן אינו נתון
-                                             * התקדמות אישי של מתאמן.
-                                             */
-                                            if (!effectiveIsCoach) {
-                                                runCatching {
-                                                    UserProgressRepository
-                                                        .syncCurrentUserBeltProgress(
-                                                            vm = vm,
-                                                            belt = belt
-                                                        )
-                                                }
-                                            }
-                                        }
-                                    }
-                                }
-                            )
-                        }
-
-                        val bubbleTransition =
-                            rememberInfiniteTransition(
-                                label =
-                                    "materialsSummaryButtonBubbleTransition"
-                            )
-
-                        val bubbleOffset by
-                        bubbleTransition.animateFloat(
-                            initialValue = -120f,
-                            targetValue = 320f,
-                            animationSpec =
-                                infiniteRepeatable(
-                                    animation =
-                                        tween(
-                                            durationMillis = 2600,
-                                            easing = LinearEasing
-                                        ),
-                                    repeatMode =
-                                        RepeatMode.Restart
-                                ),
-                            label =
-                                "materialsSummaryButtonBubbleOffset"
-                        )
-
-                        Surface(
-                            onClick = {
-                                onSummary(
-                                    belt,
-                                    topicUi,
-                                    subTopicFilter
                                 )
                             },
-                            shape = RoundedCornerShape(18.dp),
-                            tonalElevation = 0.dp,
-                            shadowElevation = 0.dp,
-                            modifier =
-                                Modifier
-                                    .fillMaxWidth()
-                                    .heightIn(
-                                        min = 46.dp,
-                                        max = 58.dp
-                                    )
-                                    .border(
-                                        width = 1.dp,
-                                        brush =
-                                            Brush.linearGradient(
-                                                colors =
-                                                    listOf(
-                                                        MaterialTheme
-                                                            .colorScheme
-                                                            .onPrimary
-                                                            .copy(
-                                                                alpha =
-                                                                    0.85f
-                                                            ),
-                                                        MaterialTheme
-                                                            .colorScheme
-                                                            .onPrimary
-                                                            .copy(
-                                                                alpha =
-                                                                    0.25f
-                                                            ),
-                                                        MaterialTheme
-                                                            .colorScheme
-                                                            .onPrimary
-                                                            .copy(
-                                                                alpha =
-                                                                    0.85f
-                                                            )
-                                                    )
-                                            ),
-                                        shape =
-                                            RoundedCornerShape(
-                                                18.dp
-                                            )
-                                    )
-                        ) {
-                            Box(
-                                modifier =
-                                    Modifier
-                                        .fillMaxSize()
-                                        .background(
-                                            Brush.linearGradient(
-                                                colors =
-                                                    listOf(
-                                                        Color(
-                                                            0xFF7F00FF
-                                                        ),
-                                                        Color(
-                                                            0xFF3F51B5
-                                                        ),
-                                                        Color(
-                                                            0xFF03A9F4
-                                                        )
-                                                    )
-                                            )
+                        shape = AbsoluteRoundedCornerShape(
+                            topLeft = 20.dp,
+                            topRight = 0.dp,
+                            bottomRight = 0.dp,
+                            bottomLeft = 20.dp
+                        ),
+                        color = Color.Transparent,
+                        tonalElevation = 0.dp,
+                        shadowElevation = 7.dp,
+                        border = BorderStroke(
+                            width = 1.dp,
+                            color = Color.White.copy(alpha = 0.34f)
+                        )
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .background(
+                                    brush = Brush.verticalGradient(
+                                        colors = listOf(
+                                            Color(0xFF7EDC87),
+                                            Color(0xFF66CF75),
+                                            Color(0xFF49BB62)
                                         )
+                                    )
+                                ),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Column(
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                verticalArrangement = Arrangement.Center
                             ) {
-                                /*
-                                 * אותה בועת אור נעה של מסך הבית.
-                                 */
                                 Box(
-                                    modifier =
-                                        Modifier
-                                            .offset(
-                                                x =
-                                                    bubbleOffset.dp
-                                            )
-                                            .size(140.dp)
-                                            .background(
-                                                brush =
-                                                    Brush.radialGradient(
-                                                        colors =
-                                                            listOf(
-                                                                Color.White
-                                                                    .copy(
-                                                                        alpha =
-                                                                            0.45f
-                                                                    ),
-                                                                Color.Transparent
-                                                            )
-                                                    ),
-                                                shape =
-                                                    CircleShape
-                                            )
+                                    modifier = Modifier
+                                        .width(16.dp)
+                                        .height(3.dp)
+                                        .background(
+                                            color = Color.White,
+                                            shape = RoundedCornerShape(50)
+                                        )
                                 )
 
+                                Spacer(Modifier.height(5.dp))
+
                                 Box(
-                                    modifier =
-                                        Modifier.fillMaxSize(),
-                                    contentAlignment =
-                                        Alignment.Center
-                                ) {
-                                    Text(
-                                        text =
-                                            if (isEnglish) {
-                                                "Summary Screen"
-                                            } else {
-                                                "מסך סיכום"
-                                            },
-                                        fontWeight =
-                                            FontWeight.ExtraBold,
-                                        color =
-                                            MaterialTheme
-                                                .colorScheme
-                                                .onPrimary,
-                                        style =
-                                            KmiTypography.action,
-                                        textAlign =
-                                            TextAlign.Center,
-                                        maxLines = 1,
-                                        overflow =
-                                            TextOverflow.Ellipsis
-                                    )
-                                }
+                                    modifier = Modifier
+                                        .width(16.dp)
+                                        .height(3.dp)
+                                        .background(
+                                            color = Color.White,
+                                            shape = RoundedCornerShape(50)
+                                        )
+                                )
+
+                                Spacer(Modifier.height(5.dp))
+
+                                Box(
+                                    modifier = Modifier
+                                        .width(16.dp)
+                                        .height(3.dp)
+                                        .background(
+                                            color = Color.White,
+                                            shape = RoundedCornerShape(50)
+                                        )
+                                )
                             }
                         }
                     }
                 }
             }
-        }
+        },
 
-    ) { innerPadding ->
+        ) { innerPadding ->
         Surface(
             modifier = Modifier
                 .fillMaxSize()
@@ -3678,15 +3737,23 @@ fun MaterialsScreen(
                                                                                     },
                                                                                 containerColor =
                                                                                     if (isDarkSurface) {
-                                                                                        Color(0xFF5B4A22)
+                                                                                        Color(
+                                                                                            0xFF5B4A22
+                                                                                        )
                                                                                     } else {
-                                                                                        Color(0xFFFFE7B3)
+                                                                                        Color(
+                                                                                            0xFFFFE7B3
+                                                                                        )
                                                                                     },
                                                                                 contentColor =
                                                                                     if (isDarkSurface) {
-                                                                                        Color(0xFFFFD978)
+                                                                                        Color(
+                                                                                            0xFFFFD978
+                                                                                        )
                                                                                     } else {
-                                                                                        Color(0xFF8A5A00)
+                                                                                        Color(
+                                                                                            0xFF8A5A00
+                                                                                        )
                                                                                     }
                                                                             )
                                                                         }
@@ -4163,6 +4230,64 @@ fun MaterialsScreen(
                     }
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun MaterialsSideActionButton(
+    symbol: String,
+    label: String,
+    containerColor: Color,
+    onClick: () -> Unit,
+    showLabel: Boolean = true
+) {
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Surface(
+            onClick = onClick,
+            modifier = Modifier.size(34.dp),
+            shape = CircleShape,
+            color = containerColor,
+            tonalElevation = 0.dp,
+            shadowElevation = 2.dp,
+            border = BorderStroke(
+                width = 1.dp,
+                color = Color.White.copy(alpha = 0.72f)
+            )
+        ) {
+            Box(
+                modifier = Modifier.fillMaxSize(),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = symbol,
+                    style =
+                        KmiTypography.caption.copy(
+                            fontWeight = FontWeight.ExtraBold
+                        ),
+                    color = Color.White,
+                    textAlign = TextAlign.Center,
+                    maxLines = 1
+                )
+            }
+        }
+
+        if (showLabel && label.isNotBlank()) {
+            Spacer(Modifier.height(1.dp))
+
+            Text(
+                text = label,
+                style =
+                    KmiTypography.caption.copy(
+                        fontWeight = FontWeight.Bold
+                    ),
+                color = Color.White,
+                textAlign = TextAlign.Center,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
         }
     }
 }
@@ -4945,81 +5070,10 @@ private fun createMaterialsPdf(
     return file
 }
 
-// ===== כפתור מונפש =====
-@Composable
-fun AnimatedButton(
-    text: String,
-    modifier: Modifier = Modifier,
-    containerColor: Color = MaterialTheme.colorScheme.primary,
-    onClick: () -> Unit
-) {
-    var pressed by remember { mutableStateOf(false) }
-
-    val scale by animateFloatAsState(
-        targetValue = if (pressed) 0.97f else 1f,
-        label = "buttonScaleAnim"
-    )
-
-    val scope = rememberCoroutineScope()
-
-    val contentOnContainer =
-        if (containerColor.luminance() < 0.5f) {
-            Color.White
-        } else {
-            Color.Black
-        }
-
-    Button(
-        onClick = {
-            pressed = true
-            onClick()
-
-            scope.launch {
-                delay(140.milliseconds)
-                pressed = false
-            }
-        },
-        shape = RoundedCornerShape(18.dp),
-        modifier = modifier
-            .scale(scale)
-            .heightIn(min = 56.dp)
-            .defaultMinSize(minWidth = 72.dp),
-        border = BorderStroke(
-            width = 1.dp,
-            color =
-                contentOnContainer.copy(
-                    alpha = 0.22f
-                )
-        ),
-        colors = ButtonDefaults.buttonColors(
-            containerColor = containerColor,
-            contentColor = contentOnContainer
-        ),
-        elevation =
-            ButtonDefaults.buttonElevation(
-                defaultElevation = 0.dp,
-                pressedElevation = 0.dp,
-                focusedElevation = 0.dp,
-                hoveredElevation = 0.dp,
-                disabledElevation = 0.dp
-            )
-    ) {
-        Text(
-            text = text,
-            style = KmiTypography.action,
-            color = contentOnContainer,
-            textAlign = TextAlign.Center,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis
-        )
-    }
-}
-
 @Composable
 private fun MaterialsTopStatusCard(
     value: String,
     label: String,
-    symbol: String,
     accentColor: Color,
     containerColor: Color,
     modifier: Modifier = Modifier,
@@ -5154,7 +5208,6 @@ internal fun MaterialsExerciseStatusCard(
     statuses: @Composable RowScope.() -> Unit
 ) {
     val colors = MaterialTheme.colorScheme
-    val dark = colors.surface.luminance() < 0.5f
 
     CompositionLocalProvider(
         LocalLayoutDirection provides

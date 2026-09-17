@@ -33,6 +33,175 @@ function normalizeEmail(value) {
 
 /**
  * ====================================================
+ * שחזור שם משתמש לפי אימייל
+ *
+ * הלקוח שולח email.
+ * הפונקציה מאתרת את המשתמש ושולחת את שם המשתמש
+ * לכתובת האימייל הרשומה באמצעות Firebase Trigger Email.
+ *
+ * מטעמי פרטיות מוחזרת אותה תשובה גם אם המשתמש לא נמצא.
+ * ====================================================
+ */
+exports.recoverUsername = functions.https.onCall(async (data, context) => {
+  const emailLower = normalizeEmail(
+    data && data.email
+  );
+
+  if (!emailLower) {
+    throw new functions.https.HttpsError(
+      "invalid-argument",
+      "Missing email."
+    );
+  }
+
+  const genericResult = {
+    accepted: true,
+  };
+
+  try {
+    /*
+     * קודם מחפשים לפי emailLower.
+     */
+    let userSnap =
+      await db.collection("users")
+        .where("emailLower", "==", emailLower)
+        .limit(1)
+        .get();
+
+    /*
+     * תמיכה גם במשתמשים ותיקים ששומרים רק email.
+     */
+    if (userSnap.empty) {
+      userSnap =
+        await db.collection("users")
+          .where("email", "==", emailLower)
+          .limit(1)
+          .get();
+    }
+
+    if (userSnap.empty) {
+      console.log(
+        "recoverUsername: user not found",
+        {
+          emailLower,
+        }
+      );
+
+      return genericResult;
+    }
+
+    const userDoc =
+      userSnap.docs[0];
+
+    const user =
+      userDoc.data() || {};
+
+    /*
+     * תמיכה בכל שמות השדה שכבר משמשים
+     * במסך ההתחברות של האפליקציה.
+     */
+    const username =
+      String(
+        user.username ||
+        user.userName ||
+        user.loginUsername ||
+        user.login_name ||
+        user.user_login ||
+        ""
+      ).trim();
+
+    if (!username) {
+      console.log(
+        "recoverUsername: username missing",
+        {
+          uid: userDoc.id,
+        }
+      );
+
+      return genericResult;
+    }
+
+    const registeredEmail =
+      normalizeEmail(
+        user.email ||
+        user.emailLower ||
+        emailLower
+      );
+
+    if (!registeredEmail) {
+      return genericResult;
+    }
+
+    /*
+     * Firebase Trigger Email Extension מאזינה
+     * לקולקציית mail ושולחת את ההודעה.
+     */
+    await db.collection("mail").add({
+      to: registeredEmail,
+
+      message: {
+        subject: "K.A.M.I - שחזור שם משתמש",
+
+        text:
+          "שלום,\n\n" +
+          "שם המשתמש שלך באפליקציית K.A.M.I הוא:\n\n" +
+          username +
+          "\n\n" +
+          "אם לא ביקשת לשחזר את שם המשתמש, " +
+          "ניתן להתעלם מהודעה זו.",
+
+        html:
+          "<div dir=\"rtl\" style=\"font-family:Arial,sans-serif\">" +
+          "<h2>K.A.M.I</h2>" +
+          "<p>שלום,</p>" +
+          "<p>שם המשתמש שלך באפליקציה הוא:</p>" +
+          "<p style=\"font-size:20px;font-weight:bold\">" +
+          escapeHtmlForRecovery(username) +
+          "</p>" +
+          "<p>אם לא ביקשת לשחזר את שם המשתמש, " +
+          "ניתן להתעלם מהודעה זו.</p>" +
+          "</div>",
+      },
+
+      createdAt:
+        admin.firestore.FieldValue.serverTimestamp(),
+
+      type:
+        "username_recovery",
+    });
+
+    console.log(
+      "recoverUsername: recovery email queued",
+      {
+        uid: userDoc.id,
+      }
+    );
+
+    return genericResult;
+  } catch (error) {
+    console.error(
+      "recoverUsername failed:",
+      error
+    );
+
+    throw new functions.https.HttpsError(
+      "internal",
+      "Unable to process username recovery."
+    );
+  }
+});
+
+function escapeHtmlForRecovery(value) {
+  return String(value || "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
+}
+
+/**
+ * ====================================================
  * אימות וקישור מאמן לפי coachInvites
  *
  * תהליך:

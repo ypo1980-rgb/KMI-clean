@@ -1003,13 +1003,6 @@ object ContentRepo {
                     items = emptyList(),
                     subTopics = listOf(
                         SubTopic(
-                            "הגנות נגד מקל",
-                            listOf(
-                                "הגנה נגד מקל - צד חי",
-                                "הגנה נגד מקל - צד מת"
-                            )
-                        ),
-                        SubTopic(
                             "הגנות מאיום סכין",
                             listOf(
                                 "הגנה מאיום סכין לעורק שמאל",
@@ -1046,9 +1039,18 @@ object ContentRepo {
                             )
                         )
                     )
+                ),
+
+                SubTopic(
+                    title = "הגנות נגד מקל",
+                    items = listOf(
+                        "הגנה נגד מקל - צד חי",
+                        "הגנה נגד מקל - צד מת"
+                    )
                 )
             )
         ),
+
         Topic(
             title = "שחרורים",
             items = emptyList(),
