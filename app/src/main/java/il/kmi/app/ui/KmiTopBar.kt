@@ -26,6 +26,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.AbsoluteRoundedCornerShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.HelpOutline
@@ -63,6 +64,8 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
 import il.kmi.app.KmiViewModel
+import il.kmi.shared.domain.Belt
+import il.kmi.app.domain.color
 import il.kmi.app.R
 import kotlinx.coroutines.launch
 import androidx.core.content.edit
@@ -208,6 +211,7 @@ fun KmiTopBar(
     isInsideAssistant: Boolean = false,
     onOpenAi: (() -> Unit)? = null,
     onOpenVoiceCommands: (() -> Unit)? = null,
+    quickActionsAccentOverride: Color? = null,
     attachedHandleHorizontalOffset: Dp = 8.dp
 ) {
     // 🔴 כאן היה רינדור מוקדם של CenterAlignedTopAppBar/TopAppBar – הורדנו אותו
@@ -349,6 +353,183 @@ fun KmiTopBar(
         )
     }
 
+    var quickActionsBeltRefreshTick by remember {
+        mutableIntStateOf(0)
+    }
+
+    val quickActionsRegisteredBelt =
+        remember(
+            spUser,
+            spSettings,
+            quickActionsBeltRefreshTick
+        ) {
+            val rawBelt =
+                listOf(
+                    spUser.getString(
+                        "current_belt",
+                        null
+                    ),
+                    spUser.getString(
+                        "belt_current",
+                        null
+                    ),
+                    spUser.getString(
+                        "belt",
+                        null
+                    ),
+                    spSettings.getString(
+                        "current_belt",
+                        null
+                    ),
+                    spSettings.getString(
+                        "belt",
+                        null
+                    )
+                )
+                    .firstOrNull {
+                        !it.isNullOrBlank()
+                    }
+                    ?.trim()
+                    .orEmpty()
+
+            val resolvedBelt =
+                Belt.fromId(rawBelt)
+                    ?: Belt.entries.firstOrNull { belt ->
+                        belt.id.equals(
+                            rawBelt,
+                            ignoreCase = true
+                        ) ||
+                                belt.heb.equals(
+                                    rawBelt,
+                                    ignoreCase = true
+                                ) ||
+                                belt.en.equals(
+                                    rawBelt,
+                                    ignoreCase = true
+                                )
+                    }
+
+            rawBelt to resolvedBelt
+        }
+
+    val quickActionsAccentColor =
+        remember(quickActionsRegisteredBelt) {
+
+            val rawBelt =
+                quickActionsRegisteredBelt
+                    .first
+                    .trim()
+                    .lowercase()
+
+            val registeredBelt =
+                quickActionsRegisteredBelt.second
+
+            when {
+                /*
+                 * לא נבחרה חגורה ברישום:
+                 * ברירת מחדל כתומה.
+                 */
+                rawBelt.isBlank() ->
+                    Belt.ORANGE.color
+
+                /*
+                 * חגורה לבנה:
+                 * צבע החגורה הבאה = צהוב.
+                 */
+                registeredBelt == Belt.WHITE ->
+                    Belt.YELLOW.color
+
+                /*
+                 * חגורה צהובה:
+                 * צבע החגורה הבאה = כתום.
+                 */
+                registeredBelt == Belt.YELLOW ->
+                    Belt.ORANGE.color
+
+                /*
+                 * חגורה כתומה:
+                 * צבע החגורה הבאה = ירוק.
+                 */
+                registeredBelt == Belt.ORANGE ->
+                    Belt.GREEN.color
+
+                /*
+                 * חגורה ירוקה:
+                 * צבע החגורה הבאה = כחול.
+                 */
+                registeredBelt == Belt.GREEN ->
+                    Belt.BLUE.color
+
+                /*
+                 * חגורה כחולה:
+                 * צבע החגורה הבאה = חום.
+                 */
+                registeredBelt == Belt.BLUE ->
+                    Belt.BROWN.color
+
+                /*
+                 * מחגורה חומה ומעלה:
+                 * חומה / שחורה / דן 1–10 = שחור.
+                 */
+                registeredBelt == Belt.BROWN ||
+                        registeredBelt == Belt.BLACK ||
+                        rawBelt.contains("brown") ||
+                        rawBelt.contains("חום") ||
+                        rawBelt.contains("חומה") ||
+                        rawBelt.contains("black") ||
+                        rawBelt.contains("שחור") ||
+                        rawBelt.contains("שחורה") ||
+                        rawBelt.contains("dan") ||
+                        rawBelt.contains("דאן") ||
+                        rawBelt.contains("דן") ->
+                    Color.Black
+
+                /*
+                 * ערך ישן / לא מזוהה:
+                 * משתמשים באותה ברירת מחדל כתומה.
+                 */
+                else ->
+                    Belt.ORANGE.color
+            }
+        }
+
+    val screenBeltAccentColor =
+        remember(
+            title,
+            resolvedTopBeltIconRes
+        ) {
+            when (resolvedTopBeltIconRes) {
+                R.drawable.intro_belt_white ->
+                    Belt.WHITE.color
+
+                R.drawable.intro_belt_yellow ->
+                    Belt.YELLOW.color
+
+                R.drawable.intro_belt_orange ->
+                    Belt.ORANGE.color
+
+                R.drawable.intro_belt_green ->
+                    Belt.GREEN.color
+
+                R.drawable.intro_belt_blue ->
+                    Belt.BLUE.color
+
+                R.drawable.intro_belt_brown ->
+                    Belt.BROWN.color
+
+                R.drawable.intro_belt_black ->
+                    Color.Black
+
+                else ->
+                    null
+            }
+        }
+
+    val effectiveQuickActionsAccentColor =
+        quickActionsAccentOverride
+            ?: screenBeltAccentColor
+            ?: quickActionsAccentColor
+
     /*
      * icon = אייקון מיקרופון
      * long_press = לחיצה ארוכה על חיפוש
@@ -416,6 +597,15 @@ fun KmiTopBar(
     // האזנה לשינויים בשני ה-Prefs
     DisposableEffect(spUser, spDefault, spSettings) {
         val listener = SharedPreferences.OnSharedPreferenceChangeListener { source, key ->
+
+            if (
+                key == "current_belt" ||
+                key == "belt_current" ||
+                key == "belt"
+            ) {
+                quickActionsBeltRefreshTick++
+            }
+
             if (
                 source === spSettings &&
                 key == "voice_commands_activation_mode"
@@ -796,7 +986,7 @@ fun KmiTopBar(
 
     // ✅ טור האייקונים נפתח כ-overlay מעל המסך,
     // לכן ה-TopBar עצמו נשאר בגובה הכותרת בלבד.
-    val quickActionsWidth = 68.dp
+    val quickActionsWidth = 46.dp
 
     // Back בטוח
     val backDispatcher =
@@ -1200,8 +1390,11 @@ fun KmiTopBar(
             ) {
                 IconsRailAttachedHandle(
                     expanded = quickActionsExpanded,
+                    accentColor =
+                        effectiveQuickActionsAccentColor,
                     onToggle = {
-                        quickActionsExpanded = !quickActionsExpanded
+                        quickActionsExpanded =
+                            !quickActionsExpanded
                     }
                 )
             }
@@ -1227,6 +1420,8 @@ fun KmiTopBar(
             ) {
                 VoiceCommandsAttachedHandle(
                     isEnglish = isEnglish,
+                    accentColor =
+                        effectiveQuickActionsAccentColor,
                     onClick = {
                         if (!lockAllActions) {
                             quickActionsExpanded = false
@@ -1304,36 +1499,51 @@ fun KmiTopBar(
                     exit = androidx.compose.animation.fadeOut() +
                             androidx.compose.animation.slideOutHorizontally { it / 3 }
                 ) {
+                    val quickActionsShape =
+                        AbsoluteRoundedCornerShape(
+                            topLeft = 22.dp,
+                            topRight = 0.dp,
+                            bottomLeft = 22.dp,
+                            bottomRight = 0.dp
+                        )
+
                     Surface(
-                        modifier = Modifier.width(quickActionsWidth),
-                        shape = RoundedCornerShape(24.dp),
-                        color = Color.Transparent,
-                        shadowElevation = 2.dp,
-                        tonalElevation = 0.dp
+                        modifier = Modifier.width(
+                            quickActionsWidth
+                        ),
+                        shape = quickActionsShape,
+                        color =
+                            effectiveQuickActionsAccentColor.copy(
+                                alpha = 0.96f
+                            ),
+                        shadowElevation = 7.dp,
+                        tonalElevation = 0.dp,
+                        border = BorderStroke(
+                            width = 1.4.dp,
+                            color = Color.White.copy(
+                                alpha = 0.70f
+                            )
+                        )
                     ) {
                         Box(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .background(
-                                    brush = Brush.verticalGradient(
-                                        colors = listOf(
-                                            MaterialTheme.colorScheme.surface,
-                                            MaterialTheme.colorScheme.surfaceVariant,
-                                            MaterialTheme.colorScheme.surface
-                                        )
-                                    ),
-                                    shape = RoundedCornerShape(22.dp)
+                                    color =
+                                        effectiveQuickActionsAccentColor.copy(
+                                            alpha = 0.96f
+                                        ),
+                                    shape = quickActionsShape
                                 )
-                                .border(
-                                    width = 1.dp,
-                                    color = MaterialTheme.colorScheme.outlineVariant,
-                                    shape = RoundedCornerShape(22.dp)
+                                .padding(
+                                    horizontal = 3.dp,
+                                    vertical = 5.dp
                                 )
-                                .padding(horizontal = 2.dp, vertical = 6.dp)
                         ) {
                             Column(
                                 modifier = Modifier.fillMaxWidth(),
-                                verticalArrangement = Arrangement.spacedBy(5.dp),
+                                verticalArrangement =
+                                    Arrangement.spacedBy(3.dp),
                                 horizontalAlignment = Alignment.CenterHorizontally
                             ) {
                                 VerticalQuickActionItem(
@@ -2213,6 +2423,7 @@ private fun PremiumMenuImageIcon(
 @Composable
 private fun VoiceCommandsAttachedHandle(
     isEnglish: Boolean,
+    accentColor: Color,
     onClick: () -> Unit
 ) {
     var pressed by remember {
@@ -2272,18 +2483,16 @@ private fun VoiceCommandsAttachedHandle(
             modifier = Modifier
                 .fillMaxSize()
                 .background(
-                    brush = Brush.verticalGradient(
-                        colors = listOf(
-                            Color(0xFFF8F7FF),
-                            Color(0xFFF0EEFF),
-                            Color(0xFFE6E2FF)
-                        )
+                    color = accentColor.copy(
+                        alpha = 0.96f
                     ),
                     shape = handleShape
                 )
                 .border(
-                    width = 1.dp,
-                    color = Color(0xFFB7AEF5),
+                    width = 1.4.dp,
+                    color = Color.White.copy(
+                        alpha = 0.70f
+                    ),
                     shape = handleShape
                 )
                 .drawBehind {
@@ -2310,7 +2519,7 @@ private fun VoiceCommandsAttachedHandle(
                     } else {
                         "פקודות קוליות"
                     },
-                tint = Color(0xFF4B478F),
+                tint = Color.White,
                 modifier = Modifier.size(KmiIconSize.medium)
             )
         }
@@ -2320,6 +2529,7 @@ private fun VoiceCommandsAttachedHandle(
 @Composable
 private fun IconsRailAttachedHandle(
     expanded: Boolean,
+    accentColor: Color,
     onToggle: () -> Unit
 ) {
     var pressed by remember { mutableStateOf(false) }
@@ -2358,7 +2568,10 @@ private fun IconsRailAttachedHandle(
 
     Surface(
         modifier = Modifier
-            .size(width = 48.dp, height = 28.dp)
+            .size(
+                width = 46.dp,
+                height = 28.dp
+            )
             .graphicsLayer {
                 scaleX = pressScale
                 scaleY = pressScale
@@ -2381,18 +2594,16 @@ private fun IconsRailAttachedHandle(
             modifier = Modifier
                 .fillMaxSize()
                 .background(
-                    brush = Brush.verticalGradient(
-                        colors = listOf(
-                            Color(0xFFF8F7FF),
-                            Color(0xFFF0EEFF),
-                            Color(0xFFE6E2FF)
-                        )
+                    color = accentColor.copy(
+                        alpha = 0.96f
                     ),
                     shape = handleShape
                 )
                 .border(
-                    width = 1.dp,
-                    color = Color(0xFFB7AEF5),
+                    width = 1.4.dp,
+                    color = Color.White.copy(
+                        alpha = 0.70f
+                    ),
                     shape = handleShape
                 )
                 .drawBehind {
@@ -2419,7 +2630,7 @@ private fun IconsRailAttachedHandle(
                     } else {
                         "פתח סרגל אייקונים"
                     },
-                tint = Color(0xFF4B478F),
+                tint = Color.White,
                 modifier = Modifier
                     .size(KmiIconSize.medium)
                     .graphicsLayer {
@@ -2458,7 +2669,7 @@ private fun VerticalQuickActionItem(
     ) {
         Box(
             modifier = Modifier
-                .size(34.dp)
+                .size(27.dp)
                 .shadow(
                     elevation = iconShadow,
                     shape = CircleShape,
@@ -2476,7 +2687,7 @@ private fun VerticalQuickActionItem(
                     imageVector = icon,
                     contentDescription = label,
                     tint = tint.copy(alpha = itemAlpha),
-                    modifier = Modifier.size(KmiIconSize.small)
+                    modifier = Modifier.size(13.dp)
                 )
             }
         }
@@ -2485,19 +2696,17 @@ private fun VerticalQuickActionItem(
 
         Text(
             text = label,
-            color = MaterialTheme.colorScheme.onSurface.copy(alpha = itemAlpha),
+            color = Color.White.copy(alpha = itemAlpha),
             style =
-                if (label == "סטטיסטיקה") {
-                    KmiTypography.caption.copy(
-                        fontSize = KmiTypography.caption.fontSize * 0.82f,
-                        lineHeight = KmiTypography.caption.lineHeight * 0.82f,
-                        fontWeight = FontWeight.ExtraBold
-                    )
-                } else {
-                    KmiTypography.caption.copy(
-                        fontWeight = FontWeight.ExtraBold
-                    )
-                },
+                KmiTypography.caption.copy(
+                    fontSize =
+                        KmiTypography.caption.fontSize *
+                                0.78f,
+                    lineHeight =
+                        KmiTypography.caption.lineHeight *
+                                0.78f,
+                    fontWeight = FontWeight.Bold
+                ),
             textAlign = TextAlign.Center,
             maxLines = 1,
             softWrap = false,

@@ -377,6 +377,16 @@ fun NavGraphBuilder.trainingNavGraph(
 
         BeltQuestionsByTopicScreen(
             vm = vm,
+
+            onOpenHome = {
+                nav.navigate(Route.Home.route) {
+                    popUpTo(Route.Home.route) {
+                        inclusive = false
+                    }
+                    launchSingleTop = true
+                    restoreState = true
+                }
+            },
             onOpenByBelt = {
                 val returnedToBeltScreen =
                     nav.popBackStack(

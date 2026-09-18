@@ -54,7 +54,6 @@ import androidx.compose.material3.TabRowDefaults.tabIndicatorOffset
 import il.kmi.app.FcmTokenManager
 import il.kmi.shared.localization.AppLanguage
 import il.kmi.shared.localization.AppLanguageManager
-import com.google.firebase.auth.ActionCodeSettings
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.functions.FirebaseFunctions
@@ -1986,25 +1985,16 @@ private fun RecoveryScreen(
 
                                             runCatching {
 
-                                                val resetUrl =
-                                                    "https://app-1c22cc8d.web.app/reset-password.html"
-
-                                                val settings =
-                                                    ActionCodeSettings
-                                                        .newBuilder()
-                                                        .setUrl(
-                                                            resetUrl
-                                                        )
-                                                        .setHandleCodeInApp(
-                                                            false
-                                                        )
-                                                        .build()
-
-                                                FirebaseAuth
+                                                FirebaseFunctions
                                                     .getInstance()
-                                                    .sendPasswordResetEmail(
-                                                        cleanEmail,
-                                                        settings
+                                                    .getHttpsCallable(
+                                                        "recoverPassword"
+                                                    )
+                                                    .call(
+                                                        mapOf(
+                                                            "email" to
+                                                                    cleanEmail
+                                                        )
                                                     )
                                                     .await()
 
@@ -2015,8 +2005,8 @@ private fun RecoveryScreen(
 
                                                 successText =
                                                     tr(
-                                                        "שלחנו אליך קישור מאובטח לאיפוס הסיסמה.",
-                                                        "We've sent you a secure password reset link."
+                                                        "אם האימייל קיים במערכת, שלחנו אליו קישור מאובטח לאיפוס הסיסמה.",
+                                                        "If the email exists in our system, we've sent a secure password reset link."
                                                     )
 
                                             }.onFailure {
@@ -2026,8 +2016,8 @@ private fun RecoveryScreen(
 
                                                 errorText =
                                                     tr(
-                                                        "לא הצלחנו לשלוח את המייל. בדוק את הכתובת ונסה שוב.",
-                                                        "We couldn't send the email. Check the address and try again."
+                                                        "לא הצלחנו לבצע את הבקשה. נסה שוב בעוד מספר רגעים.",
+                                                        "We couldn't process the request. Please try again shortly."
                                                     )
                                             }
                                         }

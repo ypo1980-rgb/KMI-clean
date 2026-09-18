@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>שחזור שם משתמש – K.M.I</title>
+<style>
+  body{margin:0;padding:0;background:#f3f6fb;font-family:Arial,'Segoe UI',Tahoma,sans-serif;color:#0b1f3a;direction:rtl}
+  .wrap{width:100%;background:#f3f6fb;padding:28px 12px;box-sizing:border-box}
+  .card{width:100%;max-width:680px;margin:0 auto;background:#fff;border-radius:22px;overflow:hidden;box-shadow:0 10px 30px rgba(7,34,68,.12)}
+  .header{background:linear-gradient(135deg,#061d36 0%,#0c3f78 60%,#0b2d55 100%);padding:28px 30px 26px}
+  .header-table{width:100%;border-collapse:collapse}
+  .brand-small{color:#7dc2ff;font-size:14px;line-height:1.55;font-weight:700;text-align:right}
+  .logo-circle{width:112px;height:112px;border-radius:999px;border:4px solid #2c78e8;background:#0b2340;box-shadow:0 0 0 6px rgba(255,255,255,.12);color:#fff;text-align:center}
+  .brand-big{color:#fff;text-align:left}
+  .body{padding:34px 38px 30px;background:#fff}
+  .icon{display:inline-block;width:54px;height:54px;line-height:54px;border-radius:999px;background:#eef5ff;color:#1460d2;font-size:25px;text-align:center}
+  .title{font-size:34px;line-height:1.2;font-weight:900;color:#0a2242;text-align:center;padding:0 0 8px}
+  .subtitle{font-size:17px;line-height:1.6;color:#6d7f97;text-align:center;padding:0 8px 22px}
+  .text{font-size:16px;line-height:1.8;color:#22354d;padding:0 6px 18px;text-align:right}
+  .cta{display:inline-block;min-width:310px;max-width:100%;background:#1769e0;background-image:linear-gradient(90deg,#0e58cf 0%,#2476ef 100%);color:#fff;text-decoration:none;font-size:19px;line-height:1;font-weight:800;padding:18px 30px;border-radius:999px;box-shadow:0 6px 16px rgba(23,105,224,.24)}
+  .info{width:92%;margin:0 auto;background:#f1f6fd;border-radius:14px;padding:13px 16px;color:#233a58;font-size:14px;line-height:1.55;text-align:center;box-sizing:border-box}
+  .divider{height:1px;background:#e4ebf4}
+  .security{background:#f6f9fd;border-radius:14px;border:1px solid #e6edf6;padding:14px 18px;color:#4d6077;font-size:13px;line-height:1.6;text-align:center}
+  .footer{padding-top:16px;font-size:11px;letter-spacing:.4px;color:#9aa8ba;text-align:center}
+  .system{max-width:680px;margin:12px auto 0;text-align:center;font-size:11px;color:#a3afbf;line-height:1.5}
+  .username-box{margin:8px auto 18px;background:#eef5ff;border:1px solid #cddff7;border-radius:16px;padding:18px 20px;text-align:center}
+  .username-value{font-size:28px;font-weight:900;color:#0a3e87;letter-spacing:.6px;direction:ltr}
+  @media(max-width:620px){
+    .body{padding:28px 20px 24px}
+    .header{padding:24px 18px}
+    .title{font-size:29px}
+    .cta{min-width:0;width:100%;box-sizing:border-box}
+    .logo-circle{width:96px;height:96px}
+    .brand-big div:first-child{font-size:34px!important}
+  }
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="card">
+      
+<div class="header">
+  <table class="header-table" role="presentation" cellspacing="0" cellpadding="0" border="0">
+    <tr>
+      <td style="width:33%;vertical-align:middle" class="brand-small">
+        חוזק<br>ביטחון<br>קהילה<br>לחיים טובים יותר
+      </td>
+      <td style="width:34%;vertical-align:middle;text-align:center">
+        <table role="presentation" align="center" cellspacing="0" cellpadding="0" border="0">
+          <tr>
+            <td class="logo-circle">
+              <div style="font-size:27px;font-weight:900;letter-spacing:2px;">K.M.I</div>
+              <div style="margin-top:5px;font-size:11px;letter-spacing:1.8px;color:#cfe5ff;">KRAV MAGA</div>
+            </td>
+          </tr>
+        </table>
+      </td>
+      <td style="width:33%;vertical-align:middle" class="brand-big">
+        <div style="font-size:42px;line-height:1;font-weight:900;letter-spacing:4px;">K.M.I</div>
+        <div style="margin-top:7px;font-size:11px;letter-spacing:3px;color:#d8e9ff;">KRAV MAGA ISRAELI</div>
+      </td>
+    </tr>
+  </table>
+</div>
+
+      <div class="body">
+        <div style="text-align:center;padding-bottom:8px"><span class="icon">👤</span></div>
+        <div class="title">שחזור שם משתמש</div>
+        <div class="subtitle">מצאנו את שם המשתמש המשויך לחשבון שלך ב־K.M.I</div>
+
+        <div class="text">
+          <strong style="color:#0a2242;">שלום,</strong><br>
+          קיבלנו בקשה לשחזור שם המשתמש של החשבון שלך.<br>
+          שם המשתמש שלך הוא:
+        </div>
+
+        <div class="username-box">
+          <div style="font-size:13px;color:#6d7f97;margin-bottom:6px;">שם המשתמש</div>
+          <div class="username-value">{{USERNAME}}</div>
+        </div>
+
+        <div style="text-align:center;padding:0 0 18px">
+          <a class="cta" href="{{LOGIN_URL}}">מעבר למסך הכניסה</a>
+        </div>
+
+        <div class="divider" style="margin:18px 0"></div>
+
+        <div style="text-align:center;font-size:14px;line-height:1.55;color:#2a3e58;padding-bottom:16px">
+          <strong style="color:#0a2242;">נתקלת בבעיה?</strong><br>
+          אפשר לפנות לתמיכה שלנו
+          <a href="{{SUPPORT_URL}}" style="color:#1769e0;text-decoration:underline;font-weight:700;">כאן</a>
+        </div>
+
+        <div class="security">
+          🛡 אם לא ביקשת לשחזר את שם המשתמש – אפשר להתעלם מההודעה הזו בבטחה.<br>
+          לא בוצע כל שינוי בחשבון שלך.
+        </div>
+
+        <div style="text-align:center;padding:18px 0 4px;font-size:14px;line-height:1.55;color:#334860">
+          בברכה,<br>
+          <strong style="font-size:17px;color:#0a2242;">צוות K.M.I</strong><br>
+          <span style="color:#6e8198;">קרב מגן ישראלי</span>
+        </div>
+
+        <div class="footer">K.M.I &nbsp;|&nbsp; יחד מחזקים אנשים</div>
+      </div>
+    </div>
+    <div class="system">הודעת מערכת אוטומטית – אין להשיב למייל זה.</div>
+  </div>
+</body>
+</html>

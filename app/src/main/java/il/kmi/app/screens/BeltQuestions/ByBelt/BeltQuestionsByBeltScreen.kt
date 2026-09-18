@@ -1528,6 +1528,10 @@ internal fun BeltPangoLayout(
                     showBackNavigation = false,
                     showTopBeltIcon = true,
                     topBeltIconRes = null,
+
+                    quickActionsAccentOverride =
+                        currentBelt.color,
+
                     currentLang =
                         if (
                             topBarLanguageManager.getCurrentLanguage() ==

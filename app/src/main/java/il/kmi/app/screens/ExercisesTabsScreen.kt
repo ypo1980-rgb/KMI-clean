@@ -20,7 +20,11 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -56,6 +60,7 @@ import il.kmi.shared.domain.content.ExerciseIdentityRegistry
 import android.app.Activity
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.ui.AbsoluteAlignment
 import androidx.core.content.edit
 import il.kmi.app.ui.ext.color
 import il.kmi.app.ui.pdf.KmiPdfHeader
@@ -610,9 +615,8 @@ fun ExercisesTabsScreen(
     DisposableEffect(roleSp) {
         val roleListener =
             android.content.SharedPreferences
-                .OnSharedPreferenceChangeListener {
-                        _,
-                        key ->
+                .OnSharedPreferenceChangeListener { _,
+                                                    key ->
 
                     if (
                         key == "active_user_mode" ||
@@ -1592,748 +1596,761 @@ fun ExercisesTabsScreen(
         mutableStateOf(false)
     }
 
+    val sideHandlePositionKey =
+        "exercise_cards_side_handle_offset_dp"
+
+    var sideHandleOffsetDp by remember {
+        mutableFloatStateOf(
+            sp.getFloat(
+                sideHandlePositionKey,
+                220f
+            )
+        )
+    }
+
+    val density = LocalDensity.current
+    val screenHeightDp = LocalConfiguration.current.screenHeightDp.toFloat()
+    val minSideHandleOffsetDp = 120f
+    val maxSideHandleOffsetDp =
+        (screenHeightDp - 220f).coerceAtLeast(minSideHandleOffsetDp)
+
     Box(
         modifier = Modifier.fillMaxSize()
     ) {
         Scaffold(
-        containerColor = Color.Transparent,
-        topBar = {
-            val contextLang = LocalContext.current
-            val langManager = remember { AppLanguageManager(contextLang) }
+            containerColor = Color.Transparent,
+            topBar = {
+                val contextLang = LocalContext.current
+                val langManager = remember { AppLanguageManager(contextLang) }
 
-            il.kmi.app.ui.KmiTopBar(
-                title = tr(
-                    "כרטיסיות התרגילים",
-                    "Exercise Cards"
-                ),
-                onHome = onHome,
-                centerTitle = true,
-                showTopHome = false,
-                showTopShare = true,
-                showBottomActions = true,
-                lockSearch = false,
-                onShare = onExportPdf,
-                extraActions = {},
-                currentLang = if (
-                    langManager.getCurrentLanguage() == AppLanguage.ENGLISH
-                ) {
-                    "en"
-                } else {
-                    "he"
-                },
-                onToggleLanguage = {
-                    val newLang =
-                        if (
-                            langManager.getCurrentLanguage() ==
-                            AppLanguage.HEBREW
-                        ) {
-                            AppLanguage.ENGLISH
-                        } else {
-                            AppLanguage.HEBREW
-                        }
+                il.kmi.app.ui.KmiTopBar(
+                    title = tr(
+                        "כרטיסיות התרגילים",
+                        "Exercise Cards"
+                    ),
+                    onHome = onHome,
+                    centerTitle = true,
+                    showTopHome = false,
+                    showTopShare = true,
+                    showBottomActions = true,
+                    lockSearch = false,
+                    onShare = onExportPdf,
+                    extraActions = {},
+                    currentLang = if (
+                        langManager.getCurrentLanguage() == AppLanguage.ENGLISH
+                    ) {
+                        "en"
+                    } else {
+                        "he"
+                    },
+                    onToggleLanguage = {
+                        val newLang =
+                            if (
+                                langManager.getCurrentLanguage() ==
+                                AppLanguage.HEBREW
+                            ) {
+                                AppLanguage.ENGLISH
+                            } else {
+                                AppLanguage.HEBREW
+                            }
 
-                    langManager.setLanguage(newLang)
-                    (contextLang as? Activity)?.recreate()
-                }
-            )
-        },
+                        langManager.setLanguage(newLang)
+                        (contextLang as? Activity)?.recreate()
+                    }
+                )
+            },
 
             bottomBar = {}
-    ) { padding ->
+        ) { padding ->
 
-        // ===== טאבים על פס הגראניט =====
-        @Composable
-        fun MetricFieldEdgeToEdge(
-            title: String,
-            number: Int,
-            selected: Boolean,
-            onClick: () -> Unit,
-            modifier: Modifier = Modifier
-        ) {
-            Box(
-                modifier = modifier
-                    .height(70.dp)
-                    .clickable(onClick = onClick),
-                contentAlignment = Alignment.Center
+            // ===== טאבים על פס הגראניט =====
+            @Composable
+            fun MetricFieldEdgeToEdge(
+                title: String,
+                number: Int,
+                selected: Boolean,
+                onClick: () -> Unit,
+                modifier: Modifier = Modifier
             ) {
-                Column(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(
-                            horizontal = 4.dp,
-                            vertical = 7.dp
-                        ),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.Center
+                Box(
+                    modifier = modifier
+                        .height(70.dp)
+                        .clickable(onClick = onClick),
+                    contentAlignment = Alignment.Center
                 ) {
-                    Text(
-                        text = title,
-                        style = KmiTypography.caption.copy(
-                            fontWeight = FontWeight.ExtraBold
-                        ),
-                        color = Color.White,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        textAlign = TextAlign.Center
-                    )
-
-                    Spacer(Modifier.height(4.dp))
-
-                    Text(
-                        text = number.toString(),
-                        style = KmiTypography.action.copy(
-                            fontWeight = FontWeight.Black
-                        ),
-                        color = Color.White,
-                        textAlign = TextAlign.Center
-                    )
-                }
-
-                if (selected) {
-                    Box(
+                    Column(
                         modifier = Modifier
-                            .align(Alignment.BottomCenter)
-                            .padding(bottom = 8.dp)
-                            .width(30.dp)
-                            .height(3.dp)
-                            .background(
-                                color = Color.White,
-                                shape = RoundedCornerShape(999.dp)
-                            )
-                    )
-                }
-            }
-        }
-
-        val allCount = itemList.size
-
-        val unknownCount by remember {
-            derivedStateOf {
-                unknownItems.count()
-            }
-        }
-
-        val favCount = remember(
-            itemList,
-            favoriteExerciseIds,
-            belt,
-            topic,
-            allTopicItems
-        ) {
-            itemList.count { item ->
-                isFavoriteRawItem(item)
-            }
-        }
-
-        val taughtCount by remember(
-            itemList,
-            coachStatuses
-        ) {
-            derivedStateOf {
-                itemList.count { item ->
-                    ExerciseCoachStatus.TAUGHT in
-                            coachStatuses[item].orEmpty()
-                }
-            }
-        }
-
-        val practiceCount by remember(
-            itemList,
-            coachStatuses
-        ) {
-            derivedStateOf {
-                itemList.count { item ->
-                    ExerciseCoachStatus.PRACTICED in
-                            coachStatuses[item].orEmpty()
-                }
-            }
-        }
-
-        val improvementCount by remember(
-            itemList,
-            coachStatuses
-        ) {
-            derivedStateOf {
-                itemList.count { item ->
-                    ExerciseCoachStatus.NEEDS_REINFORCEMENT in
-                            coachStatuses[item].orEmpty()
-                }
-            }
-        }
-
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(padding)
-                .background(
-                    brush = kmiScreenBackgroundBrush()
-                )
-        ) {
-
-            // =========================================================
-            // טאבים על מלבן הגראניט העליון
-            // =========================================================
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .kmiSectionHeaderBackground()
-            ) {
-                if (isCoach) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(70.dp)
-                            .padding(horizontal = 40.dp),
-                        verticalAlignment = Alignment.CenterVertically
+                            .fillMaxSize()
+                            .padding(
+                                horizontal = 4.dp,
+                                vertical = 7.dp
+                            ),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.Center
                     ) {
-
-                        MetricFieldEdgeToEdge(
-                            title = tr("הכול", "All"),
-                            number = allCount,
-                            selected = selectedTab == 0,
-                            onClick = {
-                                selectedTab = 0
-                            },
-                            modifier = Modifier.weight(1f)
+                        Text(
+                            text = title,
+                            style = KmiTypography.caption.copy(
+                                fontWeight = FontWeight.ExtraBold
+                            ),
+                            color = Color.White,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            textAlign = TextAlign.Center
                         )
 
-                        Box(
-                            modifier = Modifier
-                                .width(1.dp)
-                                .height(54.dp)
-                                .background(
-                                    Color.White.copy(alpha = 0.72f)
-                                )
-                        )
+                        Spacer(Modifier.height(4.dp))
 
-                        MetricFieldEdgeToEdge(
-                            title = tr("נלמד", "Taught"),
-                            number = taughtCount,
-                            selected = selectedTab == 1,
-                            onClick = {
-                                selectedTab = 1
-                            },
-                            modifier = Modifier.weight(1f)
-                        )
-
-                        Box(
-                            modifier = Modifier
-                                .width(1.dp)
-                                .height(54.dp)
-                                .background(
-                                    Color.White.copy(alpha = 0.72f)
-                                )
-                        )
-
-                        MetricFieldEdgeToEdge(
-                            title = tr("לתרגול", "Practice"),
-                            number = practiceCount,
-                            selected = selectedTab == 2,
-                            onClick = {
-                                selectedTab = 2
-                            },
-                            modifier = Modifier.weight(1f)
-                        )
-
-                        Box(
-                            modifier = Modifier
-                                .width(1.dp)
-                                .height(54.dp)
-                                .background(
-                                    Color.White.copy(alpha = 0.72f)
-                                )
-                        )
-
-                        MetricFieldEdgeToEdge(
-                            title = tr("לשיפור", "Improve"),
-                            number = improvementCount,
-                            selected = selectedTab == 3,
-                            onClick = {
-                                selectedTab = 3
-                            },
-                            modifier = Modifier.weight(1f)
+                        Text(
+                            text = number.toString(),
+                            style = KmiTypography.action.copy(
+                                fontWeight = FontWeight.Black
+                            ),
+                            color = Color.White,
+                            textAlign = TextAlign.Center
                         )
                     }
-                } else {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(70.dp)
-                            .padding(horizontal = 40.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
 
-                        MetricFieldEdgeToEdge(
-                            title = tr("הכול", "All"),
-                            number = allCount,
-                            selected = selectedTab == 0,
-                            onClick = {
-                                selectedTab = 0
-                            },
-                            modifier = Modifier.weight(1f)
-                        )
-
+                    if (selected) {
                         Box(
                             modifier = Modifier
-                                .width(1.dp)
-                                .height(54.dp)
+                                .align(Alignment.BottomCenter)
+                                .padding(bottom = 8.dp)
+                                .width(30.dp)
+                                .height(3.dp)
                                 .background(
-                                    Color.White.copy(alpha = 0.72f)
+                                    color = Color.White,
+                                    shape = RoundedCornerShape(999.dp)
                                 )
-                        )
-
-                        MetricFieldEdgeToEdge(
-                            title = tr("לא יודע", "Unknown"),
-                            number = unknownCount,
-                            selected = selectedTab == 1,
-                            onClick = {
-                                selectedTab = 1
-                            },
-                            modifier = Modifier.weight(1f)
-                        )
-
-                        Box(
-                            modifier = Modifier
-                                .width(1.dp)
-                                .height(54.dp)
-                                .background(
-                                    Color.White.copy(alpha = 0.72f)
-                                )
-                        )
-
-                        MetricFieldEdgeToEdge(
-                            title = tr("מועדפים", "Favorites"),
-                            number = favCount,
-                            selected = selectedTab == 2,
-                            onClick = {
-                                selectedTab = 2
-                            },
-                            modifier = Modifier.weight(1f)
                         )
                     }
                 }
             }
 
-            Spacer(Modifier.height(8.dp))
+            val allCount = itemList.size
 
-            val filtered: List<String> by remember(
-                selectedTab,
-                isCoach,
+            val unknownCount by remember {
+                derivedStateOf {
+                    unknownItems.count()
+                }
+            }
+
+            val favCount = remember(
                 itemList,
-                coachStatuses,
-                unknownItems,
                 favoriteExerciseIds,
                 belt,
-                topic
+                topic,
+                allTopicItems
+            ) {
+                itemList.count { item ->
+                    isFavoriteRawItem(item)
+                }
+            }
+
+            val taughtCount by remember(
+                itemList,
+                coachStatuses
             ) {
                 derivedStateOf {
-                    if (isCoach) {
-                        when (selectedTab) {
-                            1 -> itemList.filter { item ->
-                                ExerciseCoachStatus.TAUGHT in
-                                        coachStatuses[item].orEmpty()
-                            }
-
-                            2 -> itemList.filter { item ->
-                                ExerciseCoachStatus.PRACTICED in
-                                        coachStatuses[item].orEmpty()
-                            }
-
-                            3 -> itemList.filter { item ->
-                                ExerciseCoachStatus.NEEDS_REINFORCEMENT in
-                                        coachStatuses[item].orEmpty()
-                            }
-
-                            else -> itemList
-                        }
-                    } else {
-                        when (selectedTab) {
-                            1 -> itemList.filter { item ->
-                                item in unknownItems
-                            }
-
-                            2 -> itemList.filter { item ->
-                                isFavoriteRawItem(item)
-                            }
-
-                            else -> itemList
-                        }
+                    itemList.count { item ->
+                        ExerciseCoachStatus.TAUGHT in
+                                coachStatuses[item].orEmpty()
                     }
                 }
             }
 
-            // שמות התצוגה מחושבים פעם אחת לכל הרשימה.
-// מעבר בין טאבים וגלילה אינם מחשבים אותם מחדש.
-            val displayByRaw: Map<String, String> =
-                remember(
-                    itemList,
-                    belt,
-                    topic,
-                    isEnglish
+            val practiceCount by remember(
+                itemList,
+                coachStatuses
+            ) {
+                derivedStateOf {
+                    itemList.count { item ->
+                        ExerciseCoachStatus.PRACTICED in
+                                coachStatuses[item].orEmpty()
+                    }
+                }
+            }
+
+            val improvementCount by remember(
+                itemList,
+                coachStatuses
+            ) {
+                derivedStateOf {
+                    itemList.count { item ->
+                        ExerciseCoachStatus.NEEDS_REINFORCEMENT in
+                                coachStatuses[item].orEmpty()
+                    }
+                }
+            }
+
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(padding)
+                    .background(
+                        brush = kmiScreenBackgroundBrush()
+                    )
+            ) {
+
+                // =========================================================
+                // טאבים על מלבן הגראניט העליון
+                // =========================================================
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .kmiSectionHeaderBackground()
                 ) {
-                    itemList.associateWith { raw ->
-                        formattedExerciseTitle(raw)
+                    if (isCoach) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(70.dp)
+                                .padding(horizontal = 40.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+
+                            MetricFieldEdgeToEdge(
+                                title = tr("הכול", "All"),
+                                number = allCount,
+                                selected = selectedTab == 0,
+                                onClick = {
+                                    selectedTab = 0
+                                },
+                                modifier = Modifier.weight(1f)
+                            )
+
+                            Box(
+                                modifier = Modifier
+                                    .width(1.dp)
+                                    .height(54.dp)
+                                    .background(
+                                        Color.White.copy(alpha = 0.72f)
+                                    )
+                            )
+
+                            MetricFieldEdgeToEdge(
+                                title = tr("נלמד", "Taught"),
+                                number = taughtCount,
+                                selected = selectedTab == 1,
+                                onClick = {
+                                    selectedTab = 1
+                                },
+                                modifier = Modifier.weight(1f)
+                            )
+
+                            Box(
+                                modifier = Modifier
+                                    .width(1.dp)
+                                    .height(54.dp)
+                                    .background(
+                                        Color.White.copy(alpha = 0.72f)
+                                    )
+                            )
+
+                            MetricFieldEdgeToEdge(
+                                title = tr("לתרגול", "Practice"),
+                                number = practiceCount,
+                                selected = selectedTab == 2,
+                                onClick = {
+                                    selectedTab = 2
+                                },
+                                modifier = Modifier.weight(1f)
+                            )
+
+                            Box(
+                                modifier = Modifier
+                                    .width(1.dp)
+                                    .height(54.dp)
+                                    .background(
+                                        Color.White.copy(alpha = 0.72f)
+                                    )
+                            )
+
+                            MetricFieldEdgeToEdge(
+                                title = tr("לשיפור", "Improve"),
+                                number = improvementCount,
+                                selected = selectedTab == 3,
+                                onClick = {
+                                    selectedTab = 3
+                                },
+                                modifier = Modifier.weight(1f)
+                            )
+                        }
+                    } else {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(70.dp)
+                                .padding(horizontal = 40.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+
+                            MetricFieldEdgeToEdge(
+                                title = tr("הכול", "All"),
+                                number = allCount,
+                                selected = selectedTab == 0,
+                                onClick = {
+                                    selectedTab = 0
+                                },
+                                modifier = Modifier.weight(1f)
+                            )
+
+                            Box(
+                                modifier = Modifier
+                                    .width(1.dp)
+                                    .height(54.dp)
+                                    .background(
+                                        Color.White.copy(alpha = 0.72f)
+                                    )
+                            )
+
+                            MetricFieldEdgeToEdge(
+                                title = tr("לא יודע", "Unknown"),
+                                number = unknownCount,
+                                selected = selectedTab == 1,
+                                onClick = {
+                                    selectedTab = 1
+                                },
+                                modifier = Modifier.weight(1f)
+                            )
+
+                            Box(
+                                modifier = Modifier
+                                    .width(1.dp)
+                                    .height(54.dp)
+                                    .background(
+                                        Color.White.copy(alpha = 0.72f)
+                                    )
+                            )
+
+                            MetricFieldEdgeToEdge(
+                                title = tr("מועדפים", "Favorites"),
+                                number = favCount,
+                                selected = selectedTab == 2,
+                                onClick = {
+                                    selectedTab = 2
+                                },
+                                modifier = Modifier.weight(1f)
+                            )
+                        }
                     }
                 }
 
-            LazyColumn(
-                modifier = Modifier
-                    .weight(1f)
-                    .fillMaxWidth()
-                    .padding(
-                        horizontal = 16.dp,
-                        vertical = 4.dp
-                    ),
-                verticalArrangement = Arrangement.spacedBy(10.dp)
-            ) {
-                itemsIndexed(
-                    items = filtered,
-                    key = { index, item ->
-                        exerciseIdByRaw[item]
-                            ?.let { exerciseId ->
-                                "$exerciseId::$index"
-                            }
-                            ?: "$item::$index"
-                    },
-                    contentType = { _, _ ->
-                        "exercise_row"
-                    }
-                ) { index, item ->
-                    var pressed by remember(item) {
-                        mutableStateOf(false)
-                    }
+                Spacer(Modifier.height(8.dp))
 
-                    val scale by animateFloatAsState(
-                        targetValue = if (pressed) 0.985f else 1f,
-                        animationSpec = tween(120),
-                        label = "exerciseRowScale"
-                    )
-
-                    val displayName = displayByRaw[item]
-                        ?: formattedExerciseTitle(item)
-
-                    val isFav = isFavoriteRawItem(item)
-
-                    val itemHasNote =
-                        notePresenceByRaw[item] == true
-
-                    val itemIsUnknown = item in unknownItems
-
-                    val itemCoachStatuses =
-                        coachStatuses[item]
-                            .orEmpty()
-
-                    Surface(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .graphicsLayer {
-                                scaleX = scale
-                                scaleY = scale
-                            }
-                            .clickable {
-                                pressed = true
-                                explainFromSearch = item
-
-                                scope.launch {
-                                    kotlinx.coroutines.delay(120)
-                                    pressed = false
+                val filtered: List<String> by remember(
+                    selectedTab,
+                    isCoach,
+                    itemList,
+                    coachStatuses,
+                    unknownItems,
+                    favoriteExerciseIds,
+                    belt,
+                    topic
+                ) {
+                    derivedStateOf {
+                        if (isCoach) {
+                            when (selectedTab) {
+                                1 -> itemList.filter { item ->
+                                    ExerciseCoachStatus.TAUGHT in
+                                            coachStatuses[item].orEmpty()
                                 }
-                            },
-                        shape = RoundedCornerShape(24.dp),
-                        color = MaterialTheme.colorScheme.surface,
-                        tonalElevation = 0.dp,
-                        shadowElevation = 2.dp,
-                        border = BorderStroke(
-                            width = 1.dp,
-                            color =
-                                when {
-                                    itemIsUnknown ->
-                                        MaterialTheme.colorScheme.error
-                                            .copy(alpha = 0.22f)
 
-                                    isFav ->
-                                        MaterialTheme.colorScheme.primary
-                                            .copy(alpha = 0.24f)
-
-                                    else ->
-                                        MaterialTheme.colorScheme.outlineVariant
-                                            .copy(alpha = 0.72f)
+                                2 -> itemList.filter { item ->
+                                    ExerciseCoachStatus.PRACTICED in
+                                            coachStatuses[item].orEmpty()
                                 }
-                        )
+
+                                3 -> itemList.filter { item ->
+                                    ExerciseCoachStatus.NEEDS_REINFORCEMENT in
+                                            coachStatuses[item].orEmpty()
+                                }
+
+                                else -> itemList
+                            }
+                        } else {
+                            when (selectedTab) {
+                                1 -> itemList.filter { item ->
+                                    item in unknownItems
+                                }
+
+                                2 -> itemList.filter { item ->
+                                    isFavoriteRawItem(item)
+                                }
+
+                                else -> itemList
+                            }
+                        }
+                    }
+                }
+
+                // שמות התצוגה מחושבים פעם אחת לכל הרשימה.
+// מעבר בין טאבים וגלילה אינם מחשבים אותם מחדש.
+                val displayByRaw: Map<String, String> =
+                    remember(
+                        itemList,
+                        belt,
+                        topic,
+                        isEnglish
                     ) {
-                        Box(
+                        itemList.associateWith { raw ->
+                            formattedExerciseTitle(raw)
+                        }
+                    }
+
+                LazyColumn(
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxWidth()
+                        .padding(
+                            horizontal = 16.dp,
+                            vertical = 4.dp
+                        ),
+                    verticalArrangement = Arrangement.spacedBy(0.dp)
+                ) {
+                    itemsIndexed(
+                        items = filtered,
+                        key = { index, item ->
+                            exerciseIdByRaw[item]
+                                ?.let { exerciseId ->
+                                    "$exerciseId::$index"
+                                }
+                                ?: "$item::$index"
+                        },
+                        contentType = { _, _ ->
+                            "exercise_row"
+                        }
+                    ) { index, item ->
+                        if (index != filtered.lastIndex) {
+                            HorizontalDivider(
+                                modifier = Modifier.padding(
+                                    horizontal = 8.dp
+                                ),
+                                thickness = 0.7.dp,
+                                color = MaterialTheme.colorScheme.outlineVariant
+                                    .copy(alpha = 0.55f)
+                            )
+                        }
+                        var pressed by remember(item) {
+                            mutableStateOf(false)
+                        }
+
+                        val scale by animateFloatAsState(
+                            targetValue = if (pressed) 0.985f else 1f,
+                            animationSpec = tween(120),
+                            label = "exerciseRowScale"
+                        )
+
+                        val displayName = displayByRaw[item]
+                            ?: formattedExerciseTitle(item)
+
+                        val isFav = isFavoriteRawItem(item)
+
+                        val itemHasNote =
+                            notePresenceByRaw[item] == true
+
+                        val itemIsUnknown = item in unknownItems
+
+                        val itemCoachStatuses =
+                            coachStatuses[item]
+                                .orEmpty()
+
+                        Surface(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .background(
-                                    brush =
-                                        Brush.verticalGradient(
-                                            colors = listOf(
-                                                MaterialTheme.colorScheme.surface,
-                                                MaterialTheme.colorScheme.surfaceVariant
-                                                    .copy(alpha = 0.38f),
-                                                MaterialTheme.colorScheme.surface
-                                            )
-                                        )
-                                )
-                                .padding(
-                                    horizontal = 14.dp,
-                                    vertical = 12.dp
-                                )
+                                .graphicsLayer {
+                                    scaleX = scale
+                                    scaleY = scale
+                                }
+                                .clickable {
+                                    pressed = true
+                                    explainFromSearch = item
+
+                                    scope.launch {
+                                        kotlinx.coroutines.delay(120)
+                                        pressed = false
+                                    }
+                                },
+                            shape = RoundedCornerShape(0.dp),
+                            color = Color.Transparent,
+                            tonalElevation = 0.dp,
+                            shadowElevation = 0.dp,
+                            border = null
                         ) {
-                            CompositionLocalProvider(
-                                LocalLayoutDirection provides
-                                        LayoutDirection.Ltr
-                            ) {
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    ExerciseRowActionsMenu(
-                                        isEnglish = isEnglish,
-                                        isCoach = isCoach,
-                                        isFav = isFav,
-                                        hasNote = itemHasNote,
-                                        isUnknown = itemIsUnknown,
-                                        coachStatuses = itemCoachStatuses,
-                                        onInfo = {
-                                            pressed = true
-                                            explainFromSearch = item
-
-                                            scope.launch {
-                                                kotlinx.coroutines.delay(120)
-                                                pressed = false
-                                            }
-                                        },
-                                        onToggleFavorite = {
-                                            toggleFavorite(item)
-                                        },
-                                        onEditNote = {
-                                            noteEditorFor = item
-                                            noteDraft = loadNote(item)
-                                        },
-                                        onToggleUnknown = {
-                                            setUnknown(
-                                                item,
-                                                item !in unknownItems
-                                            )
-                                        },
-                                        onCoachStatusChange = { newStatus ->
-                                            updateCoachStatus(
-                                                raw = item,
-                                                status = newStatus
-                                            )
-                                        }
-                                    )
-
-                                    Spacer(Modifier.width(12.dp))
-
-                                    CompositionLocalProvider(
-                                        LocalLayoutDirection provides
-                                                if (isEnglish) {
-                                                    LayoutDirection.Ltr
-                                                } else {
-                                                    LayoutDirection.Rtl
-                                                }
-                                    ) {
-                                        Column(
-                                            modifier = Modifier.weight(1f),
-                                            horizontalAlignment =
-                                                if (isEnglish) {
-                                                    Alignment.Start
-                                                } else {
-                                                    Alignment.End
-                                                }
-                                        ) {
-                                            Text(
-                                                text = displayName,
-                                                modifier =
-                                                    Modifier.fillMaxWidth(),
-                                                textAlign =
-                                                    if (isEnglish) {
-                                                        TextAlign.Left
-                                                    } else {
-                                                        TextAlign.Right
-                                                    },
-                                                color =
-                                                    MaterialTheme
-                                                        .colorScheme
-                                                        .onSurface,
-                                                style =
-                                                    KmiTypography
-                                                        .cardTitle
-                                                        .copy(
-                                                            fontWeight =
-                                                                FontWeight.Bold
-                                                        ),
-                                                maxLines = 3,
-                                                overflow =
-                                                    TextOverflow.Ellipsis
-                                            )
-
-                                            if (
-                                                itemHasNote ||
-                                                isFav ||
-                                                itemIsUnknown
-                                            ) {
-                                                Spacer(
-                                                    Modifier.height(9.dp)
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .background(
+                                        brush =
+                                            Brush.verticalGradient(
+                                                colors = listOf(
+                                                    MaterialTheme.colorScheme.surface,
+                                                    MaterialTheme.colorScheme.surfaceVariant
+                                                        .copy(alpha = 0.38f),
+                                                    MaterialTheme.colorScheme.surface
                                                 )
+                                            )
+                                    )
+                                    .padding(
+                                        horizontal = 14.dp,
+                                        vertical = 12.dp
+                                    )
+                            ) {
+                                CompositionLocalProvider(
+                                    LocalLayoutDirection provides
+                                            LayoutDirection.Ltr
+                                ) {
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        ExerciseRowActionsMenu(
+                                            isEnglish = isEnglish,
+                                            isCoach = isCoach,
+                                            isFav = isFav,
+                                            hasNote = itemHasNote,
+                                            isUnknown = itemIsUnknown,
+                                            coachStatuses = itemCoachStatuses,
+                                            onInfo = {
+                                                pressed = true
+                                                explainFromSearch = item
 
-                                                Row(
+                                                scope.launch {
+                                                    kotlinx.coroutines.delay(120)
+                                                    pressed = false
+                                                }
+                                            },
+                                            onToggleFavorite = {
+                                                toggleFavorite(item)
+                                            },
+                                            onEditNote = {
+                                                noteEditorFor = item
+                                                noteDraft = loadNote(item)
+                                            },
+                                            onToggleUnknown = {
+                                                setUnknown(
+                                                    item,
+                                                    item !in unknownItems
+                                                )
+                                            },
+                                            onCoachStatusChange = { newStatus ->
+                                                updateCoachStatus(
+                                                    raw = item,
+                                                    status = newStatus
+                                                )
+                                            }
+                                        )
+
+                                        Spacer(Modifier.width(12.dp))
+
+                                        CompositionLocalProvider(
+                                            LocalLayoutDirection provides
+                                                    if (isEnglish) {
+                                                        LayoutDirection.Ltr
+                                                    } else {
+                                                        LayoutDirection.Rtl
+                                                    }
+                                        ) {
+                                            Column(
+                                                modifier = Modifier.weight(1f),
+                                                horizontalAlignment =
+                                                    if (isEnglish) {
+                                                        Alignment.Start
+                                                    } else {
+                                                        Alignment.End
+                                                    }
+                                            ) {
+                                                Text(
+                                                    text = displayName,
                                                     modifier =
                                                         Modifier.fillMaxWidth(),
-                                                    horizontalArrangement =
+                                                    textAlign =
                                                         if (isEnglish) {
-                                                            Arrangement.Start
+                                                            TextAlign.Left
                                                         } else {
-                                                            Arrangement.End
+                                                            TextAlign.Right
                                                         },
-                                                    verticalAlignment =
-                                                        Alignment.CenterVertically
+                                                    color =
+                                                        MaterialTheme
+                                                            .colorScheme
+                                                            .onSurface,
+                                                    style =
+                                                        KmiTypography
+                                                            .cardTitle
+                                                            .copy(
+                                                                fontWeight =
+                                                                    FontWeight.Bold
+                                                            ),
+                                                    maxLines = 3,
+                                                    overflow =
+                                                        TextOverflow.Ellipsis
+                                                )
+
+                                                if (
+                                                    itemHasNote ||
+                                                    isFav ||
+                                                    itemIsUnknown
                                                 ) {
-                                                    if (itemIsUnknown) {
-                                                        Surface(
-                                                            shape =
-                                                                RoundedCornerShape(
-                                                                    999.dp
-                                                                ),
-                                                            color =
-                                                                MaterialTheme
-                                                                    .colorScheme
-                                                                    .errorContainer,
-                                                            tonalElevation = 0.dp,
-                                                            shadowElevation = 0.dp
-                                                        ) {
-                                                            Text(
-                                                                text =
-                                                                    tr(
-                                                                        "●  לא יודע",
-                                                                        "●  Unknown"
-                                                                    ),
-                                                                modifier =
-                                                                    Modifier.padding(
-                                                                        horizontal =
-                                                                            10.dp,
-                                                                        vertical =
-                                                                            4.dp
+                                                    Spacer(
+                                                        Modifier.height(9.dp)
+                                                    )
+
+                                                    Row(
+                                                        modifier =
+                                                            Modifier.fillMaxWidth(),
+                                                        horizontalArrangement =
+                                                            if (isEnglish) {
+                                                                Arrangement.Start
+                                                            } else {
+                                                                Arrangement.End
+                                                            },
+                                                        verticalAlignment =
+                                                            Alignment.CenterVertically
+                                                    ) {
+                                                        if (itemIsUnknown) {
+                                                            Surface(
+                                                                shape =
+                                                                    RoundedCornerShape(
+                                                                        999.dp
                                                                     ),
                                                                 color =
                                                                     MaterialTheme
                                                                         .colorScheme
-                                                                        .error,
-                                                                style =
-                                                                    KmiTypography
-                                                                        .caption
-                                                                        .copy(
-                                                                            fontWeight =
-                                                                                FontWeight.Bold
-                                                                        )
+                                                                        .errorContainer,
+                                                                tonalElevation = 0.dp,
+                                                                shadowElevation = 0.dp
+                                                            ) {
+                                                                Text(
+                                                                    text =
+                                                                        tr(
+                                                                            "●  לא יודע",
+                                                                            "●  Unknown"
+                                                                        ),
+                                                                    modifier =
+                                                                        Modifier.padding(
+                                                                            horizontal =
+                                                                                10.dp,
+                                                                            vertical =
+                                                                                4.dp
+                                                                        ),
+                                                                    color =
+                                                                        MaterialTheme
+                                                                            .colorScheme
+                                                                            .error,
+                                                                    style =
+                                                                        KmiTypography
+                                                                            .caption
+                                                                            .copy(
+                                                                                fontWeight =
+                                                                                    FontWeight.Bold
+                                                                            )
+                                                                )
+                                                            }
+                                                        }
+
+                                                        if (
+                                                            itemIsUnknown &&
+                                                            (isFav ||
+                                                                    itemHasNote)
+                                                        ) {
+                                                            Spacer(
+                                                                Modifier.width(
+                                                                    6.dp
+                                                                )
                                                             )
                                                         }
-                                                    }
 
-                                                    if (
-                                                        itemIsUnknown &&
-                                                        (isFav ||
-                                                                itemHasNote)
-                                                    ) {
-                                                        Spacer(
-                                                            Modifier.width(
-                                                                6.dp
-                                                            )
-                                                        )
-                                                    }
-
-                                                    if (isFav) {
-                                                        Surface(
-                                                            shape =
-                                                                RoundedCornerShape(
-                                                                    999.dp
-                                                                ),
-                                                            color =
-                                                                MaterialTheme
-                                                                    .colorScheme
-                                                                    .primaryContainer,
-                                                            tonalElevation = 0.dp,
-                                                            shadowElevation = 0.dp
-                                                        ) {
-                                                            Text(
-                                                                text =
-                                                                    tr(
-                                                                        "★  מועדף",
-                                                                        "★  Favorite"
-                                                                    ),
-                                                                modifier =
-                                                                    Modifier.padding(
-                                                                        horizontal =
-                                                                            10.dp,
-                                                                        vertical =
-                                                                            4.dp
+                                                        if (isFav) {
+                                                            Surface(
+                                                                shape =
+                                                                    RoundedCornerShape(
+                                                                        999.dp
                                                                     ),
                                                                 color =
                                                                     MaterialTheme
                                                                         .colorScheme
-                                                                        .primary,
-                                                                style =
-                                                                    KmiTypography
-                                                                        .caption
-                                                                        .copy(
-                                                                            fontWeight =
-                                                                                FontWeight.Bold
-                                                                        )
+                                                                        .primaryContainer,
+                                                                tonalElevation = 0.dp,
+                                                                shadowElevation = 0.dp
+                                                            ) {
+                                                                Text(
+                                                                    text =
+                                                                        tr(
+                                                                            "★  מועדף",
+                                                                            "★  Favorite"
+                                                                        ),
+                                                                    modifier =
+                                                                        Modifier.padding(
+                                                                            horizontal =
+                                                                                10.dp,
+                                                                            vertical =
+                                                                                4.dp
+                                                                        ),
+                                                                    color =
+                                                                        MaterialTheme
+                                                                            .colorScheme
+                                                                            .primary,
+                                                                    style =
+                                                                        KmiTypography
+                                                                            .caption
+                                                                            .copy(
+                                                                                fontWeight =
+                                                                                    FontWeight.Bold
+                                                                            )
+                                                                )
+                                                            }
+                                                        }
+
+                                                        if (
+                                                            isFav &&
+                                                            itemHasNote
+                                                        ) {
+                                                            Spacer(
+                                                                Modifier.width(
+                                                                    6.dp
+                                                                )
                                                             )
                                                         }
-                                                    }
 
-                                                    if (
-                                                        isFav &&
-                                                        itemHasNote
-                                                    ) {
-                                                        Spacer(
-                                                            Modifier.width(
-                                                                6.dp
-                                                            )
-                                                        )
-                                                    }
-
-                                                    if (itemHasNote) {
-                                                        Surface(
-                                                            shape =
-                                                                RoundedCornerShape(
-                                                                    999.dp
-                                                                ),
-                                                            color =
-                                                                MaterialTheme
-                                                                    .colorScheme
-                                                                    .secondaryContainer,
-                                                            tonalElevation = 0.dp,
-                                                            shadowElevation = 0.dp
-                                                        ) {
-                                                            Text(
-                                                                text =
-                                                                    tr(
-                                                                        "הערה שמורה",
-                                                                        "Saved note"
-                                                                    ),
-                                                                modifier =
-                                                                    Modifier.padding(
-                                                                        horizontal =
-                                                                            10.dp,
-                                                                        vertical =
-                                                                            4.dp
+                                                        if (itemHasNote) {
+                                                            Surface(
+                                                                shape =
+                                                                    RoundedCornerShape(
+                                                                        999.dp
                                                                     ),
                                                                 color =
                                                                     MaterialTheme
                                                                         .colorScheme
-                                                                        .onSecondaryContainer,
-                                                                style =
-                                                                    KmiTypography
-                                                                        .caption
-                                                                        .copy(
-                                                                            fontWeight =
-                                                                                FontWeight.Bold
-                                                                        )
-                                                            )
+                                                                        .secondaryContainer,
+                                                                tonalElevation = 0.dp,
+                                                                shadowElevation = 0.dp
+                                                            ) {
+                                                                Text(
+                                                                    text =
+                                                                        tr(
+                                                                            "הערה שמורה",
+                                                                            "Saved note"
+                                                                        ),
+                                                                    modifier =
+                                                                        Modifier.padding(
+                                                                            horizontal =
+                                                                                10.dp,
+                                                                            vertical =
+                                                                                4.dp
+                                                                        ),
+                                                                    color =
+                                                                        MaterialTheme
+                                                                            .colorScheme
+                                                                            .onSecondaryContainer,
+                                                                    style =
+                                                                        KmiTypography
+                                                                            .caption
+                                                                            .copy(
+                                                                                fontWeight =
+                                                                                    FontWeight.Bold
+                                                                            )
+                                                                )
+                                                            }
                                                         }
                                                     }
                                                 }
@@ -2343,92 +2360,105 @@ fun ExercisesTabsScreen(
                                 }
                             }
                         }
+
+                        if (index != filtered.lastIndex) {
+                            HorizontalDivider(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(
+                                        horizontal = 12.dp,
+                                        vertical = 2.dp
+                                    ),
+                                thickness = 1.2.dp,
+                                color = MaterialTheme.colorScheme.outline
+                                    .copy(alpha = 0.42f)
+                            )
+                        }
                     }
                 }
             }
-        }
 
-        // ===== דיאלוג הסבר (לחיצה על שורה או אייקון info ברשימה) =====
-        explainFromSearch?.let { item ->
+            // ===== דיאלוג הסבר (לחיצה על שורה או אייקון info ברשימה) =====
+            explainFromSearch?.let { item ->
 
-            val displayName = formattedExerciseTitle(item)
+                val displayName = formattedExerciseTitle(item)
 
-            LaunchedEffect(item) {
-                KmiTtsManager.init(ctx)
-            }
-            DisposableEffect(item) {
-                onDispose { KmiTtsManager.stop() }
-            }
-
-            val explanation = remember(belt, topic, item, displayName, isEnglish) {
-                val itemTopic = topicForRawItem(item)
-
-                val resolved = ExerciseExplanationResolver.get(
-                    belt = belt,
-                    topic = itemTopic,
-                    item = displayName,
-                    isEnglish = isEnglish
-                ).trim()
-
-                val cleaned = if ("::" in resolved) {
-                    resolved
-                        .split("::")
-                        .map { it.trim() }
-                        .lastOrNull { it.isNotBlank() }
-                        ?: resolved
-                } else {
-                    resolved
-                }.trim()
-
-                val isFallback = if (isEnglish) {
-                    cleaned.isBlank() ||
-                            cleaned.startsWith("Detailed explanation for:") ||
-                            cleaned.startsWith("There is currently no explanation")
-                } else {
-                    cleaned.isBlank() ||
-                            cleaned.startsWith("הסבר מפורט על") ||
-                            cleaned.startsWith("אין כרגע")
+                LaunchedEffect(item) {
+                    KmiTtsManager.init(ctx)
+                }
+                DisposableEffect(item) {
+                    onDispose { KmiTtsManager.stop() }
                 }
 
-                if (!isFallback) {
-                    cleaned
-                } else {
-                    tr(
-                        "לא נמצא הסבר עבור \"$displayName\".",
-                        "No explanation found for \"$displayName\"."
-                    )
-                }
-            }
+                val explanation = remember(belt, topic, item, displayName, isEnglish) {
+                    val itemTopic = topicForRawItem(item)
 
-            val isFav = isFavoriteRawItem(item)
-            val noteText = remember(item, notesRefreshKey) {
-                loadNote(item)
-            }
+                    val resolved = ExerciseExplanationResolver.get(
+                        belt = belt,
+                        topic = itemTopic,
+                        item = displayName,
+                        isEnglish = isEnglish
+                    ).trim()
 
-            ExerciseExplanationDialog(
-                title = displayName,
-                beltLabel = if (isEnglish) "(${belt.en})" else "(${belt.heb})",
-                explanation = explanation,
-                noteText = noteText,
-                isFavorite = isFav,
-                accentColor = belt.color,
-                isEnglish = isEnglish,
-                onDismiss = {
-                    KmiTtsManager.stop()
-                    explainFromSearch = null
-                },
-                onEditNote = {
-                    noteEditorFor = item
-                    noteDraft = loadNote(item)
-                },
-                onDeleteNote = {
-                    deleteNote(item)
-                },
-                onToggleFavorite = {
-                    toggleFavorite(item)
+                    val cleaned = if ("::" in resolved) {
+                        resolved
+                            .split("::")
+                            .map { it.trim() }
+                            .lastOrNull { it.isNotBlank() }
+                            ?: resolved
+                    } else {
+                        resolved
+                    }.trim()
+
+                    val isFallback = if (isEnglish) {
+                        cleaned.isBlank() ||
+                                cleaned.startsWith("Detailed explanation for:") ||
+                                cleaned.startsWith("There is currently no explanation")
+                    } else {
+                        cleaned.isBlank() ||
+                                cleaned.startsWith("הסבר מפורט על") ||
+                                cleaned.startsWith("אין כרגע")
+                    }
+
+                    if (!isFallback) {
+                        cleaned
+                    } else {
+                        tr(
+                            "לא נמצא הסבר עבור \"$displayName\".",
+                            "No explanation found for \"$displayName\"."
+                        )
+                    }
                 }
-            )
-        }
+
+                val isFav = isFavoriteRawItem(item)
+                val noteText = remember(item, notesRefreshKey) {
+                    loadNote(item)
+                }
+
+                ExerciseExplanationDialog(
+                    title = displayName,
+                    beltLabel = if (isEnglish) "(${belt.en})" else "(${belt.heb})",
+                    explanation = explanation,
+                    noteText = noteText,
+                    isFavorite = isFav,
+                    accentColor = belt.color,
+                    isEnglish = isEnglish,
+                    onDismiss = {
+                        KmiTtsManager.stop()
+                        explainFromSearch = null
+                    },
+                    onEditNote = {
+                        noteEditorFor = item
+                        noteDraft = loadNote(item)
+                    },
+                    onDeleteNote = {
+                        deleteNote(item)
+                    },
+                    onToggleFavorite = {
+                        toggleFavorite(item)
+                    }
+                )
+            }
 
             noteEditorFor?.let { item ->
                 ExerciseNoteEditorDialog(
@@ -2448,228 +2478,324 @@ fun ExercisesTabsScreen(
             }
         } // ✅ סוגר את Scaffold { padding -> ... }
 
-        val sideHandleShape =
+        val unifiedSideShape =
             if (isEnglish) {
                 AbsoluteRoundedCornerShape(
                     topLeft = 0.dp,
                     bottomLeft = 0.dp,
-                    topRight = 18.dp,
-                    bottomRight = 18.dp
+                    topRight = 22.dp,
+                    bottomRight = 22.dp
                 )
             } else {
                 AbsoluteRoundedCornerShape(
-                    topLeft = 18.dp,
-                    bottomLeft = 18.dp,
-                    topRight = 0.dp,
-                    bottomRight = 0.dp
-                )
-            }
-
-        val sideRailShape =
-            if (isEnglish) {
-                AbsoluteRoundedCornerShape(
-                    topLeft = 0.dp,
-                    bottomLeft = 0.dp,
-                    topRight = 24.dp,
-                    bottomRight = 24.dp
-                )
-            } else {
-                AbsoluteRoundedCornerShape(
-                    topLeft = 24.dp,
-                    bottomLeft = 24.dp,
+                    topLeft = 22.dp,
+                    bottomLeft = 22.dp,
                     topRight = 0.dp,
                     bottomRight = 0.dp
                 )
             }
 
         if (sideActionsExpanded) {
+
             Surface(
                 modifier = Modifier
                     .align(
                         if (isEnglish) {
-                            Alignment.CenterStart
+                            AbsoluteAlignment.TopLeft
                         } else {
-                            Alignment.CenterEnd
+                            AbsoluteAlignment.TopRight
                         }
                     )
-                    .padding(top = 12.dp)
-                    .width(64.dp),
-                shape = sideRailShape,
-                color = Color.Transparent,
+                    .offset(
+                        y = (sideHandleOffsetDp - 142f).dp
+                    )
+                    .width(46.dp),
+                shape = unifiedSideShape,
+                color = belt.color.copy(alpha = 0.96f),
                 tonalElevation = 0.dp,
-                shadowElevation = 8.dp,
+                shadowElevation = 7.dp,
                 border = BorderStroke(
-                    width = 1.dp,
-                    color = Color.White.copy(alpha = 0.30f)
+                    width = 1.4.dp,
+                    color = Color.White.copy(alpha = 0.70f)
                 )
             ) {
+
                 Column(
                     modifier = Modifier
+                        .fillMaxWidth()
                         .background(
-                            brush = Brush.verticalGradient(
-                                colors = listOf(
-                                    belt.color.copy(alpha = 0.82f),
-                                    MaterialTheme.colorScheme.primary,
-                                    MaterialTheme.colorScheme.primary.copy(alpha = 0.86f),
-                                    MaterialTheme.colorScheme.primary.copy(alpha = 0.72f)
-                                )
-                            )
+                            color = belt.color.copy(alpha = 0.96f)
                         )
                         .padding(
-                            horizontal = 5.dp,
-                            vertical = 7.dp
+                            horizontal = 3.dp,
+                            vertical = 5.dp
                         ),
-                    horizontalAlignment = Alignment.CenterHorizontally
+                    horizontalAlignment =
+                        Alignment.CenterHorizontally
                 ) {
+
+                    // =========================
+                    // תרגול
+                    // =========================
                     Column(
                         modifier = Modifier
                             .fillMaxWidth()
                             .clickable {
-                                sideActionsExpanded = false
                                 onPracticeClick()
                             }
-                            .padding(vertical = 4.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally
+                            .padding(vertical = 3.dp),
+                        horizontalAlignment =
+                            Alignment.CenterHorizontally
                     ) {
+
                         Surface(
-                            modifier = Modifier.size(34.dp),
+                            modifier = Modifier.size(27.dp),
                             shape = CircleShape,
-                            color = Color.White.copy(alpha = 0.16f),
+                            color = Color.White.copy(
+                                alpha = 0.14f
+                            ),
                             tonalElevation = 0.dp,
                             shadowElevation = 0.dp,
                             border = BorderStroke(
                                 width = 1.dp,
-                                color = Color.White.copy(alpha = 0.58f)
+                                color = Color.White.copy(
+                                    alpha = 0.65f
+                                )
                             )
                         ) {
                             Box(
-                                contentAlignment = Alignment.Center
+                                contentAlignment =
+                                    Alignment.Center
                             ) {
                                 Icon(
-                                    imageVector = Icons.Filled.FitnessCenter,
+                                    imageVector =
+                                        Icons.Filled.FitnessCenter,
                                     contentDescription = null,
                                     tint = Color.White,
-                                    modifier = Modifier.size(KmiIconSize.small)
+                                    modifier =
+                                        Modifier.size(13.dp)
                                 )
                             }
                         }
 
-                        Spacer(Modifier.height(2.dp))
+                        Spacer(
+                            Modifier.height(1.dp)
+                        )
 
                         Text(
-                            text = tr("תרגול", "Practice"),
-                            style = KmiTypography.caption.copy(
-                                fontWeight = FontWeight.ExtraBold
+                            text = tr(
+                                "תרגול",
+                                "Practice"
                             ),
+                            style =
+                                KmiTypography.caption.copy(
+                                    fontSize =
+                                        KmiTypography.caption.fontSize *
+                                                0.78f,
+                                    fontWeight =
+                                        FontWeight.Bold
+                                ),
                             color = Color.White,
-                            textAlign = TextAlign.Center,
-                            maxLines = 2,
-                            overflow = TextOverflow.Ellipsis
+                            textAlign =
+                                TextAlign.Center,
+                            maxLines = 1,
+                            overflow =
+                                TextOverflow.Ellipsis
                         )
                     }
 
+                    // =========================
+                    // קו תרגול / איפוס
+                    // =========================
                     HorizontalDivider(
-                        modifier = Modifier
-                            .padding(
-                                horizontal = 5.dp,
-                                vertical = 5.dp
-                            ),
-                        thickness = 0.7.dp,
-                        color = Color.White.copy(alpha = 0.26f)
+                        modifier = Modifier.padding(
+                            horizontal = 3.dp,
+                            vertical = 4.dp
+                        ),
+                        thickness = 1.4.dp,
+                        color = Color.White.copy(
+                            alpha = 0.70f
+                        )
                     )
 
+                    // =========================
+                    // איפוס
+                    // =========================
                     Column(
                         modifier = Modifier
                             .fillMaxWidth()
                             .clickable {
-                                sideActionsExpanded = false
                                 onResetClick()
                             }
-                            .padding(vertical = 4.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally
+                            .padding(vertical = 3.dp),
+                        horizontalAlignment =
+                            Alignment.CenterHorizontally
                     ) {
+
                         Surface(
-                            modifier = Modifier.size(34.dp),
+                            modifier = Modifier.size(27.dp),
                             shape = CircleShape,
-                            color = MaterialTheme.colorScheme.error,
+                            color =
+                                MaterialTheme
+                                    .colorScheme
+                                    .error,
                             tonalElevation = 0.dp,
                             shadowElevation = 0.dp,
                             border = BorderStroke(
                                 width = 1.dp,
-                                color = Color.White.copy(alpha = 0.58f)
+                                color = Color.White.copy(
+                                    alpha = 0.65f
+                                )
                             )
                         ) {
                             Box(
-                                contentAlignment = Alignment.Center
+                                contentAlignment =
+                                    Alignment.Center
                             ) {
                                 Icon(
-                                    imageVector = Icons.Filled.Delete,
+                                    imageVector =
+                                        Icons.Filled.Delete,
                                     contentDescription = null,
                                     tint = Color.White,
-                                    modifier = Modifier.size(KmiIconSize.small)
+                                    modifier =
+                                        Modifier.size(13.dp)
                                 )
                             }
                         }
 
-                        Spacer(Modifier.height(2.dp))
+                        Spacer(
+                            Modifier.height(1.dp)
+                        )
 
                         Text(
-                            text = tr("איפוס", "Reset"),
-                            style = KmiTypography.caption.copy(
-                                fontWeight = FontWeight.ExtraBold
+                            text = tr(
+                                "איפוס",
+                                "Reset"
                             ),
+                            style =
+                                KmiTypography.caption.copy(
+                                    fontSize =
+                                        KmiTypography.caption.fontSize *
+                                                0.78f,
+                                    fontWeight =
+                                        FontWeight.Bold
+                                ),
                             color = Color.White,
-                            textAlign = TextAlign.Center,
-                            maxLines = 2,
-                            overflow = TextOverflow.Ellipsis
+                            textAlign =
+                                TextAlign.Center,
+                            maxLines = 1,
+                            overflow =
+                                TextOverflow.Ellipsis
                         )
                     }
 
+                    // =========================
+                    // קו רציף לפני הידית
+                    // =========================
                     HorizontalDivider(
-                        modifier = Modifier
-                            .padding(
-                                horizontal = 5.dp,
-                                vertical = 5.dp
-                            ),
-                        thickness = 0.7.dp,
-                        color = Color.White.copy(alpha = 0.26f)
+                        modifier = Modifier.padding(
+                            horizontal = 3.dp,
+                            vertical = 4.dp
+                        ),
+                        thickness = 1.4.dp,
+                        color = Color.White.copy(
+                            alpha = 0.70f
+                        )
                     )
 
+                    // =========================
+                    // ידית פתיחה / סגירה
+                    // =========================
                     Surface(
                         onClick = {
                             sideActionsExpanded = false
                         },
-                        modifier = Modifier.size(36.dp),
-                        shape = CircleShape,
-                        color = Color(0xFF7B31E8),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(58.dp)
+                            .pointerInput(
+                                minSideHandleOffsetDp,
+                                maxSideHandleOffsetDp,
+                                density
+                            ) {
+                                detectDragGesturesAfterLongPress(
+                                    onDrag = { change, dragAmount ->
+                                        change.consume()
+
+                                        val dragDp =
+                                            dragAmount.y /
+                                                    density.density
+
+                                        sideHandleOffsetDp =
+                                            (
+                                                    sideHandleOffsetDp +
+                                                            dragDp
+                                                    )
+                                                .coerceIn(
+                                                    minSideHandleOffsetDp,
+                                                    maxSideHandleOffsetDp
+                                                )
+                                    },
+                                    onDragEnd = {
+                                        sp.edit {
+                                            putFloat(
+                                                sideHandlePositionKey,
+                                                sideHandleOffsetDp
+                                            )
+                                        }
+                                    },
+                                    onDragCancel = {
+                                        sp.edit {
+                                            putFloat(
+                                                sideHandlePositionKey,
+                                                sideHandleOffsetDp
+                                            )
+                                        }
+                                    }
+                                )
+                            },
+                        shape = RoundedCornerShape(0.dp),
+                        color = Color.Transparent,
                         tonalElevation = 0.dp,
-                        shadowElevation = 2.dp,
-                        border = BorderStroke(
-                            width = 1.dp,
-                            color = Color.White.copy(alpha = 0.72f)
-                        )
+                        shadowElevation = 0.dp
                     ) {
                         Box(
-                            contentAlignment = Alignment.Center
+                            contentAlignment =
+                                Alignment.Center
                         ) {
-                            Icon(
-                                imageVector = Icons.Filled.Close,
-                                contentDescription =
-                                    if (isEnglish) {
-                                        "Close"
-                                    } else {
-                                        "סגור"
-                                    },
-                                tint = Color.White,
-                                modifier = Modifier.size(
-                                    KmiIconSize.small
+                            Box(
+                                modifier = Modifier
+                                    .size(25.dp)
+                                    .border(
+                                        width = 1.1.dp,
+                                        color =
+                                            Color.White.copy(
+                                                alpha = 0.74f
+                                            ),
+                                        shape = CircleShape
+                                    ),
+                                contentAlignment =
+                                    Alignment.Center
+                            ) {
+                                Text(
+                                    text = "☰",
+                                    color = Color.White,
+                                    style =
+                                        KmiTypography
+                                            .action
+                                            .copy(
+                                                fontWeight =
+                                                    FontWeight.Black
+                                            )
                                 )
-                            )
+                            }
                         }
                     }
                 }
             }
+
         } else {
+
             Surface(
                 onClick = {
                     sideActionsExpanded = true
@@ -2677,39 +2803,91 @@ fun ExercisesTabsScreen(
                 modifier = Modifier
                     .align(
                         if (isEnglish) {
-                            Alignment.CenterStart
+                            AbsoluteAlignment.TopLeft
                         } else {
-                            Alignment.CenterEnd
+                            AbsoluteAlignment.TopRight
                         }
                     )
-                    .padding(top = 12.dp)
-                    .width(38.dp)
-                    .height(72.dp),
-                shape = sideHandleShape,
-                color = belt.color.copy(alpha = 0.88f),
+                    .offset(
+                        y = sideHandleOffsetDp.dp
+                    )
+                    .width(46.dp)
+                    .height(58.dp)
+                    .pointerInput(
+                        minSideHandleOffsetDp,
+                        maxSideHandleOffsetDp,
+                        density
+                    ) {
+                        detectDragGesturesAfterLongPress(
+                            onDrag = {
+                                    change,
+                                    dragAmount ->
+
+                                change.consume()
+
+                                val dragDp =
+                                    dragAmount.y /
+                                            density.density
+
+                                sideHandleOffsetDp =
+                                    (
+                                            sideHandleOffsetDp +
+                                                    dragDp
+                                            )
+                                        .coerceIn(
+                                            minSideHandleOffsetDp,
+                                            maxSideHandleOffsetDp
+                                        )
+                            }
+                        )
+                    },
+                shape = unifiedSideShape,
+                color = belt.color.copy(
+                    alpha = 0.96f
+                ),
                 tonalElevation = 0.dp,
-                shadowElevation = 6.dp,
+                shadowElevation = 7.dp,
                 border = BorderStroke(
-                    width = 1.dp,
-                    color = Color.White.copy(alpha = 0.28f)
+                    width = 1.4.dp,
+                    color = Color.White.copy(
+                        alpha = 0.70f
+                    )
                 )
             ) {
+
                 Box(
+                    modifier = Modifier.fillMaxSize(),
                     contentAlignment = Alignment.Center
                 ) {
-                    Text(
-                        text = "☰",
-                        color = Color.White,
-                        style = KmiTypography.action.copy(
-                            fontWeight = FontWeight.Black
+
+                    Box(
+                        modifier = Modifier
+                            .size(25.dp)
+                            .border(
+                                width = 1.1.dp,
+                                color = Color.White.copy(
+                                    alpha = 0.74f
+                                ),
+                                shape = CircleShape
+                            ),
+                        contentAlignment =
+                            Alignment.Center
+                    ) {
+                        Text(
+                            text = "☰",
+                            color = Color.White,
+                            style =
+                                KmiTypography.action.copy(
+                                    fontWeight =
+                                        FontWeight.Black
+                                )
                         )
-                    )
+                    }
                 }
             }
         }
-    } // ✅ סוגר את Box
-} // ✅ סוגר את ExercisesTabsScreen(...)
-
+    }
+}
 
 @Composable
 private fun ExerciseRowActionsMenu(

@@ -1,6 +1,9 @@
 // שימוש ב־v1 compat של Firebase Functions (Node 20)
 const functions = require("firebase-functions/v1");
 const admin = require("firebase-admin");
+const fs = require("fs");
+const path = require("path");
+
 const {
   GoogleAuth,
 } = require("google-auth-library");
@@ -29,6 +32,28 @@ function normalizeDigits(value) {
 
 function normalizeEmail(value) {
   return String(value || "").trim().toLowerCase();
+}
+
+function loadEmailTemplate(fileName) {
+  return fs.readFileSync(
+    path.join(
+      __dirname,
+      "templates",
+      fileName
+    ),
+    "utf8"
+  );
+}
+
+function replaceTemplateValue(
+  html,
+  key,
+  value
+) {
+  return String(html || "").replaceAll(
+    `{{${key}}}`,
+    String(value || "")
+  );
 }
 
 /**
@@ -136,39 +161,57 @@ exports.recoverUsername = functions.https.onCall(async (data, context) => {
      * Firebase Trigger Email Extension מאזינה
      * לקולקציית mail ושולחת את ההודעה.
      */
-    await db.collection("mail").add({
-      to: registeredEmail,
+  let usernameHtml =
+    loadEmailTemplate(
+      "KMI_username_recovery_email.html"
+    );
 
-      message: {
-        subject: "K.A.M.I - שחזור שם משתמש",
+  usernameHtml =
+    replaceTemplateValue(
+      usernameHtml,
+      "USERNAME",
+      escapeHtmlForRecovery(username)
+    );
 
-        text:
-          "שלום,\n\n" +
-          "שם המשתמש שלך באפליקציית K.A.M.I הוא:\n\n" +
-          username +
-          "\n\n" +
-          "אם לא ביקשת לשחזר את שם המשתמש, " +
-          "ניתן להתעלם מהודעה זו.",
+  usernameHtml =
+    replaceTemplateValue(
+      usernameHtml,
+      "LOGIN_URL",
+      "https://app-1c22cc8d.web.app/"
+    );
 
-        html:
-          "<div dir=\"rtl\" style=\"font-family:Arial,sans-serif\">" +
-          "<h2>K.A.M.I</h2>" +
-          "<p>שלום,</p>" +
-          "<p>שם המשתמש שלך באפליקציה הוא:</p>" +
-          "<p style=\"font-size:20px;font-weight:bold\">" +
-          escapeHtmlForRecovery(username) +
-          "</p>" +
-          "<p>אם לא ביקשת לשחזר את שם המשתמש, " +
-          "ניתן להתעלם מהודעה זו.</p>" +
-          "</div>",
-      },
+  usernameHtml =
+    replaceTemplateValue(
+      usernameHtml,
+      "SUPPORT_URL",
+      "mailto:support@kmi.app"
+    );
 
-      createdAt:
-        admin.firestore.FieldValue.serverTimestamp(),
+  await db.collection("mail").add({
+    to: registeredEmail,
 
-      type:
-        "username_recovery",
-    });
+    message: {
+      subject:
+        "K.M.I - שחזור שם משתמש",
+
+      text:
+        "שלום,\n\n" +
+        "שם המשתמש שלך באפליקציית K.M.I הוא:\n\n" +
+        username +
+        "\n\n" +
+        "אם לא ביקשת לשחזר את שם המשתמש, " +
+        "ניתן להתעלם מהודעה זו.",
+
+      html:
+        usernameHtml,
+    },
+
+    createdAt:
+      admin.firestore.FieldValue.serverTimestamp(),
+
+    type:
+      "username_recovery",
+  });
 
     console.log(
       "recoverUsername: recovery email queued",
@@ -199,6 +242,143 @@ function escapeHtmlForRecovery(value) {
     .replace(/"/g, "&quot;")
     .replace(/'/g, "&#039;");
 }
+
+exports.recoverPassword = functions.https.onCall(async (data, context) => {
+  const emailLower = normalizeEmail(
+    data && data.email
+  );
+
+  if (!emailLower) {
+    throw new functions.https.HttpsError(
+      "invalid-argument",
+      "Missing email."
+    );
+  }
+
+  const genericResult = {
+    accepted: true,
+  };
+
+  try {
+    /*
+     * לא חושפים ללקוח אם המשתמש קיים או לא.
+     */
+    let authUser;
+
+    try {
+      authUser =
+        await admin.auth()
+          .getUserByEmail(emailLower);
+    } catch (error) {
+      if (
+        error &&
+        error.code === "auth/user-not-found"
+      ) {
+        console.log(
+          "recoverPassword: user not found",
+          {
+            emailLower,
+          }
+        );
+
+        return genericResult;
+      }
+
+      throw error;
+    }
+
+    const registeredEmail =
+      normalizeEmail(
+        authUser.email ||
+        emailLower
+      );
+
+    if (!registeredEmail) {
+      return genericResult;
+    }
+
+    const resetUrl =
+      "https://app-1c22cc8d.web.app/reset-password.html";
+
+    const actionCodeSettings = {
+      url: resetUrl,
+      handleCodeInApp: false,
+    };
+
+    const passwordResetLink =
+      await admin.auth()
+        .generatePasswordResetLink(
+          registeredEmail,
+          actionCodeSettings
+        );
+
+    let passwordHtml =
+      loadEmailTemplate(
+        "KMI_password_reset_email.html"
+      );
+
+    passwordHtml =
+      replaceTemplateValue(
+        passwordHtml,
+        "RESET_URL",
+        passwordResetLink
+      );
+
+    passwordHtml =
+      replaceTemplateValue(
+        passwordHtml,
+        "SUPPORT_URL",
+        "mailto:support@kmi.app"
+      );
+
+    await db.collection("mail").add({
+      to: registeredEmail,
+
+      message: {
+        subject:
+          "K.M.I - איפוס סיסמה",
+
+        text:
+          "שלום,\n\n" +
+          "קיבלנו בקשה לאיפוס הסיסמה של החשבון שלך.\n\n" +
+          "לאיפוס הסיסמה יש להשתמש בקישור הבא:\n\n" +
+          passwordResetLink +
+          "\n\n" +
+          "אם לא ביקשת לאפס את הסיסמה, " +
+          "ניתן להתעלם מהודעה זו.",
+
+        html:
+          passwordHtml,
+      },
+
+      createdAt:
+        admin.firestore.FieldValue.serverTimestamp(),
+
+      type:
+        "password_reset",
+    });
+
+    console.log(
+      "recoverPassword: recovery email queued",
+      {
+        uid: authUser.uid,
+      }
+    );
+
+    return genericResult;
+
+  } catch (error) {
+    console.error(
+      "recoverPassword failed:",
+      error
+    );
+
+    throw new functions.https.HttpsError(
+      "internal",
+      "Unable to process password recovery."
+    );
+  }
+});
 
 /**
  * ====================================================

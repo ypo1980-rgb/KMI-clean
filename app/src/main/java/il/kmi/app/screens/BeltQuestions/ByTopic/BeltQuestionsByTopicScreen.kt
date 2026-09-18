@@ -81,6 +81,7 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import il.kmi.app.KmiViewModel
 import il.kmi.app.domain.DefenseKind
 import il.kmi.app.domain.TopicsBySubjectRegistry
+import il.kmi.app.domain.color
 import il.kmi.app.ui.KmiTopBar
 import il.kmi.app.ui.LocalAppIconScale
 import il.kmi.app.ui.loading.KmiLoadingRings
@@ -780,6 +781,7 @@ private fun createSubjectTopicsPdf(
 @Composable
 fun BeltQuestionsByTopicScreen(
     vm: KmiViewModel,
+    onOpenHome: () -> Unit,
     onOpenByBelt: () -> Unit,
     onOpenSubject: (Belt, SubjectTopic) -> Unit,
     @Suppress("UNUSED_PARAMETER")
@@ -940,9 +942,27 @@ fun BeltQuestionsByTopicScreen(
         mutableStateOf(false)
     }
 
+    val selectedBeltFromVm by
+    vm.selectedBelt.collectAsState()
+
     var effectiveBelt by
-    rememberSaveable {
-        mutableStateOf(Belt.GREEN)
+    rememberSaveable(
+        selectedBeltFromVm
+    ) {
+        mutableStateOf(
+            selectedBeltFromVm
+                ?: Belt.GREEN
+        )
+    }
+
+    LaunchedEffect(
+        selectedBeltFromVm
+    ) {
+        selectedBeltFromVm?.let { belt ->
+            if (effectiveBelt != belt) {
+                effectiveBelt = belt
+            }
+        }
     }
 
     // החיפוש והסברי התרגילים עוברים דרך KmiTopBar + ExercisePremiumSearchDialog
@@ -952,11 +972,17 @@ fun BeltQuestionsByTopicScreen(
         topBar = {
             KmiTopBar(
                 title = if (isEnglish) "Exercises by Topic" else "תרגילים לפי נושא",
-                onHome = { },
+                onHome = {
+                    onOpenHome()
+                },
                 lockHome = false,
                 showTopHome = false,
                 showTopBeltIcon = false,
                 topBeltIconRes = null,
+
+                quickActionsAccentOverride =
+                    effectiveBelt.color,
+
                 // החיפוש הגלובלי נפתח ומטופל פנימית בתוך KmiTopBar
                 lockSearch = false,
                 showTopShare = true,

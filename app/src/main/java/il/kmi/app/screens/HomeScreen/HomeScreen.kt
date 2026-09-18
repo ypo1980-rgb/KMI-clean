@@ -703,10 +703,126 @@ fun HomeScreen(
                     )
                 }
 
+            val rawHomeBelt =
+                remember(
+                    userSp,
+                    legacySp,
+                    settingsSp
+                ) {
+                    listOf(
+                        userSp.getString(
+                            "current_belt",
+                            null
+                        ),
+                        userSp.getString(
+                            "belt_current",
+                            null
+                        ),
+                        userSp.getString(
+                            "belt",
+                            null
+                        ),
+                        legacySp.getString(
+                            "current_belt",
+                            null
+                        ),
+                        legacySp.getString(
+                            "belt_current",
+                            null
+                        ),
+                        legacySp.getString(
+                            "belt",
+                            null
+                        ),
+                        settingsSp.getString(
+                            "current_belt",
+                            null
+                        ),
+                        settingsSp.getString(
+                            "belt",
+                            null
+                        )
+                    )
+                        .firstOrNull {
+                            !it.isNullOrBlank()
+                        }
+                        ?.trim()
+                        .orEmpty()
+                }
+
+            val homeBeltAccentRaw =
+                remember(
+                    activeHomeBelt,
+                    rawHomeBelt
+                ) {
+                    val normalizedRaw =
+                        rawHomeBelt
+                            .trim()
+                            .lowercase()
+
+                    when {
+                        /*
+                         * לא סומנה חגורה:
+                         * ברירת מחדל כתומה.
+                         */
+                        normalizedRaw.isBlank() ->
+                            Belt.ORANGE.color
+
+                        /*
+                         * לבנה -> צהובה
+                         */
+                        activeHomeBelt == Belt.WHITE ->
+                            Belt.YELLOW.color
+
+                        /*
+                         * צהובה -> כתומה
+                         */
+                        activeHomeBelt == Belt.YELLOW ->
+                            Belt.ORANGE.color
+
+                        /*
+                         * כתומה -> ירוקה
+                         */
+                        activeHomeBelt == Belt.ORANGE ->
+                            Belt.GREEN.color
+
+                        /*
+                         * ירוקה -> כחולה
+                         */
+                        activeHomeBelt == Belt.GREEN ->
+                            Belt.BLUE.color
+
+                        /*
+                         * כחולה -> חומה
+                         */
+                        activeHomeBelt == Belt.BLUE ->
+                            Belt.BROWN.color
+
+                        /*
+                         * מחומה ועד דן 10:
+                         * שחור.
+                         */
+                        activeHomeBelt == Belt.BROWN ||
+                                activeHomeBelt == Belt.BLACK ||
+                                normalizedRaw.contains("brown") ||
+                                normalizedRaw.contains("חום") ||
+                                normalizedRaw.contains("חומה") ||
+                                normalizedRaw.contains("black") ||
+                                normalizedRaw.contains("שחור") ||
+                                normalizedRaw.contains("שחורה") ||
+                                normalizedRaw.contains("dan") ||
+                                normalizedRaw.contains("דאן") ||
+                                normalizedRaw.contains("דן") ->
+                            Color.Black
+
+                        else ->
+                            Belt.ORANGE.color
+                    }
+                }
+
             val homeBeltAccent =
                 readableHomeBeltAccent(
-                    beltColor =
-                        activeHomeBelt.color
+                    beltColor = homeBeltAccentRaw
                 )
 
             var homeAccessRefreshTick by
@@ -2337,6 +2453,48 @@ fun HomeScreen(
                     isEnglish = isEnglish,
                     accentColor = homeBeltAccent,
                     items = quickMenuItems,
+                    triggerModifier =
+                        Modifier.pointerInput(
+                            minHomeQuickMenuBottomDp,
+                            maxHomeQuickMenuBottomDp,
+                            homeQuickMenuDensity
+                        ) {
+                            detectDragGesturesAfterLongPress(
+                                onDrag = { change, dragAmount ->
+                                    change.consume()
+
+                                    val dragDp =
+                                        dragAmount.y /
+                                                homeQuickMenuDensity.density
+
+                                    homeQuickMenuBottomDp =
+                                        (
+                                                homeQuickMenuBottomDp -
+                                                        dragDp
+                                                )
+                                            .coerceIn(
+                                                minHomeQuickMenuBottomDp,
+                                                maxHomeQuickMenuBottomDp
+                                            )
+                                },
+                                onDragEnd = {
+                                    settingsSp.edit {
+                                        putFloat(
+                                            homeQuickMenuPositionKey,
+                                            homeQuickMenuBottomDp
+                                        )
+                                    }
+                                },
+                                onDragCancel = {
+                                    settingsSp.edit {
+                                        putFloat(
+                                            homeQuickMenuPositionKey,
+                                            homeQuickMenuBottomDp
+                                        )
+                                    }
+                                }
+                            )
+                        },
                     onClose = {
                         fabExpanded = false
                     }
@@ -2355,7 +2513,7 @@ fun HomeScreen(
             ) {
                 ModernHomeQuickFab(
                     isEnglish = isEnglish,
-                    accentColor = activeHomeBelt.color,
+                    accentColor = homeBeltAccent,
                     modifier = Modifier.pointerInput(
                         minHomeQuickMenuBottomDp,
                         maxHomeQuickMenuBottomDp,
@@ -3135,8 +3293,8 @@ private fun ModernHomeQuickFab(
                     .copy(alpha = 0.55f)
         ),
         modifier = Modifier
-            .width(38.dp)
-            .height(72.dp)
+            .width(46.dp)
+            .height(58.dp)
             .then(modifier)
     ) {
         Box(
@@ -3193,6 +3351,7 @@ private fun HomePremiumQuickMenuPanel(
     isEnglish: Boolean,
     accentColor: Color,
     items: List<Triple<String, ImageVector, () -> Unit>>,
+    triggerModifier: Modifier = Modifier,
     onClose: () -> Unit
 ) {
     val railShape =
@@ -3200,48 +3359,38 @@ private fun HomePremiumQuickMenuPanel(
             AbsoluteRoundedCornerShape(
                 topLeft = 0.dp,
                 bottomLeft = 0.dp,
-                topRight = 24.dp,
-                bottomRight = 24.dp
+                topRight = 22.dp,
+                bottomRight = 22.dp
             )
         } else {
             AbsoluteRoundedCornerShape(
-                topLeft = 24.dp,
-                bottomLeft = 24.dp,
+                topLeft = 22.dp,
+                bottomLeft = 22.dp,
                 topRight = 0.dp,
                 bottomRight = 0.dp
             )
         }
 
     Surface(
-        modifier = Modifier.width(64.dp),
+        modifier = Modifier.width(46.dp),
         shape = railShape,
-        color = Color.Transparent,
+        color = accentColor.copy(alpha = 0.96f),
         tonalElevation = 0.dp,
-        shadowElevation = 8.dp,
+        shadowElevation = 7.dp,
         border = BorderStroke(
-            width = 1.dp,
-            color = Color.White.copy(
-                alpha = 0.30f
-            )
+            width = 1.4.dp,
+            color = Color.White.copy(alpha = 0.70f)
         )
     ) {
         Column(
             modifier = Modifier
+                .fillMaxWidth()
                 .background(
-                    brush = Brush.verticalGradient(
-                        colors = listOf(
-                            accentColor.copy(
-                                alpha = 0.82f
-                            ),
-                            Color(0xFF245FC8),
-                            Color(0xFF173F99),
-                            Color(0xFF102E78)
-                        )
-                    )
+                    color = accentColor.copy(alpha = 0.96f)
                 )
                 .padding(
-                    horizontal = 5.dp,
-                    vertical = 7.dp
+                    horizontal = 3.dp,
+                    vertical = 5.dp
                 ),
             horizontalAlignment =
                 Alignment.CenterHorizontally
@@ -3258,23 +3407,19 @@ private fun HomePremiumQuickMenuPanel(
                 val displayTitle =
                     when {
                         !isEnglish &&
-                                cleanTitle ==
-                                "ארכיון אימונים" ->
+                                cleanTitle == "ארכיון אימונים" ->
                             "ארכיון\nאימונים"
 
                         !isEnglish &&
-                                cleanTitle ==
-                                "אימונים חופשיים" ->
+                                cleanTitle == "אימונים חופשיים" ->
                             "אימונים\nחופשיים"
 
                         isEnglish &&
-                                cleanTitle ==
-                                "Training Archive" ->
+                                cleanTitle == "Training Archive" ->
                             "Training\nArchive"
 
                         isEnglish &&
-                                cleanTitle ==
-                                "Free Trainings" ->
+                                cleanTitle == "Free Trainings" ->
                             "Free\nTrainings"
 
                         else ->
@@ -3288,28 +3433,25 @@ private fun HomePremiumQuickMenuPanel(
                             onClick = item.third
                         )
                         .padding(
-                            vertical = 4.dp
+                            vertical = 3.dp
                         ),
                     horizontalAlignment =
                         Alignment.CenterHorizontally
                 ) {
 
                     Surface(
-                        modifier =
-                            Modifier.size(34.dp),
+                        modifier = Modifier.size(27.dp),
                         shape = CircleShape,
-                        color =
-                            Color.White.copy(
-                                alpha = 0.16f
-                            ),
+                        color = Color.White.copy(
+                            alpha = 0.16f
+                        ),
                         tonalElevation = 0.dp,
                         shadowElevation = 0.dp,
                         border = BorderStroke(
                             width = 1.dp,
-                            color =
-                                Color.White.copy(
-                                    alpha = 0.58f
-                                )
+                            color = Color.White.copy(
+                                alpha = 0.58f
+                            )
                         )
                     ) {
                         Box(
@@ -3317,35 +3459,41 @@ private fun HomePremiumQuickMenuPanel(
                                 Alignment.Center
                         ) {
                             Icon(
-                                imageVector =
-                                    item.second,
-                                contentDescription =
-                                    null,
-                                tint =
-                                    Color.White,
+                                imageVector = item.second,
+                                contentDescription = null,
+                                tint = Color.White,
                                 modifier =
-                                    Modifier.size(
-                                        KmiIconSize.small
-                                    )
+                                    Modifier.size(13.dp)
                             )
                         }
                     }
 
                     Spacer(
-                        Modifier.height(2.dp)
+                        Modifier.height(1.dp)
                     )
 
                     Text(
                         text = displayTitle,
                         style =
                             KmiTypography.caption.copy(
+                                fontSize =
+                                    KmiTypography
+                                        .caption
+                                        .fontSize *
+                                            0.78f,
                                 fontWeight =
-                                    FontWeight.ExtraBold
+                                    FontWeight.Bold
                             ),
                         color = Color.White,
-                        textAlign =
-                            TextAlign.Center,
-                        maxLines = 2,
+                        textAlign = TextAlign.Center,
+                        maxLines =
+                            if (
+                                displayTitle.contains("\n")
+                            ) {
+                                2
+                            } else {
+                                1
+                            },
                         overflow =
                             TextOverflow.Ellipsis
                     )
@@ -3358,8 +3506,7 @@ private fun HomePremiumQuickMenuPanel(
                         Icon(
                             imageVector =
                                 Icons.Filled.Lock,
-                            contentDescription =
-                                null,
+                            contentDescription = null,
                             tint = Color.White,
                             modifier =
                                 Modifier.size(
@@ -3371,68 +3518,72 @@ private fun HomePremiumQuickMenuPanel(
 
                 if (index != items.lastIndex) {
                     HorizontalDivider(
-                        modifier = Modifier
-                            .padding(
-                                horizontal = 5.dp,
-                                vertical = 5.dp
-                            ),
-                        thickness = 0.7.dp,
-                        color =
-                            Color.White.copy(
-                                alpha = 0.26f
-                            )
+                        modifier = Modifier.padding(
+                            horizontal = 3.dp,
+                            vertical = 4.dp
+                        ),
+                        thickness = 1.4.dp,
+                        color = Color.White.copy(
+                            alpha = 0.70f
+                        )
                     )
                 }
             }
 
             HorizontalDivider(
-                modifier = Modifier
-                    .padding(
-                        horizontal = 5.dp,
-                        vertical = 5.dp
-                    ),
-                thickness = 0.7.dp,
-                color =
-                    Color.White.copy(
-                        alpha = 0.26f
-                    )
+                modifier = Modifier.padding(
+                    horizontal = 3.dp,
+                    vertical = 4.dp
+                ),
+                thickness = 1.4.dp,
+                color = Color.White.copy(
+                    alpha = 0.70f
+                )
             )
 
             Surface(
                 onClick = onClose,
-                modifier =
-                    Modifier.size(36.dp),
-                shape = CircleShape,
-                color = Color(0xFF7B31E8),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(58.dp)
+                    .then(triggerModifier),
+                shape = RoundedCornerShape(0.dp),
+                color = Color.Transparent,
                 tonalElevation = 0.dp,
-                shadowElevation = 2.dp,
-                border = BorderStroke(
-                    width = 1.dp,
-                    color =
-                        Color.White.copy(
-                            alpha = 0.72f
-                        )
-                )
+                shadowElevation = 0.dp
             ) {
                 Box(
                     contentAlignment =
                         Alignment.Center
                 ) {
-                    Icon(
-                        imageVector =
-                            Icons.Filled.Close,
-                        contentDescription =
-                            if (isEnglish) {
-                                "Close"
-                            } else {
-                                "סגור"
-                            },
-                        tint = Color.White,
-                        modifier =
-                            Modifier.size(
-                                KmiIconSize.small
-                            )
-                    )
+                    Box(
+                        modifier = Modifier
+                            .size(25.dp)
+                            .border(
+                                width = 1.1.dp,
+                                color =
+                                    Color.White.copy(
+                                        alpha = 0.74f
+                                    ),
+                                shape = CircleShape
+                            ),
+                        contentAlignment =
+                            Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector =
+                                Icons.Filled.Menu,
+                            contentDescription =
+                                if (isEnglish) {
+                                    "Close quick menu"
+                                } else {
+                                    "סגור תפריט מהיר"
+                                },
+                            tint = Color.White,
+                            modifier =
+                                Modifier.size(17.dp)
+                        )
+                    }
                 }
             }
         }

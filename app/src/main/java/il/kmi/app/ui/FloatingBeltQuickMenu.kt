@@ -297,13 +297,13 @@ private fun SideRailQuickMenuTrigger(
             AbsoluteRoundedCornerShape(
                 topLeft = 0.dp,
                 bottomLeft = 0.dp,
-                topRight = 18.dp,
-                bottomRight = 18.dp
+                topRight = 22.dp,
+                bottomRight = 22.dp
             )
         } else {
             AbsoluteRoundedCornerShape(
-                topLeft = 18.dp,
-                bottomLeft = 18.dp,
+                topLeft = 22.dp,
+                bottomLeft = 22.dp,
                 topRight = 0.dp,
                 bottomRight = 0.dp
             )
@@ -322,8 +322,8 @@ private fun SideRailQuickMenuTrigger(
             )
         ),
         modifier = Modifier
-            .width(38.dp)
-            .height(72.dp)
+            .width(46.dp)
+            .height(58.dp)
             .then(modifier)
     ) {
         Box(
@@ -682,6 +682,48 @@ fun FloatingQuickMenu(
                                 closeThen(action)
                             },
                             onLockedItemClick = onLockedItemClick,
+                            triggerModifier =
+                                Modifier.pointerInput(
+                                    sideRailMinBottomDp,
+                                    sideRailMaxBottomDp,
+                                    sideRailDensity
+                                ) {
+                                    detectDragGesturesAfterLongPress(
+                                        onDrag = { change, dragAmount ->
+                                            change.consume()
+
+                                            val dragDp =
+                                                dragAmount.y /
+                                                        sideRailDensity.density
+
+                                            sideRailBottomDp =
+                                                (
+                                                        sideRailBottomDp -
+                                                                dragDp
+                                                        )
+                                                    .coerceIn(
+                                                        sideRailMinBottomDp,
+                                                        sideRailMaxBottomDp
+                                                    )
+                                        },
+                                        onDragEnd = {
+                                            sideRailPositionSp.edit {
+                                                putFloat(
+                                                    sideRailPositionKey,
+                                                    sideRailBottomDp
+                                                )
+                                            }
+                                        },
+                                        onDragCancel = {
+                                            sideRailPositionSp.edit {
+                                                putFloat(
+                                                    sideRailPositionKey,
+                                                    sideRailBottomDp
+                                                )
+                                            }
+                                        }
+                                    )
+                                },
                             onClose = {
                                 onExpandedChange(false)
                             }
@@ -828,61 +870,46 @@ private fun SideRailQuickMenuPanel(
     items: List<QuickMenuItemUi>,
     onItemClick: (() -> Unit) -> Unit,
     onLockedItemClick: () -> Unit,
+    triggerModifier: Modifier = Modifier,
     onClose: () -> Unit
 ) {
-    val colors =
-        MaterialTheme.colorScheme
-
     val railShape =
         if (isEnglish) {
             AbsoluteRoundedCornerShape(
                 topLeft = 0.dp,
                 bottomLeft = 0.dp,
-                topRight = 24.dp,
-                bottomRight = 24.dp
+                topRight = 22.dp,
+                bottomRight = 22.dp
             )
         } else {
             AbsoluteRoundedCornerShape(
-                topLeft = 24.dp,
-                bottomLeft = 24.dp,
+                topLeft = 22.dp,
+                bottomLeft = 22.dp,
                 topRight = 0.dp,
                 bottomRight = 0.dp
             )
         }
 
     Surface(
-        modifier =
-            Modifier.width(64.dp),
+        modifier = Modifier.width(46.dp),
         shape = railShape,
-        color = Color.Transparent,
+        color = accentColor.copy(alpha = 0.96f),
         tonalElevation = 0.dp,
-        shadowElevation = 8.dp,
+        shadowElevation = 7.dp,
         border = BorderStroke(
-            width = 1.dp,
-            color =
-                Color.White.copy(
-                    alpha = 0.30f
-                )
+            width = 1.4.dp,
+            color = Color.White.copy(alpha = 0.70f)
         )
     ) {
         Column(
             modifier = Modifier
+                .fillMaxWidth()
                 .background(
-                    brush =
-                        Brush.verticalGradient(
-                            colors = listOf(
-                                accentColor.copy(
-                                    alpha = 0.82f
-                                ),
-                                Color(0xFF245FC8),
-                                Color(0xFF173F99),
-                                Color(0xFF102E78)
-                            )
-                        )
+                    color = accentColor.copy(alpha = 0.96f)
                 )
                 .padding(
-                    horizontal = 5.dp,
-                    vertical = 7.dp
+                    horizontal = 3.dp,
+                    vertical = 5.dp
                 ),
             horizontalAlignment =
                 Alignment.CenterHorizontally
@@ -897,23 +924,19 @@ private fun SideRailQuickMenuPanel(
                 val displayTitle =
                     when {
                         !isEnglish &&
-                                item.title ==
-                                "נקודות תורפה" ->
+                                item.title == "נקודות תורפה" ->
                             "נקודות\nתורפה"
 
                         !isEnglish &&
-                                item.title ==
-                                "כל הרשימות" ->
+                                item.title == "כל הרשימות" ->
                             "רשימות"
 
                         isEnglish &&
-                                item.title ==
-                                "Weak Points" ->
+                                item.title == "Weak Points" ->
                             "Weak\nPoints"
 
                         isEnglish &&
-                                item.title ==
-                                "All Lists" ->
+                                item.title == "All Lists" ->
                             "Lists"
 
                         else ->
@@ -937,68 +960,80 @@ private fun SideRailQuickMenuPanel(
 
                 if (index != items.lastIndex) {
                     HorizontalDivider(
-                        modifier = Modifier
-                            .padding(
-                                horizontal = 5.dp,
-                                vertical = 5.dp
-                            ),
-                        thickness = 0.7.dp,
-                        color =
-                            Color.White.copy(
-                                alpha = 0.26f
-                            )
+                        modifier = Modifier.padding(
+                            horizontal = 3.dp,
+                            vertical = 4.dp
+                        ),
+                        thickness = 1.4.dp,
+                        color = Color.White.copy(
+                            alpha = 0.70f
+                        )
                     )
                 }
             }
 
+            /*
+             * קו רציף בין הפעולות לבין ידית
+             * הפתיחה / הסגירה.
+             */
             HorizontalDivider(
-                modifier = Modifier
-                    .padding(
-                        horizontal = 5.dp,
-                        vertical = 5.dp
-                    ),
-                thickness = 0.7.dp,
-                color =
-                    Color.White.copy(
-                        alpha = 0.26f
-                    )
+                modifier = Modifier.padding(
+                    horizontal = 3.dp,
+                    vertical = 4.dp
+                ),
+                thickness = 1.4.dp,
+                color = Color.White.copy(
+                    alpha = 0.70f
+                )
             )
 
+            /*
+             * אותה ידית נשארת כחלק מהסרגל.
+             * לחיצה קצרה סוגרת.
+             * לחיצה ארוכה מאפשרת להזיז.
+             */
             Surface(
                 onClick = onClose,
-                modifier =
-                    Modifier.size(36.dp),
-                shape = CircleShape,
-                color = Color(0xFF7B31E8),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(58.dp)
+                    .then(triggerModifier),
+                shape = RoundedCornerShape(0.dp),
+                color = Color.Transparent,
                 tonalElevation = 0.dp,
-                shadowElevation = 2.dp,
-                border = BorderStroke(
-                    width = 1.dp,
-                    color =
-                        Color.White.copy(
-                            alpha = 0.72f
-                        )
-                )
+                shadowElevation = 0.dp
             ) {
                 Box(
                     contentAlignment =
                         Alignment.Center
                 ) {
-                    Icon(
-                        imageVector =
-                            Icons.Filled.Close,
-                        contentDescription =
-                            if (isEnglish) {
-                                "Close"
-                            } else {
-                                "סגור"
-                            },
-                        tint = Color.White,
-                        modifier =
-                            Modifier.size(
-                                KmiIconSize.small
-                            )
-                    )
+                    Box(
+                        modifier = Modifier
+                            .size(25.dp)
+                            .border(
+                                width = 1.1.dp,
+                                color = Color.White.copy(
+                                    alpha = 0.74f
+                                ),
+                                shape = CircleShape
+                            ),
+                        contentAlignment =
+                            Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector =
+                                Icons.Filled.Menu,
+                            contentDescription =
+                                if (isEnglish) {
+                                    "Close quick menu"
+                                } else {
+                                    "סגור תפריט מהיר"
+                                },
+                            tint = Color.White,
+                            modifier =
+                                Modifier.size(17.dp)
+                        )
+                    }
                 }
             }
         }
@@ -1019,7 +1054,7 @@ private fun SideRailQuickMenuAction(
                 onClick = onClick
             )
             .padding(
-                vertical = 4.dp
+                vertical = 3.dp
             ),
         horizontalAlignment =
             Alignment.CenterHorizontally
@@ -1027,7 +1062,7 @@ private fun SideRailQuickMenuAction(
 
         Surface(
             modifier =
-                Modifier.size(34.dp),
+                Modifier.size(27.dp),
             shape = CircleShape,
             color =
                 Color.White.copy(
@@ -1052,9 +1087,7 @@ private fun SideRailQuickMenuAction(
                     contentDescription = null,
                     tint = Color.White,
                     modifier =
-                        Modifier.size(
-                            KmiIconSize.small
-                        )
+                        Modifier.size(13.dp)
                 )
             }
         }
@@ -1067,14 +1100,20 @@ private fun SideRailQuickMenuAction(
             text = title,
             style =
                 KmiTypography.caption.copy(
-                    fontWeight =
-                        FontWeight.ExtraBold
+                    fontSize =
+                        KmiTypography.caption.fontSize *
+                                0.78f,
+                    fontWeight = FontWeight.Bold
                 ),
             color = Color.White,
             textAlign = TextAlign.Center,
-            maxLines = 2,
-            overflow =
-                TextOverflow.Ellipsis
+            maxLines =
+                if (title.contains("\n")) {
+                    2
+                } else {
+                    1
+                },
+            overflow = TextOverflow.Ellipsis
         )
 
         if (isLocked) {
